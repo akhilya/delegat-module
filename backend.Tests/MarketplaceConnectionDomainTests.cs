@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Delegat.Tests;
 
+[Collection("EnvVars")]
 public class MarketplaceConnectionDomainTests
 {
     private static (DataContext db, TestDataBuilder data, FakeCurrentUserService currentUser) Create()

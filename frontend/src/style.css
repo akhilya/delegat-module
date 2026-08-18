@@ -108,13 +108,19 @@ button {
 }
 
 .adaptive-padding {
-  /* Right side: FAB clearance (~5rem). ≤2000px (incl. Full HD): tight gutters. */
+  /*
+    Default is the wide-screen gutter (8vw). Do not invert this to min-width
+    @apply — arbitrary min-[…] variants inside @apply drop the 8vw rule, and
+    2K / QHD content stretches edge to edge. Tighten with max-* only.
+    Below lg: symmetric gutters (FABs live in the navbar). From lg: extra
+    right for corner FABs (at least 5rem).
+  */
   @apply pl-[8vw] pr-[max(8vw,5rem)]
     max-[2000px]:pl-6 max-[2000px]:pr-20
     max-2xl:pl-6 max-2xl:pr-20
     max-[1281px]:pl-5 max-[1281px]:pr-20
-    max-lg:pl-5 max-lg:pr-20
-    max-sm:pl-3 max-sm:pr-20;
+    max-lg:pl-5 max-lg:pr-5
+    max-sm:pl-3 max-sm:pr-3;
 }
 
 .ai-panel-open .adaptive-padding {

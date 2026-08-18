@@ -25,6 +25,7 @@ using Delegat.Services.Ai;
 using Delegat.Services.Ai.Tools;
 using Delegat.Services.Ai.Tools.Handlers;
 using Delegat.Services.Marketplace;
+using Delegat.Services.Tools;
 using Delegat.Services.Plugins;
 using Delegat.Services.PlatformLink;
 using Delegat.Marketplace.SDK;
@@ -259,6 +260,7 @@ builder.Services.AddScoped<ProductFolderController>();
 
 // Quotas / overage trim
 builder.Services.AddScoped<QuotaService>();
+builder.Services.AddScoped<MarketplaceConnectionCreateService>();
 builder.Services.AddScoped<IPlatformEntitlementsService, PlatformEntitlementsService>();
 builder.Services.AddScoped<IOverageTrimService, OverageTrimService>();
 builder.Services.AddHostedService<OverageTrimHostedService>();
@@ -312,7 +314,11 @@ builder.Services.AddScoped<MappingService>(sp =>
         generative);
 });
 builder.Services.AddScoped<CategoryImportService>();
+builder.Services.AddScoped<CategoryImportQueueService>();
 builder.Services.AddScoped<ProductSyncService>();
+builder.Services.AddScoped<CatalogMatchService>();
+builder.Services.AddScoped<CatalogScrapeService>();
+builder.Services.AddScoped<ToolCatalogService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<CurrencyService>();
@@ -322,6 +328,7 @@ builder.Services.AddScoped<PluginVersionSyncService>();
 // Background services
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
+builder.Services.AddHostedService<CategoryImportBackgroundService>();
 builder.Services.AddHostedService<ProductExportBackgroundService>();
 builder.Services.AddHostedService<ProductTransferBackgroundService>();
 builder.Services.AddHostedService<ProductBulkUpdateBackgroundService>();
@@ -548,6 +555,7 @@ using (var scope = app.Services.CreateScope())
 
     await ApplyMigrationsWithRetryAsync(
         db, migrator, logger, BaselineMigrationId, EfProductVersion);
+    await StoreOnboardingBackfill.RunAsync(db);
 }
 
 // Run platform data migrations
@@ -646,10 +654,14 @@ using (var scope = app.Services.CreateScope())
         .Where(p => p.status == FolderJobStatus.InProgress)
         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Pending));
 
-    if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs > 0)
+    var stuckCategoryImports = await db.pendingCategoryImports
+        .Where(p => p.status == CategoryImportStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending));
+
+    if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs + stuckCategoryImports > 0)
         resetLogger.LogWarning(
-            "Startup recovery: reset {Imports} imports, {Exports} exports, {Images} images, {Transfers} transfers, {Bulk} bulk updates, {Folders} folder jobs from InProgress to Pending",
-            stuckImports, stuckExports, stuckImages, stuckTransfers, stuckBulkUpdates, stuckFolderJobs);
+            "Startup recovery: reset {Imports} imports, {Exports} exports, {Images} images, {Transfers} transfers, {Bulk} bulk updates, {Folders} folder jobs, {Categories} category imports from InProgress to Pending",
+            stuckImports, stuckExports, stuckImages, stuckTransfers, stuckBulkUpdates, stuckFolderJobs, stuckCategoryImports);
 }
 
 // Middleware pipeline

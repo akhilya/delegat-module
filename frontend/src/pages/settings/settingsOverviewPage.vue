@@ -1,21 +1,26 @@
 <script setup>
 import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import PageSection from "@/components/pageSection.vue";
-import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
-import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
+import QuotaUsagePanel from "@/components/settings/QuotaUsagePanel.vue";
 import { http, invalidateMeCache, loadMe } from "@/main";
 import { notifyMeUpdated } from "@/lib/meCache";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
+  AlertTriangle,
+  Cable,
   Download,
+  KeyRound,
   Save,
+  ScrollText,
 } from "lucide-vue-next";
 import { t } from "@/i18n";
-import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
-import QuotaUsagePanel from "@/components/settings/QuotaUsagePanel.vue";
 
 const isDumping = ref(false);
 const loggingLoading = ref(true);
@@ -234,6 +239,17 @@ async function savePublicApiSettings() {
   }
 }
 
+function togglePublicApi() {
+  if (publicApiLocked.value || publicApiLoading.value || publicApiSaving.value) return;
+  publicApi.publicApiEnabled = !publicApi.publicApiEnabled;
+}
+
+function toggleLogging(key) {
+  if (loggingLoading.value || loggingSaving.value) return;
+  if (key === "logApiRequestsEnabled" && apiLoggingDisabled.value) return;
+  logging[key] = !logging[key];
+}
+
 onMounted(async () => {
   await Promise.all([loadPlanFlags(), loadPublicApiSettings(), loadLoggingSettings()]);
   settingsLoaded.value = true;
@@ -241,138 +257,179 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex flex-col">
-    <PageSection class="!min-h-0">
-      <SettingsFormSection
-        :title="$t('pages.settingsOverviewPage.publicApiTitle')"
-        :description="$t('pages.settingsOverviewPage.publicApiDescription')"
-      >
-        <SettingsSettingRow
-          :title="$t('pages.settingsOverviewPage.publicApiEnabledLabel')"
-          :description="
-            publicApiLocked
-              ? $t('pages.settingsOverviewPage.publicApiPlanLockedHint')
-              : $t('pages.settingsOverviewPage.publicApiEnabledHint')
-          "
-        >
-          <Switch
-            v-if="settingsLoaded"
-            :model-value="publicApiLocked ? false : publicApi.publicApiEnabled"
-            :disabled="publicApiLoading || publicApiSaving || publicApiLocked"
-            @update:model-value="(v) => (publicApi.publicApiEnabled = v)"
-          />
-          <div
-            v-else
-            class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
-            aria-hidden="true"
-          />
-        </SettingsSettingRow>
+  <div class="flex w-full max-w-xl flex-col gap-8 pb-10">
+    <QuotaUsagePanel />
 
-        <div
-          v-if="!publicApiLocked"
-          class="mt-4 flex justify-end"
+    <section>
+      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.publicApiTitle") }}</InsetGroupLabel>
+      <InsetGroup>
+        <InsetGroupItem
+          :as="publicApiLocked ? 'div' : 'button'"
+          :disabled="!publicApiLocked && (!settingsLoaded || publicApiLoading || publicApiSaving)"
+          :aria-pressed="publicApiLocked ? false : publicApi.publicApiEnabled"
+          @click="togglePublicApi"
         >
-          <Button
-            :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
-            @click="savePublicApiSettings"
-          >
-            <Spinner v-if="publicApiSaving" class="mr-2" />
-            <Save v-else class="mr-2 size-4" />
-            {{ $t("pages.settingsOverviewPage.savePublicApiButton") }}
-          </Button>
-        </div>
-      </SettingsFormSection>
+          <template #leading>
+            <KeyRound class="size-4" />
+          </template>
+          <p>{{ $t("pages.settingsOverviewPage.publicApiEnabledLabel") }}</p>
+          <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+            {{
+              publicApiLocked
+                ? $t("pages.settingsOverviewPage.publicApiPlanLockedHint")
+                : $t("pages.settingsOverviewPage.publicApiEnabledHint")
+            }}
+          </p>
+          <template #trailing>
+            <Switch
+              v-if="settingsLoaded"
+              :model-value="publicApiLocked ? false : publicApi.publicApiEnabled"
+              :disabled="publicApiLoading || publicApiSaving || publicApiLocked"
+              tabindex="-1"
+              class="pointer-events-none"
+            />
+            <div
+              v-else
+              class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
+              aria-hidden="true"
+            />
+          </template>
+        </InsetGroupItem>
+      </InsetGroup>
+      <div v-if="!publicApiLocked" class="mt-2 flex justify-end">
+        <Button
+          size="sm"
+          :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
+          @click="savePublicApiSettings"
+        >
+          <Spinner v-if="publicApiSaving" class="mr-2" />
+          <Save v-else class="mr-2 size-4" />
+          {{ $t("pages.settingsOverviewPage.savePublicApiButton") }}
+        </Button>
+      </div>
+    </section>
 
-      <SettingsFormSection
-        :title="$t('pages.settingsOverviewPage.loggingTitle')"
-        :description="$t('pages.settingsOverviewPage.loggingDescription')"
-      >
-        <div class="grid gap-3">
-          <SettingsSettingRow
-            :title="$t('pages.settingsOverviewPage.logErrorsLabel')"
-            :description="$t('pages.settingsOverviewPage.logErrorsHint')"
-          >
+    <section>
+      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.loggingTitle") }}</InsetGroupLabel>
+      <InsetGroup>
+        <InsetGroupItem
+          :disabled="!settingsLoaded || loggingLoading || loggingSaving"
+          :aria-pressed="logging.logErrorsEnabled"
+          @click="toggleLogging('logErrorsEnabled')"
+        >
+          <template #leading>
+            <AlertTriangle class="size-4" />
+          </template>
+          <p>{{ $t("pages.settingsOverviewPage.logErrorsLabel") }}</p>
+          <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+            {{ $t("pages.settingsOverviewPage.logErrorsHint") }}
+          </p>
+          <template #trailing>
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logErrorsEnabled"
               :disabled="loggingLoading || loggingSaving"
-              @update:model-value="(v) => (logging.logErrorsEnabled = v)"
+              tabindex="-1"
+              class="pointer-events-none"
             />
             <div
               v-else
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </SettingsSettingRow>
-          <SettingsSettingRow
-            :title="$t('pages.settingsOverviewPage.logApiRequestsLabel')"
-            :description="
+          </template>
+        </InsetGroupItem>
+        <InsetGroupItem
+          :as="apiLoggingDisabled ? 'div' : 'button'"
+          :disabled="!apiLoggingDisabled && (!settingsLoaded || loggingLoading || loggingSaving)"
+          :aria-pressed="logging.logApiRequestsEnabled"
+          @click="toggleLogging('logApiRequestsEnabled')"
+        >
+          <template #leading>
+            <ScrollText class="size-4" />
+          </template>
+          <p>{{ $t("pages.settingsOverviewPage.logApiRequestsLabel") }}</p>
+          <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+            {{
               publicApiLocked || !publicApi.publicApiEnabled
-                ? $t('pages.settingsOverviewPage.logApiRequestsDisabledHint')
-                : $t('pages.settingsOverviewPage.logApiRequestsHint')
-            "
-          >
+                ? $t("pages.settingsOverviewPage.logApiRequestsDisabledHint")
+                : $t("pages.settingsOverviewPage.logApiRequestsHint")
+            }}
+          </p>
+          <template #trailing>
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logApiRequestsEnabled"
               :disabled="apiLoggingDisabled"
-              @update:model-value="(v) => (logging.logApiRequestsEnabled = v)"
+              tabindex="-1"
+              class="pointer-events-none"
             />
             <div
               v-else
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </SettingsSettingRow>
-          <SettingsSettingRow
-            :title="$t('pages.settingsOverviewPage.logAdapterHttpLabel')"
-            :description="$t('pages.settingsOverviewPage.logAdapterHttpHint')"
-          >
+          </template>
+        </InsetGroupItem>
+        <InsetGroupItem
+          :disabled="!settingsLoaded || loggingLoading || loggingSaving"
+          :aria-pressed="logging.logAdapterHttpEnabled"
+          @click="toggleLogging('logAdapterHttpEnabled')"
+        >
+          <template #leading>
+            <Cable class="size-4" />
+          </template>
+          <p>{{ $t("pages.settingsOverviewPage.logAdapterHttpLabel") }}</p>
+          <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+            {{ $t("pages.settingsOverviewPage.logAdapterHttpHint") }}
+          </p>
+          <template #trailing>
             <Switch
               v-if="settingsLoaded"
               :model-value="logging.logAdapterHttpEnabled"
               :disabled="loggingLoading || loggingSaving"
-              @update:model-value="(v) => (logging.logAdapterHttpEnabled = v)"
+              tabindex="-1"
+              class="pointer-events-none"
             />
             <div
               v-else
               class="h-[1.15rem] w-8 shrink-0 rounded-full bg-muted"
               aria-hidden="true"
             />
-          </SettingsSettingRow>
-        </div>
+          </template>
+        </InsetGroupItem>
+      </InsetGroup>
+      <div class="mt-2 flex justify-end">
+        <Button
+          size="sm"
+          :disabled="!settingsLoaded || loggingLoading || loggingSaving || !loggingDirty"
+          @click="saveLoggingSettings"
+        >
+          <Spinner v-if="loggingSaving" class="mr-2" />
+          <Save v-else class="mr-2 size-4" />
+          {{ $t("pages.settingsOverviewPage.saveLoggingButton") }}
+        </Button>
+      </div>
+    </section>
 
-        <div class="mt-4 flex justify-end">
-          <Button
-            :disabled="!settingsLoaded || loggingLoading || loggingSaving || !loggingDirty"
-            @click="saveLoggingSettings"
-          >
-            <Spinner v-if="loggingSaving" class="mr-2" />
-            <Save v-else class="mr-2 size-4" />
-            {{ $t("pages.settingsOverviewPage.saveLoggingButton") }}
-          </Button>
-        </div>
-      </SettingsFormSection>
-
-      <SettingsFormSection
-        :title="$t('pages.settingsOverviewPage.databaseBackupTitle')"
-        :description="$t('pages.settingsOverviewPage.databaseBackupDescription')"
-      >
-        <SettingsFormField :label="$t('pages.settingsOverviewPage.downloadDumpButton')">
-          <Button :disabled="isDumping" @click="downloadDatabaseDump">
-            <Spinner v-if="isDumping" class="mr-2" />
-            <Download v-else class="mr-2 size-4" />
-            {{ $t("pages.settingsOverviewPage.downloadDumpButton") }}
-          </Button>
-        </SettingsFormField>
-      </SettingsFormSection>
-
-      <SettingsFormSection
-        :title="$t('nav.usage')"
-        :description="$t('pages.usagePage.description')"
-      >
-        <QuotaUsagePanel />
-      </SettingsFormSection>
-    </PageSection>
+    <section>
+      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.databaseBackupTitle") }}</InsetGroupLabel>
+      <InsetGroup>
+        <InsetGroupItem
+          :disabled="isDumping"
+          show-chevron
+          @click="downloadDatabaseDump"
+        >
+          <template #leading>
+            <Spinner v-if="isDumping" size="sm" />
+            <Download v-else class="size-4" />
+          </template>
+          <p>{{ $t("pages.settingsOverviewPage.downloadDumpButton") }}</p>
+          <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+            {{ $t("pages.settingsOverviewPage.databaseBackupDescription") }}
+          </p>
+        </InsetGroupItem>
+      </InsetGroup>
+    </section>
   </div>
 </template>

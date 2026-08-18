@@ -3,6 +3,13 @@ import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
@@ -27,9 +34,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -50,6 +55,11 @@ export default {
     PageSection,
     Button,
     Input,
+    FieldGroup,
+    SettingsFormField,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     UserPlus,
     UserMinus,
     Users,
@@ -66,7 +76,6 @@ export default {
     SelectContent,
     SelectGroup,
     SelectItem,
-    SelectLabel,
     SelectTrigger,
     SelectValue,
     Table,
@@ -250,25 +259,26 @@ export default {
               {{ $t("pages.storeDetailPage.addMemberDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="py-4">
-            <Select v-model="selectedUserId">
-              <SelectTrigger>
-                <SelectValue :placeholder="$t('pages.storeDetailPage.selectUserPlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>{{ $t("pages.storeDetailPage.usersLabel") }}</SelectLabel>
-                  <SelectItem
-                    v-for="user in availableUsers"
-                    :key="user.id"
-                    :value="String(user.id)"
-                  >
-                    {{ user.userName }}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+          <FieldGroup>
+            <SettingsFormField :label="$t('pages.storeDetailPage.usersLabel')">
+              <Select v-model="selectedUserId">
+                <SelectTrigger>
+                  <SelectValue :placeholder="$t('pages.storeDetailPage.selectUserPlaceholder')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem
+                      v-for="user in availableUsers"
+                      :key="user.id"
+                      :value="String(user.id)"
+                    >
+                      {{ user.userName }}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
@@ -294,13 +304,14 @@ export default {
           </template>
         </EmptyState>
 
-        <div v-else class="overflow-x-auto border-y">
+        <div v-else class="overflow-hidden rounded-xl border border-border/70 bg-card">
+          <div class="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead class="w-16">ID</TableHead>
                 <TableHead>{{ $t("pages.storeDetailPage.columnUserName") }}</TableHead>
-                <TableHead class="w-[100px]"></TableHead>
+                <TableHead class="w-24"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -308,8 +319,8 @@ export default {
                 <TableCell class="text-muted-foreground">
                   {{ member.id }}
                 </TableCell>
-                <TableCell class="font-medium">
-                  {{ member.userName }}
+                <TableCell class="max-w-0 font-medium">
+                  <span class="block truncate">{{ member.userName }}</span>
                 </TableCell>
                 <TableCell>
                   <Button
@@ -326,24 +337,26 @@ export default {
               </TableRow>
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
     </PageSection>
 
-    <section
-      v-if="store && canDeleteStore"
-      class="mt-8 rounded-lg border border-destructive/40 p-4"
-    >
-      <h2 class="text-sm font-semibold text-destructive">
+    <section v-if="store && canDeleteStore" class="mt-8 max-w-xl">
+      <InsetGroupLabel class="text-destructive">
         {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
-      </h2>
-      <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
-        {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
-      </p>
-      <Button class="mt-4" variant="destructive" @click="openDeleteDialog">
-        <Trash2 class="mr-2 size-4" />
-        {{ $t("pages.storeDetailPage.deleteStoreButton") }}
-      </Button>
+      </InsetGroupLabel>
+      <InsetGroup>
+        <InsetGroupItem @click="openDeleteDialog">
+          <template #leading>
+            <Trash2 class="size-4 text-destructive" />
+          </template>
+          <p class="text-destructive">{{ $t("pages.storeDetailPage.deleteStoreButton") }}</p>
+          <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+            {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
+          </p>
+        </InsetGroupItem>
+      </InsetGroup>
 
       <Dialog v-model:open="showDeleteDialog">
         <DialogContent size="md">
@@ -353,18 +366,20 @@ export default {
               {{ $t("pages.storeDetailPage.deleteDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
-          <div class="grid gap-2 py-2">
-            <label class="text-sm font-medium" for="store-delete-confirm">
-              {{ $t("pages.storeDetailPage.deleteConfirmLabel", { name: store.name }) }}
-            </label>
-            <Input
-              id="store-delete-confirm"
-              v-model="deleteConfirmName"
-              :placeholder="$t('pages.storeDetailPage.deleteConfirmPlaceholder')"
-              autocomplete="off"
-              @keydown.enter="handleDeleteStore"
-            />
-          </div>
+          <FieldGroup>
+            <SettingsFormField
+              :label="$t('pages.storeDetailPage.deleteConfirmLabel', { name: store.name })"
+              label-for="store-delete-confirm"
+            >
+              <Input
+                id="store-delete-confirm"
+                v-model="deleteConfirmName"
+                :placeholder="$t('pages.storeDetailPage.deleteConfirmPlaceholder')"
+                autocomplete="off"
+                @keydown.enter="handleDeleteStore"
+              />
+            </SettingsFormField>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
               <Button variant="outline" :disabled="isDeleting">{{ $t("common.cancel") }}</Button>

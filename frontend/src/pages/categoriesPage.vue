@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +73,7 @@ export default {
       newCategoryDescription: "",
       showCreateDialog: false,
       categoryToDelete: null,
+      FIELD_LIMITS,
       breadcrumbs: [{ label: this.$t("pages.categoriesPage.breadcrumb") }],
       PAGE_PRODUCTS,
     };
@@ -93,8 +95,29 @@ export default {
     },
 
     async handleCreateCategory() {
-      if (!this.newCategoryName.trim()) {
+      const nameIssue = fieldLimitIssue(
+        this.newCategoryName,
+        FIELD_LIMITS.categoryName,
+      );
+      if (nameIssue === "empty") {
         displaySonnerError(this.$t("pages.categoriesPage.nameRequired"));
+        return;
+      }
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.categoryName }),
+        );
+        return;
+      }
+      const descIssue = fieldLimitIssue(
+        this.newCategoryDescription,
+        FIELD_LIMITS.categoryDescription,
+        { required: false },
+      );
+      if (descIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.categoryDescription }),
+        );
         return;
       }
 
@@ -161,13 +184,14 @@ export default {
               {{ $t("pages.categoriesPage.newCategoryDescription") }}
             </DialogDescription>
           </DialogHeader>
+          <form @submit.prevent="handleCreateCategory">
           <FieldGroup class="gap-4 py-4">
             <SettingsFormField :label="$t('common.name')" label-for="new-category-name">
               <Input
                 id="new-category-name"
                 v-model="newCategoryName"
                 :placeholder="$t('pages.categoriesPage.namePlaceholder')"
-                @keyup.enter="handleCreateCategory"
+                :maxlength="FIELD_LIMITS.categoryName"
               />
             </SettingsFormField>
             <SettingsFormField :label="$t('common.description')" label-for="new-category-description">
@@ -175,18 +199,20 @@ export default {
                 id="new-category-description"
                 v-model="newCategoryDescription"
                 :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
+                :maxlength="FIELD_LIMITS.categoryDescription"
               />
             </SettingsFormField>
           </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline">{{ $t("common.cancel") }}</Button>
+              <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
-            <Button @click="handleCreateCategory" :disabled="isCreating">
+            <Button type="submit" :disabled="isCreating">
               <Spinner v-if="isCreating" class="mr-2" />
               {{ $t("common.create") }}
             </Button>
           </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
@@ -211,7 +237,7 @@ export default {
             <TableHeader>
               <TableRow class="hover:bg-transparent">
                 <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="hidden md:table-cell">{{ $t("common.description") }}</TableHead>
+                <TableHead class="hidden w-[36%] md:table-cell">{{ $t("common.description") }}</TableHead>
                 <TableHead class="w-28 text-right">{{ $t("pages.categoriesPage.productsHeader") }}</TableHead>
                 <TableHead class="w-32 text-right">{{ $t("pages.categoriesPage.attributesHeader") }}</TableHead>
                 <TableHead class="w-12" />
@@ -224,17 +250,17 @@ export default {
                 class="group cursor-pointer"
                 @click="openCategory(category.id)"
               >
-                <TableCell class="font-medium max-w-0">
-                  <span class="truncate block">{{ category.name }}</span>
+                <TableCell class="max-w-0 font-medium">
+                  <span class="block truncate">{{ category.name }}</span>
                   <span
                     v-if="category.description"
-                    class="text-xs text-muted-foreground truncate block md:hidden"
+                    class="text-muted-foreground block truncate text-xs md:hidden"
                   >
                     {{ category.description }}
                   </span>
                 </TableCell>
-                <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
-                  {{ category.description || $t("common.emDash") }}
+                <TableCell class="text-muted-foreground hidden max-w-0 md:table-cell">
+                  <span class="block truncate">{{ category.description || $t("common.emDash") }}</span>
                 </TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
                   {{ category.productsCount || 0 }}

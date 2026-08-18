@@ -31,15 +31,24 @@
 ### Marketplace Integration
 - Plugin architecture (DLL, isolated AssemblyLoadContext, hot reload)
 - Plugins: Wildberries, Ozon, OpenCart (via bridge)
-- Marketplace connections (MarketplaceConnection) with AES-256 encrypted credentials
+- Marketplace connections (MarketplaceConnection) with AES-256 encrypted credentials; create tests the adapter first and refuses to save on failure
+- Several connections of the same adapter per store are allowed; create/update is rejected if the remote shop is already connected (same Client ID, store URL, campaign, or API key)
 - Visual field mapping editor (node graph, MappingCanvas)
 - Modifier pipeline: regex, template, calculation, value-map
-- Category mapping (CategoryMapping) + category import from marketplace
-- Two-way product sync (ProductSyncService)
+- Category mapping (CategoryMapping) + background category import from marketplace (Operations)
+- Two-way product sync (ProductSyncService). Import stores attribute values in local types (`.` decimals, JSON multiselect); marketplace required flags stay on the mapping graph, not on local category attributes. When the marketplace card has no selling price, import loads it from the prices API (Wildberries content cards never include price)
+- Linked products: Import photos (preview picker, append-only gallery). Already-imported URLs can be queued again as extra copies; in-flight URLs are skipped. Image download worker never replaces an occupied gallery slot; file/storage quota failures are not retried.
 - Price sync (PriceSyncService) and stock sync
 - Group sync (GroupSyncService)
 - Bulk export/import operations
 - SDK-level rate limiting (RateLimitConfig, MarketplaceRateLimiter)
+- Adapter job tools: plugins declare `GetTools()`; the instance prefixes ids as `{adapterKey}.{localId}` and runs them through `POST /api/tools/{id}/run`
+
+### Tools
+- Tools page (`/tools`) loads `GET /api/tools`: first-party page tools plus job tools from loaded adapters
+- Platform page tool: Catalog Connect (`catalog-connect` → `/tools/catalog-connect`)
+- Platform page tool: Catalog scrape (`catalog-scrape` → `/tools/catalog-scrape`) — public storefront search (Wildberries in v1), import selected cards **unlinked**
+- Adapter jobs: Vue form from credential-shaped `paramsSchema`, then an Operation of type `tool` (table result optional). Plugins do not ship UI.
 
 ### Multi-tenancy (within an instance)
 - Stores (Store) as the primary organizational unit
@@ -55,6 +64,7 @@
 - **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies
 - `User.isAdmin` is an **instance owner marker** only (break-glass / assign owner); API access is not granted by the flag alone
 - `roles.manage` is **admin-only**: effective solely for `isAdmin`, never assignable via roles or grants
+- Instance owners cannot change their **own** roles or extra permissions, and cannot drop the Owner role from a user who still has `isAdmin` (prevents locking themselves out of Administration → Users). `isAdmin` always keeps the Owner role; a missing Owner role on an owner is restored on the next permission hydrate.
 - `api.access` gates Public API key management UI/API and authenticating with API keys
 - Effective permissions = union of role claims + per-user grants; hydrated on each JWT validation from DB
 - Store-scoped permissions also require store membership (`selected_store` or `/stores/{id}`)
@@ -76,7 +86,8 @@
 - All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
 
 ### Quotas
-- `MAX_PRODUCTS` - max products per store
+- `MAX_PRODUCTS` - max products per store (create, clone/move, and adapter import)
+- Adapter product import stops at the product cap (`product_limit_reached`); already-linked cards are not counted as new products. A batch import (Catalog Connect, import-selected, Catalog scrape, Public API) queues at most the remaining slots; if the cap is hit while a queue is running, leftover rows fail in one pass and are not retried.
 - `MAX_STORAGE_GB` - max storage per store
 - `MAX_FILES` - max files per store
 - `MAX_CONNECTIONS` - max marketplace connections
@@ -107,7 +118,7 @@
 - Empty catalogs until CP sync (first-run wizard can skip and use server defaults)
 
 ### Background Services
-- ImageDownloadBackgroundService - downloads images from marketplaces
+- ImageDownloadBackgroundService - downloads images from marketplaces (append-only; quota failures are not retried)
 - ProductImportBackgroundService - processes product import queue (PendingProductImport)
 - ProductExportBackgroundService - processes product export queue (PendingProductExport)
 - FolderJobBackgroundService - folder archive/delete jobs (`pendingFolderJobs`)
@@ -142,8 +153,14 @@
 ### Critical - before first customers
 
 #### Onboarding / First-Run Wizard
-- **Current (MVP):** Authenticated admin (or `stores.create`) with zero stores is redirected to `/setup`. Steps: welcome + Platform Link catalog status → create store (name, base currency, timezone from `GET /reference/*`) → select store → open products. If catalogs are unavailable (no Control Plane link or not synced yet), the wizard can skip catalogs and create the store with server defaults (`RUB` / `Europe/Moscow`). Marketplace connection and first sync are deferred (skip in MVP).
-- **Still needed (v2):** Marketplace connection wizard, first sync run, invite teammates, bootstrap password change in-wizard.
+- **Current:** Authenticated admin (or `stores.create`) with zero stores, or a store whose `onboardingCompletedAt` is still null, is redirected to `/setup`. Steps: welcome → create store (name; currency and timezone when catalogs are ready, otherwise server defaults) → branding → adapters (skippable) → Done. Done opens Catalog Connect when an import-capable connection exists. Settings-created stores skip the wizard (`onboardingCompletedAt` set on create).
+- **Still needed:** invite teammates, bootstrap password change in-wizard.
+
+#### Catalog Connect
+- **Current:** Tools catalog → Connect catalogs (`/tools/catalog-connect`, platform tool id `catalog-connect`). After importing a source catalog (or if the store already has products), other connections are matched by barcode/SKU — not the source marketplace, and not a connection that already links every local product. When the local catalog is small, each unlinked article then barcode is looked up on the other adapter; a full remote catalog download is used only when local lookup would be too large. Confirming a link loads those marketplace cards by id in one batch, copies mapped field values into local attributes, imports that marketplace category into the existing local category (or creates a local category when the product has none), and builds a mapping graph for export. Already-linked cards without a mapping are repaired. If the store is empty, import one marketplace catalog via `import-unlinked` (category jobs first, then products), then match remaining connections. SPA capability parsing expands `FullProducts` / `Basic` composites from adapter `Enum.ToString()`.
+
+#### Catalog scrape
+- **Current:** Tools catalog → Catalog scrape (`/tools/catalog-scrape`, platform tool id `catalog-scrape`). Searches the public storefront (Wildberries in v1: unofficial `search.wb.ru` / `card.wb.ru` / basket `card.json`), not the seller cabinet. Selected cards are copied into the local catalog without `ProductMarketplaceLink`. Category import still uses the seller connection dictionaries; apply waits for that mapping, then assigns the local category and copies mapped attributes (storefront options matched by characteristic name). Photos queue as usual; product quota stops the rest of the batch. Not on Public API. Ozon / Yandex / Woo / OpenCart do not expose this capability.
 
 #### Backup & Recovery
 - **Current:** Manual MySQL dump for administrators via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.

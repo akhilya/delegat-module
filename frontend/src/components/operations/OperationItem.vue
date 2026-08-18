@@ -28,9 +28,12 @@ import {
   Pencil,
   User,
   Cable,
+  Wand2,
+  Search,
   Copy,
   Check,
   Loader2,
+  FolderTree,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +60,7 @@ import { parseServerUtc } from "@/utils/dateTime";
 import { t } from "@/i18n";
 import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { artifactDownloadUrl, triggerBrowserDownload } from "@/lib/artifactDownload";
 import { hasPermission, PERMS } from "@/lib/permissions";
 
 const props = defineProps({
@@ -71,7 +75,6 @@ loadMemberships();
 const store = useStore();
 const expanded = ref(false);
 const loadingLogs = ref(false);
-const downloadingArtifact = ref(false);
 const copyingLogs = ref(false);
 const logsCopied = ref(false);
 const explainingWithAi = ref(false);
@@ -138,6 +141,14 @@ const typeIcon = computed(() => {
       return Trash2;
     case "ai-mapping":
       return Sparkles;
+    case "catalog-match":
+      return Cable;
+    case "catalog-scrape":
+      return Search;
+    case "category-import":
+      return FolderTree;
+    case "tool":
+      return Wand2;
     default:
       return Upload;
   }
@@ -217,6 +228,9 @@ const NON_CANCELLABLE_TYPES = new Set([
   "stock-export",
   "stock-import",
   "excel-import",
+  "catalog-match",
+  "catalog-scrape",
+  "tool",
 ]);
 
 const supportsPause = computed(() =>
@@ -414,29 +428,11 @@ async function explainWithAi() {
   }
 }
 
-async function downloadArtifact() {
-  if (downloadingArtifact.value || !canDownloadArtifact.value) return;
-  downloadingArtifact.value = true;
-  try {
-    const response = await http({
-      url: `/operations/${props.operation.id}/artifact`,
-      method: "GET",
-      responseType: "blob",
-    });
-    const disposition = response.headers?.["content-disposition"] || "";
-    const match = disposition.match(/filename\*=UTF-8''(.+)/);
-    const filename = match ? decodeURIComponent(match[1]) : "archive.zip";
-    const url = URL.createObjectURL(response.data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    displaySonnerError(error);
-  } finally {
-    downloadingArtifact.value = false;
-  }
+function downloadArtifact() {
+  if (!canDownloadArtifact.value) return;
+  triggerBrowserDownload(
+    artifactDownloadUrl(http.defaults.baseURL, props.operation.id),
+  );
 }
 </script>
 
@@ -615,10 +611,9 @@ async function downloadArtifact() {
               variant="outline"
               size="sm"
               class="h-7 text-xs"
-              :disabled="downloadingArtifact"
               @click.stop="downloadArtifact"
             >
-              <Download class="size-3 mr-1" :class="downloadingArtifact ? 'animate-pulse' : ''" />
+              <Download class="size-3 mr-1" />
               {{ t("operations.downloadArtifact") }}
             </Button>
             <Button

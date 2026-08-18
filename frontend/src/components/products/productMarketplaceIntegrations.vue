@@ -7,11 +7,13 @@ import { mapActions } from "vuex";
 import {
   displaySonnerError,
   displaySonnerSuccess,
+  displayImportFieldsUpdated,
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
 import { randomUuidCompact } from "@/utils/uuid";
+import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import {
   Upload,
   Download,
@@ -97,11 +99,17 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { PAGE_MARKETPLACE, PAGE_MARKETPLACE_CONNECTION, PAGE_MARKETPLACE_FIELD_MAPPING } from "@/router";
+import {
+  PAGE_MARKETPLACE,
+  PAGE_MARKETPLACE_CONNECTION,
+  PAGE_MARKETPLACE_FIELD_MAPPING,
+} from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
+import ImportImagesPreviewDialog from "@/components/products/ImportImagesPreviewDialog.vue";
 import ProductAdapterConnectionMenu from "@/components/products/ProductAdapterConnectionMenu.vue";
 import ProductAdapterConnectionMenuItems from "@/components/products/ProductAdapterConnectionMenuItems.vue";
 import { formatMoney } from "@/lib/currency";
+import { displayFieldValue } from "@/lib/fieldDiff";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { t } from "@/i18n";
@@ -189,7 +197,8 @@ export default {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-    FieldChangesPreviewDialog
+    FieldChangesPreviewDialog,
+    ImportImagesPreviewDialog,
   },
   props: {
     productId: {
@@ -233,6 +242,12 @@ export default {
       previewLinkId: null,
       previewConnection: null,
       importExcludedFields: new Set(),
+      // Import photos preview
+      showImportImagesDialog: false,
+      importImagesPreview: null,
+      isApplyingImportImages: false,
+      importImagesLinkId: null,
+      importImagesConnection: null,
       // Mapping selection
       mappingSelections: {}, // { connectionId: categoryMappingId }
       // Variants per connection: { connectionId: { loading, variants: [] } }
@@ -257,7 +272,11 @@ export default {
       return this.getExportModeLabel(this.exportAllMode);
     },
     isExportingAnyAll() {
-      return this.isExportingAll || this.isExportingPricesAll || this.isExportingStocksAll;
+      return (
+        this.isExportingAll ||
+        this.isExportingPricesAll ||
+        this.isExportingStocksAll
+      );
     },
     // Connections with mapping (can be exported)
     connectionsWithMapping() {
@@ -290,21 +309,33 @@ export default {
       return this.connectionsWithMapping.length > 0;
     },
     linkedForPriceExport() {
-      return this.linkedConnections.filter((c) => c.canExportPrices && c.linkId);
+      return this.linkedConnections.filter(
+        (c) => c.canExportPrices && c.linkId,
+      );
     },
     linkedForStockExport() {
-      return this.linkedConnections.filter((c) => c.canExportStocks && c.linkId);
+      return this.linkedConnections.filter(
+        (c) => c.canExportStocks && c.linkId,
+      );
     },
     importPreviewItems() {
       if (!this.importPreviewData?.updatedFields) return [];
-      return [{
-        fields: this.importPreviewData.updatedFields.map((field) => ({
-          key: field,
-          label: this.getFieldLabel(field),
-          oldValue: this.formatFieldValue(field, this.importPreviewData.oldValues[field]),
-          newValue: this.formatFieldValue(field, this.importPreviewData.newValues[field]),
-        })),
-      }];
+      return [
+        {
+          fields: this.importPreviewData.updatedFields.map((field) => ({
+            key: field,
+            label: this.getFieldLabel(field),
+            oldValue: this.formatFieldValue(
+              field,
+              this.importPreviewData.oldValues[field],
+            ),
+            newValue: this.formatFieldValue(
+              field,
+              this.importPreviewData.newValues[field],
+            ),
+          })),
+        },
+      ];
     },
     importWarning() {
       return this.importIrreversibleFields.length > 0
@@ -316,11 +347,14 @@ export default {
     },
   },
   methods: {
+    mappingDisplayName,
     ...mapActions([
       "getAvailableConnectionsForProduct",
       "exportProduct",
       "importFromLink",
       "importFromLinkPreview",
+      "importImagesFromLinkPreview",
+      "importImagesFromLink",
       "exportFromLink",
       "exportPrices",
       "exportStocks",
@@ -361,25 +395,37 @@ export default {
     },
 
     async handleMappingChange(conn, mappingId) {
-      this.mappingSelections = { ...this.mappingSelections, [conn.connectionId]: mappingId };
+      this.mappingSelections = {
+        ...this.mappingSelections,
+        [conn.connectionId]: mappingId,
+      };
       try {
         await this.saveMappingSelections({
           connectionId: conn.connectionId,
-          selections: [{ productId: this.productId, categoryMappingId: mappingId }],
+          selections: [
+            { productId: this.productId, categoryMappingId: mappingId },
+          ],
         });
         await this.fetchData();
       } catch {
-        displaySonnerError(t("productMarketplaceIntegrations.errorSavingMapping"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.errorSavingMapping"),
+        );
       }
     },
 
     async loadVariants(connectionId) {
       this.variantsData = {
         ...this.variantsData,
-        [connectionId]: { loading: true, variants: this.variantsData[connectionId]?.variants || [] },
+        [connectionId]: {
+          loading: true,
+          variants: this.variantsData[connectionId]?.variants || [],
+        },
       };
       try {
-        const data = await this.getProductVariants({ productId: this.productId });
+        const data = await this.getProductVariants({
+          productId: this.productId,
+        });
         this.variantsData = {
           ...this.variantsData,
           [connectionId]: { loading: false, variants: data || [] },
@@ -408,7 +454,9 @@ export default {
     async handleExportToAll() {
       const allExportable = this.connectionsWithMapping;
       if (allExportable.length === 0) {
-        displaySonnerSuccess(t("productMarketplaceIntegrations.noExportableConnections"));
+        displaySonnerSuccess(
+          t("productMarketplaceIntegrations.noExportableConnections"),
+        );
         return;
       }
 
@@ -416,7 +464,9 @@ export default {
 
       // Check for unlinked connections with multiple mappings but no selection
       const conflicts = toLink.filter(
-        (c) => c.availableMappings?.length > 1 && !this.mappingSelections[c.connectionId],
+        (c) =>
+          c.availableMappings?.length > 1 &&
+          !this.mappingSelections[c.connectionId],
       );
       if (conflicts.length > 0) {
         this.bulkMappingConflicts = conflicts;
@@ -433,8 +483,12 @@ export default {
       for (const conn of allExportable) {
         const operationId = randomUuidCompact();
         const title = conn.isLinked
-          ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
-          : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });
+          ? t("productMarketplaceIntegrations.exportTitleLinked", {
+              id: this.productId,
+            })
+          : t("productMarketplaceIntegrations.exportTitleUnlinked", {
+              id: this.productId,
+            });
         await this.$store.dispatch("operations/startOperation", {
           id: operationId,
           type: "single-export",
@@ -474,10 +528,18 @@ export default {
       }
 
       if (successCount > 0) {
-        displaySonnerSuccess(t("productMarketplaceIntegrations.exportedToAdapters", { count: successCount }));
+        displaySonnerSuccess(
+          t("productMarketplaceIntegrations.exportedToAdapters", {
+            count: successCount,
+          }),
+        );
       }
       if (errorCount > 0) {
-        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.exportErrors", {
+            count: errorCount,
+          }),
+        );
       }
 
       this.isExportingAll = false;
@@ -487,7 +549,9 @@ export default {
     async handleExportPricesToAll() {
       const targets = this.linkedForPriceExport;
       if (targets.length === 0) {
-        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForPriceExport"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.noLinkedForPriceExport"),
+        );
         return;
       }
 
@@ -514,11 +578,17 @@ export default {
 
       if (successCount > 0) {
         displaySonnerSuccess(
-          t("productMarketplaceIntegrations.exportedPricesToAdapters", { count: successCount }),
+          t("productMarketplaceIntegrations.exportedPricesToAdapters", {
+            count: successCount,
+          }),
         );
       }
       if (errorCount > 0) {
-        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.exportErrors", {
+            count: errorCount,
+          }),
+        );
       }
 
       this.isExportingPricesAll = false;
@@ -528,7 +598,9 @@ export default {
     async handleExportStocksToAll() {
       const targets = this.linkedForStockExport;
       if (targets.length === 0) {
-        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForStockExport"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.noLinkedForStockExport"),
+        );
         return;
       }
 
@@ -555,11 +627,17 @@ export default {
 
       if (successCount > 0) {
         displaySonnerSuccess(
-          t("productMarketplaceIntegrations.exportedStocksToAdapters", { count: successCount }),
+          t("productMarketplaceIntegrations.exportedStocksToAdapters", {
+            count: successCount,
+          }),
         );
       }
       if (errorCount > 0) {
-        displaySonnerError(t("productMarketplaceIntegrations.exportErrors", { count: errorCount }));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.exportErrors", {
+            count: errorCount,
+          }),
+        );
       }
 
       this.isExportingStocksAll = false;
@@ -577,14 +655,23 @@ export default {
       for (const conn of this.bulkMappingConflicts) {
         const mappingId = this.bulkMappingSelections[conn.connectionId];
         if (mappingId) {
-          this.mappingSelections = { ...this.mappingSelections, [conn.connectionId]: mappingId };
+          this.mappingSelections = {
+            ...this.mappingSelections,
+            [conn.connectionId]: mappingId,
+          };
           try {
             await this.saveMappingSelections({
               connectionId: conn.connectionId,
-              selections: [{ productId: this.productId, categoryMappingId: mappingId }],
+              selections: [
+                { productId: this.productId, categoryMappingId: mappingId },
+              ],
             });
           } catch {
-            displaySonnerError(t("productMarketplaceIntegrations.errorSavingMappingFor", { adapter: conn.adapterName }));
+            displaySonnerError(
+              t("productMarketplaceIntegrations.errorSavingMappingFor", {
+                adapter: conn.adapterName,
+              }),
+            );
             return;
           }
         }
@@ -605,10 +692,14 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (!result.hasChanges) {
-            displaySonnerSuccess(t("productMarketplaceIntegrations.noChangesFound"));
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.noChangesFound"),
+            );
           } else {
             this.importPreviewData = result;
-            this.importExcludedFields = new Set(result.irreversibleFields || []);
+            this.importExcludedFields = new Set(
+              result.irreversibleFields || [],
+            );
             this.previewLinkId = conn.linkId;
             this.previewConnection = conn;
             this.showImportPreviewDialog = true;
@@ -632,7 +723,9 @@ export default {
       await this.$store.dispatch("operations/startOperation", {
         id: operationId,
         type: "single-import",
-        title: t("productMarketplaceIntegrations.importTitle", { id: this.productId }),
+        title: t("productMarketplaceIntegrations.importTitle", {
+          id: this.productId,
+        }),
         connectionId: conn?.connectionId || null,
         connectionName: conn?.connectionName || null,
       });
@@ -644,12 +737,10 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
-            displaySonnerSuccess(
-              t("productMarketplaceIntegrations.updatedFieldsMessage", { fields: result.updatedFields.join(", ") }),
-            );
+            displayImportFieldsUpdated(result.updatedFields);
             this.$emit("product-updated");
           } else {
-            displaySonnerSuccess(t("productMarketplaceIntegrations.noChangesFound"));
+            displayImportFieldsUpdated([]);
           }
           this.fetchData();
         },
@@ -676,9 +767,99 @@ export default {
       this.importExcludedFields = new Set();
     },
 
+    async handleImportImagesFromLink(conn) {
+      this.importingLinkId = conn.linkId;
+      this.isLoadingPreview = true;
+      await this.importImagesFromLinkPreview({
+        linkId: conn.linkId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          const images = result.images || [];
+          if (images.length === 0) {
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.importImagesNoneOnAdapter"),
+            );
+          } else {
+            this.importImagesPreview = result;
+            this.importImagesLinkId = conn.linkId;
+            this.importImagesConnection = conn;
+            this.showImportImagesDialog = true;
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isLoadingPreview = false;
+      this.importingLinkId = null;
+    },
+
+    async confirmImportImages(urls) {
+      if (!this.importImagesLinkId) return;
+      this.isApplyingImportImages = true;
+      const operationId = randomUuidCompact();
+      const conn = this.importImagesConnection;
+      await this.$store.dispatch("operations/startOperation", {
+        id: operationId,
+        type: "image-download",
+        title: t("productMarketplaceIntegrations.importImagesOpTitle", {
+          id: this.productId,
+        }),
+        connectionId: conn?.connectionId || null,
+        connectionName: conn?.connectionName || null,
+        batchType: "image-download",
+      });
+
+      await this.importImagesFromLink({
+        linkId: this.importImagesLinkId,
+        urls,
+        operationId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          const queued = result.queued ?? 0;
+          if (queued > 0) {
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.importImagesQueuedToast", {
+                count: queued,
+              }),
+            );
+            this.$emit("product-updated");
+          } else {
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.importImagesNoneSelected"),
+            );
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isApplyingImportImages = false;
+      this.cancelImportImages();
+    },
+
+    cancelImportImages() {
+      this.showImportImagesDialog = false;
+      this.importImagesPreview = null;
+      this.importImagesLinkId = null;
+      this.importImagesConnection = null;
+    },
+
+    resetImportImagesPreview() {
+      this.importImagesPreview = null;
+      this.importImagesLinkId = null;
+      this.importImagesConnection = null;
+    },
+
     getFieldLabel(field) {
       if (field.startsWith("attr:")) return field.substring(5);
-      const known = ["name", "description", "price", "storageQuantity", "barcode"];
+      const known = [
+        "name",
+        "description",
+        "price",
+        "storageQuantity",
+        "barcode",
+      ];
       return known.includes(field)
         ? t(`productMarketplaceIntegrations.fieldLabels.${field}`)
         : field;
@@ -689,7 +870,7 @@ export default {
       if (field === "price") {
         return formatMoney(value, this.storeBaseCurrency);
       }
-      return String(value);
+      return displayFieldValue(value, "");
     },
 
     resolveExportMode(target) {
@@ -699,22 +880,34 @@ export default {
       } else {
         mode = target.preferredExportMode;
       }
-      if (mode !== EXPORT_MODE_PRICE && mode !== EXPORT_MODE_STOCK && mode !== EXPORT_MODE_FULL) {
+      if (
+        mode !== EXPORT_MODE_PRICE &&
+        mode !== EXPORT_MODE_STOCK &&
+        mode !== EXPORT_MODE_FULL
+      ) {
         mode = EXPORT_MODE_FULL;
       }
 
       if (target === "all") {
-        if (mode === EXPORT_MODE_PRICE && this.linkedForPriceExport.length === 0) {
+        if (
+          mode === EXPORT_MODE_PRICE &&
+          this.linkedForPriceExport.length === 0
+        ) {
           return EXPORT_MODE_FULL;
         }
-        if (mode === EXPORT_MODE_STOCK && this.linkedForStockExport.length === 0) {
+        if (
+          mode === EXPORT_MODE_STOCK &&
+          this.linkedForStockExport.length === 0
+        ) {
           return EXPORT_MODE_FULL;
         }
         return mode;
       }
 
-      if (mode === EXPORT_MODE_PRICE && !target.canExportPrices) return EXPORT_MODE_FULL;
-      if (mode === EXPORT_MODE_STOCK && !target.canExportStocks) return EXPORT_MODE_FULL;
+      if (mode === EXPORT_MODE_PRICE && !target.canExportPrices)
+        return EXPORT_MODE_FULL;
+      if (mode === EXPORT_MODE_STOCK && !target.canExportStocks)
+        return EXPORT_MODE_FULL;
       return mode;
     },
 
@@ -726,7 +919,10 @@ export default {
       if (target === "all") {
         const prev = this.connections?.preferredExportAllMode;
         if (this.connections) {
-          this.connections = { ...this.connections, preferredExportAllMode: mode };
+          this.connections = {
+            ...this.connections,
+            preferredExportAllMode: mode,
+          };
         }
         await this.setProductPreferredExportAllMode({
           productId: this.productId,
@@ -734,7 +930,10 @@ export default {
           onSuccess: () => {},
           onError: (error) => {
             if (this.connections) {
-              this.connections = { ...this.connections, preferredExportAllMode: prev };
+              this.connections = {
+                ...this.connections,
+                preferredExportAllMode: prev,
+              };
             }
             displaySonnerError(error);
           },
@@ -744,7 +943,9 @@ export default {
 
       const prev = target.preferredExportMode;
       const updated = (this.connections?.allConnections || []).map((c) =>
-        c.connectionId === target.connectionId ? { ...c, preferredExportMode: mode } : c,
+        c.connectionId === target.connectionId
+          ? { ...c, preferredExportMode: mode }
+          : c,
       );
       this.connections = { ...this.connections, allConnections: updated };
 
@@ -754,7 +955,9 @@ export default {
         onSuccess: () => {},
         onError: (error) => {
           const reverted = (this.connections?.allConnections || []).map((c) =>
-            c.connectionId === target.connectionId ? { ...c, preferredExportMode: prev } : c,
+            c.connectionId === target.connectionId
+              ? { ...c, preferredExportMode: prev }
+              : c,
           );
           this.connections = { ...this.connections, allConnections: reverted };
           displaySonnerError(error);
@@ -805,23 +1008,38 @@ export default {
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
       if (conn.mappingMissing) {
-        displaySonnerError(t("productMarketplaceIntegrations.mappingDeletedError"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.mappingDeletedError"),
+        );
         return;
       }
 
-      if (conn.availableMappings?.length > 1 && !this.mappingSelections[conn.connectionId]) {
-        displaySonnerError(t("productMarketplaceIntegrations.chooseMappingBeforeExport"));
+      if (
+        conn.availableMappings?.length > 1 &&
+        !this.mappingSelections[conn.connectionId]
+      ) {
+        displaySonnerError(
+          t("productMarketplaceIntegrations.chooseMappingBeforeExport"),
+        );
         return;
       }
 
       if (this.exportingByConnectionId[conn.connectionId]) return;
-      this.setConnectionBusyFlag("exportingByConnectionId", conn.connectionId, true);
+      this.setConnectionBusyFlag(
+        "exportingByConnectionId",
+        conn.connectionId,
+        true,
+      );
 
       try {
         const operationId = randomUuidCompact();
         const title = conn.isLinked
-          ? t("productMarketplaceIntegrations.exportTitleLinked", { id: this.productId })
-          : t("productMarketplaceIntegrations.exportTitleUnlinked", { id: this.productId });
+          ? t("productMarketplaceIntegrations.exportTitleLinked", {
+              id: this.productId,
+            })
+          : t("productMarketplaceIntegrations.exportTitleUnlinked", {
+              id: this.productId,
+            });
         await this.$store.dispatch("operations/startOperation", {
           id: operationId,
           type: "single-export",
@@ -835,7 +1053,11 @@ export default {
             linkId: conn.linkId,
             operationId,
             onSuccess: () => {
-              displaySonnerSuccess(t("productMarketplaceIntegrations.productUpdatedOnAdapter", { adapter: conn.adapterName }));
+              displaySonnerSuccess(
+                t("productMarketplaceIntegrations.productUpdatedOnAdapter", {
+                  adapter: conn.adapterName,
+                }),
+              );
               this.fetchData();
             },
             onError: (error) => {
@@ -848,7 +1070,11 @@ export default {
             productId: this.productId,
             operationId,
             onSuccess: () => {
-              displaySonnerSuccess(t("productMarketplaceIntegrations.productExportedToAdapter", { adapter: conn.adapterName }));
+              displaySonnerSuccess(
+                t("productMarketplaceIntegrations.productExportedToAdapter", {
+                  adapter: conn.adapterName,
+                }),
+              );
               this.fetchData();
             },
             onError: (error) => {
@@ -857,25 +1083,37 @@ export default {
           });
         }
       } finally {
-        this.setConnectionBusyFlag("exportingByConnectionId", conn.connectionId, false);
+        this.setConnectionBusyFlag(
+          "exportingByConnectionId",
+          conn.connectionId,
+          false,
+        );
       }
     },
 
     async handleExportPricesToConnection(conn) {
       if (!conn?.linkId || !conn.canExportPrices) {
-        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForPriceExport"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.noLinkedForPriceExport"),
+        );
         return;
       }
 
       if (this.exportingPricesByConnectionId[conn.connectionId]) return;
-      this.setConnectionBusyFlag("exportingPricesByConnectionId", conn.connectionId, true);
+      this.setConnectionBusyFlag(
+        "exportingPricesByConnectionId",
+        conn.connectionId,
+        true,
+      );
       try {
         await this.exportPrices({
           connectionId: conn.connectionId,
           linkIds: [conn.linkId],
           onSuccess: () => {
             displaySonnerSuccess(
-              t("productMarketplaceIntegrations.priceExportedToAdapter", { adapter: conn.adapterName }),
+              t("productMarketplaceIntegrations.priceExportedToAdapter", {
+                adapter: conn.adapterName,
+              }),
             );
             this.fetchData();
           },
@@ -884,25 +1122,37 @@ export default {
           },
         });
       } finally {
-        this.setConnectionBusyFlag("exportingPricesByConnectionId", conn.connectionId, false);
+        this.setConnectionBusyFlag(
+          "exportingPricesByConnectionId",
+          conn.connectionId,
+          false,
+        );
       }
     },
 
     async handleExportStocksToConnection(conn) {
       if (!conn?.linkId || !conn.canExportStocks) {
-        displaySonnerError(t("productMarketplaceIntegrations.noLinkedForStockExport"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.noLinkedForStockExport"),
+        );
         return;
       }
 
       if (this.exportingStocksByConnectionId[conn.connectionId]) return;
-      this.setConnectionBusyFlag("exportingStocksByConnectionId", conn.connectionId, true);
+      this.setConnectionBusyFlag(
+        "exportingStocksByConnectionId",
+        conn.connectionId,
+        true,
+      );
       try {
         await this.exportStocks({
           connectionId: conn.connectionId,
           linkIds: [conn.linkId],
           onSuccess: () => {
             displaySonnerSuccess(
-              t("productMarketplaceIntegrations.stockExportedToAdapter", { adapter: conn.adapterName }),
+              t("productMarketplaceIntegrations.stockExportedToAdapter", {
+                adapter: conn.adapterName,
+              }),
             );
             this.fetchData();
           },
@@ -911,7 +1161,11 @@ export default {
           },
         });
       } finally {
-        this.setConnectionBusyFlag("exportingStocksByConnectionId", conn.connectionId, false);
+        this.setConnectionBusyFlag(
+          "exportingStocksByConnectionId",
+          conn.connectionId,
+          false,
+        );
       }
     },
 
@@ -931,7 +1185,9 @@ export default {
           const result = extractResponseData(response, {});
           let msg = t("productMarketplaceIntegrations.productRecreated");
           if (result.archiveError) {
-            msg += t("productMarketplaceIntegrations.archiveErrorSuffix", { error: result.archiveError });
+            msg += t("productMarketplaceIntegrations.archiveErrorSuffix", {
+              error: result.archiveError,
+            });
           }
           displaySonnerSuccess(msg);
           this.showRecreateDialog = false;
@@ -961,7 +1217,11 @@ export default {
           linkId: this.linkConn.linkId,
           externalProductId: this.linkExternalId.trim(),
           onSuccess: () => {
-            displaySonnerSuccess(t("productMarketplaceIntegrations.productRelinked", { adapter: this.linkConn.adapterName }));
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.productRelinked", {
+                adapter: this.linkConn.adapterName,
+              }),
+            );
             this.showLinkDialog = false;
             this.linkConn = null;
             this.fetchData();
@@ -976,7 +1236,11 @@ export default {
           productId: this.productId,
           externalProductId: this.linkExternalId.trim(),
           onSuccess: () => {
-            displaySonnerSuccess(t("productMarketplaceIntegrations.productLinked", { adapter: this.linkConn.adapterName }));
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.productLinked", {
+                adapter: this.linkConn.adapterName,
+              }),
+            );
             this.showLinkDialog = false;
             this.linkConn = null;
             this.fetchData();
@@ -994,7 +1258,10 @@ export default {
 
       const ok = await confirm({
         title: t("productMarketplaceIntegrations.unlinkConfirmTitle"),
-        description: t("productMarketplaceIntegrations.unlinkConfirmDescription", { adapter: conn.adapterName }),
+        description: t(
+          "productMarketplaceIntegrations.unlinkConfirmDescription",
+          { adapter: conn.adapterName },
+        ),
         confirmLabel: t("productMarketplaceIntegrations.unlinkConfirmLabel"),
       });
       if (!ok) return;
@@ -1004,7 +1271,11 @@ export default {
         await this.unlinkProduct({
           linkId: conn.linkId,
           onSuccess: () => {
-            displaySonnerSuccess(t("productMarketplaceIntegrations.productUnlinked", { adapter: conn.adapterName }));
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.productUnlinked", {
+                adapter: conn.adapterName,
+              }),
+            );
             this.fetchData();
           },
           onError: (error) => {
@@ -1026,14 +1297,20 @@ export default {
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
             if (result.broken > 0 || result.status === "RemoteMissing") {
-              displaySonnerError(t("productMarketplaceIntegrations.verifyBroken"));
+              displaySonnerError(
+                t("productMarketplaceIntegrations.verifyBroken"),
+              );
             } else {
-              displaySonnerSuccess(t("productMarketplaceIntegrations.verifySuccess"));
+              displaySonnerSuccess(
+                t("productMarketplaceIntegrations.verifySuccess"),
+              );
             }
             this.fetchData();
           },
           onError: (error) => {
-            displaySonnerError(error || t("productMarketplaceIntegrations.verifyError"));
+            displaySonnerError(
+              error || t("productMarketplaceIntegrations.verifyError"),
+            );
           },
         });
       } finally {
@@ -1049,7 +1326,12 @@ export default {
 
     getSelectedMappingName(conn) {
       const m = this.getSelectedMapping(conn);
-      return m ? (m.name || m.externalCategoryName || t("productMarketplaceIntegrations.mappingFallback", { id: m.id })) : null;
+      return m
+        ? mappingDisplayName(
+            m,
+            t("productMarketplaceIntegrations.mappingFallback", { id: m.id }),
+          )
+        : null;
     },
 
     getMappingRoute(conn) {
@@ -1068,9 +1350,10 @@ export default {
         query: {
           tab: "mappings",
           createMapping: "true",
-          localCategoryId: this.connections?.categoryId != null
-            ? String(this.connections.categoryId)
-            : undefined,
+          localCategoryId:
+            this.connections?.categoryId != null
+              ? String(this.connections.categoryId)
+              : undefined,
           localCategoryName: this.connections?.categoryName || undefined,
         },
       };
@@ -1080,22 +1363,36 @@ export default {
       if (this.exportingByConnectionId[conn.connectionId]) return true;
       if (this.exportingPricesByConnectionId[conn.connectionId]) return true;
       if (this.exportingStocksByConnectionId[conn.connectionId]) return true;
-      if (this.isExportingAll && conn.hasMapping && conn.canExport && !conn.mappingMissing) return true;
-      if (this.isExportingPricesAll && conn.isLinked && conn.canExportPrices) return true;
-      if (this.isExportingStocksAll && conn.isLinked && conn.canExportStocks) return true;
+      if (
+        this.isExportingAll &&
+        conn.hasMapping &&
+        conn.canExport &&
+        !conn.mappingMissing
+      )
+        return true;
+      if (this.isExportingPricesAll && conn.isLinked && conn.canExportPrices)
+        return true;
+      if (this.isExportingStocksAll && conn.isLinked && conn.canExportStocks)
+        return true;
       if (conn.isLinked) {
         if (this.importingLinkId === conn.linkId) return true;
         if (this.unlinkingLinkId === conn.linkId) return true;
         if (this.verifyingLinkId === conn.linkId) return true;
-        if (this.isApplyingImport && this.previewLinkId === conn.linkId) return true;
-        if (this.isRecreating && this.recreateConn?.connectionId === conn.connectionId) return true;
+        if (this.isApplyingImport && this.previewLinkId === conn.linkId)
+          return true;
+        if (
+          this.isRecreating &&
+          this.recreateConn?.connectionId === conn.connectionId
+        )
+          return true;
       }
       return false;
     },
 
     getMarketplaceProductUrl(conn) {
       if (!conn.externalProductId || !conn.productEditUrlTemplate) return null;
-      const publicCreds = conn.publicCredentials || conn.PublicCredentials || {};
+      const publicCreds =
+        conn.publicCredentials || conn.PublicCredentials || {};
       return fillProductEditUrl(conn.productEditUrlTemplate, {
         ...publicCreds,
         externalId: conn.externalProductId,
@@ -1132,8 +1429,14 @@ export default {
       const diffMins = Math.floor(diffMs / 60000);
 
       if (diffMins < 1) return t("productMarketplaceIntegrations.justNow");
-      if (diffMins < 60) return t("productMarketplaceIntegrations.minutesAgo", { count: diffMins });
-      if (diffMins < 1440) return t("productMarketplaceIntegrations.hoursAgo", { count: Math.floor(diffMins / 60) });
+      if (diffMins < 60)
+        return t("productMarketplaceIntegrations.minutesAgo", {
+          count: diffMins,
+        });
+      if (diffMins < 1440)
+        return t("productMarketplaceIntegrations.hoursAgo", {
+          count: Math.floor(diffMins / 60),
+        });
       return this.formatStoreDate(date);
     },
   },
@@ -1185,12 +1488,18 @@ export default {
       v-else-if="!connections?.allConnections?.length"
       :framed="false"
       :title="$t('productMarketplaceIntegrations.noConnectionsTitle')"
-      :description="$t('productMarketplaceIntegrations.noConnectionsDescription')"
+      :description="
+        $t('productMarketplaceIntegrations.noConnectionsDescription')
+      "
     >
       <template #icon>
         <Link2 />
       </template>
-      <Button variant="outline" class="mt-2" @click="$router.push(PAGE_MARKETPLACE)">
+      <Button
+        variant="outline"
+        class="mt-2"
+        @click="$router.push(PAGE_MARKETPLACE)"
+      >
         <Settings class="mr-2 size-4" />
         {{ $t("productMarketplaceIntegrations.goToConnections") }}
       </Button>
@@ -1204,21 +1513,31 @@ export default {
         class="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3"
       >
         <div class="flex items-center gap-3 min-w-0">
-          <div class="size-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+          <div
+            class="size-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0"
+          >
             <Upload class="size-4 text-primary" />
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-medium">{{ $t("productMarketplaceIntegrations.exportToAllTitle") }}</div>
+            <div class="text-sm font-medium">
+              {{ $t("productMarketplaceIntegrations.exportToAllTitle") }}
+            </div>
             <div class="text-xs text-muted-foreground">
               {{
                 connectionsWithMapping.length < 5
-                  ? $t("productMarketplaceIntegrations.readyCountFew", { count: connectionsWithMapping.length })
-                  : $t("productMarketplaceIntegrations.readyCountMany", { count: connectionsWithMapping.length })
+                  ? $t("productMarketplaceIntegrations.readyCountFew", {
+                      count: connectionsWithMapping.length,
+                    })
+                  : $t("productMarketplaceIntegrations.readyCountMany", {
+                      count: connectionsWithMapping.length,
+                    })
               }}
             </div>
           </div>
         </div>
-        <ButtonGroup class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none">
+        <ButtonGroup
+          class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none"
+        >
           <Button
             size="sm"
             @click="runSelectedExportAll"
@@ -1234,7 +1553,9 @@ export default {
                 size="sm"
                 class="px-2"
                 :disabled="isExportingAnyAll || isLoading"
-                :aria-label="$t('productMarketplaceIntegrations.menuExportMode')"
+                :aria-label="
+                  $t('productMarketplaceIntegrations.menuExportMode')
+                "
               >
                 <ChevronRight class="size-4" />
               </Button>
@@ -1266,141 +1587,209 @@ export default {
       </div>
 
       <!-- Linked connections (already exported) -->
-      <ContextMenu
-        v-for="conn in linkedConnections"
-        :key="conn.connectionId"
-      >
+      <ContextMenu v-for="conn in linkedConnections" :key="conn.connectionId">
         <ContextMenuTrigger as-child>
           <div class="relative border rounded-lg">
-        <div class="flex items-center gap-3 px-4 py-3">
-        <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
-          <Spinner size="lg" class="text-primary" />
-        </div>
-        <a
-          v-if="getMarketplaceProductUrl(conn)"
-          :href="getMarketplaceProductUrl(conn)"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0 hover:bg-muted/80 transition-colors"
-          :title="$t('productMarketplaceIntegrations.openOnAdapter')"
-              @contextmenu.stop
-        >
-          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-        </a>
-        <div v-else class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
-            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
-          </div>
-          <div class="flex items-center gap-2 mt-0.5">
-            <code class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{{ conn.externalProductId }}</code>
-            <span v-if="conn.externalSku" class="text-xs text-muted-foreground">
-              {{ $t("productMarketplaceIntegrations.skuPrefix", { sku: conn.externalSku }) }}
-            </span>
-            <router-link
-              v-if="getMappingRoute(conn)"
-              :to="getMappingRoute(conn)"
-              class="text-xs text-primary hover:underline truncate"
+            <div class="flex items-center gap-3 px-4 py-3">
+              <div
+                v-if="isConnectionBusy(conn)"
+                class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10"
+              >
+                <Spinner size="lg" class="text-primary" />
+              </div>
+              <a
+                v-if="getMarketplaceProductUrl(conn)"
+                :href="getMarketplaceProductUrl(conn)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0 hover:bg-muted/80 transition-colors"
+                :title="$t('productMarketplaceIntegrations.openOnAdapter')"
+                @contextmenu.stop
+              >
+                <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
+              </a>
+              <div
+                v-else
+                class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
+              >
+                <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-sm truncate">{{
+                    conn.adapterName
+                  }}</span>
+                  <span
+                    class="text-xs text-muted-foreground truncate hidden sm:inline"
+                    >{{ conn.connectionName }}</span
+                  >
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <code
+                    class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground"
+                    >{{ conn.externalProductId }}</code
+                  >
+                  <span
+                    v-if="conn.externalSku"
+                    class="text-xs text-muted-foreground"
+                  >
+                    {{
+                      $t("productMarketplaceIntegrations.skuPrefix", {
+                        sku: conn.externalSku,
+                      })
+                    }}
+                  </span>
+                  <router-link
+                    v-if="getMappingRoute(conn)"
+                    :to="getMappingRoute(conn)"
+                    class="text-xs text-primary hover:underline truncate"
+                  >
+                    {{ getSelectedMappingName(conn) }}
+                  </router-link>
+                  <span
+                    v-else-if="conn.mappingMissing"
+                    class="text-xs text-destructive"
+                  >
+                    {{ $t("productMarketplaceIntegrations.mappingDeleted") }}
+                  </span>
+                </div>
+              </div>
+              <Badge
+                :variant="getConnectionStatusInfo(conn).variant"
+                class="shrink-0"
+              >
+                <component
+                  :is="getConnectionStatusInfo(conn).icon"
+                  v-if="getConnectionStatusInfo(conn).icon"
+                  class="size-3 mr-1"
+                />
+                {{ getConnectionStatusInfo(conn).label }}
+              </Badge>
+              <TooltipProvider v-if="connections?.hasSizes">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8 shrink-0"
+                      @click="toggleVariants(conn)"
+                    >
+                      <Ruler class="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>
+                      {{ $t("productMarketplaceIntegrations.sizesTooltip") }}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <ProductAdapterConnectionMenu
+                :connection="conn"
+                :selected-mapping-id="mappingSelections[conn.connectionId]"
+                :marketplace-url="getMarketplaceProductUrl(conn)"
+                :configure-mapping-to="configureMappingTo(conn)"
+                :category-name="connections?.categoryName"
+                align="end"
+                :export-busy="isSelectedExportBusy(conn)"
+                :import-busy="importingLinkId === conn.linkId"
+                :verify-busy="verifyingLinkId === conn.linkId"
+                :unlink-busy="unlinkingLinkId === conn.linkId"
+                show-relink
+                show-recreate
+                show-danger-section
+                @export="runSelectedExport(conn)"
+                @update:export-mode="setExportMode(conn, $event)"
+                @import="handleImportFromLink(conn)"
+                @import-images="handleImportImagesFromLink(conn)"
+                @verify="handleVerifyLink(conn)"
+                @unlink="handleUnlink(conn)"
+                @update:mapping="handleMappingChange(conn, $event)"
+                @relink="openLinkDialog(conn, true)"
+                @recreate="openRecreateDialog(conn)"
+              >
+                <template #trigger>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 shrink-0"
+                    :aria-label="$t('common.actions')"
+                  >
+                    <EllipsisVertical class="size-4" />
+                  </Button>
+                </template>
+              </ProductAdapterConnectionMenu>
+            </div>
+            <!-- Variants panel -->
+            <div
+              v-if="variantsData[conn.connectionId]"
+              class="border-t px-4 py-2"
             >
-              {{ getSelectedMappingName(conn) }}
-            </router-link>
-            <span v-else-if="conn.mappingMissing" class="text-xs text-destructive">
-              {{ $t("productMarketplaceIntegrations.mappingDeleted") }}
-            </span>
-          </div>
-        </div>
-        <Badge :variant="getConnectionStatusInfo(conn).variant" class="shrink-0">
-          <component
-            :is="getConnectionStatusInfo(conn).icon"
-            v-if="getConnectionStatusInfo(conn).icon"
-            class="size-3 mr-1"
-          />
-          {{ getConnectionStatusInfo(conn).label }}
-        </Badge>
-        <TooltipProvider v-if="connections?.hasSizes">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Button variant="ghost" size="icon" class="size-8 shrink-0" @click="toggleVariants(conn)">
-                <Ruler class="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{{ $t("productMarketplaceIntegrations.sizesTooltip") }}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <ProductAdapterConnectionMenu
-          :connection="conn"
-          :selected-mapping-id="mappingSelections[conn.connectionId]"
-          :marketplace-url="getMarketplaceProductUrl(conn)"
-          :configure-mapping-to="configureMappingTo(conn)"
-          :category-name="connections?.categoryName"
-          align="end"
-          :export-busy="isSelectedExportBusy(conn)"
-          :import-busy="importingLinkId === conn.linkId"
-          :verify-busy="verifyingLinkId === conn.linkId"
-          :unlink-busy="unlinkingLinkId === conn.linkId"
-          show-relink
-          show-recreate
-          show-danger-section
-          @export="runSelectedExport(conn)"
-          @update:export-mode="setExportMode(conn, $event)"
-          @import="handleImportFromLink(conn)"
-          @verify="handleVerifyLink(conn)"
-          @unlink="handleUnlink(conn)"
-          @update:mapping="handleMappingChange(conn, $event)"
-          @relink="openLinkDialog(conn, true)"
-          @recreate="openRecreateDialog(conn)"
-        >
-          <template #trigger>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-8 shrink-0"
-              :aria-label="$t('common.actions')"
-            >
-              <EllipsisVertical class="size-4" />
-            </Button>
-          </template>
-        </ProductAdapterConnectionMenu>
-        </div>
-        <!-- Variants panel -->
-        <div v-if="variantsData[conn.connectionId]" class="border-t px-4 py-2">
-          <div v-if="variantsData[conn.connectionId].loading" class="flex items-center gap-2 py-2">
-            <Spinner />
-            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.loadingSizes") }}</span>
-          </div>
-          <div v-else-if="variantsData[conn.connectionId].variants.length === 0" class="py-2">
-            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.noSizesForConnection") }}</span>
-          </div>
-          <Table v-else>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.sizeHeader") }}</TableHead>
-                <TableHead class="text-xs h-8">SKU</TableHead>
-                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.barcodeHeader") }}</TableHead>
-                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.priceHeader") }}</TableHead>
-                <TableHead class="text-xs h-8">{{ $t("productMarketplaceIntegrations.stockHeader") }}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="v in variantsData[conn.connectionId].variants" :key="v.id">
-                <TableCell class="text-xs py-1">{{ v.size || '-' }}</TableCell>
-                <TableCell class="text-xs py-1">
-                  <code class="bg-muted px-1 rounded">{{ v.sku || '-' }}</code>
-                </TableCell>
-                <TableCell class="text-xs py-1">
-                  <code class="bg-muted px-1 rounded">{{ v.barcode || '-' }}</code>
-                </TableCell>
-                <TableCell class="text-xs py-1">{{ v.price != null ? v.price : '-' }}</TableCell>
-                <TableCell class="text-xs py-1">{{ v.quantity != null ? v.quantity : '-' }}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+              <div
+                v-if="variantsData[conn.connectionId].loading"
+                class="flex items-center gap-2 py-2"
+              >
+                <Spinner />
+                <span class="text-xs text-muted-foreground">{{
+                  $t("productMarketplaceIntegrations.loadingSizes")
+                }}</span>
+              </div>
+              <div
+                v-else-if="
+                  variantsData[conn.connectionId].variants.length === 0
+                "
+                class="py-2"
+              >
+                <span class="text-xs text-muted-foreground">{{
+                  $t("productMarketplaceIntegrations.noSizesForConnection")
+                }}</span>
+              </div>
+              <Table v-else>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="h-8 w-20 text-xs">{{
+                      $t("productMarketplaceIntegrations.sizeHeader")
+                    }}</TableHead>
+                    <TableHead class="h-8 text-xs">SKU</TableHead>
+                    <TableHead class="h-8 text-xs">{{
+                      $t("productMarketplaceIntegrations.barcodeHeader")
+                    }}</TableHead>
+                    <TableHead class="h-8 w-24 text-right text-xs">{{
+                      $t("productMarketplaceIntegrations.priceHeader")
+                    }}</TableHead>
+                    <TableHead class="h-8 w-20 text-right text-xs">{{
+                      $t("productMarketplaceIntegrations.stockHeader")
+                    }}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="v in variantsData[conn.connectionId].variants"
+                    :key="v.id"
+                  >
+                    <TableCell class="text-xs py-1">{{
+                      v.size || "-"
+                    }}</TableCell>
+                    <TableCell class="text-xs py-1">
+                      <code class="bg-muted px-1 rounded">{{
+                        v.sku || "-"
+                      }}</code>
+                    </TableCell>
+                    <TableCell class="text-xs py-1">
+                      <code class="bg-muted px-1 rounded">{{
+                        v.barcode || "-"
+                      }}</code>
+                    </TableCell>
+                    <TableCell class="text-xs py-1">{{
+                      v.price != null ? v.price : "-"
+                    }}</TableCell>
+                    <TableCell class="text-xs py-1">{{
+                      v.quantity != null ? v.quantity : "-"
+                    }}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent class="w-56">
@@ -1421,6 +1810,7 @@ export default {
             @export="runSelectedExport(conn)"
             @update:export-mode="setExportMode(conn, $event)"
             @import="handleImportFromLink(conn)"
+            @import-images="handleImportImagesFromLink(conn)"
             @verify="handleVerifyLink(conn)"
             @unlink="handleUnlink(conn)"
             @update:mapping="handleMappingChange(conn, $event)"
@@ -1436,59 +1826,74 @@ export default {
         :key="conn.connectionId"
       >
         <ContextMenuTrigger as-child>
-      <div
-        class="relative flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
-      >
-        <div v-if="isConnectionBusy(conn)" class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10">
-          <Spinner size="lg" class="text-primary" />
-        </div>
-        <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
-            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
-          </div>
-          <div class="flex items-center gap-2 mt-0.5">
-            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.notExported") }}</span>
-            <router-link
-              v-if="getMappingRoute(conn)"
-              :to="getMappingRoute(conn)"
-              class="text-xs text-primary hover:underline truncate"
+          <div
+            class="relative flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
+          >
+            <div
+              v-if="isConnectionBusy(conn)"
+              class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10"
             >
-              · {{ getSelectedMappingName(conn) }}
-            </router-link>
-          </div>
-        </div>
-        <Badge variant="outline" class="text-success border-success shrink-0">
-          <CheckCircle class="size-3 mr-1" />
-          {{ $t("productMarketplaceIntegrations.ready") }}
-        </Badge>
-        <ProductAdapterConnectionMenu
-          :connection="conn"
-          :selected-mapping-id="mappingSelections[conn.connectionId]"
-          :configure-mapping-to="configureMappingTo(conn)"
-          :category-name="connections?.categoryName"
-          align="end"
-          :export-busy="exportingByConnectionId[conn.connectionId]"
-          show-link-manually
-          @export="handleExportToConnection(conn)"
-          @link-manually="openLinkDialog(conn)"
-          @update:mapping="handleMappingChange(conn, $event)"
-        >
-          <template #trigger>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-8 shrink-0"
-              :aria-label="$t('common.actions')"
+              <Spinner size="lg" class="text-primary" />
+            </div>
+            <div
+              class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
             >
-              <EllipsisVertical class="size-4" />
-            </Button>
-          </template>
-        </ProductAdapterConnectionMenu>
-      </div>
+              <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-sm truncate">{{
+                  conn.adapterName
+                }}</span>
+                <span
+                  class="text-xs text-muted-foreground truncate hidden sm:inline"
+                  >{{ conn.connectionName }}</span
+                >
+              </div>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-xs text-muted-foreground">{{
+                  $t("productMarketplaceIntegrations.notExported")
+                }}</span>
+                <router-link
+                  v-if="getMappingRoute(conn)"
+                  :to="getMappingRoute(conn)"
+                  class="text-xs text-primary hover:underline truncate"
+                >
+                  · {{ getSelectedMappingName(conn) }}
+                </router-link>
+              </div>
+            </div>
+            <Badge
+              variant="outline"
+              class="text-success border-success shrink-0"
+            >
+              <CheckCircle class="size-3 mr-1" />
+              {{ $t("productMarketplaceIntegrations.ready") }}
+            </Badge>
+            <ProductAdapterConnectionMenu
+              :connection="conn"
+              :selected-mapping-id="mappingSelections[conn.connectionId]"
+              :configure-mapping-to="configureMappingTo(conn)"
+              :category-name="connections?.categoryName"
+              align="end"
+              :export-busy="exportingByConnectionId[conn.connectionId]"
+              show-link-manually
+              @export="handleExportToConnection(conn)"
+              @link-manually="openLinkDialog(conn)"
+              @update:mapping="handleMappingChange(conn, $event)"
+            >
+              <template #trigger>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 shrink-0"
+                  :aria-label="$t('common.actions')"
+                >
+                  <EllipsisVertical class="size-4" />
+                </Button>
+              </template>
+            </ProductAdapterConnectionMenu>
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent class="w-56">
           <ProductAdapterConnectionMenuItems
@@ -1512,16 +1917,27 @@ export default {
         :key="conn.connectionId"
         class="flex items-center gap-3 rounded-lg px-4 py-3 border border-dashed"
       >
-        <div class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+        <div
+          class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
+        >
           <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span class="font-medium text-sm truncate">{{ conn.adapterName }}</span>
-            <span class="text-xs text-muted-foreground truncate hidden sm:inline">{{ conn.connectionName }}</span>
+            <span class="font-medium text-sm truncate">{{
+              conn.adapterName
+            }}</span>
+            <span
+              class="text-xs text-muted-foreground truncate hidden sm:inline"
+              >{{ conn.connectionName }}</span
+            >
           </div>
           <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="text-xs text-muted-foreground">{{ $t("productMarketplaceIntegrations.mappingNotConfigured", { category: connections.categoryName }) }}</span>
+            <span class="text-xs text-muted-foreground">{{
+              $t("productMarketplaceIntegrations.mappingNotConfigured", {
+                category: connections.categoryName,
+              })
+            }}</span>
             <router-link
               :to="{
                 name: PAGE_MARKETPLACE_CONNECTION,
@@ -1553,7 +1969,9 @@ export default {
           :framed="false"
           size="sm"
           :title="$t('productMarketplaceIntegrations.noAvailableAdaptersTitle')"
-          :description="$t('productMarketplaceIntegrations.noAvailableAdaptersDescription')"
+          :description="
+            $t('productMarketplaceIntegrations.noAvailableAdaptersDescription')
+          "
         >
           <template #icon>
             <Link2 />
@@ -1567,7 +1985,9 @@ export default {
       v-if="showImportPreviewDialog"
       :open="showImportPreviewDialog"
       :title="$t('productMarketplaceIntegrations.importDialogTitle')"
-      :description="$t('productMarketplaceIntegrations.importDialogDescription')"
+      :description="
+        $t('productMarketplaceIntegrations.importDialogDescription')
+      "
       :items="importPreviewItems"
       selectable
       :excluded-fields="importExcludedFields"
@@ -1580,13 +2000,28 @@ export default {
       @cancel="resetImportPreview"
     />
 
+    <ImportImagesPreviewDialog
+      v-if="showImportImagesDialog"
+      :open="showImportImagesDialog"
+      :images="importImagesPreview?.images || []"
+      :local-gallery-count="importImagesPreview?.localGalleryCount || 0"
+      :confirm-loading="isApplyingImportImages"
+      @update:open="(v) => (showImportImagesDialog = v)"
+      @confirm="confirmImportImages"
+      @cancel="resetImportImagesPreview"
+    />
+
     <!-- Bulk Mapping Selection Dialog -->
     <Dialog v-model:open="showBulkMappingDialog">
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>{{ $t("productMarketplaceIntegrations.bulkMappingDialogTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            $t("productMarketplaceIntegrations.bulkMappingDialogTitle")
+          }}</DialogTitle>
           <DialogDescription>
-            {{ $t("productMarketplaceIntegrations.bulkMappingDialogDescription") }}
+            {{
+              $t("productMarketplaceIntegrations.bulkMappingDialogDescription")
+            }}
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-4 py-4">
@@ -1595,13 +2030,27 @@ export default {
             :key="conn.connectionId"
             class="flex items-center gap-3"
           >
-            <span class="text-sm font-medium w-[120px] shrink-0">{{ conn.adapterName }}</span>
+            <span class="text-sm font-medium w-[120px] shrink-0">{{
+              conn.adapterName
+            }}</span>
             <Select
-              :model-value="String(bulkMappingSelections[conn.connectionId] || '')"
-              @update:model-value="(val) => (bulkMappingSelections = { ...bulkMappingSelections, [conn.connectionId]: Number(val) })"
+              :model-value="
+                String(bulkMappingSelections[conn.connectionId] || '')
+              "
+              @update:model-value="
+                (val) =>
+                  (bulkMappingSelections = {
+                    ...bulkMappingSelections,
+                    [conn.connectionId]: Number(val),
+                  })
+              "
             >
               <SelectTrigger class="h-8 flex-1">
-                <SelectValue :placeholder="$t('productMarketplaceIntegrations.choosePlaceholder')" />
+                <SelectValue
+                  :placeholder="
+                    $t('productMarketplaceIntegrations.choosePlaceholder')
+                  "
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -1609,15 +2058,29 @@ export default {
                   :key="m.id"
                   :value="String(m.id)"
                 >
-                  {{ m.name || m.externalCategoryName || $t("productMarketplaceIntegrations.mappingFallback", { id: m.id }) }}
+                  {{
+                    mappingDisplayName(
+                      m,
+                      $t("productMarketplaceIntegrations.mappingFallback", {
+                        id: m.id,
+                      }),
+                    )
+                  }}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline">{{ $t("common.cancel") }}</Button></DialogClose>
-          <Button @click="confirmBulkMappingAndExport" :disabled="!allBulkMappingsSelected()">
+          <DialogClose as-child
+            ><Button variant="outline">{{
+              $t("common.cancel")
+            }}</Button></DialogClose
+          >
+          <Button
+            @click="confirmBulkMappingAndExport"
+            :disabled="!allBulkMappingsSelected()"
+          >
             <Upload class="size-4 mr-2" />
             {{ $t("productMarketplaceIntegrations.export") }}
           </Button>
@@ -1629,9 +2092,15 @@ export default {
     <Dialog v-model:open="showRecreateDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ $t("productMarketplaceIntegrations.recreateDialogTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            $t("productMarketplaceIntegrations.recreateDialogTitle")
+          }}</DialogTitle>
           <DialogDescription>
-            {{ $t("productMarketplaceIntegrations.recreateDialogDescription", { adapter: recreateConn?.adapterName }) }}
+            {{
+              $t("productMarketplaceIntegrations.recreateDialogDescription", {
+                adapter: recreateConn?.adapterName,
+              })
+            }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4">
@@ -1644,15 +2113,24 @@ export default {
                 id="recreate-sku"
                 v-model="recreateNewSku"
                 maxlength="50"
-                :placeholder="$t('productMarketplaceIntegrations.newSkuPlaceholder')"
+                :placeholder="
+                  $t('productMarketplaceIntegrations.newSkuPlaceholder')
+                "
                 @keyup.enter="submitRecreate"
               />
             </SettingsFormField>
           </FieldGroup>
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline" :disabled="isRecreating">{{ $t("common.cancel") }}</Button></DialogClose>
-          <Button @click="submitRecreate" :disabled="isRecreating || !recreateNewSku.trim()">
+          <DialogClose as-child
+            ><Button variant="outline" :disabled="isRecreating">{{
+              $t("common.cancel")
+            }}</Button></DialogClose
+          >
+          <Button
+            @click="submitRecreate"
+            :disabled="isRecreating || !recreateNewSku.trim()"
+          >
             <Spinner v-if="isRecreating" class="mr-2" />
             <RefreshCw v-else class="size-4 mr-2" />
             {{ $t("productMarketplaceIntegrations.menuRecreate") }}
@@ -1665,12 +2143,20 @@ export default {
     <Dialog v-model:open="showLinkDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ isRelinking ? $t("productMarketplaceIntegrations.relinkProductTitle") : $t("productMarketplaceIntegrations.linkProductTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            isRelinking
+              ? $t("productMarketplaceIntegrations.relinkProductTitle")
+              : $t("productMarketplaceIntegrations.linkProductTitle")
+          }}</DialogTitle>
           <DialogDescription>
             {{
               isRelinking
-                ? $t("productMarketplaceIntegrations.relinkDescription", { adapter: linkConn?.adapterName })
-                : $t("productMarketplaceIntegrations.linkDescription", { adapter: linkConn?.adapterName })
+                ? $t("productMarketplaceIntegrations.relinkDescription", {
+                    adapter: linkConn?.adapterName,
+                  })
+                : $t("productMarketplaceIntegrations.linkDescription", {
+                    adapter: linkConn?.adapterName,
+                  })
             }}
           </DialogDescription>
         </DialogHeader>
@@ -1684,18 +2170,31 @@ export default {
                 id="link-external-id"
                 v-model="linkExternalId"
                 maxlength="100"
-                :placeholder="$t('productMarketplaceIntegrations.externalIdPlaceholder')"
+                :placeholder="
+                  $t('productMarketplaceIntegrations.externalIdPlaceholder')
+                "
                 @keyup.enter="submitLink"
               />
             </SettingsFormField>
           </FieldGroup>
         </div>
         <DialogFooter>
-          <DialogClose as-child><Button variant="outline" :disabled="isLinking">{{ $t("common.cancel") }}</Button></DialogClose>
-          <Button @click="submitLink" :disabled="isLinking || !linkExternalId.trim()">
+          <DialogClose as-child
+            ><Button variant="outline" :disabled="isLinking">{{
+              $t("common.cancel")
+            }}</Button></DialogClose
+          >
+          <Button
+            @click="submitLink"
+            :disabled="isLinking || !linkExternalId.trim()"
+          >
             <Spinner v-if="isLinking" class="mr-2" />
             <Link2 v-else class="size-4 mr-2" />
-            {{ isRelinking ? $t("productMarketplaceIntegrations.relinkAction") : $t("productMarketplaceIntegrations.linkAction") }}
+            {{
+              isRelinking
+                ? $t("productMarketplaceIntegrations.relinkAction")
+                : $t("productMarketplaceIntegrations.linkAction")
+            }}
           </Button>
         </DialogFooter>
       </DialogContent>

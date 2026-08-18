@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps({
   loading: { type: Boolean, default: false },
+  loadingMessage: { type: String, default: "" },
   empty: { type: Boolean, default: false },
   emptyIcon: { type: null, default: null },
   emptyTitle: { type: String, default: "" },
@@ -26,6 +27,7 @@ const props = defineProps({
     <EmptyState
       v-if="loading"
       loading
+      :title="loadingMessage"
       class="min-h-0 flex-1"
     />
     <EmptyState

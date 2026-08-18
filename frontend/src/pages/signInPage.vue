@@ -24,6 +24,7 @@ import {
   translateApiFieldErrors,
   usernameSchema,
 } from "@/lib/authValidation";
+import { FIELD_LIMITS } from "@/lib/fieldLimits";
 
 export default {
   components: {
@@ -84,15 +85,16 @@ export default {
       isSubmitting,
       PAGE_SIGN_UP,
       t,
+      FIELD_LIMITS,
     };
   },
 };
 </script>
 
 <template>
-  <AuthLayout :title="t('auth.signIn')">
-    <form class="auth-form" @submit="onSubmit">
-      <FieldGroup class="gap-4">
+  <AuthLayout :title="t('auth.signIn')" :subtitle="t('auth.signInBody')">
+    <form @submit="onSubmit">
+      <FieldGroup class="gap-5">
         <FormField v-slot="{ componentField, errorMessage }" name="userName">
           <SettingsFormField
             :label="t('auth.userName')"
@@ -102,8 +104,8 @@ export default {
             <Input
               id="sign-in-username"
               type="text"
-              :placeholder="t('auth.userName')"
               autocomplete="username"
+              :maxlength="FIELD_LIMITS.userName"
               v-bind="componentField"
             />
           </SettingsFormField>
@@ -118,6 +120,7 @@ export default {
             <PasswordInput
               id="sign-in-password"
               autocomplete="current-password"
+              :maxlength="FIELD_LIMITS.password"
               v-bind="componentField"
             />
           </SettingsFormField>
@@ -142,7 +145,12 @@ export default {
           </SettingsFormField>
         </FormField>
 
-        <Button type="submit" class="w-full" :disabled="isSubmitting">
+        <Button
+          type="submit"
+          size="lg"
+          class="auth-submit w-full"
+          :disabled="isSubmitting"
+        >
           <Spinner v-if="isSubmitting" />
           <span v-else>{{ t("auth.signIn") }}</span>
         </Button>

@@ -85,6 +85,8 @@ const MAP = {
   Languages: "LanguageCircleIcon",
   Layers: "Layers01Icon",
   LayoutGrid: "DashboardSquare01Icon",
+  Columns3: "LayoutThreeColumnIcon",
+  Rows3: "LayoutThreeRowIcon",
   Link: "Link01Icon",
   Link2: "Link02Icon",
   List: "Menu01Icon",

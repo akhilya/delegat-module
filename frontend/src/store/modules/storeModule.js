@@ -60,10 +60,11 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createStore(ctx, { name, addAllUsers, timezone, baseCurrency, onSuccess, onError }) {
+    async createStore(ctx, { name, addAllUsers, timezone, baseCurrency, fromSetup, onSuccess, onError }) {
       const data = { name, addAllUsers };
       if (timezone) data.timezone = timezone;
       if (baseCurrency) data.baseCurrency = baseCurrency;
+      if (fromSetup) data.fromSetup = true;
       return await useAxios(
         `/stores/`,
         {
@@ -79,6 +80,19 @@ export default {
       )
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
+    },
+
+    async completeStoreOnboarding(ctx, { storeId, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/stores/${storeId}/onboarding/complete`,
+          {},
+          { cache: false },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
     },
 
     async updateStore(ctx, { storeId, data, onSuccess, onError }) {

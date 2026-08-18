@@ -49,6 +49,12 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     public bool isMultiline { get; set; } = false;
 
     /// <summary>
+    /// For select/multiselect: the product form accepts values that are not in <see cref="options"/>.
+    /// Copied from marketplace fields that allow custom values (Wildberries characteristics, Yandex allowCustomValues).
+    /// </summary>
+    public bool allowCustomValues { get; set; } = false;
+
+    /// <summary>
     /// Whether this attribute is shown on the product edit page.
     /// </summary>
     public bool showOnProductPage { get; set; } = true;
@@ -84,8 +90,41 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     /// <summary>
     /// Attribute group for visual grouping (e.g., "Dimensions and weight", "Media").
     /// </summary>
-    [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
-    public string? group { get; set; }
+        [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
+        public string? group { get; set; }
+
+        /// <summary>
+        /// Optional icon for the attribute group: <c>adapter:{adapterKey}</c> or a Lucide-compatible name.
+        /// </summary>
+        [StringLength(ATTRIBUTE_GROUP_ICON_MAX_LENGTH)]
+        public string? groupIcon { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value (copied from marketplace field limits on import).
+        /// </summary>
+    public int? maxLength { get; set; }
+
+    /// <summary>
+    /// Minimum numeric value (copied from marketplace field limits on import).
+    /// </summary>
+    public decimal? minValue { get; set; }
+
+    /// <summary>
+    /// Maximum numeric value (copied from marketplace field limits on import).
+    /// </summary>
+    public decimal? maxValue { get; set; }
+
+    /// <summary>
+    /// Maximum number of selected values for select/multiselect (copied from marketplace MaxCount / MaxValueCount).
+    /// Null means unlimited.
+    /// </summary>
+    public int? maxValues { get; set; }
+
+    /// <summary>
+    /// Regex the stored value must match (copied from marketplace field limits on import).
+    /// </summary>
+    [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+    public string? validationPattern { get; set; }
 
     /// <summary>
     /// Foreign key to the parent category.
@@ -111,6 +150,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         isRequired = form.isRequired;
         isUnique = form.isUnique;
         isMultiline = form.isMultiline;
+        allowCustomValues = form.allowCustomValues;
         showOnProductPage = form.isRequired || form.showOnProductPage;
         sortOrder = form.sortOrder;
         options = form.options;
@@ -118,6 +158,12 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         description = form.description;
         descriptionInTooltip = form.descriptionInTooltip;
         group = form.group;
+        groupIcon = form.groupIcon;
+        maxLength = form.maxLength;
+        minValue = form.minValue;
+        maxValue = form.maxValue;
+        maxValues = form.maxValues;
+        validationPattern = form.validationPattern;
         categoryId = form.categoryId;
         return true;
     }
@@ -136,6 +182,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             isUnique = form.isUnique.Value;
         if (form.isMultiline.HasValue)
             isMultiline = form.isMultiline.Value;
+        if (form.allowCustomValues.HasValue)
+            allowCustomValues = form.allowCustomValues.Value;
         if (form.showOnProductPage.HasValue)
             showOnProductPage = form.showOnProductPage.Value;
         // Required attributes must always appear on the product page.
@@ -150,6 +198,12 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             descriptionInTooltip = form.descriptionInTooltip.Value;
         // Allow setting group to null or a value
         group = form.group;
+        groupIcon = form.groupIcon;
+        maxLength = form.maxLength;
+        minValue = form.minValue;
+        maxValue = form.maxValue;
+        maxValues = form.maxValues;
+        validationPattern = form.validationPattern;
         return true;
     }
 
@@ -164,13 +218,20 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             isRequired = isRequired,
             isUnique = isUnique,
             isMultiline = isMultiline,
+            allowCustomValues = allowCustomValues,
             showOnProductPage = isRequired || showOnProductPage,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
             description = description,
             descriptionInTooltip = descriptionInTooltip,
-            group = group
+            group = group,
+            groupIcon = groupIcon,
+            maxLength = maxLength,
+            minValue = minValue,
+            maxValue = maxValue,
+            maxValues = maxValues,
+            validationPattern = validationPattern
         };
     }
 
@@ -202,7 +263,17 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     /// <summary>
     /// Maximum length for attribute group name.
     /// </summary>
-    public const int ATTRIBUTE_GROUP_MAX_LENGTH = 100;
+        public const int ATTRIBUTE_GROUP_MAX_LENGTH = 100;
+
+        /// <summary>
+        /// Maximum length for a group icon token (<c>adapter:{key}</c> or Lucide name).
+        /// </summary>
+        public const int ATTRIBUTE_GROUP_ICON_MAX_LENGTH = 80;
+
+        /// <summary>
+        /// Maximum length for a stored validation regex.
+        /// </summary>
+    public const int ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH = 500;
 
     /// <summary>
     /// Internal form used to create a new category attribute (includes category context).
@@ -242,6 +313,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// Callers should set true for marketplace imports (entity default is true).
         /// </summary>
@@ -279,6 +355,38 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// </summary>
         [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
         public string? group { get; set; }
+
+        /// <summary>
+        /// Optional icon for the attribute group.
+        /// </summary>
+        [StringLength(ATTRIBUTE_GROUP_ICON_MAX_LENGTH)]
+        public string? groupIcon { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
 
         /// <summary>
         /// Parent category identifier.
@@ -324,6 +432,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
@@ -355,6 +468,38 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// </summary>
         [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
         public string? group { get; set; }
+
+        /// <summary>
+        /// Optional icon for the attribute group.
+        /// </summary>
+        [StringLength(ATTRIBUTE_GROUP_ICON_MAX_LENGTH)]
+        public string? groupIcon { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
     }
 
     /// <summary>
@@ -395,6 +540,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool? isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool? allowCustomValues { get; set; }
+
+        /// <summary>
         /// Updated product page visibility flag.
         /// </summary>
         public bool? showOnProductPage { get; set; }
@@ -431,6 +581,38 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// </summary>
         [StringLength(ATTRIBUTE_GROUP_MAX_LENGTH)]
         public string? group { get; set; }
+
+        /// <summary>
+        /// Updated group icon.
+        /// </summary>
+        [StringLength(ATTRIBUTE_GROUP_ICON_MAX_LENGTH)]
+        public string? groupIcon { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
     }
 
     /// <summary>
@@ -474,6 +656,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
@@ -507,5 +694,35 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Attribute group name for visual grouping.
         /// </summary>
         public string? group { get; set; }
+
+        /// <summary>
+        /// Optional icon for the attribute group (<c>adapter:{key}</c> or Lucide name).
+        /// </summary>
+        public string? groupIcon { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        public string? validationPattern { get; set; }
     }
 }

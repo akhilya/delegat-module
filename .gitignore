@@ -152,3 +152,6 @@ scripts/marketing-demo-seed/
 nul
 Thumbs.db
 ".vs/"
+
+# Local browser profiler dumps
+*profile.json.gz

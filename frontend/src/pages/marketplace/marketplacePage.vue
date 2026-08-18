@@ -3,21 +3,21 @@ import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import Input from "@/components/ui/input/Input.vue";
-import PasswordInput from "@/components/ui/input/PasswordInput.vue";
-import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { FieldGroup } from "@/components/ui/field";
-import Separator from "@/components/ui/separator/Separator.vue";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PAGE_ADMIN_PLUGINS } from "@/router";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import ConnectionCreateForm from "@/components/marketplace/ConnectionCreateForm.vue";
+import { getCachedMe } from "@/lib/meCache";
+import { hasPermission, PERMS } from "@/lib/permissions";
+import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
 import { mapActions } from "vuex";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import { displaySonnerError, displaySonnerSuccess, extractResponseData, apiErrorCode } from "@/store/sonnerHelper";
 import {
   Plus,
   Store,
   Package,
   Trash2,
   Settings,
-  BookOpen,
-  ExternalLink,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -41,13 +41,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -55,13 +48,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Switch from "@/components/ui/switch/Switch.vue";
-import { EmptyState } from "@/components/ui/empty-state";
-import { PAGE_ADMIN_PLUGINS } from "@/router";
-import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
-import { getCachedMe } from "@/lib/meCache";
-import { hasPermission, PERMS } from "@/lib/permissions";
-import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
 
 export default {
   components: {
@@ -69,24 +55,13 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    Input,
-    PasswordInput,
-    SettingsFormField,
-    FieldGroup,
-    Separator,
     Plus,
     Store,
     Package,
     Trash2,
     Settings,
-    BookOpen,
-    ExternalLink,
     AdapterIcon,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    ConnectionCreateForm,
     Table,
     TableBody,
     TableCell,
@@ -110,8 +85,7 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Switch,
-    EmptyState
+    EmptyState,
   },
   data() {
     return {
@@ -121,14 +95,7 @@ export default {
       isCreating: false,
       deletingConnectionId: null,
       showCreateDialog: false,
-      newConnection: {
-        name: "",
-        adapterKey: "",
-        credentialsJson: "",
-        isActive: true,
-      },
-      selectedAdapter: null,
-      credentialValues: {},
+      connectionQuotaReached: false,
     };
   },
   computed: {
@@ -138,25 +105,6 @@ export default {
     canOpenPlugins() {
       const me = getCachedMe();
       return me?.pluginsEnabled === true && hasPermission(me, PERMS.PluginsManage);
-    },
-    selectedAdapterSchema() {
-      if (!this.selectedAdapter) return null;
-      const adapter = this.adapters.find((a) => a.key === this.selectedAdapter);
-      return adapter?.credentialsSchema;
-    },
-    credentialFields() {
-      // Handle both PascalCase (C# local) and camelCase (remote adapter) naming
-      const schema = this.selectedAdapterSchema;
-      if (!schema) return [];
-      return schema.fields || schema.Fields || [];
-    },
-    selectedAdapterMeta() {
-      if (!this.selectedAdapter) return null;
-      return this.adapters.find((a) => a.key === this.selectedAdapter) || null;
-    },
-    credentialsDocsUrl() {
-      if (!this.selectedAdapter) return null;
-      return getAdapterCredentialsDocsUrl(this.selectedAdapter, this.$i18n.locale);
     },
   },
   methods: {
@@ -176,7 +124,8 @@ export default {
     async fetchConnections() {
       await this.getConnections({
         onSuccess: (response) => {
-          this.connections = extractResponseData(response, []);
+          const data = extractResponseData(response, []);
+          this.connections = Array.isArray(data) ? data : [];
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -195,42 +144,43 @@ export default {
       });
     },
 
-    onAdapterSelect(adapterKey) {
-      this.selectedAdapter = adapterKey;
-      this.newConnection.adapterKey = adapterKey;
-      this.credentialValues = {};
-    },
-
-    buildCredentialsJson() {
-      return JSON.stringify(this.credentialValues);
-    },
-
     async handleCreateConnection() {
-      if (!this.newConnection.name.trim()) {
+      const form = this.$refs.createForm;
+      const data = form?.payload?.();
+      if (!data?.name) {
         displaySonnerError(this.$t("marketplace.marketplacePage.enterConnectionName"));
         return;
       }
-      if (!this.newConnection.adapterKey) {
+      if (!isNonEmptyWithinLimit(data.name, FIELD_LIMITS.connectionName)) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.connectionName }),
+        );
+        return;
+      }
+      if (!data.adapterKey) {
         displaySonnerError(this.$t("marketplace.marketplacePage.selectAdapter"));
+        return;
+      }
+      if (!form.canSubmit) {
+        displaySonnerError(this.$t("marketplace.marketplacePage.enterCredentials"));
         return;
       }
 
       this.isCreating = true;
       await this.createConnection({
-        data: {
-          name: this.newConnection.name.trim(),
-          adapterKey: this.newConnection.adapterKey,
-          credentialsJson: this.buildCredentialsJson(),
-          isActive: this.newConnection.isActive,
-        },
+        data,
         onSuccess: (response) => {
           displaySonnerSuccess(this.$t("marketplace.marketplacePage.connectionCreated"));
           this.resetForm();
           this.showCreateDialog = false;
-          const data = extractResponseData(response, {});
-          this.$router.push(`/adapter/${data.id}`);
+          const created = extractResponseData(response, {});
+          this.$router.push(`/adapter/${created.id}`);
         },
         onError: (error) => {
+          if (apiErrorCode(error) === "quota_connections_reached") {
+            this.connectionQuotaReached = true;
+            this.showCreateDialog = false;
+          }
           displaySonnerError(error);
         },
       });
@@ -242,7 +192,6 @@ export default {
 
       this.deletingConnectionId = connectionId;
       const previous = this.connections;
-      // Remove immediately so a second click cannot race the in-flight DELETE.
       this.connections = this.connections.filter((c) => c.id !== connectionId);
 
       let failed = false;
@@ -259,20 +208,14 @@ export default {
       });
 
       if (!failed) {
+        this.connectionQuotaReached = false;
         await this.fetchConnections();
       }
       this.deletingConnectionId = null;
     },
 
     resetForm() {
-      this.newConnection = {
-        name: "",
-        adapterKey: "",
-        credentialsJson: "",
-        isActive: true,
-      };
-      this.selectedAdapter = null;
-      this.credentialValues = {};
+      this.$refs.createForm?.reset?.();
     },
 
     openConnection(connectionId) {
@@ -340,144 +283,40 @@ export default {
               </Button>
             </EmptyState>
 
-            <FieldGroup v-else class="gap-5">
-              <SettingsFormField
-                :label="$t('marketplace.marketplacePage.connectionNameLabel')"
-                label-for="new-connection-name"
-              >
-                <Input
-                  id="new-connection-name"
-                  v-model="newConnection.name"
-                  :placeholder="$t('marketplace.marketplacePage.connectionNamePlaceholder')"
-                  autocomplete="off"
-                />
-              </SettingsFormField>
-
-              <SettingsFormField
-                :label="$t('marketplace.marketplacePage.adapterLabel')"
-                label-for="new-connection-adapter"
-              >
-                <Select
-                  :model-value="selectedAdapter"
-                  @update:model-value="onAdapterSelect"
-                >
-                  <SelectTrigger id="new-connection-adapter" class="w-full min-w-0">
-                    <div class="flex min-w-0 flex-1 items-center gap-2">
-                      <AdapterIcon
-                        v-if="selectedAdapter"
-                        :adapter-key="selectedAdapter"
-                        class="size-4 shrink-0"
-                      />
-                      <SelectValue
-                        :placeholder="$t('marketplace.marketplacePage.selectAdapterPlaceholder')"
-                      />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="adapter in adapters"
-                      :key="adapter.key"
-                      :value="adapter.key"
-                      :text-value="adapter.displayName"
-                    >
-                      <span class="flex min-w-0 items-center gap-2">
-                        <AdapterIcon
-                          :adapter-key="adapter.key"
-                          class="size-4 shrink-0"
-                        />
-                        <span class="truncate">{{ adapter.displayName }}</span>
-                        <span
-                          v-if="adapter.version"
-                          class="font-mono text-xs tabular-nums text-muted-foreground"
-                        >
-                          v{{ adapter.version }}
-                        </span>
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <template #description>
-                  {{ $t("marketplace.marketplacePage.adapterPickHint") }}
-                </template>
-              </SettingsFormField>
-
-              <template v-if="selectedAdapter && credentialFields.length > 0">
-                <Separator />
-                <div class="space-y-1">
-                  <h3 class="text-sm font-medium tracking-tight">
-                    {{ $t("marketplace.marketplacePage.credentialsSectionTitle") }}
-                  </h3>
-                  <p class="text-xs text-muted-foreground">
-                    {{
-                      $t("marketplace.marketplacePage.credentialsSectionHint", {
-                        adapter: selectedAdapterMeta?.displayName || selectedAdapter,
-                      })
-                    }}
-                  </p>
-                  <a
-                    v-if="credentialsDocsUrl"
-                    :href="credentialsDocsUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="inline-flex items-center gap-1.5 pt-0.5 text-xs font-medium text-primary hover:underline"
-                  >
-                    <BookOpen class="size-3.5 shrink-0" />
-                    {{ $t("marketplace.marketplacePage.credentialsDocsLink") }}
-                    <ExternalLink class="size-3 shrink-0 opacity-70" />
-                  </a>
-                </div>
-                <FieldGroup class="gap-4">
-                  <SettingsFormField
-                    v-for="field in credentialFields"
-                    :key="field.key"
-                    :label="field.displayName || field.key"
-                    :label-for="`new-cred-${field.key}`"
-                    :required="field.isRequired"
-                    :description="field.description || ''"
-                  >
-                    <PasswordInput
-                      v-if="field.isSecret"
-                      :id="`new-cred-${field.key}`"
-                      v-model="credentialValues[field.key]"
-                      :placeholder="field.placeholder || ''"
-                      autocomplete="off"
-                    />
-                    <Input
-                      v-else
-                      :id="`new-cred-${field.key}`"
-                      v-model="credentialValues[field.key]"
-                      type="text"
-                      :placeholder="field.placeholder || ''"
-                      autocomplete="off"
-                    />
-                  </SettingsFormField>
-                </FieldGroup>
+            <EmptyState
+              v-else-if="connectionQuotaReached"
+              size="sm"
+              :title="$t('marketplace.marketplacePage.connectionQuotaTitle')"
+              :description="$t('marketplace.marketplacePage.connectionQuotaDescription')"
+            >
+              <template #icon>
+                <Store />
               </template>
+            </EmptyState>
 
-              <Separator />
-
-              <SettingsFormField
-                :label="$t('marketplace.marketplacePage.activeConnectionLabel')"
-                label-for="new-connection-active"
-                inline
-                :description="$t('marketplace.marketplacePage.activeConnectionHint')"
-              >
-                <Switch
-                  id="new-connection-active"
-                  :model-value="newConnection.isActive"
-                  @update:model-value="newConnection.isActive = $event"
-                />
-              </SettingsFormField>
-            </FieldGroup>
+            <form
+              v-else
+              id="new-connection-form"
+              class="contents"
+              @submit.prevent="handleCreateConnection"
+            >
+              <ConnectionCreateForm
+                ref="createForm"
+                :adapters="adapters"
+                :disabled="isCreating"
+                id-prefix="new-conn"
+              />
+            </form>
           </div>
 
-          <DialogFooter v-if="adapters.length > 0" variant="bar">
+          <DialogFooter v-if="adapters.length > 0 && !connectionQuotaReached" variant="bar">
             <DialogClose as-child>
-              <Button variant="outline">{{ $t("common.cancel") }}</Button>
+              <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
             <Button
-              :disabled="isCreating || !newConnection.name.trim() || !selectedAdapter"
-              @click="handleCreateConnection"
+              type="submit"
+              form="new-connection-form"
+              :disabled="isCreating"
             >
               <Spinner v-if="isCreating" class="mr-2" />
               {{ $t("marketplace.marketplacePage.createConnection") }}
@@ -507,7 +346,7 @@ export default {
               <TableRow class="hover:bg-transparent">
                 <TableHead class="w-10" />
                 <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="hidden sm:table-cell">{{ $t("marketplace.marketplacePage.adapterLabel") }}</TableHead>
+                <TableHead class="hidden w-40 sm:table-cell">{{ $t("marketplace.marketplacePage.adapterLabel") }}</TableHead>
                 <TableHead class="w-32 text-right">{{ $t("marketplace.marketplacePage.mappingsColumn") }}</TableHead>
                 <TableHead class="w-28 text-right">{{ $t("marketplace.marketplacePage.productsColumn") }}</TableHead>
                 <TableHead class="w-24" />

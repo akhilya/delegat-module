@@ -47,7 +47,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 
 export default {
   setup() {
@@ -61,6 +65,9 @@ export default {
     Button,
     Badge,
     AdapterIcon,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Table,
     TableBody,
     TableCell,
@@ -339,56 +346,42 @@ export default {
             </button>
 
             <!-- Selected: payload card -->
-            <div
-              v-else
-              class="overflow-hidden rounded-lg border bg-muted/20"
-            >
-              <div class="flex items-start gap-3 px-3.5 py-3">
-                <div
-                  class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background"
-                >
-                  <FileCode2 class="size-4 text-foreground" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm font-medium text-foreground">
-                    {{ selectedFile.name }}
-                  </p>
-                  <div
-                    class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground"
+            <InsetGroup v-else>
+              <InsetGroupItem as="div">
+                <template #leading>
+                  <FileCode2 class="size-4" />
+                </template>
+                <p class="truncate">{{ selectedFile.name }}</p>
+                <p class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground">
+                  .dll · {{ selectedFileSizeLabel }}
+                </p>
+                <template #trailing>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 text-muted-foreground"
+                    :title="$t('marketplace.pluginsPage.chooseAnother')"
+                    :disabled="isUploading"
+                    @click="resetUploadForm"
                   >
-                    <span class="font-mono tabular-nums uppercase tracking-wide">.dll</span>
-                    <span class="text-border" aria-hidden="true">·</span>
-                    <span class="tabular-nums">{{ selectedFileSizeLabel }}</span>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  class="size-8 shrink-0 text-muted-foreground"
-                  :title="$t('marketplace.pluginsPage.chooseAnother')"
-                  :disabled="isUploading"
-                  @click="resetUploadForm"
-                >
-                  <X class="size-4" />
-                </Button>
-              </div>
-              <div
-                class="flex items-center justify-between gap-2 border-t bg-background/60 px-3.5 py-2"
+                    <X class="size-4" />
+                  </Button>
+                </template>
+              </InsetGroupItem>
+            </InsetGroup>
+            <p class="mt-2 px-1 text-xs text-muted-foreground">
+              {{ $t("marketplace.pluginsPage.readyToInstall") }}
+              ·
+              <button
+                type="button"
+                class="font-medium text-foreground underline-offset-2 hover:underline"
+                :disabled="isUploading"
+                @click="openFilePicker"
               >
-                <span class="text-[11px] text-muted-foreground">
-                  {{ $t("marketplace.pluginsPage.readyToInstall") }}
-                </span>
-                <button
-                  type="button"
-                  class="text-[11px] font-medium text-foreground underline-offset-2 hover:underline"
-                  :disabled="isUploading"
-                  @click="openFilePicker"
-                >
-                  {{ $t("marketplace.pluginsPage.chooseAnother") }}
-                </button>
-              </div>
-            </div>
+                {{ $t("marketplace.pluginsPage.chooseAnother") }}
+              </button>
+            </p>
 
             <p class="text-xs leading-relaxed text-muted-foreground">
               {{ $t("marketplace.pluginsPage.sdkInterfaceHintBefore") }}
@@ -422,34 +415,35 @@ export default {
       </Dialog>
     </div>
 
-    <div
+    <section
       v-if="availableFromRegistry.length"
-      class="mb-6 rounded-lg border p-4 space-y-3"
+      class="mb-8"
     >
-      <div>
-        <h2 class="text-sm font-semibold">{{ $t("marketplace.pluginsPage.registryTitle") }}</h2>
-        <p class="text-xs text-muted-foreground mt-1">
-          {{ $t("marketplace.pluginsPage.registryDescription") }}
-        </p>
-      </div>
-      <div class="overflow-x-auto rounded-md border">
-        <Table>
+      <InsetGroupLabel>{{ $t("marketplace.pluginsPage.registryTitle") }}</InsetGroupLabel>
+      <p class="mb-2 px-1 text-xs text-muted-foreground">
+        {{ $t("marketplace.pluginsPage.registryDescription") }}
+      </p>
+      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
+        <div class="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow class="hover:bg-transparent">
               <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
-              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
-              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
+              <TableHead class="w-40 px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
+              <TableHead class="w-24 px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="plugin in availableFromRegistry" :key="plugin.key">
-              <TableCell class="px-3 font-medium">
-                <div class="flex items-center gap-2">
-                  <AdapterIcon :adapter-key="plugin.key" class="size-4" />
-                  <span>{{ plugin.displayName }}</span>
+              <TableCell class="max-w-0 px-3 font-medium">
+                <div class="flex min-w-0 items-center gap-2">
+                  <AdapterIcon :adapter-key="plugin.key" class="size-4 shrink-0" />
+                  <span class="truncate">{{ plugin.displayName }}</span>
                 </div>
               </TableCell>
-              <TableCell class="px-3 font-mono text-xs text-muted-foreground">{{ plugin.key }}</TableCell>
+              <TableCell class="text-muted-foreground max-w-0 px-3 font-mono text-xs">
+                <span class="block truncate">{{ plugin.key }}</span>
+              </TableCell>
               <TableCell class="px-3">
                 <Badge variant="outline" class="text-xs tabular-nums">
                   v{{ plugin.latestVersion || "-" }}
@@ -458,8 +452,9 @@ export default {
             </TableRow>
           </TableBody>
         </Table>
+        </div>
       </div>
-    </div>
+    </section>
 
     <PageSection
       :loading="isLoading"
@@ -475,17 +470,17 @@ export default {
         </Button>
       </template>
 
-      <div class="rounded-lg border overflow-hidden">
+      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
         <div class="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
                 <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
-                <TableHead class="hidden md:table-cell px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
+                <TableHead class="hidden w-40 px-3 md:table-cell">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
                 <TableHead class="w-24 px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
                 <TableHead class="w-32 px-3">{{ $t("common.status") }}</TableHead>
-                <TableHead class="hidden lg:table-cell px-3">{{ $t("marketplace.pluginsPage.file") }}</TableHead>
-                <TableHead class="hidden xl:table-cell px-3">{{ $t("marketplace.pluginsPage.loaded") }}</TableHead>
+                <TableHead class="hidden w-40 px-3 lg:table-cell">{{ $t("marketplace.pluginsPage.file") }}</TableHead>
+                <TableHead class="hidden w-40 px-3 xl:table-cell">{{ $t("marketplace.pluginsPage.loaded") }}</TableHead>
                 <TableHead class="w-28 px-3">{{ $t("marketplace.pluginsPage.type") }}</TableHead>
                 <TableHead class="w-24 px-2" />
               </TableRow>
@@ -496,11 +491,11 @@ export default {
                 :key="plugin.key"
                 class="group"
               >
-                <TableCell class="px-3 align-top">
-                  <div class="flex items-start gap-2.5 min-w-0">
-                    <AdapterIcon :adapter-key="plugin.key" class="size-4 mt-0.5" />
+                <TableCell class="max-w-0 px-3 align-top">
+                  <div class="flex min-w-0 items-start gap-2.5">
+                    <AdapterIcon :adapter-key="plugin.key" class="mt-0.5 size-4 shrink-0" />
                     <div class="min-w-0">
-                      <div class="font-medium break-words">{{ plugin.displayName }}</div>
+                      <div class="truncate font-medium" :title="plugin.displayName">{{ plugin.displayName }}</div>
                       <div
                         v-if="plugin.description"
                         class="text-xs text-muted-foreground mt-0.5 line-clamp-2"
@@ -513,8 +508,8 @@ export default {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell class="hidden md:table-cell px-3 align-top font-mono text-xs text-muted-foreground">
-                  {{ plugin.key }}
+                <TableCell class="text-muted-foreground hidden max-w-0 px-3 align-top font-mono text-xs md:table-cell">
+                  <span class="block truncate">{{ plugin.key }}</span>
                 </TableCell>
                 <TableCell class="px-3 align-top">
                   <Badge variant="outline" class="text-xs tabular-nums">

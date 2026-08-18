@@ -1,4 +1,5 @@
 using Delegat.Enums;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Storage;
 using System.ComponentModel.DataAnnotations;
@@ -83,6 +84,18 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
     public string? publicToken { get; set; }
 
     /// <summary>
+    /// Marketplace URL this blob was downloaded from (null for user uploads).
+    /// Used to label already-imported photos in the re-import picker.
+    /// </summary>
+    [StringLength(SourceUrlMaxLength)]
+    public string? sourceUrl { get; set; }
+
+    /// <summary>
+    /// Max stored marketplace source URL length.
+    /// </summary>
+    public const int SourceUrlMaxLength = 2048;
+
+    /// <summary>
     /// Optional folder this file belongs to (null = root level).
     /// </summary>
     [ForeignKey(nameof(folder))]
@@ -106,6 +119,7 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
         productId = form.productId;
         contentType = form.contentType;
         length = form.length;
+        sourceUrl = StringClip.ClipOptional(form.sourceUrl, SourceUrlMaxLength);
 
         return true;
     }
@@ -199,13 +213,19 @@ public class File : IEntity, IMapToDTO<object>, IAddable<File.AddForm>
         /// </summary>
         public long length { get; set; }
 
-        public AddForm(string filePath, int authorUserId, int productId, string contentType, long length)
+        /// <summary>
+        /// Marketplace source URL when this file was downloaded during import.
+        /// </summary>
+        public string? sourceUrl { get; set; }
+
+        public AddForm(string filePath, int authorUserId, int productId, string contentType, long length, string? sourceUrl = null)
         {
             this.filePath = filePath;
             this.authorUserId = authorUserId;
             this.productId = productId;
             this.contentType = contentType;
             this.length = length;
+            this.sourceUrl = sourceUrl;
         }
     }
 }

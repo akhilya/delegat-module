@@ -12,21 +12,21 @@ import {
 import { confirmState, resolveConfirm } from "@/composables/useConfirm";
 
 /** Set before AlertDialogAction closes the root — update:open(false) must see it. */
-let pendingAccept = false;
+let pendingResult = false;
 
 function onOpenChange(open) {
   if (open) {
     confirmState.open = true;
-    pendingAccept = false;
+    pendingResult = false;
     return;
   }
-  const accepted = pendingAccept;
-  pendingAccept = false;
-  resolveConfirm(accepted);
+  const result = pendingResult;
+  pendingResult = false;
+  resolveConfirm(result);
 }
 
-function markAccept() {
-  pendingAccept = true;
+function markResult(result) {
+  pendingResult = result;
 }
 
 function preventOutside(event) {
@@ -47,17 +47,37 @@ function preventOutside(event) {
           {{ confirmState.description }}
         </AlertDialogDescription>
       </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>
-          {{ confirmState.cancelLabel }}
-        </AlertDialogCancel>
-        <AlertDialogAction
-          :variant="confirmState.destructive ? 'destructive' : 'default'"
-          @pointerdown="markAccept"
-          @click="markAccept"
-        >
-          {{ confirmState.confirmLabel }}
-        </AlertDialogAction>
+      <AlertDialogFooter :layout="confirmState.saveLabel ? 'stack' : 'split'">
+        <template v-if="confirmState.saveLabel">
+          <AlertDialogAction
+            @pointerdown="markResult('save')"
+            @click="markResult('save')"
+          >
+            {{ confirmState.saveLabel }}
+          </AlertDialogAction>
+          <AlertDialogAction
+            :variant="confirmState.destructive ? 'destructive' : 'outline'"
+            @pointerdown="markResult(true)"
+            @click="markResult(true)"
+          >
+            {{ confirmState.confirmLabel }}
+          </AlertDialogAction>
+          <AlertDialogCancel>
+            {{ confirmState.cancelLabel }}
+          </AlertDialogCancel>
+        </template>
+        <template v-else>
+          <AlertDialogCancel>
+            {{ confirmState.cancelLabel }}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            :variant="confirmState.destructive ? 'destructive' : 'default'"
+            @pointerdown="markResult(true)"
+            @click="markResult(true)"
+          >
+            {{ confirmState.confirmLabel }}
+          </AlertDialogAction>
+        </template>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

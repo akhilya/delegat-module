@@ -4,6 +4,7 @@ import { Spinner } from "@/components/ui/spinner";
 // Height is locked to --app-navbar-height (single row) so breadcrumbs share one Y-offset on every page.
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import UserAccountMenu from "@/components/UserAccountMenu.vue";
+import FabGroup from "@/components/FabGroup.vue";
 
 import { http } from "@/main";
 import { mapActions } from "vuex";
@@ -20,7 +21,8 @@ export default {
   components: {
     Spinner,
     SidebarTrigger,
-    UserAccountMenu
+    UserAccountMenu,
+    FabGroup,
   },
   data() {
     return {
@@ -92,7 +94,11 @@ export default {
           <slot name="right" />
         </div>
 
-        <div class="ml-auto shrink-0">
+        <div class="ml-auto flex shrink-0 items-center gap-0.5">
+          <FabGroup
+            placement="navbar"
+            :ai-enabled="me?.aiEnabled === true"
+          />
           <UserAccountMenu
             variant="navbar"
             :user-name="me?.userName"

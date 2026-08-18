@@ -236,6 +236,19 @@ public class OperationsController : ControllerBase
         op.status = "paused";
         await _context.SaveChangesAsync(ct);
 
+        if (op.batchType == "import" && op.batchId != null)
+        {
+            await _context.pendingCategoryImports
+                .Where(p => p.operationId == op.batchId && p.status == CategoryImportStatus.InProgress)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
+        }
+        else if (op.batchType == "category-import")
+        {
+            await _context.pendingCategoryImports
+                .Where(p => p.operationId == op.operationId && p.status == CategoryImportStatus.InProgress)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
+        }
+
         await _operationLogger.LogAsync(operationId, op.storeId, "warning", "Operation paused");
         await _operationLogger.UpdateStatusAsync(operationId, op.storeId, "paused");
 
@@ -274,6 +287,15 @@ public class OperationsController : ControllerBase
                 await _context.pendingProductImports
                     .Where(p => p.batchId == op.batchId && p.status == ProductImportStatus.Cancelled)
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Pending), ct);
+                await _context.pendingCategoryImports
+                    .Where(p => p.operationId == op.batchId && p.status == CategoryImportStatus.Cancelled)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
+            }
+            else if (op.batchType == "category-import")
+            {
+                await _context.pendingCategoryImports
+                    .Where(p => p.operationId == op.operationId && p.status == CategoryImportStatus.Cancelled)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
             }
             else if (op.batchType == "export")
             {
@@ -338,6 +360,21 @@ public class OperationsController : ControllerBase
                         (p.status == ProductImportStatus.Pending
                          || p.status == ProductImportStatus.InProgress))
                     .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
+                cancelledCount += await _context.pendingCategoryImports
+                    .Where(p => p.operationId == op.batchId &&
+                        (p.status == CategoryImportStatus.Pending
+                         || p.status == CategoryImportStatus.InProgress
+                         || p.status == CategoryImportStatus.Failed))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
+            }
+            else if (op.batchType == "category-import")
+            {
+                cancelledCount = await _context.pendingCategoryImports
+                    .Where(p => p.operationId == op.operationId &&
+                        (p.status == CategoryImportStatus.Pending
+                         || p.status == CategoryImportStatus.InProgress
+                         || p.status == CategoryImportStatus.Failed))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
             }
             else if (op.batchType == "export")
             {
@@ -409,6 +446,14 @@ public class OperationsController : ControllerBase
                 total = items.Count;
                 completed = items.Count(p => p.status == ImageDownloadStatus.Completed);
                 failed = items.Count(p => p.status == ImageDownloadStatus.Failed);
+            }
+            else if (op.batchType == "category-import")
+            {
+                var items = await _context.pendingCategoryImports.AsNoTracking()
+                    .Where(p => p.operationId == op.operationId).ToListAsync(ct);
+                total = items.Count;
+                completed = items.Count(p => p.status == CategoryImportStatus.Completed);
+                failed = items.Count(p => p.status == CategoryImportStatus.Failed);
             }
         }
 

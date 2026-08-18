@@ -982,12 +982,19 @@ public class ProductTransferService
                         type = srcAttr.type,
                         isRequired = srcAttr.isRequired,
                         isUnique = srcAttr.isUnique,
+                        allowCustomValues = srcAttr.allowCustomValues,
                         sortOrder = srcAttr.sortOrder,
                         options = srcAttr.options,
                         defaultValue = srcAttr.defaultValue,
                         description = srcAttr.description,
                         descriptionInTooltip = srcAttr.descriptionInTooltip,
-                        group = srcAttr.group
+                        group = srcAttr.group,
+                        groupIcon = srcAttr.groupIcon,
+                        maxLength = srcAttr.maxLength,
+                        minValue = srcAttr.minValue,
+                        maxValue = srcAttr.maxValue,
+                        maxValues = srcAttr.maxValues,
+                        validationPattern = srcAttr.validationPattern
                     });
                     added++;
                 }
@@ -1030,12 +1037,19 @@ public class ProductTransferService
                 type = srcAttr.type,
                 isRequired = srcAttr.isRequired,
                 isUnique = srcAttr.isUnique,
+                allowCustomValues = srcAttr.allowCustomValues,
                 sortOrder = srcAttr.sortOrder,
                 options = srcAttr.options,
                 defaultValue = srcAttr.defaultValue,
                 description = srcAttr.description,
                 descriptionInTooltip = srcAttr.descriptionInTooltip,
-                group = srcAttr.group
+                group = srcAttr.group,
+                groupIcon = srcAttr.groupIcon,
+                maxLength = srcAttr.maxLength,
+                minValue = srcAttr.minValue,
+                maxValue = srcAttr.maxValue,
+                maxValues = srcAttr.maxValues,
+                validationPattern = srcAttr.validationPattern
             });
         }
         await _context.SaveChangesAsync(ct);

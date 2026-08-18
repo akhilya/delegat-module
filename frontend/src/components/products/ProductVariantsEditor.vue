@@ -229,7 +229,7 @@ export default {
         <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10 pl-4 pr-2" />
-            <TableHead class="px-3">{{ $t("products.productVariantsEditor.sizeHeader") }}</TableHead>
+            <TableHead class="w-28 px-3">{{ $t("products.productVariantsEditor.sizeHeader") }}</TableHead>
             <TableHead class="px-3">{{ $t("products.productVariantsEditor.skuHeader") }}</TableHead>
             <TableHead class="px-3">{{ $t("products.productVariantsEditor.barcodeHeader") }}</TableHead>
             <TableHead class="w-28 px-3">{{ $t("products.productVariantsEditor.priceHeader") }}</TableHead>
@@ -250,23 +250,23 @@ export default {
             <TableCell class="pl-4 pr-2 py-1.5">
               <GripVertical class="drag-handle size-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
             </TableCell>
-            <TableCell class="px-3 py-1.5">
+            <TableCell class="min-w-0 px-3 py-1.5">
               <Input
                 v-model="variant.size"
                 placeholder="XS, S, M..."
-                class="h-8"
+                class="h-8 min-w-0"
                 @input="onFieldChange(variant)"
               />
             </TableCell>
-            <TableCell class="px-3 py-1.5">
+            <TableCell class="min-w-0 px-3 py-1.5">
               <Input
                 v-model="variant.sku"
                 placeholder="SKU"
-                class="h-8"
+                class="h-8 min-w-0"
                 @input="onFieldChange(variant)"
               />
             </TableCell>
-            <TableCell class="px-3 py-1.5">
+            <TableCell class="min-w-0 px-3 py-1.5">
               <BarcodeInput
                 :model-value="variant.barcode || ''"
                 @update:model-value="variant.barcode = $event; onFieldChange(variant)"

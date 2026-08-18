@@ -5,11 +5,7 @@ import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import {
-  FormControl,
-  FormField,
-  FormItem,
-} from "@/components/ui/form";
+import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,9 +41,16 @@ import ProductMarketplaceIntegrations from "@/components/products/productMarketp
 import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.vue";
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import CreateProductGroupDialog from "@/components/products/CreateProductGroupDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import Note from "@/components/note.vue";
 
@@ -58,6 +61,7 @@ import {
   Pencil,
   Plus,
   Copy,
+  Check,
   X,
   ChevronLeft,
   ChevronRight,
@@ -96,6 +100,7 @@ import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { formatEquivalents } from "@/lib/currency";
 import { computeDiscountPercent } from "@/lib/productPrice";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
   Select,
   SelectContent,
@@ -161,6 +166,7 @@ export default {
     AppImage,
     BarcodeInput,
     SearchableSelect,
+    CreateProductGroupDialog,
     SettingsFormField,
     FieldGroup,
     Card,
@@ -175,6 +181,7 @@ export default {
     Note,
     Plus,
     Copy,
+    Check,
     X,
     ChevronLeft,
     ChevronRight,
@@ -201,7 +208,7 @@ export default {
     Tooltip,
     TooltipContent,
     TooltipProvider,
-    TooltipTrigger
+    TooltipTrigger,
   },
   data() {
     return {
@@ -215,7 +222,9 @@ export default {
       if (this.productSKU) {
         items.push({ label: this.productSKU });
       } else {
-        items.push({ label: this.$t("pages.productEditPage.breadcrumbEditing") });
+        items.push({
+          label: this.$t("pages.productEditPage.breadcrumbEditing"),
+        });
       }
       return items;
     },
@@ -223,7 +232,7 @@ export default {
   watch: {
     tab(newVal) {
       this.$router.replace({ query: { ...this.$route.query, tab: newVal } });
-      if (newVal === 'properties') {
+      if (newVal === "properties") {
         this.$nextTick(() => this.autoResizeDescription());
       }
     },
@@ -251,8 +260,11 @@ export default {
     const aiEnabled = ref(false);
     const productGroup = ref(null);
     const isLoadingGroup = ref(true);
-    const visibleCategoryAttributes = computed(() =>
-      category.value?.attributes?.filter((a) => a.showOnProductPage !== false) ?? [],
+    const visibleCategoryAttributes = computed(
+      () =>
+        category.value?.attributes?.filter(
+          (a) => a.showOnProductPage !== false,
+        ) ?? [],
     );
     const visibleStoreAttributes = computed(() =>
       storeAttributes.value.filter((a) => a.showOnProductPage !== false),
@@ -266,26 +278,53 @@ export default {
     } = useSelectedStore();
 
     const priceField = z.number().min(0).optional().nullable();
-    const formSchema = computed(() => toTypedSchema(
-      z.object({
-        product: z.object({
-          name: z.string().min(1, t("pages.productEditPage.validation.nameRequired")).max(100),
-          description: z.string().max(5000).optional(),
-          barcode: z.string().max(13).optional().nullable(),
-          storageQuantity: z.number().int().min(0, t("pages.productEditPage.validation.quantityNonNegative")).optional().nullable(),
-          price: priceField,
-          ...(extendedPriceParameters.value ? {
-            oldPrice: priceField,
-            minPrice: priceField,
-            netPrice: priceField,
-            discount: z.number().int().min(0).max(99).optional().nullable(),
-            currency: z.string().max(3).optional().nullable(),
-          } : {}),
+    const formSchema = computed(() =>
+      toTypedSchema(
+        z.object({
+          product: z.object({
+            name: z
+              .string()
+              .min(1, t("pages.productEditPage.validation.nameRequired"))
+              .max(FIELD_LIMITS.productName),
+            description: z
+              .string()
+              .max(FIELD_LIMITS.productDescription)
+              .optional(),
+            barcode: z
+              .string()
+              .max(FIELD_LIMITS.productBarcode)
+              .optional()
+              .nullable(),
+            storageQuantity: z
+              .number()
+              .int()
+              .min(0, t("pages.productEditPage.validation.quantityNonNegative"))
+              .optional()
+              .nullable(),
+            price: priceField,
+            ...(extendedPriceParameters.value
+              ? {
+                  oldPrice: priceField,
+                  minPrice: priceField,
+                  netPrice: priceField,
+                  discount: z
+                    .number()
+                    .int()
+                    .min(0)
+                    .max(99)
+                    .optional()
+                    .nullable(),
+                  currency: z.string().max(3).optional().nullable(),
+                }
+              : {}),
+          }),
+          categoryAttributes: buildAttributesSchema(
+            visibleCategoryAttributes.value,
+          ),
+          storeAttributes: buildAttributesSchema(visibleStoreAttributes.value),
         }),
-        categoryAttributes: buildAttributesSchema(visibleCategoryAttributes.value),
-        storeAttributes: buildAttributesSchema(visibleStoreAttributes.value),
-      }),
-    ));
+      ),
+    );
 
     const form = useForm({
       validationSchema: formSchema,
@@ -309,7 +348,11 @@ export default {
     });
 
     function pricePreview(amount) {
-      return formatEquivalents(amount, storeCurrencies.value, storeBaseCurrency.value);
+      return formatEquivalents(
+        amount,
+        storeCurrencies.value,
+        storeBaseCurrency.value,
+      );
     }
     const categorySelectOptions = computed(() =>
       categories.value.map((item) => ({
@@ -355,7 +398,8 @@ export default {
 
     async function onCategorySelectChange(value) {
       const nextCategoryId = value ? parseInt(value, 10) : null;
-      if (!nextCategoryId || nextCategoryId === selectedCategoryId.value) return;
+      if (!nextCategoryId || nextCategoryId === selectedCategoryId.value)
+        return;
 
       syncCategoryAttributesCacheFromForm();
       isChangingCategory.value = true;
@@ -379,9 +423,12 @@ export default {
     function attributeCountLabel(n) {
       const mod10 = n % 10;
       const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14) return t("pages.productEditPage.attributesCount.formMany");
-      if (mod10 === 1) return t("pages.productEditPage.attributesCount.formOne");
-      if (mod10 >= 2 && mod10 <= 4) return t("pages.productEditPage.attributesCount.formFew");
+      if (mod100 >= 11 && mod100 <= 14)
+        return t("pages.productEditPage.attributesCount.formMany");
+      if (mod10 === 1)
+        return t("pages.productEditPage.attributesCount.formOne");
+      if (mod10 >= 2 && mod10 <= 4)
+        return t("pages.productEditPage.attributesCount.formFew");
       return t("pages.productEditPage.attributesCount.formMany");
     }
     const hasUnsavedChanges = ref(false);
@@ -390,8 +437,11 @@ export default {
     const showSkuDialog = ref(false);
     const newSkuValue = ref("");
     const isUpdatingSku = ref(false);
+    const skuCopied = ref(false);
+    let skuCopiedTimer = null;
     const allGroups = ref([]);
     const isChangingGroup = ref(false);
+    const showCreateGroupDialog = ref(false);
     const descriptionRef = ref(null);
     const groupSidebarRef = ref(null);
 
@@ -430,19 +480,22 @@ export default {
       () => isSubmitting.value || saveDisabledReasons.value.length > 0,
     );
 
-
     watch(
       () => store.state.aiChat.productRefreshToken,
-      () => fetchProduct()
+      () => fetchProduct(),
     );
 
     watch(productId, (newId) => {
       // If the new product is in the same group, just update isCurrent on the client.
       // This preserves the sidebar scroll position and avoids re-rendering the list.
       // If the product is from another group, reload the group entirely.
-      const memberInCurrentGroup = productGroup.value?.members?.find(m => m.productId === newId);
+      const memberInCurrentGroup = productGroup.value?.members?.find(
+        (m) => m.productId === newId,
+      );
       if (memberInCurrentGroup) {
-        productGroup.value.members.forEach(m => { m.isCurrent = m.productId === newId; });
+        productGroup.value.members.forEach((m) => {
+          m.isCurrent = m.productId === newId;
+        });
       } else {
         fetchProductGroup(false);
       }
@@ -464,13 +517,13 @@ export default {
     function autoResizeDescription() {
       const ref = descriptionRef.value;
       const el = ref?.$el ?? ref;
-      if (!el || el.tagName !== 'TEXTAREA') return;
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
+      if (!el || el.tagName !== "TEXTAREA") return;
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
     }
 
     function onDescriptionGenerated(text) {
-      form.setFieldValue('product.description', text);
+      form.setFieldValue("product.description", text);
       nextTick(() => autoResizeDescription());
     }
 
@@ -487,7 +540,7 @@ export default {
         form.values.product?.oldPrice,
         form.values.product?.price,
       );
-      form.setFieldValue('product.discount', discount);
+      form.setFieldValue("product.discount", discount);
     }
 
     watch(
@@ -499,13 +552,13 @@ export default {
       const lines = [];
       for (const attr of visibleCategoryAttributes.value) {
         const raw = form.values.categoryAttributes?.[String(attr.id)];
-        if (raw != null && raw !== '') lines.push(`${attr.name}: ${raw}`);
+        if (raw != null && raw !== "") lines.push(`${attr.name}: ${raw}`);
       }
       for (const attr of visibleStoreAttributes.value) {
         const raw = form.values.storeAttributes?.[String(attr.id)];
-        if (raw != null && raw !== '') lines.push(`${attr.name}: ${raw}`);
+        if (raw != null && raw !== "") lines.push(`${attr.name}: ${raw}`);
       }
-      return lines.join('\n');
+      return lines.join("\n");
     });
 
     function scrollCurrentMemberIntoView() {
@@ -601,7 +654,10 @@ export default {
           selectedCategoryId.value = product.category?.id ?? null;
           savedCategoryId.value = selectedCategoryId.value;
           allCategoryAttributeValues.value = Object.fromEntries(
-            (product.attributeValues || []).map((item) => [item.attributeId, item.value]),
+            (product.attributeValues || []).map((item) => [
+              item.attributeId,
+              item.value,
+            ]),
           );
           loadedStoreAttributeValues.value = product.storeAttributeValues || [];
 
@@ -615,7 +671,10 @@ export default {
               oldPrice: product.oldPrice ?? null,
               minPrice: product.minPrice ?? null,
               netPrice: product.netPrice ?? null,
-              discount: computeDiscountPercent(product.oldPrice, product.price) ?? product.discount ?? null,
+              discount:
+                computeDiscountPercent(product.oldPrice, product.price) ??
+                product.discount ??
+                null,
               currency: product.currency || storeBaseCurrency.value || null,
             },
             categoryAttributes: attributesToFormRecord(
@@ -688,7 +747,10 @@ export default {
           selectedCategoryId.value = product.category?.id ?? null;
           savedCategoryId.value = selectedCategoryId.value;
           allCategoryAttributeValues.value = Object.fromEntries(
-            (product.attributeValues || []).map((item) => [item.attributeId, item.value]),
+            (product.attributeValues || []).map((item) => [
+              item.attributeId,
+              item.value,
+            ]),
           );
           applyCategoryAttributesToForm();
         },
@@ -698,15 +760,26 @@ export default {
       });
     }
 
-    async function confirmDiscardChanges() {
+    async function confirmLeaveWithUnsaved() {
       if (!hasUnsavedChanges.value) return true;
-      return confirm({
+      const result = await confirm({
         title: t("pages.productEditPage.discardChangesConfirm.title"),
-        description: t("pages.productEditPage.discardChangesConfirm.description"),
-        confirmLabel: t("pages.productEditPage.discardChangesConfirm.confirmLabel"),
-        cancelLabel: t("pages.productEditPage.discardChangesConfirm.cancelLabel"),
+        description: t(
+          "pages.productEditPage.discardChangesConfirm.description",
+        ),
+        confirmLabel: t(
+          "pages.productEditPage.discardChangesConfirm.confirmLabel",
+        ),
+        cancelLabel: t(
+          "pages.productEditPage.discardChangesConfirm.cancelLabel",
+        ),
+        saveLabel: t("pages.productEditPage.discardChangesConfirm.saveLabel"),
         destructive: false,
       });
+      if (result === "save") {
+        return saveProduct(true);
+      }
+      return result === true;
     }
 
     // Save product (manual save only)
@@ -724,9 +797,16 @@ export default {
       const values = form.values;
       const input = {
         ...values.product,
-        ...(selectedCategoryId.value != null ? { categoryId: Number(selectedCategoryId.value) } : {}),
-        attributeValues: categoryAttributeCacheToValues(allCategoryAttributeValues.value),
-        storeAttributeValues: formRecordToAttributeValues(values.storeAttributes, "storeAttributeId"),
+        ...(selectedCategoryId.value != null
+          ? { categoryId: Number(selectedCategoryId.value) }
+          : {}),
+        attributeValues: categoryAttributeCacheToValues(
+          allCategoryAttributeValues.value,
+        ),
+        storeAttributeValues: formRecordToAttributeValues(
+          values.storeAttributes,
+          "storeAttributeId",
+        ),
       };
 
       try {
@@ -831,12 +911,39 @@ export default {
 
     function openSkuDialog() {
       newSkuValue.value = "";
+      skuCopied.value = false;
       showSkuDialog.value = true;
+      nextTick(() => document.getElementById("new-sku")?.focus());
+    }
+
+    function selectSkuField(event) {
+      event?.target?.select?.();
+    }
+
+    async function copySku() {
+      const text = String(productSKU.value || "").trim();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        skuCopied.value = true;
+        clearTimeout(skuCopiedTimer);
+        skuCopiedTimer = setTimeout(() => {
+          skuCopied.value = false;
+        }, 1500);
+      } catch {
+        displaySonnerError(t("common.copyFailed"));
+      }
     }
 
     async function submitSkuChange() {
       const trimmed = newSkuValue.value.trim();
       if (!trimmed || trimmed === productSKU.value) return;
+      if (fieldLimitIssue(trimmed, FIELD_LIMITS.productSku) === "tooLong") {
+        displaySonnerError(
+          t("common.tooLong", { max: FIELD_LIMITS.productSku }),
+        );
+        return;
+      }
 
       isUpdatingSku.value = true;
       await store.dispatch("updateProductSku", {
@@ -852,13 +959,20 @@ export default {
           const failed = mpResults.filter((r) => !r.success);
 
           if (failed.length > 0) {
-            const details = failed.map((r) => `${r.name}: ${r.error}`).join("\n");
+            const details = failed
+              .map((r) => `${r.name}: ${r.error}`)
+              .join("\n");
             displaySonnerSuccess(
-              t("pages.productEditPage.toast.skuChangedWithErrors", { count: failed.length, details }),
+              t("pages.productEditPage.toast.skuChangedWithErrors", {
+                count: failed.length,
+                details,
+              }),
             );
           } else if (mpResults.length > 0) {
             displaySonnerSuccess(
-              t("pages.productEditPage.toast.skuChangedOnAdapters", { count: mpResults.length }),
+              t("pages.productEditPage.toast.skuChangedOnAdapters", {
+                count: mpResults.length,
+              }),
             );
           } else {
             displaySonnerSuccess(t("pages.productEditPage.toast.skuChanged"));
@@ -872,7 +986,10 @@ export default {
     }
 
     const groupSelectOptions = computed(() => [
-      { value: GROUP_NONE, label: t("pages.productEditPage.fields.group.noGroupOption") },
+      {
+        value: GROUP_NONE,
+        label: t("pages.productEditPage.fields.group.noGroupOption"),
+      },
       ...allGroups.value.map((g) => ({
         value: String(g.id),
         label: g.name,
@@ -883,7 +1000,7 @@ export default {
       productGroup.value?.id ? String(productGroup.value.id) : GROUP_NONE,
     );
 
-    async function onGroupSelectChange(value) {
+    async function onGroupSelectChange(value, options = {}) {
       if (isChangingGroup.value) return;
       const newId = value && value !== GROUP_NONE ? parseInt(value) : null;
       const oldId = productGroup.value?.id || null;
@@ -892,12 +1009,22 @@ export default {
       isChangingGroup.value = true;
       try {
         if (oldId) {
-          await http.delete(`/productgroups/${oldId}/products/${productId.value}`);
+          await http.delete(
+            `/productgroups/${oldId}/products/${productId.value}`,
+          );
         }
         if (newId) {
-          await http.post(`/productgroups/${newId}/products`, { productIds: [productId.value] });
+          await http.post(`/productgroups/${newId}/products`, {
+            productIds: [productId.value],
+          });
         }
-        displaySonnerSuccess(newId ? t("pages.productEditPage.toast.groupChanged") : t("pages.productEditPage.toast.removedFromGroup"));
+        if (options.notify !== false) {
+          displaySonnerSuccess(
+            newId
+              ? t("pages.productEditPage.toast.groupChanged")
+              : t("pages.productEditPage.toast.removedFromGroup"),
+          );
+        }
         await fetchProductGroup();
       } catch (error) {
         displaySonnerError(error);
@@ -906,10 +1033,24 @@ export default {
       }
     }
 
-    const duplicateProductUrl = computed(() => getDuplicateUrl(productId.value));
+    function openCreateGroupDialogFromSelect(close) {
+      close?.();
+      showCreateGroupDialog.value = true;
+    }
+
+    async function onGroupCreated(group) {
+      if (!group?.id) return;
+      const exists = allGroups.value.some((g) => g.id === group.id);
+      if (!exists) allGroups.value = [...allGroups.value, group];
+      await onGroupSelectChange(String(group.id), { notify: false });
+    }
+
+    const duplicateProductUrl = computed(() =>
+      getDuplicateUrl(productId.value),
+    );
 
     async function goToDuplicate() {
-      const ok = await confirmDiscardChanges();
+      const ok = await confirmLeaveWithUnsaved();
       if (!ok) return;
       hasUnsavedChanges.value = false;
       router.push(duplicateProductUrl.value);
@@ -917,8 +1058,9 @@ export default {
 
     function getDuplicateUrl(sourceProductId) {
       const params = new URLSearchParams();
-      params.set('fromProduct', String(sourceProductId));
-      if (productGroup.value?.id) params.set('groupId', String(productGroup.value.id));
+      params.set("fromProduct", String(sourceProductId));
+      if (productGroup.value?.id)
+        params.set("groupId", String(productGroup.value.id));
       return `/products/create?${params.toString()}`;
     }
 
@@ -926,9 +1068,14 @@ export default {
     const lightboxIndex = ref(null);
     const sortedImages = ref([]);
 
-    watch(images, (val) => {
-      sortedImages.value = val?.slice().sort((a, b) => a.index - b.index) ?? [];
-    }, { immediate: true });
+    watch(
+      images,
+      (val) => {
+        sortedImages.value =
+          val?.slice().sort((a, b) => a.index - b.index) ?? [];
+      },
+      { immediate: true },
+    );
 
     watch(
       sortedImages,
@@ -939,29 +1086,38 @@ export default {
     );
 
     function onGalleryDragChange() {
-      sortedImages.value.forEach((img, idx) => { img.index = idx; });
+      sortedImages.value.forEach((img, idx) => {
+        img.index = idx;
+      });
       images.value = sortedImages.value.map((img) => ({ ...img }));
     }
 
     async function removeGalleryImage(index) {
       const ok = await confirm({
         title: t("pages.productEditPage.removeGalleryImageConfirm.title"),
-        description: t("pages.productEditPage.removeGalleryImageConfirm.description"),
+        description: t(
+          "pages.productEditPage.removeGalleryImageConfirm.description",
+        ),
         confirmLabel: t("common.delete"),
       });
       if (!ok) return;
 
       sortedImages.value.splice(index, 1);
-      sortedImages.value.forEach((img, idx) => { img.index = idx; });
+      sortedImages.value.forEach((img, idx) => {
+        img.index = idx;
+      });
       images.value = sortedImages.value.map((img) => ({ ...img }));
     }
 
     // All image files for lightbox (attached first, then unattached)
     const lightboxImages = computed(() => {
-      const imageFiles = files.value?.filter((f) => f.contentType?.includes("image")) ?? [];
+      const imageFiles =
+        files.value?.filter((f) => f.contentType?.includes("image")) ?? [];
       const attachedIds = new Set(sortedImages.value.map((img) => img.fileId));
       const attached = sortedImages.value.map((img) => img.fileId);
-      const unattached = imageFiles.filter((f) => !attachedIds.has(f.id)).map((f) => f.id);
+      const unattached = imageFiles
+        .filter((f) => !attachedIds.has(f.id))
+        .map((f) => f.id);
       return [...attached, ...unattached];
     });
 
@@ -988,16 +1144,18 @@ export default {
         const newFileIds = [];
         for (const file of fileList) {
           const formData = new FormData();
-          formData.append('files', file);
+          formData.append("files", file);
           const response = await http({
             url: `/products/${targetProductId}/files`,
-            method: 'PUT',
+            method: "PUT",
             data: formData,
-            headers: { 'Content-Type': 'multipart/form-data' },
+            headers: { "Content-Type": "multipart/form-data" },
             timeout: 60 * 60 * 1000,
           });
           if (response.data) {
-            const uploaded = Array.isArray(response.data) ? response.data : [response.data];
+            const uploaded = Array.isArray(response.data)
+              ? response.data
+              : [response.data];
             newFileIds.push(...uploaded.map((f) => f.id));
           }
         }
@@ -1014,7 +1172,9 @@ export default {
             productId: targetProductId,
             files: allFileIds,
             onSuccess: () => {},
-            onError: (error) => { displaySonnerError(error); },
+            onError: (error) => {
+              displaySonnerError(error);
+            },
           });
         } else {
           // Context has changed - attach at least the new files to their original product.
@@ -1030,7 +1190,9 @@ export default {
               productId: targetProductId,
               files: [...existing, ...newFileIds],
               onSuccess: () => {},
-              onError: (error) => { displaySonnerError(error); },
+              onError: (error) => {
+                displaySonnerError(error);
+              },
             });
           } catch (e) {
             displaySonnerError(e);
@@ -1047,24 +1209,33 @@ export default {
       } finally {
         isUploadingGallery.value = false;
         // Reset input so the same file can be selected again
-        if (galleryFileInput.value) galleryFileInput.value.value = '';
+        if (galleryFileInput.value) galleryFileInput.value.value = "";
       }
     }
 
-    function openLightbox(idx) { lightboxIndex.value = idx; }
+    function openLightbox(idx) {
+      lightboxIndex.value = idx;
+    }
     function openLightboxByFileId(fileId) {
       const idx = lightboxImages.value.indexOf(fileId);
       if (idx !== -1) lightboxIndex.value = idx;
     }
-    function closeLightbox() { lightboxIndex.value = null; }
-    function nextImage() { if (lightboxIndex.value < lightboxImages.value.length - 1) lightboxIndex.value++; }
-    function prevImage() { if (lightboxIndex.value > 0) lightboxIndex.value--; }
+    function closeLightbox() {
+      lightboxIndex.value = null;
+    }
+    function nextImage() {
+      if (lightboxIndex.value < lightboxImages.value.length - 1)
+        lightboxIndex.value++;
+    }
+    function prevImage() {
+      if (lightboxIndex.value > 0) lightboxIndex.value--;
+    }
 
     function handleLightboxKeydown(e) {
       if (lightboxIndex.value == null) return;
-      if (e.key === 'Escape') closeLightbox();
-      else if (e.key === 'ArrowRight') nextImage();
-      else if (e.key === 'ArrowLeft') prevImage();
+      if (e.key === "Escape") closeLightbox();
+      else if (e.key === "ArrowRight") nextImage();
+      else if (e.key === "ArrowLeft") prevImage();
     }
 
     function onBeforeUnload(e) {
@@ -1076,9 +1247,9 @@ export default {
 
     onBeforeRouteLeave(async () => {
       if (isSubmitting.value) return false;
-      const ok = await confirmDiscardChanges();
+      const ok = await confirmLeaveWithUnsaved();
       if (ok) hasUnsavedChanges.value = false;
-      return ok;
+      return Boolean(ok);
     });
 
     onMounted(async () => {
@@ -1096,6 +1267,7 @@ export default {
       window.removeEventListener("keydown", handleLightboxKeydown);
       window.removeEventListener("beforeunload", onBeforeUnload);
       store.commit("aiChat/clearPageContext");
+      clearTimeout(skuCopiedTimer);
     });
 
     return {
@@ -1107,7 +1279,8 @@ export default {
       saveDisabledReasons,
       isProductLoading,
       files,
-      aiEnabled,      deleteFile,
+      aiEnabled,
+      deleteFile,
       productId,
       images,
       handleDeleteProduct,
@@ -1135,13 +1308,19 @@ export default {
       showSkuDialog,
       newSkuValue,
       isUpdatingSku,
+      skuCopied,
       openSkuDialog,
+      selectSkuField,
+      copySku,
       submitSkuChange,
       allGroups,
       isChangingGroup,
       groupSelectOptions,
       currentGroupSelectValue,
       onGroupSelectChange,
+      showCreateGroupDialog,
+      openCreateGroupDialogFromSelect,
+      onGroupCreated,
       descriptionRef,
       groupSidebarRef,
       autoResizeDescription,
@@ -1149,6 +1328,7 @@ export default {
       isDescriptionGenerating,
       descriptionGeneratingHint,
       aiAttributesSummary,
+      FIELD_LIMITS,
       extendedPriceParameters,
       storeCurrencies,
       storeBaseCurrency,
@@ -1177,16 +1357,38 @@ export default {
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
     <template #nav-center>
-        <Tabs v-model="tab">
-          <TabsList>
-            <TabsTrigger value="properties">{{ $t("pages.productEditPage.tabs.properties") }}</TabsTrigger>
-            <TabsTrigger value="notes">{{ $t("pages.productEditPage.tabs.notes") }}</TabsTrigger>
-            <TabsTrigger value="files">{{ $t("pages.productEditPage.tabs.files") }}</TabsTrigger>
-            <TabsTrigger value="images"><span class="sm:hidden">{{ $t("pages.productEditPage.tabs.imagesShort") }}</span><span class="hidden sm:inline">{{ $t("pages.productEditPage.tabs.images") }}</span></TabsTrigger>
-            <TabsTrigger v-if="category?.hasSizes" value="sizes">{{ $t("pages.productEditPage.tabs.sizes") }}</TabsTrigger>
-            <TabsTrigger value="marketplaces"><span class="sm:hidden">{{ $t("pages.productEditPage.tabs.marketplacesShort") }}</span><span class="hidden sm:inline">{{ $t("nav.adapters") }}</span></TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <Tabs v-model="tab">
+        <TabsList>
+          <TabsTrigger value="properties">{{
+            $t("pages.productEditPage.tabs.properties")
+          }}</TabsTrigger>
+          <TabsTrigger value="notes">{{
+            $t("pages.productEditPage.tabs.notes")
+          }}</TabsTrigger>
+          <TabsTrigger value="files">{{
+            $t("pages.productEditPage.tabs.files")
+          }}</TabsTrigger>
+          <TabsTrigger value="images"
+            ><span class="sm:hidden">{{
+              $t("pages.productEditPage.tabs.imagesShort")
+            }}</span
+            ><span class="hidden sm:inline">{{
+              $t("pages.productEditPage.tabs.images")
+            }}</span></TabsTrigger
+          >
+          <TabsTrigger v-if="category?.hasSizes" value="sizes">{{
+            $t("pages.productEditPage.tabs.sizes")
+          }}</TabsTrigger>
+          <TabsTrigger value="marketplaces"
+            ><span class="sm:hidden">{{
+              $t("pages.productEditPage.tabs.marketplacesShort")
+            }}</span
+            ><span class="hidden sm:inline">{{
+              $t("nav.adapters")
+            }}</span></TabsTrigger
+          >
+        </TabsList>
+      </Tabs>
     </template>
     <template #nav-right>
       <DropdownMenu>
@@ -1236,410 +1438,820 @@ export default {
             :get-duplicate-url="getDuplicateUrl"
           />
           <div class="relative min-w-0 flex-1">
-            <div v-if="isProductLoading && productSKU" class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]">
+            <div
+              v-if="isProductLoading && productSKU"
+              class="absolute inset-0 z-10 flex items-start justify-center pt-24 bg-background/60 backdrop-blur-[1px]"
+            >
               <Spinner size="xl" class="text-muted-foreground" />
             </div>
             <form
-            v-if="form"
-            v-show="tab == 'properties'"
-            id="product-edit-form"
-            novalidate
-            @submit.prevent="onSubmit"
-            class="flex min-w-0 flex-col"
-          >
-            <ProductGallerySidebar
-              v-model:images="sortedImages"
-              layout="inline"
-              class="lg:hidden mb-4"
-              :is-uploading="isUploadingGallery"
-              :disabled="isProductLoading"
-              @drag-change="onGalleryDragChange"
-              @remove="removeGalleryImage"
-              @upload="triggerGalleryUpload"
-              @preview="openLightbox"
-            />
+              v-if="form"
+              v-show="tab == 'properties'"
+              id="product-edit-form"
+              novalidate
+              @submit.prevent="onSubmit"
+              class="flex min-w-0 flex-col"
+            >
+              <ProductGallerySidebar
+                v-model:images="sortedImages"
+                layout="inline"
+                class="lg:hidden mb-4"
+                :is-uploading="isUploadingGallery"
+                :disabled="isProductLoading"
+                @drag-change="onGalleryDragChange"
+                @remove="removeGalleryImage"
+                @upload="triggerGalleryUpload"
+                @preview="openLightbox"
+              />
 
-            <div class="flex w-full min-w-0 flex-col gap-6">
-            <!-- Main fields -->
-            <Card class="border-0 shadow-none">
-              <CardHeader>
-                <CardTitle class="text-base">
-                  {{ $t("pages.productEditPage.sections.mainData.title") }}
-                </CardTitle>
-                <CardDescription>
-                  {{ $t("pages.productEditPage.sections.mainData.description") }}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FieldGroup class="gap-5">
-                  <SettingsFormField :label="$t('pages.productEditPage.fields.category.label')">
-                    <div class="space-y-1.5 w-full">
-                      <SearchableSelect
-                        :model-value="currentCategorySelectValue"
-                        :options="categorySelectOptions"
-                        :placeholder="$t('pages.productEditPage.fields.category.placeholder')"
-                        :disabled="isProductLoading || isChangingCategory || isLoadingCategories"
-                        @update:model-value="onCategorySelectChange"
-                      />
-                      <router-link
-                        v-if="category"
-                        :to="`/categories/${category.id}/edit`"
-                        class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              <div class="flex w-full min-w-0 flex-col gap-6">
+                <!-- Main fields -->
+                <Card class="border-0 shadow-none">
+                  <CardHeader>
+                    <CardTitle class="text-base">
+                      {{ $t("pages.productEditPage.sections.mainData.title") }}
+                    </CardTitle>
+                    <CardDescription>
+                      {{
+                        $t(
+                          "pages.productEditPage.sections.mainData.description",
+                        )
+                      }}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FieldGroup class="gap-5">
+                      <SettingsFormField
+                        :label="
+                          $t('pages.productEditPage.fields.category.label')
+                        "
                       >
-                        {{ $t("pages.productEditPage.fields.category.editLink") }}
-                      </router-link>
-                    </div>
-                  </SettingsFormField>
-
-                  <SettingsFormField :label="$t('pages.productEditPage.fields.group.label')">
-                    <div class="space-y-1.5">
-                      <SearchableSelect
-                        :model-value="currentGroupSelectValue"
-                        :options="groupSelectOptions"
-                        :placeholder="$t('pages.productEditPage.fields.group.placeholder')"
-                        :disabled="isProductLoading || isChangingGroup"
-                        @update:model-value="onGroupSelectChange"
-                      />
-                      <router-link
-                        v-if="productGroup"
-                        :to="`/product-groups/${productGroup.id}/edit`"
-                        class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {{ $t("pages.productEditPage.fields.group.editLink") }}
-                      </router-link>
-                    </div>
-                  </SettingsFormField>
-
-                  <SettingsFormField :label="$t('pages.productEditPage.fields.sku.label')" label-for="product-sku">
-                    <div class="flex items-center gap-2">
-                      <Input
-                        id="product-sku"
-                        type="text"
-                        disabled
-                        :model-value="productSKU"
-                        class="font-mono"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        class="shrink-0 size-9"
-                        :title="$t('pages.productEditPage.fields.sku.changeAction')"
-                        :aria-label="$t('pages.productEditPage.fields.sku.changeAction')"
-                        type="button"
-                        @click="openSkuDialog"
-                      >
-                        <Pencil class="size-4" />
-                      </Button>
-                    </div>
-                  </SettingsFormField>
-
-                  <FormField v-slot="{ value, setValue, errorMessage }" name="product.barcode">
-                    <FormItem class="gap-0">
-                      <SettingsFormField :label="$t('pages.productEditPage.fields.barcode.label')" label-for="product-barcode" :error="errorMessage">
-                        <FormControl>
-                          <BarcodeInput
-                            id="product-barcode"
-                            :model-value="value || ''"
-                            @update:model-value="setValue($event)"
+                        <div class="space-y-1.5 w-full">
+                          <SearchableSelect
+                            :model-value="currentCategorySelectValue"
+                            :options="categorySelectOptions"
+                            :placeholder="
+                              $t(
+                                'pages.productEditPage.fields.category.placeholder',
+                              )
+                            "
+                            :disabled="
+                              isProductLoading ||
+                              isChangingCategory ||
+                              isLoadingCategories
+                            "
+                            @update:model-value="onCategorySelectChange"
                           />
-                        </FormControl>
-                      </SettingsFormField>
-                    </FormItem>
-                  </FormField>
-
-                  <FormField v-slot="{ componentField, errorMessage }" name="product.name">
-                    <FormItem class="gap-0">
-                      <SettingsFormField :label="$t('pages.productEditPage.fields.name.label')" label-for="product-name" :error="errorMessage" required>
-                        <FormControl>
-                          <Input id="product-name" type="text" v-bind="componentField" />
-                        </FormControl>
-                      </SettingsFormField>
-                    </FormItem>
-                  </FormField>
-
-                  <FormField v-slot="{ componentField, errorMessage }" name="product.description">
-                    <FormItem class="gap-1.5">
-                      <div class="flex items-center justify-between gap-2">
-                        <label for="product-description" class="text-sm font-medium leading-none">{{ $t("pages.productEditPage.fields.description.label") }}</label>
-                        <AiDescriptionGenerator
-                          v-if="aiEnabled"
-                          :product-name="form.values.product?.name"
-                          :product-sku="productSKU"
-                          :category-name="category?.name"
-                          :existing-description="form.values.product?.description"
-                          :attributes-summary="aiAttributesSummary"
-                          @update:generating="isDescriptionGenerating = $event"
-                          @generated="onDescriptionGenerated"
-                        />
-                      </div>
-                      <div class="relative">
-                        <FormControl>
-                          <Textarea
-                            id="product-description"
-                            ref="descriptionRef"
-                            v-bind="componentField"
-                            :disabled="isDescriptionGenerating"
-                            :aria-busy="isDescriptionGenerating"
-                            @input="autoResizeDescription"
-                            class="min-h-24 overflow-hidden resize-none transition-opacity"
-                            :class="isDescriptionGenerating ? 'opacity-60' : ''"
-                          />
-                        </FormControl>
-                        <div
-                          v-if="isDescriptionGenerating"
-                          class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
-                        >
-                          <p class="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Spinner size="sm" />
-                            {{ descriptionGeneratingHint }}
-                          </p>
+                          <router-link
+                            v-if="category"
+                            :to="`/categories/${category.id}/edit`"
+                            class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {{
+                              $t(
+                                "pages.productEditPage.fields.category.editLink",
+                              )
+                            }}
+                          </router-link>
                         </div>
-                      </div>
-                      <p v-if="errorMessage" class="text-sm text-destructive">{{ errorMessage }}</p>
-                    </FormItem>
-                  </FormField>
+                      </SettingsFormField>
 
-                  <template v-if="!category?.hasSizes">
-                    <div class="space-y-4 border-t pt-5">
-                      <div>
-                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.stock.title") }}</h4>
-                        <p class="text-xs text-muted-foreground mt-0.5">
-                          {{ $t("pages.productEditPage.sections.stock.description") }}
-                        </p>
-                      </div>
-                      <div class="grid grid-cols-1 gap-5">
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.storageQuantity">
-                          <FormItem class="gap-0">
-                            <SettingsFormField
-                              :label="$t('pages.productEditPage.fields.quantity.label')"
-                              label-for="product-quantity"
-                              :error="errorMessage"
-                            >
-                              <NumberField
-                                id="product-quantity"
-                                class="w-full"
-                                :min="0"
-                                :step="1"
-                                :model-value="value ?? undefined"
-                                @update:model-value="(v) => setValue(v ?? null)"
+                      <SettingsFormField
+                        :label="$t('pages.productEditPage.fields.group.label')"
+                      >
+                        <div class="space-y-1.5">
+                          <SearchableSelect
+                            :model-value="currentGroupSelectValue"
+                            :options="groupSelectOptions"
+                            :placeholder="
+                              $t(
+                                'pages.productEditPage.fields.group.placeholder',
+                              )
+                            "
+                            :disabled="isProductLoading || isChangingGroup"
+                            @update:model-value="onGroupSelectChange"
+                          >
+                            <template #footer="{ close }">
+                              <button
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                @click="openCreateGroupDialogFromSelect(close)"
                               >
-                                <NumberFieldContent class="w-full">
-                                  <NumberFieldDecrement />
-                                  <FormControl>
-                                    <NumberFieldInput />
-                                  </FormControl>
-                                  <NumberFieldIncrement />
-                                </NumberFieldContent>
-                              </NumberField>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                      </div>
-                    </div>
+                                <Plus class="size-4 shrink-0" />
+                                <span class="flex-1 truncate text-sm">
+                                  {{
+                                    $t(
+                                      "pages.productEditPage.fields.group.createLink",
+                                    )
+                                  }}
+                                </span>
+                              </button>
+                            </template>
+                          </SearchableSelect>
+                          <div
+                            class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                          >
+                            <router-link
+                              v-if="productGroup"
+                              :to="`/product-groups/${productGroup.id}/edit`"
+                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                            >
+                              {{
+                                $t(
+                                  "pages.productEditPage.fields.group.editLink",
+                                )
+                              }}
+                            </router-link>
+                            <button
+                              type="button"
+                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                              :disabled="isProductLoading || isChangingGroup"
+                              @click="showCreateGroupDialog = true"
+                            >
+                              {{
+                                $t(
+                                  "pages.productEditPage.fields.group.createLink",
+                                )
+                              }}
+                            </button>
+                          </div>
+                        </div>
+                      </SettingsFormField>
 
-                    <div class="space-y-4 border-t pt-5">
-                      <div>
-                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.price.title") }}</h4>
-                        <p class="text-xs text-muted-foreground mt-0.5">
-                          {{ $t("pages.productEditPage.sections.price.description", { currency: storeBaseCurrency || $t("pages.productEditPage.fields.price.defaultCurrencyFallback") }) }}
-                        </p>
-                      </div>
-                      <div class="grid grid-cols-1 gap-5">
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.price">
-                          <FormItem class="gap-0">
-                            <SettingsFormField :label="$t('pages.productEditPage.fields.price.label', { currency: storeBaseCurrency || $t('common.emDash') })" label-for="product-price" :error="errorMessage">
-                              <FormControl>
-                                <Input
-                                  id="product-price"
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="0.00"
-                                  :model-value="value"
-                                  @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)"
-                                />
-                              </FormControl>
-                              <p v-if="pricePreview(value).length" class="text-xs text-muted-foreground mt-1">
-                                {{ pricePreview(value).join(" · ") }}
+                      <SettingsFormField
+                        :label="$t('pages.productEditPage.fields.sku.label')"
+                        label-for="product-sku"
+                      >
+                        <div class="flex items-center gap-2">
+                          <Input
+                            id="product-sku"
+                            type="text"
+                            readonly
+                            :model-value="productSKU"
+                            class="min-w-0 flex-1 font-mono tabular-nums"
+                            @click="selectSkuField"
+                            @focus="selectSkuField"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            class="size-9 shrink-0"
+                            type="button"
+                            :title="$t('pages.productEditPage.skuDialog.copyAction')"
+                            :aria-label="$t('pages.productEditPage.skuDialog.copyAction')"
+                            :disabled="!productSKU"
+                            @click="copySku"
+                          >
+                            <Check v-if="skuCopied" class="size-4 text-success" />
+                            <Copy v-else class="size-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            class="size-9 shrink-0"
+                            :title="
+                              $t(
+                                'pages.productEditPage.fields.sku.changeAction',
+                              )
+                            "
+                            :aria-label="
+                              $t(
+                                'pages.productEditPage.fields.sku.changeAction',
+                              )
+                            "
+                            type="button"
+                            @click="openSkuDialog"
+                          >
+                            <Pencil class="size-4" />
+                          </Button>
+                        </div>
+                      </SettingsFormField>
+
+                      <FormField
+                        v-slot="{ value, setValue, errorMessage }"
+                        name="product.barcode"
+                      >
+                        <FormItem class="gap-0">
+                          <SettingsFormField
+                            :label="
+                              $t('pages.productEditPage.fields.barcode.label')
+                            "
+                            label-for="product-barcode"
+                            :error="errorMessage"
+                          >
+                            <FormControl>
+                              <BarcodeInput
+                                id="product-barcode"
+                                :model-value="value || ''"
+                                @update:model-value="setValue($event)"
+                              />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
+
+                      <FormField
+                        v-slot="{ componentField, errorMessage }"
+                        name="product.name"
+                      >
+                        <FormItem class="gap-0">
+                          <SettingsFormField
+                            :label="
+                              $t('pages.productEditPage.fields.name.label')
+                            "
+                            label-for="product-name"
+                            :error="errorMessage"
+                            required
+                          >
+                            <FormControl>
+                              <Input
+                                id="product-name"
+                                type="text"
+                                :maxlength="FIELD_LIMITS.productName"
+                                v-bind="componentField"
+                              />
+                            </FormControl>
+                          </SettingsFormField>
+                        </FormItem>
+                      </FormField>
+
+                      <FormField
+                        v-slot="{ componentField, errorMessage }"
+                        name="product.description"
+                      >
+                        <FormItem class="gap-1.5">
+                          <div class="flex items-center justify-between gap-2">
+                            <label
+                              for="product-description"
+                              class="text-sm font-medium leading-none"
+                              >{{
+                                $t(
+                                  "pages.productEditPage.fields.description.label",
+                                )
+                              }}</label
+                            >
+                            <AiDescriptionGenerator
+                              v-if="aiEnabled"
+                              :product-name="form.values.product?.name"
+                              :product-sku="productSKU"
+                              :category-name="category?.name"
+                              :existing-description="
+                                form.values.product?.description
+                              "
+                              :attributes-summary="aiAttributesSummary"
+                              @update:generating="
+                                isDescriptionGenerating = $event
+                              "
+                              @generated="onDescriptionGenerated"
+                            />
+                          </div>
+                          <div class="relative">
+                            <FormControl>
+                              <Textarea
+                                id="product-description"
+                                ref="descriptionRef"
+                                v-bind="componentField"
+                                :disabled="isDescriptionGenerating"
+                                :aria-busy="isDescriptionGenerating"
+                                :maxlength="FIELD_LIMITS.productDescription"
+                                @input="autoResizeDescription"
+                                class="min-h-24 overflow-hidden resize-none transition-opacity"
+                                :class="
+                                  isDescriptionGenerating ? 'opacity-60' : ''
+                                "
+                              />
+                            </FormControl>
+                            <div
+                              v-if="isDescriptionGenerating"
+                              class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
+                            >
+                              <p
+                                class="flex items-center gap-2 text-xs text-muted-foreground"
+                              >
+                                <Spinner size="sm" />
+                                {{ descriptionGeneratingHint }}
                               </p>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                      </div>
-                    </div>
+                            </div>
+                          </div>
+                          <p
+                            v-if="errorMessage"
+                            class="text-sm text-destructive"
+                          >
+                            {{ errorMessage }}
+                          </p>
+                        </FormItem>
+                      </FormField>
 
-                    <div v-if="extendedPriceParameters" class="space-y-4 border-t pt-5">
-                      <div>
-                        <h4 class="text-sm font-medium">{{ $t("pages.productEditPage.sections.extendedPrice.title") }}</h4>
-                        <p class="text-xs text-muted-foreground mt-0.5">
-                          {{ $t("pages.productEditPage.sections.extendedPrice.description") }}
-                        </p>
-                      </div>
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.oldPrice">
-                          <FormItem class="gap-0">
-                            <SettingsFormField
-                              :label="$t('pages.productEditPage.fields.oldPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })"
-                              :error="errorMessage"
-                              :description="$t('pages.productEditPage.fields.oldPrice.description')"
+                      <template v-if="!category?.hasSizes">
+                        <div class="space-y-4 border-t pt-5">
+                          <div>
+                            <h4 class="text-sm font-medium">
+                              {{
+                                $t("pages.productEditPage.sections.stock.title")
+                              }}
+                            </h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              {{
+                                $t(
+                                  "pages.productEditPage.sections.stock.description",
+                                )
+                              }}
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 gap-5">
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.storageQuantity"
                             >
-                              <FormControl>
-                                <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                        <FormField v-slot="{ value, errorMessage }" name="product.discount">
-                          <FormItem class="gap-0">
-                            <SettingsFormField
-                              :label="$t('pages.productEditPage.fields.discount.label')"
-                              :error="errorMessage"
-                              :description="$t('pages.productEditPage.fields.discount.description')"
-                            >
-                              <FormControl>
-                                <Input
-                                  type="text"
-                                  readonly
-                                  class="bg-muted"
-                                  :model-value="value != null ? String(value) : '-'"
-                                />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.minPrice">
-                          <FormItem class="gap-0">
-                            <SettingsFormField :label="$t('pages.productEditPage.fields.minPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
-                              <FormControl>
-                                <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.netPrice">
-                          <FormItem class="gap-0">
-                            <SettingsFormField :label="$t('pages.productEditPage.fields.netPrice.label', { currency: storeBaseCurrency || $t('common.emDash') })" :error="errorMessage">
-                              <FormControl>
-                                <Input type="number" step="0.01" min="0" :model-value="value" @update:model-value="setValue($event !== '' && $event != null ? Number($event) : null)" />
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                        <FormField v-slot="{ value, setValue, errorMessage }" name="product.currency">
-                          <FormItem class="gap-0 sm:col-span-2">
-                            <SettingsFormField
-                              :label="$t('pages.productEditPage.fields.currency.label')"
-                              :error="errorMessage"
-                              :description="$t('pages.productEditPage.fields.currency.description', { currency: storeBaseCurrency || $t('pages.productEditPage.fields.currency.defaultCurrencyFallback') })"
-                            >
-                              <FormControl>
-                                <Select :model-value="value || storeBaseCurrency" @update:model-value="setValue($event)" class="w-full">
-                                  <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem v-for="c in storeCurrencies" :key="c.code" :value="c.code">{{ c.code }}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </FormControl>
-                            </SettingsFormField>
-                          </FormItem>
-                        </FormField>
-                      </div>
-                    </div>
-                  </template>
-                </FieldGroup>
-              </CardContent>
-            </Card>
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.quantity.label',
+                                    )
+                                  "
+                                  label-for="product-quantity"
+                                  :error="errorMessage"
+                                >
+                                  <NumberField
+                                    id="product-quantity"
+                                    class="w-full"
+                                    :min="0"
+                                    :step="1"
+                                    :model-value="value ?? undefined"
+                                    @update:model-value="
+                                      (v) => setValue(v ?? null)
+                                    "
+                                  >
+                                    <NumberFieldContent class="w-full">
+                                      <NumberFieldDecrement />
+                                      <FormControl>
+                                        <NumberFieldInput />
+                                      </FormControl>
+                                      <NumberFieldIncrement />
+                                    </NumberFieldContent>
+                                  </NumberField>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
 
-            <!-- SKU change dialog -->
-            <Dialog v-model:open="showSkuDialog">
-              <DialogContent size="md">
-                <DialogHeader>
-                  <DialogTitle>{{ $t("pages.productEditPage.skuDialog.title") }}</DialogTitle>
-                  <DialogDescription>
-                    {{ $t("pages.productEditPage.skuDialog.description") }}
-                  </DialogDescription>
-                </DialogHeader>
-                <div class="space-y-4 py-4">
-                  <SettingsFormField :label="$t('pages.productEditPage.skuDialog.currentSkuLabel')">
-                    <Input type="text" disabled :model-value="productSKU" class="font-mono" />
-                  </SettingsFormField>
-                  <SettingsFormField :label="$t('pages.productEditPage.skuDialog.newSkuLabel')" label-for="new-sku">
-                    <Input
-                      id="new-sku"
-                      type="text"
-                      v-model="newSkuValue"
-                      maxlength="50"
-                      :placeholder="$t('pages.productEditPage.skuDialog.newSkuPlaceholder')"
-                      class="font-mono"
-                      @keydown.enter.prevent="submitSkuChange"
-                    />
-                  </SettingsFormField>
-                </div>
-                <DialogFooter>
-                  <DialogClose as-child><Button variant="outline" :disabled="isUpdatingSku">{{ $t("common.cancel") }}</Button></DialogClose>
-                  <Button
-                    @click="submitSkuChange"
-                    :disabled="isUpdatingSku || !newSkuValue.trim() || newSkuValue.trim() === productSKU"
-                  >
-                    <Spinner v-if="isUpdatingSku" class="mr-2" />
-                    {{ $t("pages.productEditPage.skuDialog.changeAction") }}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                        <div class="space-y-4 border-t pt-5">
+                          <div>
+                            <h4 class="text-sm font-medium">
+                              {{
+                                $t("pages.productEditPage.sections.price.title")
+                              }}
+                            </h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              {{
+                                $t(
+                                  "pages.productEditPage.sections.price.description",
+                                  {
+                                    currency:
+                                      storeBaseCurrency ||
+                                      $t(
+                                        "pages.productEditPage.fields.price.defaultCurrencyFallback",
+                                      ),
+                                  },
+                                )
+                              }}
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 gap-5">
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.price"
+                            >
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.price.label',
+                                      {
+                                        currency:
+                                          storeBaseCurrency ||
+                                          $t('common.emDash'),
+                                      },
+                                    )
+                                  "
+                                  label-for="product-price"
+                                  :error="errorMessage"
+                                >
+                                  <FormControl>
+                                    <Input
+                                      id="product-price"
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      placeholder="0.00"
+                                      :model-value="value"
+                                      @update:model-value="
+                                        setValue(
+                                          $event !== '' && $event != null
+                                            ? Number($event)
+                                            : null,
+                                        )
+                                      "
+                                    />
+                                  </FormControl>
+                                  <p
+                                    v-if="pricePreview(value).length"
+                                    class="text-xs text-muted-foreground mt-1"
+                                  >
+                                    {{ pricePreview(value).join(" · ") }}
+                                  </p>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
 
-            <!-- Category attributes -->
-            <Card
-              v-if="category && visibleCategoryAttributes.length > 0"
-              class="border-0 shadow-none"
-            >
-              <CardHeader>
-                <CardTitle class="text-base">
-                  {{ $t("pages.productEditPage.sections.categoryAttributes.title") }}
-                </CardTitle>
-                <CardDescription>
-                  {{ $t("pages.productEditPage.sections.categoryAttributes.description", {
-                    count: visibleCategoryAttributes.length,
-                    unit: attributeCountLabel(visibleCategoryAttributes.length),
-                    category: category.name,
-                  }) }}
-                </CardDescription>
-              </CardHeader>
-              <CardContent class="pt-0">
-                <ProductAttributeForm
-                  :attributes="category.attributes"
+                        <div
+                          v-if="extendedPriceParameters"
+                          class="space-y-4 border-t pt-5"
+                        >
+                          <div>
+                            <h4 class="text-sm font-medium">
+                              {{
+                                $t(
+                                  "pages.productEditPage.sections.extendedPrice.title",
+                                )
+                              }}
+                            </h4>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                              {{
+                                $t(
+                                  "pages.productEditPage.sections.extendedPrice.description",
+                                )
+                              }}
+                            </p>
+                          </div>
+                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.oldPrice"
+                            >
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.oldPrice.label',
+                                      {
+                                        currency:
+                                          storeBaseCurrency ||
+                                          $t('common.emDash'),
+                                      },
+                                    )
+                                  "
+                                  :error="errorMessage"
+                                  :description="
+                                    $t(
+                                      'pages.productEditPage.fields.oldPrice.description',
+                                    )
+                                  "
+                                >
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      :model-value="value"
+                                      @update:model-value="
+                                        setValue(
+                                          $event !== '' && $event != null
+                                            ? Number($event)
+                                            : null,
+                                        )
+                                      "
+                                    />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField
+                              v-slot="{ value, errorMessage }"
+                              name="product.discount"
+                            >
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.discount.label',
+                                    )
+                                  "
+                                  :error="errorMessage"
+                                  :description="
+                                    $t(
+                                      'pages.productEditPage.fields.discount.description',
+                                    )
+                                  "
+                                >
+                                  <FormControl>
+                                    <Input
+                                      type="text"
+                                      readonly
+                                      class="bg-muted"
+                                      :model-value="
+                                        value != null ? String(value) : '-'
+                                      "
+                                    />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.minPrice"
+                            >
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.minPrice.label',
+                                      {
+                                        currency:
+                                          storeBaseCurrency ||
+                                          $t('common.emDash'),
+                                      },
+                                    )
+                                  "
+                                  :error="errorMessage"
+                                >
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      :model-value="value"
+                                      @update:model-value="
+                                        setValue(
+                                          $event !== '' && $event != null
+                                            ? Number($event)
+                                            : null,
+                                        )
+                                      "
+                                    />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.netPrice"
+                            >
+                              <FormItem class="gap-0">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.netPrice.label',
+                                      {
+                                        currency:
+                                          storeBaseCurrency ||
+                                          $t('common.emDash'),
+                                      },
+                                    )
+                                  "
+                                  :error="errorMessage"
+                                >
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      :model-value="value"
+                                      @update:model-value="
+                                        setValue(
+                                          $event !== '' && $event != null
+                                            ? Number($event)
+                                            : null,
+                                        )
+                                      "
+                                    />
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                            <FormField
+                              v-slot="{ value, setValue, errorMessage }"
+                              name="product.currency"
+                            >
+                              <FormItem class="gap-0 sm:col-span-2">
+                                <SettingsFormField
+                                  :label="
+                                    $t(
+                                      'pages.productEditPage.fields.currency.label',
+                                    )
+                                  "
+                                  :error="errorMessage"
+                                  :description="
+                                    $t(
+                                      'pages.productEditPage.fields.currency.description',
+                                      {
+                                        currency:
+                                          storeBaseCurrency ||
+                                          $t(
+                                            'pages.productEditPage.fields.currency.defaultCurrencyFallback',
+                                          ),
+                                      },
+                                    )
+                                  "
+                                >
+                                  <FormControl>
+                                    <Select
+                                      :model-value="value || storeBaseCurrency"
+                                      @update:model-value="setValue($event)"
+                                      class="w-full"
+                                    >
+                                      <SelectTrigger class="w-full"
+                                        ><SelectValue
+                                      /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem
+                                          v-for="c in storeCurrencies"
+                                          :key="c.code"
+                                          :value="c.code"
+                                          >{{ c.code }}</SelectItem
+                                        >
+                                      </SelectContent>
+                                    </Select>
+                                  </FormControl>
+                                </SettingsFormField>
+                              </FormItem>
+                            </FormField>
+                          </div>
+                        </div>
+                      </template>
+                    </FieldGroup>
+                  </CardContent>
+                </Card>
+
+                <CreateProductGroupDialog
+                  v-model:open="showCreateGroupDialog"
+                  @created="onGroupCreated"
                 />
-              </CardContent>
-            </Card>
 
-            <!-- Store attributes -->
-            <Card
-              v-if="visibleStoreAttributes.length > 0"
-              class="border-0 shadow-none"
-            >
-              <CardHeader>
-                <CardTitle class="text-base">
-                  {{ $t("nav.globalAttributes") }}
-                </CardTitle>
-                <CardDescription>
-                  {{ $t("pages.productEditPage.sections.storeAttributes.description", {
-                    count: visibleStoreAttributes.length,
-                    unit: attributeCountLabel(visibleStoreAttributes.length),
-                  }) }}
-                </CardDescription>
-              </CardHeader>
-              <CardContent class="pt-0">
-                <StoreAttributeForm
-                  :attributes="storeAttributes"
-                />
-              </CardContent>
-            </Card>
+                <!-- SKU change dialog -->
+                <Dialog v-model:open="showSkuDialog">
+                  <DialogContent size="sm">
+                    <DialogHeader>
+                      <DialogTitle>{{
+                        $t("pages.productEditPage.skuDialog.title")
+                      }}</DialogTitle>
+                      <DialogDescription>
+                        {{ $t("pages.productEditPage.skuDialog.description") }}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <FieldGroup class="gap-4">
+                      <SettingsFormField
+                        :label="
+                          $t('pages.productEditPage.skuDialog.currentSkuLabel')
+                        "
+                        label-for="current-sku"
+                      >
+                        <div class="flex min-w-0 gap-2">
+                          <Input
+                            id="current-sku"
+                            type="text"
+                            readonly
+                            :model-value="productSKU"
+                            class="min-w-0 flex-1 font-mono tabular-nums"
+                            @click="selectSkuField"
+                            @focus="selectSkuField"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            class="size-9 shrink-0"
+                            :aria-label="
+                              $t('pages.productEditPage.skuDialog.copyAction')
+                            "
+                            :disabled="!productSKU"
+                            @click="copySku"
+                          >
+                            <Check
+                              v-if="skuCopied"
+                              class="size-4 text-success"
+                            />
+                            <Copy v-else class="size-4" />
+                          </Button>
+                        </div>
+                      </SettingsFormField>
+                      <SettingsFormField
+                        :label="
+                          $t('pages.productEditPage.skuDialog.newSkuLabel')
+                        "
+                        label-for="new-sku"
+                      >
+                        <Input
+                          id="new-sku"
+                          type="text"
+                          v-model="newSkuValue"
+                          :maxlength="FIELD_LIMITS.productSku"
+                          :placeholder="
+                            $t(
+                              'pages.productEditPage.skuDialog.newSkuPlaceholder',
+                            )
+                          "
+                          class="font-mono tabular-nums"
+                          @keydown.enter.prevent="submitSkuChange"
+                        />
+                      </SettingsFormField>
+                    </FieldGroup>
+                    <DialogFooter>
+                      <DialogClose as-child>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          :disabled="isUpdatingSku"
+                        >
+                          {{ $t("common.cancel") }}
+                        </Button>
+                      </DialogClose>
+                      <Button
+                        type="button"
+                        :disabled="
+                          isUpdatingSku ||
+                          !newSkuValue.trim() ||
+                          newSkuValue.trim() === productSKU
+                        "
+                        @click="submitSkuChange"
+                      >
+                        <Spinner v-if="isUpdatingSku" class="mr-2" />
+                        {{ $t("pages.productEditPage.skuDialog.changeAction") }}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
-            </div>
+                <!-- Category attributes -->
+                <Card
+                  v-if="category && visibleCategoryAttributes.length > 0"
+                  class="border-0 shadow-none"
+                >
+                  <ProductAttributeForm :attributes="category.attributes">
+                    <template #title>
+                      {{
+                        $t(
+                          "pages.productEditPage.sections.categoryAttributes.title",
+                        )
+                      }}
+                    </template>
+                    <template #description>
+                      {{
+                        $t(
+                          "pages.productEditPage.sections.categoryAttributes.description",
+                          {
+                            count: visibleCategoryAttributes.length,
+                            unit: attributeCountLabel(
+                              visibleCategoryAttributes.length,
+                            ),
+                            category: category.name,
+                          },
+                        )
+                      }}
+                    </template>
+                  </ProductAttributeForm>
+                </Card>
+
+                <!-- Store attributes -->
+                <Card
+                  v-if="visibleStoreAttributes.length > 0"
+                  class="border-0 shadow-none"
+                >
+                  <CardHeader>
+                    <CardTitle class="text-base">
+                      {{ $t("nav.globalAttributes") }}
+                    </CardTitle>
+                    <CardDescription>
+                      {{
+                        $t(
+                          "pages.productEditPage.sections.storeAttributes.description",
+                          {
+                            count: visibleStoreAttributes.length,
+                            unit: attributeCountLabel(
+                              visibleStoreAttributes.length,
+                            ),
+                          },
+                        )
+                      }}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent class="pt-0">
+                    <StoreAttributeForm :attributes="storeAttributes" />
+                  </CardContent>
+                </Card>
+              </div>
             </form>
 
             <!-- Files tab -->
-            <div v-show="tab == 'files'" class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
+            <div
+              v-show="tab == 'files'"
+              class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+              style="height: calc(100vh - 8.5rem)"
+            >
               <ProductFileManager
                 :files="files"
                 :productId="productId"
@@ -1651,7 +2263,11 @@ export default {
             </div>
 
             <!-- Images tab -->
-            <div v-show="tab == 'images'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
+            <div
+              v-show="tab == 'images'"
+              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
+              style="height: calc(100vh - 8.5rem)"
+            >
               <ProductImagesEditor
                 :files="files"
                 v-model:images="images"
@@ -1661,18 +2277,36 @@ export default {
             </div>
 
             <!-- Sizes tab -->
-            <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
+            <div
+              v-if="category?.hasSizes"
+              v-show="tab == 'sizes'"
+              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
+              style="height: calc(100vh - 8.5rem)"
+            >
               <ProductVariantsEditor :productId="productId" />
             </div>
 
             <!-- Marketplaces tab -->
-            <div v-show="tab == 'marketplaces'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
-              <ProductMarketplaceIntegrations :productId="productId" @product-updated="fetchProduct" />
+            <div
+              v-show="tab == 'marketplaces'"
+              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
+              style="height: calc(100vh - 8.5rem)"
+            >
+              <ProductMarketplaceIntegrations
+                :productId="productId"
+                @product-updated="fetchProduct"
+              />
             </div>
 
             <!-- Notes tab -->
-            <div v-show="tab == 'notes'" class="flex min-h-0 flex-col overflow-hidden rounded-xl border" style="height: calc(100vh - 8.5rem)">
-              <div class="flex h-11 shrink-0 items-center justify-between border-b px-4">
+            <div
+              v-show="tab == 'notes'"
+              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
+              style="height: calc(100vh - 8.5rem)"
+            >
+              <div
+                class="flex h-11 shrink-0 items-center justify-between border-b px-4"
+              >
                 <p class="flex items-center gap-2 text-sm font-medium">
                   <NotebookPen class="size-4" />
                   {{ $t("pages.productEditPage.tabs.notes") }}
@@ -1687,7 +2321,9 @@ export default {
                   v-if="notes.length === 0"
                   :framed="false"
                   :title="$t('pages.productEditPage.notesEmpty.title')"
-                  :description="$t('pages.productEditPage.notesEmpty.description')"
+                  :description="
+                    $t('pages.productEditPage.notesEmpty.description')
+                  "
                 >
                   <template #icon>
                     <NotebookPen />
@@ -1705,69 +2341,86 @@ export default {
               </div>
             </div>
 
-          <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
-          <div
-            v-show="tab === 'properties' && productSKU"
-            class="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <AlertDialog>
-              <AlertDialogTrigger as-child>
-                <Button variant="destructive" type="button">
-                  <Trash2 class="size-4 mr-2" />
-                  {{ $t("common.delete") }}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{{ $t("pages.productEditPage.deleteConfirm.title", { sku: productSKU }) }}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {{ $t("pages.productEditPage.deleteConfirm.description") }}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                  <AlertDialogAction @click="handleDeleteProduct" variant="destructive">
-                    {{ $t("pages.productEditPage.deleteConfirm.confirmAction") }}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <div class="flex items-center justify-end gap-3">
-              <p
-                v-if="hasUnsavedChanges"
-                class="text-sm text-muted-foreground"
-              >
-                {{ $t("pages.productEditPage.unsavedChanges") }}
-              </p>
-              <TooltipProvider :delay-duration="200">
-                <Tooltip :disabled="!isSaveDisabled || saveDisabledReasons.length === 0">
-                  <TooltipTrigger as-child>
-                    <span
-                      class="inline-flex"
-                      :tabindex="isSaveDisabled ? 0 : undefined"
+            <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
+            <div
+              v-show="tab === 'properties' && productSKU"
+              class="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <AlertDialog>
+                <AlertDialogTrigger as-child>
+                  <Button variant="destructive" type="button">
+                    <Trash2 class="size-4 mr-2" />
+                    {{ $t("common.delete") }}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{{
+                      $t("pages.productEditPage.deleteConfirm.title", {
+                        sku: productSKU,
+                      })
+                    }}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {{
+                        $t("pages.productEditPage.deleteConfirm.description")
+                      }}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{{
+                      $t("common.cancel")
+                    }}</AlertDialogCancel>
+                    <AlertDialogAction
+                      @click="handleDeleteProduct"
+                      variant="destructive"
                     >
-                      <Button
-                        type="submit"
-                        form="product-edit-form"
-                        :disabled="isSaveDisabled"
+                      {{
+                        $t("pages.productEditPage.deleteConfirm.confirmAction")
+                      }}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <div class="flex items-center justify-end gap-3">
+                <p
+                  v-if="hasUnsavedChanges"
+                  class="text-sm text-muted-foreground"
+                >
+                  {{ $t("pages.productEditPage.unsavedChanges") }}
+                </p>
+                <TooltipProvider :delay-duration="200">
+                  <Tooltip
+                    :disabled="
+                      !isSaveDisabled || saveDisabledReasons.length === 0
+                    "
+                  >
+                    <TooltipTrigger as-child>
+                      <span
+                        class="inline-flex"
+                        :tabindex="isSaveDisabled ? 0 : undefined"
                       >
-                        <Spinner v-if="isSubmitting" class="mr-2" />
-                        <Save v-else class="size-4 mr-2" />
-                        {{ $t("common.save") }}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" class="max-w-xs">
-                    <ul class="list-disc space-y-1 pl-4 text-left">
-                      <li v-for="reason in saveDisabledReasons" :key="reason">
-                        {{ reason }}
-                      </li>
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                        <Button
+                          type="submit"
+                          form="product-edit-form"
+                          :disabled="isSaveDisabled"
+                        >
+                          <Spinner v-if="isSubmitting" class="mr-2" />
+                          <Save v-else class="size-4 mr-2" />
+                          {{ $t("common.save") }}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" class="max-w-xs">
+                      <ul class="list-disc space-y-1 pl-4 text-left">
+                        <li v-for="reason in saveDisabledReasons" :key="reason">
+                          {{ reason }}
+                        </li>
+                      </ul>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
-          </div>
           </div>
 
           <ProductGallerySidebar
@@ -1788,32 +2441,53 @@ export default {
     <Teleport to="body">
       <div
         v-if="lightboxIndex != null"
-        class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+        class="fixed inset-0 z-[var(--z-overlay)] flex items-center justify-center bg-black/50 backdrop-blur-xs"
         @click.self="closeLightbox"
       >
         <!-- Close button -->
-        <Button variant="ghost" size="icon" class="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('common.close')" @click="closeLightbox">
-          <X class="size-8" />
+        <Button
+          variant="outline"
+          size="icon-lg"
+          class="absolute top-4 right-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          :aria-label="$t('common.close')"
+          @click="closeLightbox"
+        >
+          <X class="size-5" />
         </Button>
         <!-- Prev -->
-        <Button v-if="lightboxIndex > 0" variant="ghost" size="icon" class="absolute left-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('pages.productEditPage.lightbox.prevPhoto')" @click="prevImage">
-          <ChevronLeft class="size-10" />
+        <Button
+          v-if="lightboxIndex > 0"
+          variant="outline"
+          size="icon-lg"
+          class="absolute left-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          :aria-label="$t('pages.productEditPage.lightbox.prevPhoto')"
+          @click="prevImage"
+        >
+          <ChevronLeft class="size-6" />
         </Button>
         <!-- Image -->
         <AppImage
           :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
           :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
           spinner-size="xl"
-          spinner-class="text-white/70"
           class="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
           img-class="max-h-[90vh] max-w-[90vw] object-contain"
         />
         <!-- Next -->
-        <Button v-if="lightboxIndex < lightboxImages.length - 1" variant="ghost" size="icon" class="absolute right-4 text-white/70 hover:text-white hover:bg-transparent" :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')" @click="nextImage">
-          <ChevronRight class="size-10" />
+        <Button
+          v-if="lightboxIndex < lightboxImages.length - 1"
+          variant="outline"
+          size="icon-lg"
+          class="absolute right-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')"
+          @click="nextImage"
+        >
+          <ChevronRight class="size-6" />
         </Button>
         <!-- Counter -->
-        <div class="absolute bottom-4 text-white/60 text-sm">
+        <div
+          class="absolute bottom-4 rounded-full border bg-background/90 px-3 py-1 text-sm tabular-nums text-foreground shadow-xs supports-backdrop-filter:backdrop-blur-xs"
+        >
           {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}
         </div>
       </div>

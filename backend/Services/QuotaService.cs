@@ -23,21 +23,31 @@ public class QuotaService
         _db = db;
     }
 
-    public async Task EnsureProductQuotaAsync(int storeId)
+    /// <summary>
+    /// Remaining new-product slots for the store. Null means unlimited.
+    /// </summary>
+    public async Task<int?> GetRemainingProductSlotsAsync(int storeId)
     {
         var maxProducts = ReadPositiveInt("MAX_PRODUCTS");
-        if (maxProducts == null) return;
+        if (maxProducts == null)
+            return null;
 
         var count = await _unitOfWork.Repository<Product>()
             .CountAsync(p => p.storeId == storeId);
+        return Math.Max(0, maxProducts.Value - count);
+    }
 
-        if (count >= maxProducts.Value)
-        {
-            throw ApiException.Conflict(
-                $"Product limit reached (MAX_PRODUCTS={maxProducts.Value})",
-                data: new { limit = maxProducts.Value, used = count, remaining = 0 },
-                code: "product_limit_reached");
-        }
+    public async Task EnsureProductQuotaAsync(int storeId)
+    {
+        var remaining = await GetRemainingProductSlotsAsync(storeId);
+        if (remaining != 0)
+            return;
+
+        var maxProducts = ReadPositiveInt("MAX_PRODUCTS")!.Value;
+        throw ApiException.Conflict(
+            $"Product limit reached (MAX_PRODUCTS={maxProducts})",
+            data: new { limit = maxProducts, used = maxProducts, remaining = 0 },
+            code: "product_limit_reached");
     }
 
     public async Task EnsureStorageQuotaAsync(int storeId, long additionalBytes = 0)

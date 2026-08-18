@@ -28,6 +28,8 @@ public class ProductSyncController : ControllerBase
     private readonly DataContext _context;
     private readonly ILogger<ProductSyncController> _logger;
     private readonly IOperationLogger _operationLogger;
+    private readonly CategoryImportQueueService _categoryImportQueue;
+    private readonly QuotaService _quotaService;
     private readonly EncryptionService? _encryptionService;
 
     public ProductSyncController(
@@ -40,6 +42,8 @@ public class ProductSyncController : ControllerBase
         DataContext context,
         ILogger<ProductSyncController> logger,
         IOperationLogger operationLogger,
+        CategoryImportQueueService categoryImportQueue,
+        QuotaService quotaService,
         EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
@@ -51,6 +55,8 @@ public class ProductSyncController : ControllerBase
         _context = context;
         _logger = logger;
         _operationLogger = operationLogger;
+        _categoryImportQueue = categoryImportQueue;
+        _quotaService = quotaService;
         _encryptionService = encryptionService;
     }
 
@@ -986,6 +992,8 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest("No products selected for import", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
+        await _quotaService.EnsureProductQuotaAsync(connection.storeId);
+        var remainingSlots = await _quotaService.GetRemainingProductSlotsAsync(connection.storeId);
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -1006,42 +1014,58 @@ public class ProductSyncController : ControllerBase
 
         var skippedProducts = new List<object>();
         int queued = 0;
+        var skippedQuota = 0;
+        var categoryJobs = 0;
+        var enqueuedCategories = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var productInput in input.products)
         {
-            // Check if forcing import without mapping
-            int? targetCategoryId = null;
-
-            if (!string.IsNullOrEmpty(productInput.externalCategoryId))
+            if (remainingSlots is int cap && queued >= cap)
             {
-                if (mappingsByExternalCategory.TryGetValue(productInput.externalCategoryId, out var mapping))
+                skippedQuota++;
+                continue;
+            }
+            int? targetCategoryId = productInput.targetCategoryId;
+            var extCatId = string.IsNullOrWhiteSpace(productInput.externalCategoryId)
+                ? null
+                : productInput.externalCategoryId.Trim();
+
+            if (targetCategoryId == null && extCatId != null)
+            {
+                if (mappingsByExternalCategory.TryGetValue(extCatId, out var mapping))
                 {
                     targetCategoryId = mapping.localCategoryId;
                 }
                 else if (!productInput.forceImportWithoutMapping)
                 {
-                    // No mapping and not forced - skip (don't queue)
-                    skippedProducts.Add(new
+                    if (enqueuedCategories.Add(extCatId))
                     {
-                        externalId = productInput.externalId,
-                        error = $"Category '{productInput.externalCategoryId}' has no mapping"
-                    });
-                    continue;
+                        var job = await _categoryImportQueue.EnqueueIfNeededAsync(
+                            connection,
+                            extCatId,
+                            productInput.externalCategoryName,
+                            productInput.targetCategoryName,
+                            localCategoryId: null,
+                            selectedFieldKeys: null,
+                            batchId,
+                            userId,
+                            ct);
+                        if (job != null)
+                            categoryJobs++;
+                    }
                 }
             }
 
-            // Override with explicit target category if provided
             if (productInput.targetCategoryId.HasValue)
-            {
                 targetCategoryId = productInput.targetCategoryId.Value;
-            }
 
-            // Add to queue
             var pending = new PendingProductImport
             {
                 connectionId = connectionId,
                 externalProductId = productInput.externalId,
                 targetCategoryId = targetCategoryId,
+                externalCategoryId = extCatId,
+                forceImportWithoutMapping = productInput.forceImportWithoutMapping,
                 authorUserId = userId,
                 storeId = storeId,
                 batchId = batchId,
@@ -1093,6 +1117,17 @@ public class ProductSyncController : ControllerBase
 
             await _operationLogger.LogAsync(batchId, storeId, "info",
                 $"Added {queued} products to the queue, awaiting processing...");
+            if (categoryJobs > 0)
+            {
+                await _operationLogger.LogAsync(batchId, storeId, "info",
+                    $"Queued {categoryJobs} {(categoryJobs == 1 ? "category" : "categories")} for import before products.");
+            }
+
+            if (skippedQuota > 0)
+            {
+                await _operationLogger.LogAsync(batchId, storeId, "warning",
+                    $"Only {queued} of {input.products.Count} products were queued (product limit).");
+            }
 
             // Log skipped products
             foreach (var skipped in skippedProducts)
@@ -1224,7 +1259,14 @@ public class ProductSyncController : ControllerBase
             ct);
 
         if (!result.IsSuccess && !result.AlreadyLinked)
+        {
+            if (result.ErrorCode == "product_limit_reached")
+                throw ApiException.Conflict(
+                    result.ErrorMessage ?? "Product limit reached",
+                    result.ErrorData,
+                    code: "product_limit_reached");
             throw ApiException.BadRequest(result.ErrorMessage ?? "Import failed", code: "import_failed");
+        }
 
         return Ok(new
         {
@@ -1841,7 +1883,9 @@ public class ProductSyncController : ControllerBase
                         .Select(m => (object)new {
                             id = m.Id,
                             name = m.name,
-                            externalCategoryName = m.externalCategoryName
+                            externalCategoryId = m.externalCategoryId,
+                            externalCategoryName = m.externalCategoryName,
+                            localCategoryName = product.category?.name
                         }).ToList(),
                     // Link status
                     isLinked,
@@ -2042,6 +2086,9 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest(missingMsg, code: "remote_product_missing");
         }
 
+        externalProduct = await _productSyncService.WithImportedPriceAsync(
+            adapter, link.connection, externalProduct, ct);
+
         await _operationLogger.LogAsync(operationId, storeId, "info", "Data received, comparing fields...");
 
         // Compare and update the local product
@@ -2124,13 +2171,14 @@ public class ProductSyncController : ControllerBase
                 excludeAttrFieldNames = null;
         }
 
-        if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+        var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+        if (importedAttributes.Count > 0 && product.categoryId.HasValue)
         {
             var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
                 product.Id,
                 link.connectionId,
                 product.categoryId.Value,
-                externalProduct.Attributes,
+                importedAttributes,
                 ct,
                 excludeAttrFieldNames);
             foreach (var change in attrChanges)
@@ -2207,6 +2255,9 @@ public class ProductSyncController : ControllerBase
             throw ApiException.BadRequest(missingMsg, code: "remote_product_missing");
         }
 
+        externalProduct = await _productSyncService.WithImportedPriceAsync(
+            adapter, link.connection, externalProduct, ct);
+
         var updatedFields = new List<string>();
         var oldValues = new Dictionary<string, object?>();
         var newValues = new Dictionary<string, object?>();
@@ -2256,13 +2307,14 @@ public class ProductSyncController : ControllerBase
 
         var irreversibleFields = new List<string>();
 
-        if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+        var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+        if (importedAttributes.Count > 0 && product.categoryId.HasValue)
         {
             var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
                 product.Id,
                 link.connectionId,
                 product.categoryId.Value,
-                externalProduct.Attributes,
+                importedAttributes,
                 ct);
             foreach (var change in attrChanges)
             {
@@ -2283,6 +2335,142 @@ public class ProductSyncController : ControllerBase
             newValues,
             irreversibleFields
         });
+    }
+
+    public record ImportImagesFromLinkInput(List<string>? Urls = null, string? OperationId = null);
+
+    /// <summary>
+    /// Preview marketplace photos for a linked product (append-only; no downloads).
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/import-images-preview")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ImportImagesFromLinkPreview(int linkId, CancellationToken ct)
+    {
+        var (link, externalProduct) = await LoadImportableLinkProductAsync(linkId, ct);
+        var preview = await _productSyncService.PreviewImportImagesAsync(
+            link.productId, externalProduct.ImageUrls, ct);
+
+        return Ok(new
+        {
+            images = preview.Images.Select(i => new { url = i.Url, status = i.Status }),
+            localGalleryCount = preview.LocalGalleryCount
+        });
+    }
+
+    /// <summary>
+    /// Queue selected marketplace photos for background download (append-only).
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/links/{linkId}/import-images")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ImportImagesFromLink(
+        int linkId,
+        [FromBody] ImportImagesFromLinkInput? input,
+        CancellationToken ct)
+    {
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var (link, externalProduct) = await LoadImportableLinkProductAsync(linkId, ct);
+        var storeId = link.connection!.storeId;
+
+        var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
+        var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
+            await _context.operations.AsNoTracking().AnyAsync(o => o.operationId == operationId, ct);
+
+        if (!opExists)
+        {
+            await _operationLogger.StartAsync(operationId, storeId, userId, "image-download",
+                $"Import photos: {link.product?.name ?? link.externalProductId}",
+                connectionId: link.connectionId, connectionName: link.connection.name,
+                batchId: operationId, batchType: "image-download", totalItems: 0);
+        }
+        else
+        {
+            var existingOp = await _context.operations
+                .FirstOrDefaultAsync(o => o.operationId == operationId, ct);
+            if (existingOp != null)
+            {
+                if (string.IsNullOrEmpty(existingOp.batchType))
+                    existingOp.batchType = "image-download";
+                if (string.IsNullOrEmpty(existingOp.batchId))
+                    existingOp.batchId = operationId;
+                await _context.SaveChangesAsync(ct);
+            }
+        }
+
+        var result = await _productSyncService.QueueImportImagesAsync(
+            link.productId,
+            storeId,
+            userId,
+            input?.Urls,
+            externalProduct.ImageUrls,
+            operationId,
+            ct);
+
+        if (result.QueuedCount == 0)
+        {
+            await _operationLogger.FinishAsync(operationId, storeId, "completed", "No photos to download");
+        }
+        else
+        {
+            var existingOp = await _context.operations
+                .FirstOrDefaultAsync(o => o.operationId == operationId, ct);
+            if (existingOp != null)
+            {
+                existingOp.totalItems = result.QueuedCount;
+                existingOp.title = $"Downloading {result.QueuedCount} images";
+                await _context.SaveChangesAsync(ct);
+            }
+
+            await _operationLogger.LogAsync(operationId, storeId, "info",
+                $"Queued {result.QueuedCount} photos for download (skipped {result.SkippedCount})");
+        }
+
+        return Ok(new
+        {
+            operationId,
+            success = true,
+            queued = result.QueuedCount,
+            skipped = result.SkippedCount
+        });
+    }
+
+    private async Task<(ProductMarketplaceLink Link, Models.Marketplace.DTOs.ExternalProduct External)>
+        LoadImportableLinkProductAsync(int linkId, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var linkRepo = _unitOfWork.Repository<ProductMarketplaceLink>();
+        var link = await linkRepo.FindAsync(
+            l => l.Id == linkId,
+            q => q.Include(l => l.connection).Include(l => l.product));
+
+        if (link == null)
+            throw ApiException.NotFound("Marketplace link not found");
+
+        await ProductNotTrashed.EnsureAsync(_context, link.productId, ct);
+
+        if (link.connection?.storeId != selectedStoreId.Value)
+            throw ApiException.Forbidden("Access denied", code: "access_denied_store");
+
+        var adapter = _adapterRegistry.GetByKey(link.connection.adapterKey);
+        if (adapter == null)
+            throw ApiException.BadRequest($"Adapter '{link.connection.adapterKey}' not found");
+
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+            throw ApiException.BadRequest("Adapter does not support import");
+
+        var externalProduct = await adapter.ImportProductAsync(link.connection, link.externalProductId, ct);
+        if (externalProduct == null)
+        {
+            var missingMsg = $"Product with ID '{link.externalProductId}' not found on the marketplace";
+            await _productSyncService.MarkLinkRemoteMissingAsync(link.Id, missingMsg, ct);
+            throw ApiException.BadRequest(missingMsg, code: "remote_product_missing");
+        }
+
+        return (link, externalProduct);
     }
 
     /// <summary>
@@ -2335,6 +2523,8 @@ public class ProductSyncController : ControllerBase
             try
             {
                 var batchResult = await adapter.ImportProductsBatchAsync(connection, externalIds, ct);
+                batchResult = await _productSyncService.WithImportedPricesAsync(
+                    adapter, connection, batchResult, ct);
                 foreach (var ep in batchResult)
                     externalProductMap[ep.ExternalId] = ep;
             }
@@ -2408,13 +2598,14 @@ public class ProductSyncController : ControllerBase
                     updatedFields.Add("barcode");
                 }
 
-                if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+                var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+                if (importedAttributes.Count > 0 && product.categoryId.HasValue)
                 {
                     var attrChanges = await _productSyncService.GetAttributeChangesDetailedAsync(
                         product.Id,
                         link.connectionId,
                         product.categoryId.Value,
-                        externalProduct.Attributes,
+                        importedAttributes,
                         ct);
                     foreach (var change in attrChanges)
                     {
@@ -2726,6 +2917,8 @@ public class ProductSyncController : ControllerBase
             try
             {
                 var batchResult = await adapter.ImportProductsBatchAsync(connection, externalIds, ct);
+                batchResult = await _productSyncService.WithImportedPricesAsync(
+                    adapter, connection, batchResult, ct);
                 foreach (var ep in batchResult)
                     externalProductMap[ep.ExternalId] = ep;
             }
@@ -2799,13 +2992,14 @@ public class ProductSyncController : ControllerBase
                         updatedFields.Add("barcode");
                     }
 
-                    if (externalProduct.Attributes?.Count > 0 && product.categoryId.HasValue)
+                    var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+                    if (importedAttributes.Count > 0 && product.categoryId.HasValue)
                     {
                         var attrChanges = await _productSyncService.UpdateProductAttributesFromExternalAsync(
                             product.Id,
                             link.connectionId,
                             product.categoryId.Value,
-                            externalProduct.Attributes,
+                            importedAttributes,
                             ct);
                         foreach (var change in attrChanges)
                             updatedFields.Add($"attr:{change.FieldName}");
@@ -3199,6 +3393,8 @@ public class ProductSyncController : ControllerBase
         public int? targetCategoryId { get; set; }
         public bool forceImportWithoutMapping { get; set; }
         public string? productName { get; set; }
+        public string? targetCategoryName { get; set; }
+        public string? externalCategoryName { get; set; }
     }
 
     public struct UpdateSkuInput

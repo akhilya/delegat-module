@@ -120,6 +120,7 @@ The system rejects playful chrome, gradient-glass SaaS theater, and any decorati
 - Flat-by-default elevation; borders and tonal layers over heavy shadows
 - Light default + full `.dark` token swap
 - shadcn-vue primitives only; no parallel custom control kits
+- Apple Settings language for catalogs: inset grouped lists (one paper group, equal rows, one shared ring)
 
 ## 2. Colors
 
@@ -169,7 +170,7 @@ Dark theme swaps the same roles via `.dark` in `frontend/src/style.css` (ink↔p
 
 ## 4. Elevation
 
-Flat by default. Depth is tonal (sidebar vs paper, muted fills) and 1px borders — not stacked soft shadows. Outline buttons may use `shadow-xs`; dialogs/sheets rely on overlay scrim + surface tokens, not dramatic drop shadows.
+Flat by default. Depth is tonal (sidebar vs paper, muted fills) and 1px borders — not stacked soft shadows. Outline buttons may use `shadow-xs`; dialogs/sheets rely on overlay scrim + surface tokens, not dramatic drop shadows. The scrim fades; the panel fades and zooms.
 
 ### Shadow Vocabulary
 - **Hairline lift** (`shadow-xs` on outline controls): Barely-there separation for stroked buttons.
@@ -199,11 +200,14 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Use:** Group related form sections or auth content — not decorative marketing tiles in the app shell
 
 ### Dialogs / Modals
-- **Title:** `text-base font-semibold tracking-tight leading-none` on `DialogTitle` / `AlertDialogTitle` / `SheetTitle` — plain text only, no leading decorative icons
+- **Title (forms / sheets):** `text-base font-semibold tracking-tight leading-none` on `DialogTitle` / `SheetTitle` — plain text only, no leading decorative icons
+- **Title (confirm):** `AlertDialogTitle` is `text-lg font-medium tracking-tight leading-snug`, centered — still plain text, no header icons
 - **Header / footer layouts:**
   - **Default** — inside padded content (`DialogContent` `p-6`): bare `DialogHeader` / `DialogFooter`
   - **Bar** — `variant="bar"` when content is `p-0` / `gap-0`: header `border-b px-6 py-4`, footer `border-t px-6 py-4` (built into primitives)
-- Do not invent per-dialog title sizes (`text-lg`) or ad-hoc `px-6 py-5` / `pt-6 pb-4` header chrome
+  - **Confirm** — `AlertDialogContent`: `p-8` / `gap-8` / `sm:max-w-md` / `rounded-xl` / `ring-1 ring-foreground/5`. Copy centered. Two actions: equal-width Cancel / Confirm (`size` `lg`, `AlertDialogFooter` `layout="split"`). Three actions: full-width stack (`layout="stack"`) — preferred, then alternative, then Cancel — never three columns
+- **Overlay:** Dialog, Sheet, confirm alerts, and the product photo lightbox share `bg-black/50` + `backdrop-blur-xs`. Overlay fades; the dialog/confirm panel also zooms. Do not override at call sites. Lightbox close / prev / next / index sit on paper chips (`outline` + `bg-background`), not ghost ink on the photo.
+- Do not invent per-form-dialog title sizes or ad-hoc `px-6 py-5` / `pt-6 pb-4` header chrome
 - Icons stay in buttons, menus, empty states, and inline status — not the modal chrome header
 
 ### Inputs / Fields
@@ -215,9 +219,20 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Forms:** every labeled stack = `FieldGroup` + `Field` (prefer `SettingsFormField`); validated fields wrap with vee-validate `FormField`. No raw `Label`+`Input` / `FormItem` alone without Field. `SettingsFormSection` already supplies FieldSet + FieldGroup.
 
 ### Navigation
-- **Sidebar:** `{colors.sidebar}` surface, quiet borders, primary for active emphasis sparingly
-- **App page chrome:** Catalog and settings shells use `AppPageChrome` (`Page` + `adaptive-padding` + sticky `NavigationBar` + `Breadcrumbs`). Page titles come from breadcrumbs, not `PageHeader`. Do not nest a second `Page` inside settings route children; do not override breadcrumb `mb-4` locally.
-- **Auth shell:** Centered brand + card form (`AuthLayout`); language switcher corner; no marketing hero
+- **Sidebar:** `{colors.sidebar}` mist surface. Nav groups are inset grouped lists (paper fill, one shared hairline ring, equal-height rows). The current page is a primary (ink) pill with semibold label — hover on other rows stays tonal. Quiet borders; no second nested outline.
+- **App page chrome:** Catalog and settings shells use `AppPageChrome` (`Page` + `adaptive-padding` + sticky `NavigationBar` + `Breadcrumbs`). Page titles come from breadcrumbs, not `PageHeader`. Do not nest a second `Page` inside settings route children; do not override breadcrumb `mb-4` locally. Page gutters: **8vw** on viewports wider than 2000px (right at least FAB clearance); tighter fixed gutters at Full HD and below. AI / background-job FABs are bottom-right from `lg` up (page padding keeps a right gutter). Below `lg` they are compact icons in the navbar — do not keep the FAB gutter.
+- **Auth shell:** Full-viewport canvas (`AuthLayout`), same family as first-run Setup: large title, no card, language switcher in the corner; no marketing hero
+
+### Inset grouped lists
+iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive: `InsetGroup` / `InsetGroupItem` / `InsetGroupLabel` (`frontend/src/components/ui/inset-group`).
+
+- **Shell:** `rounded-xl bg-card p-1` and one hairline ring (`ring-sidebar-border` on mist/sidebar; `ring-border/70` on paper pages). Space **between** groups, not between rows inside a group.
+- **Rows:** equal padding, inner `rounded-lg`, hover tonal. A hairline gap (`gap-0.5`) inside the group keeps those inner corners visible so adjacent rows do not fuse. Do not give each row its own card, border, or nested outline. Leading icon sits in the row (no bordered tile). Navigation rows use a trailing chevron; the whole row is the control.
+- **Current / selected:** primary ink fill + semibold only for a **single** current item (sidebar page, tools picker). Multi-select (roles, permission grants, store members) stays quiet paper + a trailing check — do not paint every chosen row primary.
+- **Use:** tools catalog, connection pickers, settings-style choice lists, Administration and Settings pages (user, stores, users, API, plugins, logs, AI), quiet summaries. Match/review tables stay `Table` inside the same rounded ring (no `p-1`).
+- **Do not** present a catalog of tools or settings as a grid of identical icon + title + CTA cards.
+
+**The Inset Grouped List Rule.** Settings, tools, and pickers use inset grouped lists: mist or paper page, one paper group, one shared hairline ring, equal-height rows. Not a grid of separate cards and not a nested outline on children.
 
 ### Toasts (Sonner)
 - Mount **`Toaster` from `@/components/ui/sonner`** (themed wrapper), not raw `vue-sonner`
@@ -245,6 +260,7 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Do** load Onest and keep the Cyrillic-safe fallback stack; avoid `system-ui`.
 - **Do** honor WCAG AA, visible focus, keyboard paths, and `prefers-reduced-motion`.
 - **Do** favor tables, forms, and dialogs that optimize for sustained catalog work.
+- **Do** use inset grouped lists for tools, pickers, and settings-style catalogs.
 
 ### Don't:
 - **Don't** apply playful, colorful, or marketing-heavy aesthetics to operational tooling.
@@ -254,3 +270,4 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Don't** use side-stripe borders (`border-left`/`border-right` >1px) as colored accents.
 - **Don't** use gradient text (`background-clip: text`).
 - **Don't** invent a second component kit beside `components/ui`.
+- **Don't** present a catalog of tools or settings as a grid of identical cards.

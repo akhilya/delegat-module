@@ -24,7 +24,7 @@ public class MarketplaceConnectionController : ControllerBase
     private readonly PluginManager _pluginManager;
     private readonly ILogger<MarketplaceConnectionController> _logger;
     private readonly EncryptionService? _encryptionService;
-    private readonly QuotaService _quotaService;
+    private readonly MarketplaceConnectionCreateService _connectionCreate;
     private readonly DataContext _db;
     private readonly IMarketplaceMetadataCache _metadataCache;
 
@@ -35,7 +35,7 @@ public class MarketplaceConnectionController : ControllerBase
         IMarketplaceAdapterRegistry adapterRegistry,
         PluginManager pluginManager,
         ILogger<MarketplaceConnectionController> logger,
-        QuotaService quotaService,
+        MarketplaceConnectionCreateService connectionCreate,
         DataContext db,
         IMarketplaceMetadataCache metadataCache,
         EncryptionService? encryptionService = null)
@@ -46,7 +46,7 @@ public class MarketplaceConnectionController : ControllerBase
         _adapterRegistry = adapterRegistry;
         _pluginManager = pluginManager;
         _logger = logger;
-        _quotaService = quotaService;
+        _connectionCreate = connectionCreate;
         _encryptionService = encryptionService;
         _db = db;
         _metadataCache = metadataCache;
@@ -155,39 +155,15 @@ public class MarketplaceConnectionController : ControllerBase
     [HttpPost]
     [Route("/marketplace/connections")]
     [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
-    public async Task<IActionResult> CreateConnection([FromBody] MarketplaceConnection.UserAddForm input)
+    public async Task<IActionResult> CreateConnection(
+        [FromBody] MarketplaceConnection.UserAddForm input,
+        CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
 
-        await _quotaService.EnsureConnectionQuotaAsync(selectedStoreId.Value);
-
-        // Verify that the adapter exists
-        var adapter = _adapterRegistry.GetByKey(input.adapterKey);
-        if (adapter == null)
-            throw ApiException.BadRequest($"Unknown adapter: {input.adapterKey}");
-
-        var repo = _unitOfWork.Repository<MarketplaceConnection>();
-
-        var encryptedCreds = !string.IsNullOrEmpty(input.credentialsJson)
-            ? (_encryptionService?.Encrypt(input.credentialsJson)
-               ?? throw ApiException.InternalServerError("Encryption is not configured"))
-            : input.credentialsJson;
-
-        var connection = new MarketplaceConnection();
-        connection.AddFill(new MarketplaceConnection.AddForm
-        {
-            name = input.name,
-            adapterKey = input.adapterKey,
-            credentialsJson = encryptedCreds,
-            settingsJson = input.settingsJson,
-            isActive = input.isActive,
-            storeId = selectedStoreId.Value
-        });
-
-        await repo.AddAsync(connection);
-
+        var connection = await _connectionCreate.CreateAsync(input, selectedStoreId.Value, ct);
         return Ok(new { id = connection.Id });
     }
 
@@ -224,6 +200,13 @@ public class MarketplaceConnectionController : ControllerBase
                 input.credentialsJson,
                 schema,
                 _encryptionService);
+
+            await _connectionCreate.EnsureUniqueRemoteShopAsync(
+                selectedStoreId.Value,
+                connection.adapterKey,
+                input.credentialsJson,
+                testDetails: null,
+                excludeConnectionId: connection.Id);
         }
         else
         {
@@ -321,7 +304,7 @@ public class MarketplaceConnectionController : ControllerBase
                         result.Details,
                         schema,
                         _encryptionService,
-                        "businessId", "campaignId"))
+                        "businessId", "campaignId", "storeId"))
                 {
                     await repo.UpdateAsync(connection);
                 }
@@ -408,6 +391,7 @@ public class MarketplaceConnectionController : ControllerBase
                 deleteGroups = capabilities.HasFlag(MarketplaceCapabilities.DeleteGroups),
                 modifyGroupMembership = capabilities.HasFlag(MarketplaceCapabilities.ModifyGroupMembership),
                 archiveProduct = capabilities.HasFlag(MarketplaceCapabilities.ArchiveProduct),
+                searchPublicCatalog = capabilities.HasFlag(MarketplaceCapabilities.SearchPublicCatalog),
             }
         });
     }

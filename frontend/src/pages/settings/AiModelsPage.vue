@@ -53,6 +53,7 @@ import {
 import { useStore } from "vuex";
 import { ref, computed, onMounted } from "vue";
 import { t } from "@/i18n";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 export default {
   components: {
@@ -251,6 +252,20 @@ export default {
         displaySonnerError(t("pages.aiModelsPage.fillRequiredFieldsError"));
         return;
       }
+      if (
+        fieldLimitIssue(form.value.name, FIELD_LIMITS.aiModelName) === "tooLong"
+      ) {
+        displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.aiModelName }));
+        return;
+      }
+      if (
+        fieldLimitIssue(form.value.apiUrl, FIELD_LIMITS.aiModelUrl) === "tooLong" ||
+        fieldLimitIssue(form.value.proxyUrl, FIELD_LIMITS.aiModelUrl, { required: false }) === "tooLong" ||
+        fieldLimitIssue(form.value.modelId, FIELD_LIMITS.aiModelId) === "tooLong"
+      ) {
+        displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.aiModelUrl }));
+        return;
+      }
       if (!editingModel.value && !form.value.apiKey) {
         displaySonnerError(t("pages.aiModelsPage.apiKeyRequiredError"));
         return;
@@ -353,6 +368,7 @@ export default {
       settingsForm, isSettingsSaving, savePersonalSettings, openPersonalSettings,
       modelOptions, isDiscovering, discoverModels, isAnthropic,
       confirmDialog,
+      FIELD_LIMITS,
     };
   },
 };
@@ -385,7 +401,7 @@ export default {
         </Button>
       </template>
 
-      <div class="rounded-lg border overflow-hidden">
+      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
         <div class="overflow-x-auto">
           <Table class="table-fixed">
             <TableHeader>
@@ -582,17 +598,25 @@ export default {
     </Dialog>
 
     <Dialog v-model:open="isDialogOpen">
-      <DialogContent size="xl">
-        <DialogHeader>
+      <DialogContent
+        size="lg"
+        class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader variant="bar">
           <DialogTitle>{{ editingModel ? $t("pages.aiModelsPage.editModelTitle") : $t("pages.aiModelsPage.addModelDialogTitle") }}</DialogTitle>
           <DialogDescription>
             {{ editingModel ? $t("pages.aiModelsPage.editModelDescription") : $t("pages.aiModelsPage.addModelDescription") }}
           </DialogDescription>
         </DialogHeader>
 
-        <FieldGroup class="gap-4 py-2">
+        <form
+          id="ai-model-form"
+          class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+          @submit.prevent="save"
+        >
+        <FieldGroup class="gap-5">
           <SettingsFormField :label="$t('common.name')">
-            <Input v-model="form.name" />
+            <Input v-model="form.name" :maxlength="FIELD_LIMITS.aiModelName" />
           </SettingsFormField>
 
           <SettingsFormField :label="$t('pages.aiModelsPage.providerLabel')">
@@ -610,6 +634,7 @@ export default {
           <SettingsFormField label="API URL">
             <Input
               v-model="form.apiUrl"
+              :maxlength="FIELD_LIMITS.aiModelUrl"
               :placeholder="form.provider === '0'
                 ? 'https://api.anthropic.com/v1/messages'
                 : $t('pages.aiModelsPage.apiUrlPlaceholderOpenAi')"
@@ -624,6 +649,7 @@ export default {
               v-model="form.proxyUrl"
               :placeholder="$t('pages.aiModelsPage.proxyPlaceholder')"
               autocomplete="off"
+              :maxlength="FIELD_LIMITS.aiModelUrl"
             />
             <template #description>
               {{ $t("pages.aiModelsPage.proxyHint") }}
@@ -654,7 +680,7 @@ export default {
                   <SelectItem v-for="id in modelOptions" :key="id" :value="id">{{ id }}</SelectItem>
                 </SelectContent>
               </Select>
-              <Input v-else v-model="form.modelId" />
+              <Input v-else v-model="form.modelId" :maxlength="FIELD_LIMITS.aiModelId" />
               <Button
                 v-if="modelOptions.length"
                 type="button"
@@ -667,11 +693,13 @@ export default {
             </div>
           </SettingsFormField>
         </FieldGroup>
+        </form>
 
-        <DialogFooter>
-          <Button variant="ghost" @click="closeDialog">{{ $t("common.cancel") }}</Button>
-          <Button :disabled="isSaving" @click="save">
+        <DialogFooter variant="bar">
+          <Button type="button" variant="outline" @click="closeDialog">{{ $t("common.cancel") }}</Button>
+          <Button type="submit" form="ai-model-form" :disabled="isSaving">
             <Spinner v-if="isSaving" class="mr-2" />
+            <Save v-else class="mr-2 size-4" />
             {{ isSaving ? $t("pages.aiModelsPage.saving") : $t("common.save") }}
           </Button>
         </DialogFooter>

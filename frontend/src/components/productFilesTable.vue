@@ -82,21 +82,21 @@ export default {
   <Table class="border-b">
     <TableHeader>
       <TableRow>
-        <TableHead class="w-24 text-center">#</TableHead>
+        <TableHead class="w-12 text-center">#</TableHead>
         <TableHead>{{ $t('components.productFilesTable.nameHeader') }}</TableHead>
-        <TableHead>{{ $t('components.productFilesTable.typeHeader') }}</TableHead>
-        <TableHead>{{ $t('components.productFilesTable.sizeHeader') }}</TableHead>
-        <TableHead></TableHead>
+        <TableHead class="w-40">{{ $t('components.productFilesTable.typeHeader') }}</TableHead>
+        <TableHead class="w-24">{{ $t('components.productFilesTable.sizeHeader') }}</TableHead>
+        <TableHead class="w-20"></TableHead>
         <TableHead class="w-20"></TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
       <TableRow v-for="(file, index) in files" :key="file.id" class="group">
-        <TableCell class="w-24 text-center text-muted-foreground">{{
+        <TableCell class="text-muted-foreground text-center">{{
           index + 1
         }}</TableCell>
-        <TableCell class="font-medium">
-          {{ extractFileName(file) }}
+        <TableCell class="max-w-0 font-medium">
+          <span class="block truncate">{{ extractFileName(file) }}</span>
         </TableCell>
         <TableCell class="font-medium">
           <Badge
@@ -126,14 +126,19 @@ export default {
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
-              <AlertDialogHeader
-                >{{ $t('components.productFilesTable.deleteConfirmText', { name: extractFileName(file) }) }}</AlertDialogHeader
-              >
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {{ $t('components.productFilesTable.deleteConfirmText', { name: extractFileName(file) }) }}
+                </AlertDialogTitle>
+              </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{{ $t('common.back') }}</AlertDialogCancel>
-                <AlertDialogAction @click="$emit('onDelete', file.id)"
-                  >{{ $t('common.confirm') }}</AlertDialogAction
+                <AlertDialogAction
+                  variant="destructive"
+                  @click="$emit('onDelete', file.id)"
                 >
+                  {{ $t('common.confirm') }}
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

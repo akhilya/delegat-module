@@ -42,6 +42,18 @@ public class PendingProductImport
     public int? targetCategoryId { get; set; }
 
     /// <summary>
+    /// Marketplace category id; the product worker waits for a mapping when
+    /// <see cref="targetCategoryId"/> is null.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.StringLength(100)]
+    public string? externalCategoryId { get; set; }
+
+    /// <summary>
+    /// When true, import even if no category mapping exists (do not wait for a category job).
+    /// </summary>
+    public bool forceImportWithoutMapping { get; set; }
+
+    /// <summary>
     /// Identifier of the user who initiated the import.
     /// </summary>
     public int authorUserId { get; set; }

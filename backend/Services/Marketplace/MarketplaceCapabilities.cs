@@ -118,6 +118,12 @@ public enum MarketplaceCapabilities
     /// </summary>
     CreateCategory = 1 << 20,
 
+    /// <summary>
+    /// Search another seller’s public storefront and fetch a public card by id
+    /// (not the connected cabinet). Used by the Catalog scrape tool.
+    /// </summary>
+    SearchPublicCatalog = 1 << 21,
+
     #endregion
 
     /// <summary>

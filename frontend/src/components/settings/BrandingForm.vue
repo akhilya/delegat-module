@@ -2,14 +2,16 @@
 import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import {
-  Upload,
-  X,
-} from "lucide-vue-next";
+import { Image, Upload, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import AppImage from "@/components/AppImage.vue";
 import { http } from "@/main";
 import {
@@ -89,14 +91,14 @@ function afterMutation(data) {
 
 const dirty = computed(() => {
   return (
-    (form.primaryColor || "") !== (saved.primaryColor || "")
-    || (form.accentColor || "") !== (saved.accentColor || "")
-    || form.clearLogo
-    || form.clearFavicon
-    || form.hasCustomLogo !== saved.hasCustomLogo
-    || form.hasCustomFavicon !== saved.hasCustomFavicon
-    || form.logoUrl !== saved.logoUrl
-    || form.faviconUrl !== saved.faviconUrl
+    (form.primaryColor || "") !== (saved.primaryColor || "") ||
+    (form.accentColor || "") !== (saved.accentColor || "") ||
+    form.clearLogo ||
+    form.clearFavicon ||
+    form.hasCustomLogo !== saved.hasCustomLogo ||
+    form.hasCustomFavicon !== saved.hasCustomFavicon ||
+    form.logoUrl !== saved.logoUrl ||
+    form.faviconUrl !== saved.faviconUrl
   );
 });
 
@@ -233,9 +235,9 @@ async function save(opts = {}) {
   saving.value = true;
   try {
     const colorsCleared =
-      !form.primaryColor
-      && !form.accentColor
-      && !!(saved.primaryColor || saved.accentColor);
+      !form.primaryColor &&
+      !form.accentColor &&
+      !!(saved.primaryColor || saved.accentColor);
 
     const payload = {
       primaryColor: form.primaryColor || "",
@@ -280,148 +282,130 @@ defineExpose({
     <Spinner size="xl" class="text-muted-foreground" />
   </div>
 
-  <div v-else class="space-y-6" :class="{ 'space-y-8': !compact }">
-    <!-- Assets -->
-    <section class="space-y-4">
-      <div>
-        <h3 class="text-sm font-semibold">
-          {{ t("pages.settingsOverviewPage.branding.assetsTitle") }}
-        </h3>
-        <p class="text-xs text-muted-foreground">
-          {{ t("pages.settingsOverviewPage.branding.assetsHint") }}
-        </p>
-      </div>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <SettingsFormField :label="t('pages.settingsOverviewPage.branding.logoLabel')">
-          <input
-            ref="logoInput"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
-            class="sr-only"
-            @change="onLogoFileChange"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            class="group flex h-auto min-h-[11.5rem] w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
-            :class="
-              draggingLogo
-                ? 'border-foreground/40 bg-muted/40'
-                : 'border-muted-foreground/30 hover:border-foreground/35 hover:bg-muted/25'
-            "
-            :disabled="uploadingLogo"
-            @click="openLogoPicker"
-            @dragover.prevent="draggingLogo = true"
-            @dragleave.prevent="draggingLogo = false"
-            @drop.prevent="onLogoDrop"
-          >
-            <div
-              class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
-            >
-              <AppImage
-                v-if="form.logoUrl"
-                :src="form.logoUrl"
-                alt=""
-                spinner-size="sm"
-                class="flex size-full items-center justify-center"
-                img-class="max-h-14 max-w-14 object-contain"
-              />
-              <Upload v-else class="size-4 text-muted-foreground" />
-            </div>
-            <p class="text-sm font-medium">
-              <Spinner v-if="uploadingLogo" size="sm" class="mr-1 inline" />
-              {{ t("pages.settingsOverviewPage.branding.dropzoneTitle") }}
-            </p>
-            <p class="mt-1 text-xs text-muted-foreground">
-              {{ t("pages.settingsOverviewPage.branding.dropzoneHint") }}
-            </p>
-          </Button>
-          <div class="mt-1 flex h-8 items-center">
+  <div v-else class="flex flex-col gap-6" :class="{ 'gap-8': !compact }">
+    <section>
+      <InsetGroupLabel>
+        {{ t("pages.settingsOverviewPage.branding.assetsTitle") }}
+      </InsetGroupLabel>
+      <p class="mb-2 px-1 text-xs text-muted-foreground">
+        {{ t("pages.settingsOverviewPage.branding.assetsHint") }}
+      </p>
+      <input
+        ref="logoInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
+        class="sr-only"
+        @change="onLogoFileChange"
+      />
+      <input
+        ref="faviconInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
+        class="sr-only"
+        @change="onFaviconFileChange"
+      />
+      <InsetGroup>
+        <InsetGroupItem
+          :disabled="uploadingLogo"
+          :class="draggingLogo ? 'bg-muted/70' : undefined"
+          @click="openLogoPicker"
+          @dragover.prevent="draggingLogo = true"
+          @dragleave.prevent="draggingLogo = false"
+          @drop.prevent="onLogoDrop"
+        >
+          <template #leading>
+            <Spinner v-if="uploadingLogo" size="sm" />
+            <AppImage
+              v-else-if="form.logoUrl"
+              :src="form.logoUrl"
+              alt=""
+              spinner-size="sm"
+              class="flex size-8 items-center justify-center"
+              img-class="max-h-6 max-w-6 object-contain"
+            />
+            <Image v-else class="size-4" />
+          </template>
+          <p>{{ t("pages.settingsOverviewPage.branding.logoLabel") }}</p>
+          <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+            {{
+              t(
+                form.hasCustomLogo && !form.clearLogo
+                  ? "pages.settingsOverviewPage.branding.replaceImage"
+                  : "pages.settingsOverviewPage.branding.chooseImage",
+              )
+            }}
+          </p>
+          <template #trailing>
             <Button
               v-if="form.hasCustomLogo && !form.clearLogo"
               type="button"
               variant="ghost"
-              size="sm"
-              class="h-8 px-2 text-muted-foreground"
+              size="icon"
+              class="size-8 text-muted-foreground"
               :disabled="uploadingLogo"
-              @click="clearLogo"
+              :aria-label="t('pages.settingsOverviewPage.branding.resetAsset')"
+              @click.stop="clearLogo"
             >
-              <X class="mr-1 size-3.5" />
-              {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
+              <X class="size-4" />
             </Button>
-          </div>
-        </SettingsFormField>
-
-        <SettingsFormField :label="t('pages.settingsOverviewPage.branding.faviconLabel')">
-          <input
-            ref="faviconInput"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
-            class="sr-only"
-            @change="onFaviconFileChange"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            class="group flex h-auto min-h-[11.5rem] w-full flex-col items-center justify-center gap-0 border-dashed px-4 py-6 text-center font-normal shadow-none"
-            :class="
-              draggingFavicon
-                ? 'border-foreground/40 bg-muted/40'
-                : 'border-muted-foreground/30 hover:border-foreground/35 hover:bg-muted/25'
-            "
-            :disabled="uploadingFavicon"
-            @click="openFaviconPicker"
-            @dragover.prevent="draggingFavicon = true"
-            @dragleave.prevent="draggingFavicon = false"
-            @drop.prevent="onFaviconDrop"
-          >
-            <div
-              class="mb-3 flex size-16 items-center justify-center overflow-hidden rounded-md border bg-background"
-            >
-              <AppImage
-                v-if="form.faviconUrl"
-                :src="form.faviconUrl"
-                alt=""
-                spinner-size="sm"
-                class="flex size-full items-center justify-center"
-                img-class="max-h-14 max-w-14 object-contain"
-              />
-              <Upload v-else class="size-4 text-muted-foreground" />
-            </div>
-            <p class="text-sm font-medium">
-              <Spinner v-if="uploadingFavicon" size="sm" class="mr-1 inline" />
-              {{ t("pages.settingsOverviewPage.branding.dropzoneTitle") }}
-            </p>
-            <p class="mt-1 text-xs text-muted-foreground">
-              {{ t("pages.settingsOverviewPage.branding.dropzoneHint") }}
-            </p>
-          </Button>
-          <div class="mt-1 flex h-8 items-center">
+            <Upload v-else class="size-4 opacity-40" />
+          </template>
+        </InsetGroupItem>
+        <InsetGroupItem
+          :disabled="uploadingFavicon"
+          :class="draggingFavicon ? 'bg-muted/70' : undefined"
+          @click="openFaviconPicker"
+          @dragover.prevent="draggingFavicon = true"
+          @dragleave.prevent="draggingFavicon = false"
+          @drop.prevent="onFaviconDrop"
+        >
+          <template #leading>
+            <Spinner v-if="uploadingFavicon" size="sm" />
+            <AppImage
+              v-else-if="form.faviconUrl"
+              :src="form.faviconUrl"
+              alt=""
+              spinner-size="sm"
+              class="flex size-8 items-center justify-center"
+              img-class="max-h-6 max-w-6 object-contain"
+            />
+            <Image v-else class="size-4" />
+          </template>
+          <p>{{ t("pages.settingsOverviewPage.branding.faviconLabel") }}</p>
+          <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+            {{
+              t(
+                form.hasCustomFavicon && !form.clearFavicon
+                  ? "pages.settingsOverviewPage.branding.replaceImage"
+                  : "pages.settingsOverviewPage.branding.chooseImage",
+              )
+            }}
+          </p>
+          <template #trailing>
             <Button
               v-if="form.hasCustomFavicon && !form.clearFavicon"
               type="button"
               variant="ghost"
-              size="sm"
-              class="h-8 px-2 text-muted-foreground"
+              size="icon"
+              class="size-8 text-muted-foreground"
               :disabled="uploadingFavicon"
-              @click="clearFavicon"
+              :aria-label="t('pages.settingsOverviewPage.branding.resetAsset')"
+              @click.stop="clearFavicon"
             >
-              <X class="mr-1 size-3.5" />
-              {{ t("pages.settingsOverviewPage.branding.resetAsset") }}
+              <X class="size-4" />
             </Button>
-          </div>
-        </SettingsFormField>
-      </div>
+            <Upload v-else class="size-4 opacity-40" />
+          </template>
+        </InsetGroupItem>
+      </InsetGroup>
     </section>
 
-    <!-- Colors -->
-    <section class="space-y-4">
-      <div class="flex items-start justify-between gap-3">
+    <section>
+      <div class="mb-2 flex items-start justify-between gap-3 px-1">
         <div>
-          <h3 class="text-sm font-semibold">
+          <InsetGroupLabel class="mb-1 px-0">
             {{ t("pages.settingsOverviewPage.branding.colorsTitle") }}
-          </h3>
+          </InsetGroupLabel>
           <p class="text-xs text-muted-foreground">
             {{ t("pages.settingsOverviewPage.branding.colorsHint") }}
           </p>
@@ -448,14 +432,16 @@ defineExpose({
               class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
               :value="form.primaryColor || '#343434'"
               @input="(e) => (form.primaryColor = e.target.value.toUpperCase())"
-            >
+            />
             <Input
               id="brand-primary"
               :model-value="form.primaryColor"
               placeholder="#343434"
               maxlength="7"
               class="font-mono uppercase"
-              @update:model-value="(v) => (form.primaryColor = normalizeHexInput(v))"
+              @update:model-value="
+                (v) => (form.primaryColor = normalizeHexInput(v))
+              "
             />
           </div>
         </SettingsFormField>
@@ -469,14 +455,16 @@ defineExpose({
               class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
               :value="form.accentColor || '#F7F7F7'"
               @input="(e) => (form.accentColor = e.target.value.toUpperCase())"
-            >
+            />
             <Input
               id="brand-accent"
               :model-value="form.accentColor"
               placeholder="#F7F7F7"
               maxlength="7"
               class="font-mono uppercase"
-              @update:model-value="(v) => (form.accentColor = normalizeHexInput(v))"
+              @update:model-value="
+                (v) => (form.accentColor = normalizeHexInput(v))
+              "
             />
           </div>
         </SettingsFormField>

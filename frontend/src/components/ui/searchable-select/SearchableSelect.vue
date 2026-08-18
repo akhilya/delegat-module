@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch, nextTick } from "vue";
-import { ChevronDown, Check, Search } from "lucide-vue-next";
+import { ChevronDown, Check, Search, Plus } from "lucide-vue-next";
 import {
   Popover,
   PopoverTrigger,
@@ -57,6 +57,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** Allow typing a value that is not in `options`. */
+  allowCreate: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["update:modelValue", "open", "search"]);
@@ -73,7 +78,7 @@ watch(open, (isOpen) => {
     emit("open");
     if (props.remote) emit("search", "");
   }
-  if (isOpen && (isLargeList.value || props.remote)) {
+  if (isOpen && (isLargeList.value || props.remote || props.allowCreate)) {
     nextTick(() => {
       focusSearchInput();
     });
@@ -90,7 +95,10 @@ const isLargeList = computed(
 );
 
 const showSearch = computed(
-  () => props.remote || props.options.length > props.searchThreshold,
+  () =>
+    props.allowCreate ||
+    props.remote ||
+    props.options.length > props.searchThreshold,
 );
 
 const filteredOptions = computed(() => {
@@ -127,11 +135,43 @@ const remainingCount = computed(() => {
   return filteredOptions.value.length - displayedOptions.value.length;
 });
 
+const trimmedQuery = computed(() => searchQuery.value.trim());
+
 const normalizedModelValue = computed(() =>
   props.modelValue == null || props.modelValue === ""
     ? ""
     : String(props.modelValue),
 );
+
+const canAddCustom = computed(() => {
+  if (!props.allowCreate) return false;
+  const q = trimmedQuery.value;
+  if (!q) return false;
+  const lower = q.toLowerCase();
+  if (normalizedModelValue.value.toLowerCase() === lower) return false;
+  return !props.options.some(
+    (option) =>
+      String(option.value).toLowerCase() === lower ||
+      String(option.label).toLowerCase() === lower,
+  );
+});
+
+const extraSelectedOption = computed(() => {
+  const value = normalizedModelValue.value;
+  if (!value) return null;
+  const exists = props.options.some(
+    (option) =>
+      String(option.value) === value || String(option.label) === value,
+  );
+  if (exists) return null;
+  return { value, label: value };
+});
+
+const addCustom = () => {
+  if (!canAddCustom.value) return;
+  emit("update:modelValue", trimmedQuery.value);
+  open.value = false;
+};
 
 const selectedOption = computed(() => {
   return props.options.find(
@@ -156,6 +196,10 @@ const selectOption = (option) => {
 
 const clearSelection = () => {
   emit("update:modelValue", "");
+};
+
+const closePopover = () => {
+  open.value = false;
 };
 </script>
 
@@ -202,6 +246,7 @@ const clearSelection = () => {
               "
               class="h-8 bg-background pl-8"
               @click.stop
+              @keydown.enter.prevent.stop="addCustom"
             />
           </div>
           <div
@@ -231,22 +276,47 @@ const clearSelection = () => {
             {{ t("components.searchableSelect.searching") }}
           </div>
           <div
-            v-else-if="options.length === 0"
+            v-else-if="options.length === 0 && !canAddCustom && !extraSelectedOption"
             class="p-3 text-sm text-muted-foreground text-center"
           >
             {{
-              remote && searchQuery
-                ? t("components.searchableSelect.nothingFound")
-                : t("components.searchableSelect.noOptions")
+              allowCreate
+                ? t("components.searchableSelect.typeToAdd")
+                : remote && searchQuery
+                  ? t("components.searchableSelect.nothingFound")
+                  : t("components.searchableSelect.noOptions")
             }}
           </div>
           <div
-            v-else-if="filteredOptions.length === 0"
+            v-else-if="filteredOptions.length === 0 && !canAddCustom && !extraSelectedOption"
             class="p-3 text-sm text-muted-foreground text-center"
           >
             {{ t("components.searchableSelect.nothingFound") }}
           </div>
           <div v-else class="p-1">
+            <button
+              v-if="canAddCustom"
+              type="button"
+              class="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+              @click="addCustom"
+            >
+              <Plus class="size-4 shrink-0" />
+              <span class="text-sm flex-1 truncate">{{
+                t("components.searchableSelect.addCustom", {
+                  value: trimmedQuery,
+                })
+              }}</span>
+            </button>
+            <div
+              v-if="extraSelectedOption"
+              class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+              @click="selectOption(extraSelectedOption)"
+            >
+              <Check class="size-4 shrink-0 opacity-100" />
+              <span class="text-sm flex-1 truncate" :title="extraSelectedOption.label">{{
+                extraSelectedOption.label
+              }}</span>
+            </div>
             <div
               v-for="option in displayedOptions"
               :key="option.value"
@@ -288,6 +358,9 @@ const clearSelection = () => {
               </template>
             </div>
           </div>
+        </div>
+        <div v-if="$slots.footer" class="shrink-0 border-t p-1">
+          <slot name="footer" :close="closePopover" />
         </div>
       </PopoverContent>
     </Popover>

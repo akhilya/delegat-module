@@ -5,13 +5,19 @@ import PageSection from "@/components/pageSection.vue";
 
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
-import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
+import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -39,9 +45,15 @@ import {
   Save,
   Trash2,
   UserCheck,
+  UserCog,
   UserPlus,
 } from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import {
+  isOwnerRoleLocked,
+  isUserAccessRowLocked,
+} from "@/lib/userAccessEdit";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { confirm, confirmState } from "@/composables/useConfirm";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,12 +69,16 @@ export default {
     PageSection,
     Button,
     Input,
+    PasswordInput,
     FieldGroup,
     SettingsFormField,
     Switch,
-    Checkbox,
     Badge,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -85,6 +101,7 @@ export default {
     Save,
     Trash2,
     UserCheck,
+    UserCog,
     UserPlus,
   },
   data() {
@@ -92,6 +109,7 @@ export default {
       users: [],
       loadError: false,
       me: null,
+      FIELD_LIMITS,
       editingUser: null,
       editForm: {
         userName: "",
@@ -126,6 +144,22 @@ export default {
     },
     canToggleOwner() {
       return Boolean(this.me?.isAdmin);
+    },
+    isSavingEdit() {
+      return Boolean(this.editingUser && this.savingUserId === this.editingUser.id);
+    },
+    ownerToggleLocked() {
+      return !this.canToggleOwner || this.editingSelf;
+    },
+    activeToggleLocked() {
+      return this.editingSelf;
+    },
+    accessEditLocked() {
+      return isUserAccessRowLocked({
+        canManageRoles: this.canManageRoles,
+        editingSelf: this.editingSelf,
+        saving: this.isSavingEdit,
+      });
     },
   },
   methods: {
@@ -170,6 +204,7 @@ export default {
     },
 
     toggleRole(roleName, enabled) {
+      if (this.isRoleRowDisabled(roleName)) return;
       const set = new Set(this.editForm.roles);
       if (enabled) set.add(roleName);
       else set.delete(roleName);
@@ -190,11 +225,37 @@ export default {
     },
 
     togglePermissionGrant(perm, enabled) {
-      if (this.isPermissionFromRole(perm)) return;
+      if (this.accessEditLocked || this.isPermissionFromRole(perm)) return;
       const set = new Set(this.editForm.permissionGrants);
       if (enabled) set.add(perm);
       else set.delete(perm);
       this.editForm.permissionGrants = Array.from(set);
+    },
+
+    toggleOwner() {
+      if (this.ownerToggleLocked || this.isSavingEdit) return;
+      this.editForm.isAdmin = !this.editForm.isAdmin;
+      if (this.editForm.isAdmin) {
+        const set = new Set(this.editForm.roles);
+        set.add("Owner");
+        this.editForm.roles = Array.from(set);
+        this.recomputePermissionsFromRoles();
+      }
+    },
+
+    toggleActive() {
+      if (this.activeToggleLocked || this.isSavingEdit) return;
+      this.editForm.isActive = !this.editForm.isActive;
+    },
+
+    isRoleRowDisabled(roleName) {
+      if (this.accessEditLocked) return true;
+      if (roleName !== "Owner") return false;
+      return isOwnerRoleLocked({
+        editingSelf: this.editingSelf,
+        canToggleOwner: this.canToggleOwner,
+        targetIsAdmin: this.editForm.isAdmin,
+      });
     },
 
     async fetchUsers() {
@@ -258,6 +319,7 @@ export default {
       };
       this.permissionsFromRoles = [];
       this.isEditDialogOpen = true;
+      this.$nextTick(() => document.getElementById("admin-user-name")?.focus());
 
       if (this.canManageRoles) {
         await this.getUserAccess({
@@ -386,8 +448,28 @@ export default {
       const userName = this.editForm.userName.trim();
       const password = this.editForm.password.trim();
 
-      if (!userName) {
+      const nameIssue = fieldLimitIssue(
+        userName,
+        FIELD_LIMITS.userNameStored,
+      );
+      if (nameIssue === "empty") {
         displaySonnerError(this.$t("pages.usersPage.userNameEmptyError"));
+        return;
+      }
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.userNameStored }),
+        );
+        return;
+      }
+      if (
+        password &&
+        fieldLimitIssue(password, FIELD_LIMITS.password, { required: false }) ===
+          "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.password }),
+        );
         return;
       }
 
@@ -396,7 +478,7 @@ export default {
         userName,
         isActive: this.editForm.isActive,
       };
-      if (this.canToggleOwner) {
+      if (this.canToggleOwner && !this.editingSelf) {
         payload.isAdmin = this.editForm.isAdmin;
       }
       if (password) {
@@ -407,7 +489,7 @@ export default {
         userId: this.editingUser.id,
         data: payload,
         onSuccess: async () => {
-          if (this.canManageRoles) {
+          if (this.canManageRoles && !this.editingSelf) {
             await this.putUserAccess({
               userId: this.editingUser.id,
               data: {
@@ -464,12 +546,12 @@ export default {
         </Button>
       </template>
 
-      <div class="overflow-hidden rounded-lg border">
+      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
         <div class="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead class="w-24">ID</TableHead>
+                <TableHead class="w-16">ID</TableHead>
                 <TableHead>{{ $t("common.name") }}</TableHead>
                 <TableHead class="w-48">{{ $t("pages.usersPage.columnRole") }}</TableHead>
                 <TableHead class="w-32">{{ $t("common.status") }}</TableHead>
@@ -485,8 +567,8 @@ export default {
                 <TableCell class="text-muted-foreground tabular-nums">
                   {{ user.id }}
                 </TableCell>
-                <TableCell>
-                  <div class="font-medium">{{ user.userName }}</div>
+                <TableCell class="max-w-0">
+                  <div class="truncate font-medium" :title="user.userName">{{ user.userName }}</div>
                 </TableCell>
                 <TableCell>
                   <Badge :variant="user.isAdmin ? 'default' : 'secondary'">
@@ -583,23 +665,23 @@ export default {
             </Button>
           </EmptyState>
 
-          <div v-else class="overflow-hidden rounded-lg border">
+          <div v-else class="overflow-hidden rounded-xl border border-border/70 bg-card">
             <div class="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{{ $t("pages.usersPage.invite.columnToken") }}</TableHead>
+                    <TableHead class="min-w-0">{{ $t("pages.usersPage.invite.columnToken") }}</TableHead>
                     <TableHead class="w-32">{{ $t("pages.usersPage.invite.columnStatus") }}</TableHead>
                     <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnCreated") }}</TableHead>
                     <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnUsed") }}</TableHead>
-                    <TableHead>{{ $t("pages.usersPage.invite.columnUsedBy") }}</TableHead>
+                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnUsedBy") }}</TableHead>
                     <TableHead class="w-24 text-right" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="token in tokens" :key="token.id">
-                    <TableCell>
-                      <code class="font-mono text-xs text-muted-foreground">{{ tokenHint(token) }}</code>
+                    <TableCell class="max-w-0">
+                      <code class="block truncate font-mono text-xs text-muted-foreground" :title="tokenHint(token)">{{ tokenHint(token) }}</code>
                     </TableCell>
                     <TableCell>
                       <Badge v-if="token.used" variant="secondary">
@@ -616,8 +698,8 @@ export default {
                     <TableCell class="text-sm text-muted-foreground">
                       {{ formatTokenDate(token.usedAt) }}
                     </TableCell>
-                    <TableCell>
-                      {{ token.usedByUserName || "-" }}
+                    <TableCell class="max-w-0">
+                      <span class="block truncate">{{ token.usedByUserName || "-" }}</span>
                     </TableCell>
                     <TableCell class="text-right">
                       <div v-if="!token.used" class="inline-flex items-center justify-end gap-0.5">
@@ -660,123 +742,183 @@ export default {
     </Dialog>
 
     <Dialog v-model:open="isEditDialogOpen">
-      <DialogContent size="2xl">
-        <DialogHeader>
+      <DialogContent
+        size="lg"
+        class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader variant="bar">
           <DialogTitle>{{ $t("pages.usersPage.editUser") }}</DialogTitle>
           <DialogDescription>
             {{ $t("pages.usersPage.editUserDescription") }}
           </DialogDescription>
         </DialogHeader>
 
-        <FieldGroup class="max-h-[70vh] gap-4 overflow-y-auto pr-1">
-          <SettingsFormField
-            :label="$t('auth.userName')"
-            label-for="admin-user-name"
-          >
-            <Input
-              id="admin-user-name"
-              v-model="editForm.userName"
-              :disabled="savingUserId === editingUser?.id"
-              autocomplete="off"
-            />
-          </SettingsFormField>
-
-          <SettingsFormField
-            :label="$t('pages.usersPage.newPasswordLabel')"
-            label-for="admin-user-password"
-          >
-            <div class="relative">
-              <KeyRound class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="admin-user-password"
-                v-model="editForm.password"
-                :disabled="savingUserId === editingUser?.id"
-                class="pl-9"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
-              />
-            </div>
-          </SettingsFormField>
-
-          <div class="grid gap-3 rounded-lg border p-3">
-            <SettingsFormField
-              :label="$t('pages.usersPage.ownerLabel')"
-              inline
-            >
-              <Switch
-                :model-value="editForm.isAdmin"
-                :disabled="!canToggleOwner || editingSelf || savingUserId === editingUser?.id"
-                @update:model-value="(v) => (editForm.isAdmin = v)"
-              />
-              <template #description>
-                {{ $t("pages.usersPage.ownerHint") }}
-              </template>
-            </SettingsFormField>
-            <SettingsFormField
-              :label="$t('pages.usersPage.activeAccountLabel')"
-              inline
-            >
-              <Switch
-                :model-value="editForm.isActive"
-                :disabled="editingSelf || savingUserId === editingUser?.id"
-                @update:model-value="(v) => (editForm.isActive = v)"
-              />
-              <template #description>
-                {{ $t("pages.usersPage.activeAccountHint") }}
-              </template>
-            </SettingsFormField>
-          </div>
-
-          <div v-if="canManageRoles" class="grid gap-3 rounded-lg border p-3">
-            <h3 class="text-sm font-semibold">{{ $t("pages.usersPage.rolesTitle") }}</h3>
-            <div class="grid gap-2">
-              <label
-                v-for="role in roleCatalog"
-                :key="role.name"
-                class="flex cursor-pointer items-center gap-2 text-sm"
+        <form
+          id="edit-user-form"
+          class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+          @submit.prevent="saveIdentityChanges"
+        >
+          <div class="flex flex-col gap-6">
+            <FieldGroup class="gap-5">
+              <SettingsFormField
+                :label="$t('auth.userName')"
+                label-for="admin-user-name"
               >
-                <Checkbox
-                  :model-value="editForm.roles.includes(role.name)"
-                  :disabled="savingUserId === editingUser?.id || (!canToggleOwner && role.name === 'Owner')"
-                  @update:model-value="(v) => toggleRole(role.name, v)"
+                <Input
+                  id="admin-user-name"
+                  v-model="editForm.userName"
+                  :disabled="isSavingEdit"
+                  autocomplete="off"
+                  :maxlength="FIELD_LIMITS.userNameStored"
                 />
-                <span>{{ localizedRoleName(role.name) }}</span>
-              </label>
-            </div>
-          </div>
+              </SettingsFormField>
 
-          <div v-if="canManageRoles" class="grid gap-3 rounded-lg border p-3">
-            <h3 class="text-sm font-semibold">{{ $t("pages.usersPage.permissionsTitle") }}</h3>
-            <p class="text-xs text-muted-foreground">{{ $t("pages.usersPage.permissionsHint") }}</p>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <label
-                v-for="perm in permissionCatalog"
-                :key="perm"
-                class="flex cursor-pointer items-start gap-2 text-sm"
+              <SettingsFormField
+                :label="$t('pages.usersPage.newPasswordLabel')"
+                label-for="admin-user-password"
               >
-                <Checkbox
-                  class="mt-0.5"
-                  :model-value="isPermissionChecked(perm)"
-                  :disabled="isPermissionFromRole(perm) || savingUserId === editingUser?.id"
-                  @update:model-value="(v) => togglePermissionGrant(perm, v)"
+                <PasswordInput
+                  id="admin-user-password"
+                  v-model="editForm.password"
+                  :disabled="isSavingEdit"
+                  autocomplete="new-password"
+                  :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
+                  :maxlength="FIELD_LIMITS.password"
                 />
-                <span>
-                  <span>{{ localizedPermissionLabel(perm) }}</span>
-                  <span
+              </SettingsFormField>
+            </FieldGroup>
+
+            <InsetGroup>
+              <InsetGroupItem
+                :as="ownerToggleLocked ? 'div' : 'button'"
+                :disabled="!ownerToggleLocked && isSavingEdit"
+                :aria-pressed="editForm.isAdmin"
+                @click="toggleOwner"
+              >
+                <template #leading>
+                  <UserCog class="size-4" />
+                </template>
+                <p>{{ $t("pages.usersPage.ownerLabel") }}</p>
+                <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                  {{
+                    editingSelf
+                      ? $t("pages.usersPage.cannotChangeSelfAdmin")
+                      : $t("pages.usersPage.ownerHint")
+                  }}
+                </p>
+                <template #trailing>
+                  <Switch
+                    :model-value="editForm.isAdmin"
+                    :disabled="ownerToggleLocked || isSavingEdit"
+                    tabindex="-1"
+                    class="pointer-events-none"
+                  />
+                </template>
+              </InsetGroupItem>
+              <InsetGroupItem
+                :as="activeToggleLocked ? 'div' : 'button'"
+                :disabled="!activeToggleLocked && isSavingEdit"
+                :aria-pressed="editForm.isActive"
+                @click="toggleActive"
+              >
+                <template #leading>
+                  <UserCheck class="size-4" />
+                </template>
+                <p>{{ $t("pages.usersPage.activeAccountLabel") }}</p>
+                <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                  {{ $t("pages.usersPage.activeAccountHint") }}
+                </p>
+                <template #trailing>
+                  <Switch
+                    :model-value="editForm.isActive"
+                    :disabled="activeToggleLocked || isSavingEdit"
+                    tabindex="-1"
+                    class="pointer-events-none"
+                  />
+                </template>
+              </InsetGroupItem>
+            </InsetGroup>
+
+            <section v-if="canManageRoles">
+              <InsetGroupLabel>{{ $t("pages.usersPage.rolesTitle") }}</InsetGroupLabel>
+              <p
+                v-if="editingSelf"
+                class="mb-2 px-1 text-xs text-muted-foreground"
+              >
+                {{ $t("pages.usersPage.cannotChangeSelfAccess") }}
+              </p>
+              <InsetGroup>
+                <InsetGroupItem
+                  v-for="role in roleCatalog"
+                  :key="role.name"
+                  :as="isRoleRowDisabled(role.name) ? 'div' : 'button'"
+                  :disabled="isRoleRowDisabled(role.name)"
+                  :aria-pressed="editForm.roles.includes(role.name)"
+                  @click="toggleRole(role.name, !editForm.roles.includes(role.name))"
+                >
+                  {{ localizedRoleName(role.name) }}
+                  <template #trailing>
+                    <Check
+                      v-if="editForm.roles.includes(role.name)"
+                      class="size-4 text-primary"
+                    />
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+            </section>
+
+            <section v-if="canManageRoles">
+              <InsetGroupLabel>{{ $t("pages.usersPage.permissionsTitle") }}</InsetGroupLabel>
+              <InsetGroup>
+                <InsetGroupItem
+                  v-for="perm in permissionCatalog"
+                  :key="perm"
+                  :as="
+                    accessEditLocked || isPermissionFromRole(perm)
+                      ? 'div'
+                      : 'button'
+                  "
+                  :disabled="accessEditLocked || isPermissionFromRole(perm)"
+                  :aria-pressed="isPermissionChecked(perm)"
+                  @click="togglePermissionGrant(perm, !isPermissionChecked(perm))"
+                >
+                  <p>{{ localizedPermissionLabel(perm) }}</p>
+                  <p
                     v-if="isPermissionFromRole(perm)"
-                    class="block text-xs text-muted-foreground"
-                  >{{ $t("pages.usersPage.fromRole") }}</span>
-                </span>
-              </label>
-            </div>
+                    class="mt-0.5 text-xs font-normal text-muted-foreground"
+                  >
+                    {{ $t("pages.usersPage.fromRole") }}
+                  </p>
+                  <template #trailing>
+                    <Check
+                      v-if="isPermissionChecked(perm)"
+                      class="size-4"
+                      :class="
+                        isPermissionFromRole(perm)
+                          ? 'text-muted-foreground'
+                          : 'text-primary'
+                      "
+                    />
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+              <p class="mt-2 px-1 text-xs text-muted-foreground">
+                {{ $t("pages.usersPage.permissionsHint") }}
+              </p>
+            </section>
           </div>
-        </FieldGroup>
+        </form>
 
-        <DialogFooter>
-          <Button variant="outline" @click="closeEditDialog">{{ $t("common.cancel") }}</Button>
-          <Button :disabled="savingUserId === editingUser?.id" @click="saveIdentityChanges">
-            <Spinner v-if="savingUserId === editingUser?.id" class="mr-2" />
+        <DialogFooter variant="bar">
+          <DialogClose as-child>
+            <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
+          </DialogClose>
+          <Button
+            type="submit"
+            form="edit-user-form"
+            :disabled="isSavingEdit"
+          >
+            <Spinner v-if="isSavingEdit" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
             {{ $t("common.save") }}
           </Button>

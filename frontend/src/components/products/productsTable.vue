@@ -14,6 +14,14 @@ import {
   ContextMenu,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getSortIndex } from "@/lib/productSort";
 
 export default {
@@ -26,6 +34,12 @@ export default {
     ArrowUpDown,
     ContextMenu,
     ContextMenuTrigger,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
   },
   props: {
     columns: {
@@ -84,11 +98,18 @@ export default {
     // Scroll shadow - show inset shadow on actions column when content is scrollable
     const scrollContainerEl = ref(null);
     const canScrollRight = ref(false);
+    const canScrollY = ref(false);
 
     function checkScroll() {
       const el = scrollContainerEl.value;
-      if (!el) { canScrollRight.value = false; return; }
+      if (!el) {
+        canScrollRight.value = false;
+        canScrollY.value = false;
+        return;
+      }
       canScrollRight.value = el.scrollWidth - el.scrollLeft - el.clientWidth > 1;
+      // Slack so adding a 1px last-row rule does not toggle overflow.
+      canScrollY.value = el.scrollHeight > el.clientHeight + 8;
     }
 
     let scrollResizeObserver = null;
@@ -99,10 +120,19 @@ export default {
     let resizeObserver = null;
     let syncRaf = null;
 
+    function tableDom() {
+      const el = tableEl.value;
+      if (!el) return null;
+      return el.nodeType === 1 ? el : el.$el;
+    }
+
     function syncHeights() {
-      if (!tableEl.value) return;
-      const rows = tableEl.value.querySelectorAll("tbody > tr");
-      const newHeights = Array.from(rows).map((tr) => tr.getBoundingClientRect().height);
+      const table = tableDom();
+      if (!table) return;
+      const rows = table.querySelectorAll("tbody tr");
+      const newHeights = Array.from(rows).map((tr) =>
+        Math.round(tr.getBoundingClientRect().height),
+      );
       // Only update ref if heights actually changed - prevents onUpdated infinite loop
       const old = rowHeights.value;
       if (newHeights.length !== old.length || newHeights.some((h, i) => h !== old[i])) {
@@ -115,15 +145,17 @@ export default {
       syncRaf = requestAnimationFrame(() => {
         syncRaf = null;
         syncHeights();
+        checkScroll();
       });
     }
 
     function setupObserver() {
       if (resizeObserver) resizeObserver.disconnect();
-      if (!tableEl.value) return;
+      const table = tableDom();
+      if (!table) return;
       // Observe the table once - per-row observers reflow the main thread on every panel resize.
       resizeObserver = new ResizeObserver(scheduleSyncHeights);
-      resizeObserver.observe(tableEl.value);
+      resizeObserver.observe(table);
     }
 
     // Scroll shadow - attach/detach listeners when the scroll container appears/disappears (v-if/v-else)
@@ -137,6 +169,7 @@ export default {
         checkScroll();
       } else {
         canScrollRight.value = false;
+        canScrollY.value = false;
       }
     }, { flush: "post" });
 
@@ -353,6 +386,7 @@ export default {
       rowHeights,
       scrollContainerEl,
       canScrollRight,
+      canScrollY,
     };
   },
 };
@@ -367,18 +401,22 @@ export default {
       class="min-h-[12rem] flex-1"
     />
     <div v-else ref="scrollContainerEl" class="flex-1 min-h-0 overflow-auto">
-      <div class="flex min-w-full w-max">
+      <div class="flex h-max min-w-full w-max items-start">
         <!-- Data table -->
-        <table ref="tableEl" class="table-fixed grow shrink-0 text-sm border-separate border-spacing-0">
-          <thead class="sticky top-0 z-10 bg-card">
-            <tr class="bg-card transition-colors">
-              <th
+        <Table
+          ref="tableEl"
+          :contain="false"
+          class="table-fixed h-max grow shrink-0 self-start border-separate border-spacing-0"
+        >
+          <TableHeader class="sticky top-0 z-10 bg-card">
+            <TableRow class="bg-card hover:bg-transparent">
+              <TableHead
                 v-for="header in table.getHeaderGroups()[0]?.headers"
                 :key="header.id"
                 :style="{ width: header.getSize() + 'px' }"
                 :draggable="canDragColumn(header.column.id)"
                 :class="[
-                  'h-9 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap bg-card border-b group/th',
+                  'h-9 px-2 bg-card border-b group/th',
                   canDragColumn(header.column.id) ? 'cursor-grab active:cursor-grabbing' : '',
                   dragOverColumnId === header.column.id ? 'bg-muted/50' : '',
                   isSortable(header.column.id) ? 'select-none' : '',
@@ -426,51 +464,55 @@ export default {
                     <ArrowUpDown v-else class="size-3.5 shrink-0 opacity-30" />
                   </template>
                 </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody class="[&_tr:last-child>td]:border-0">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody
+            :class="canScrollY
+              ? '[&_tr:last-child>td]:border-0'
+              : '[&_tr:last-child]:!border-b'"
+          >
             <template v-if="table.getRowModel().rows?.length">
               <ContextMenu
                 v-for="row in table.getRowModel().rows"
                 :key="row.id"
               >
                 <ContextMenuTrigger as-child>
-                  <tr
+                  <TableRow
                     :data-state="row.getIsSelected() ? 'selected' : undefined"
-                    class="hover:bg-muted/50 data-[state=selected]:bg-muted transition-colors cursor-pointer group"
+                    class="cursor-pointer"
                     @click="onRowClick(row, $event)"
                   >
-                    <td
+                    <TableCell
                       v-for="cell in row.getVisibleCells()"
                       :key="cell.id"
                       :style="{ width: cell.column.getSize() + 'px' }"
-                      class="px-2 py-1 align-middle whitespace-nowrap border-b"
+                      class="px-2 py-1 border-b"
                     >
                       <FlexRender
                         :render="cell.column.columnDef.cell"
                         :props="cell.getContext()"
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 </ContextMenuTrigger>
                 <slot name="rowContextMenu" :row="row" />
               </ContextMenu>
             </template>
             <template v-else>
-              <tr class="transition-colors">
-                <td :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b">
+              <TableRow class="hover:bg-transparent">
+                <TableCell :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b whitespace-normal">
                   {{ $t("products.productsTable.noResults") }}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             </template>
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div :class="['sticky right-0 z-10 shrink-0 flex flex-col bg-card transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
+        <div :class="['sticky right-0 z-10 shrink-0 self-start flex flex-col bg-card transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
           <!-- Header: ColumnSelector slot -->
-          <div class="sticky top-0 z-30 h-9 flex items-center px-1 sm:px-3 bg-card border-b">
+          <div class="sticky top-0 z-30 h-9 box-border flex items-center px-1 sm:px-3 bg-card border-b">
             <slot name="headerActions" />
           </div>
           <!-- Row action buttons -->
@@ -478,9 +520,12 @@ export default {
             <div
               v-for="(row, i) in table.getRowModel().rows"
               :key="'action-' + row.id"
-              :style="{ height: rowHeights[i] ? rowHeights[i] + 'px' : 'auto' }"
-              class="border-b"
-              :class="row.getIsSelected() ? 'bg-muted' : ''"
+              :style="{ height: rowHeights[i] != null ? rowHeights[i] + 'px' : 'auto' }"
+              class="box-border shrink-0"
+              :class="[
+                (canScrollY && i === table.getRowModel().rows.length - 1) ? '' : 'border-b',
+                row.getIsSelected() ? 'bg-muted' : '',
+              ]"
             >
               <slot name="rowActions" :row="row" />
             </div>

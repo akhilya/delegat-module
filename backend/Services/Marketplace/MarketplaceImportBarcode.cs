@@ -52,6 +52,11 @@ public static class MarketplaceImportBarcode
         }
     }
 
+    /// <summary>
+    /// Returns a trimmed valid EAN-8/13, or null.
+    /// </summary>
+    public static string? NormalizeIfValid(string? raw) => Normalize(raw);
+
     private static string? Normalize(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

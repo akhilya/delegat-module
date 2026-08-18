@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Delegat.Enums;
+using Delegat.Infrastructure;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
@@ -22,6 +24,7 @@ public class ProductSyncService
     private readonly IStorageService _storageService;
     private readonly ILogger<ProductSyncService> _logger;
     private readonly IOperationLogger _operationLogger;
+    private readonly QuotaService _quotaService;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProductSyncService"/>.
@@ -32,7 +35,8 @@ public class ProductSyncService
         MappingService mappingService,
         IStorageService storageService,
         ILogger<ProductSyncService> logger,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        QuotaService quotaService)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
@@ -40,6 +44,7 @@ public class ProductSyncService
         _storageService = storageService;
         _logger = logger;
         _operationLogger = operationLogger;
+        _quotaService = quotaService;
     }
 
     /// <summary>
@@ -1170,6 +1175,32 @@ public class ProductSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
             return ProductImportResult.Failure("Adapter does not support product import");
 
+        var existingLink = await _context.productMarketplaceLinks
+            .Include(l => l.product)
+            .FirstOrDefaultAsync(l =>
+                l.connectionId == connectionId &&
+                l.externalProductId == externalProductId, ct);
+
+        if (existingLink != null)
+        {
+            var existingName = existingLink.product?.name ?? "Unknown";
+            await Log("warning", $"{existingName} - already imported (ID: {existingLink.productId})");
+            return ProductImportResult.AlreadyExists(
+                existingLink.productId,
+                existingName
+            );
+        }
+
+        try
+        {
+            await _quotaService.EnsureProductQuotaAsync(connection.storeId);
+        }
+        catch (ApiException ex) when (ex.Code == "product_limit_reached")
+        {
+            await Log("error", ex.Message);
+            return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
+
         try
         {
             // Get the product from the marketplace
@@ -1186,6 +1217,8 @@ public class ProductSyncService
                 return ProductImportResult.Failure($"Product with ID '{externalProductId}' not found on the marketplace");
             }
 
+            externalProduct = await WithImportedPriceAsync(adapter, connection, externalProduct, ct);
+
             var productLabel = externalProduct.Name ?? externalProductId;
             var importBarcode = MarketplaceImportBarcode.Resolve(externalProduct);
             await Log("info", $"Received: {productLabel} | SKU: {externalProduct.Sku ?? "-"} | Barcode: {importBarcode ?? "-"} | Price: {externalProduct.Price} | Stock: {externalProduct.Quantity} | Attributes: {externalProduct.Attributes?.Count ?? 0} | Photos: {externalProduct.ImageUrls?.Count ?? 0} | Variants: {externalProduct.Variants?.Count ?? 0}");
@@ -1200,21 +1233,7 @@ public class ProductSyncService
                 importBarcode ?? "null",
                 externalProduct.Attributes?.Count ?? 0);
 
-            // Check whether a link already exists
-            var existingLink = await _context.productMarketplaceLinks
-                .Include(l => l.product)
-                .FirstOrDefaultAsync(l =>
-                    l.connectionId == connectionId &&
-                    l.externalProductId == externalProductId, ct);
-
-            if (existingLink != null)
-            {
-                await Log("warning", $"{productLabel} - already imported (ID: {existingLink.productId})");
-                return ProductImportResult.AlreadyExists(
-                    existingLink.productId,
-                    existingLink.product?.name ?? "Unknown"
-                );
-            }
+            await _quotaService.EnsureProductQuotaAsync(connection.storeId);
 
             // Create a local product
             await Log("info", $"Creating product in the database: {productLabel}...");
@@ -1222,10 +1241,20 @@ public class ProductSyncService
             product.AddFill(new Product.AddForm(
                 new Product.UserAddForm
                 {
-                    sku = externalProduct.Sku ?? $"MP-{externalProductId}",
-                    barcode = importBarcode,
-                    name = externalProduct.Name ?? $"Product {externalProductId}",
-                    description = Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description) ?? "",
+                    sku = StringClip.ClipRequired(
+                        externalProduct.Sku,
+                        Product.PRODUCT_SKU_MAX_LENGTH,
+                        $"MP-{externalProductId}"),
+                    barcode = StringClip.ClipOptional(
+                        importBarcode,
+                        Product.PRODUCT_BARCODE_MAX_LENGTH),
+                    name = StringClip.ClipRequired(
+                        externalProduct.Name,
+                        Product.PRODUCT_NAME_MAX_LENGTH,
+                        $"Product {externalProductId}"),
+                    description = StringClip.Clip(
+                        Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description),
+                        Product.PRODUCT_DESCRIPTION_MAX_LENGTH),
                     price = externalProduct.Price,
                     storageQuantity = externalProduct.Quantity,
                     categoryId = targetCategoryId
@@ -1239,16 +1268,20 @@ public class ProductSyncService
             await Log("info", $"Product created (ID: {product.Id})");
 
             // Import attributes based on the category mapping
-            if (targetCategoryId.HasValue && externalProduct.Attributes?.Count > 0)
+            if (targetCategoryId.HasValue)
             {
-                await Log("info", $"Importing {externalProduct.Attributes.Count} attributes...");
-                await ImportProductAttributesAsync(
-                    product.Id,
-                    connectionId,
-                    targetCategoryId.Value,
-                    externalProduct.Attributes,
-                    ct);
-                await Log("info", $"Attributes imported");
+                var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+                if (importedAttributes.Count > 0)
+                {
+                    await Log("info", $"Importing {importedAttributes.Count} attributes...");
+                    await ImportProductAttributesAsync(
+                        product.Id,
+                        connectionId,
+                        targetCategoryId.Value,
+                        importedAttributes,
+                        ct);
+                    await Log("info", $"Attributes imported");
+                }
             }
 
             // Import images
@@ -1318,6 +1351,11 @@ public class ProductSyncService
                 "Product imported successfully"
             );
         }
+        catch (ApiException ex) when (ex.Code == "product_limit_reached")
+        {
+            await Log("error", ex.Message);
+            return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Product import error {ExternalId}", externalProductId);
@@ -1327,9 +1365,202 @@ public class ProductSyncService
     }
 
     /// <summary>
+    /// Create a local product from an already-fetched public card. Does not
+    /// insert a marketplace link (export later as a new listing).
+    /// </summary>
+    public async Task<ProductImportResult> ImportUnlinkedExternalProductAsync(
+        MarketplaceConnection connection,
+        ExternalProduct externalProduct,
+        int? targetCategoryId,
+        int userId,
+        CancellationToken ct,
+        string? operationId = null)
+    {
+        async Task Log(string level, string message)
+        {
+            if (operationId != null)
+                await _operationLogger.LogAsync(operationId, connection.storeId, level, message);
+        }
+
+        var publicId = (externalProduct.ExternalId ?? "").Trim();
+        if (publicId.Length == 0)
+            return ProductImportResult.Failure("Public product id is required");
+
+        try
+        {
+            await _quotaService.EnsureProductQuotaAsync(connection.storeId);
+        }
+        catch (ApiException ex) when (ex.Code == "product_limit_reached")
+        {
+            await Log("error", ex.Message);
+            return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
+
+        try
+        {
+            var importBarcode = MarketplaceImportBarcode.Resolve(externalProduct);
+            var sku = await ResolveUniqueSkuAsync(
+                connection.storeId, externalProduct.Sku, publicId, connection.adapterKey, ct);
+            var productLabel = externalProduct.Name ?? publicId;
+            await Log("info", $"Creating unlinked product: {productLabel} | SKU: {sku} | public id: {publicId}");
+
+            var product = new Product();
+            product.AddFill(new Product.AddForm(
+                new Product.UserAddForm
+                {
+                    sku = sku,
+                    barcode = StringClip.ClipOptional(
+                        importBarcode,
+                        Product.PRODUCT_BARCODE_MAX_LENGTH),
+                    name = StringClip.ClipRequired(
+                        externalProduct.Name,
+                        Product.PRODUCT_NAME_MAX_LENGTH,
+                        $"Product {publicId}"),
+                    description = StringClip.Clip(
+                        Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description),
+                        Product.PRODUCT_DESCRIPTION_MAX_LENGTH),
+                    price = externalProduct.Price,
+                    storageQuantity = externalProduct.Quantity,
+                    categoryId = targetCategoryId
+                },
+                connection.storeId,
+                targetCategoryId
+            ));
+
+            _context.products.Add(product);
+            await _context.SaveChangesAsync(ct);
+            await Log("info", $"Product created (ID: {product.Id}) without a marketplace link");
+
+            if (targetCategoryId.HasValue)
+            {
+                var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
+                if (importedAttributes.Count > 0)
+                {
+                    await Log("info", $"Importing {importedAttributes.Count} attributes...");
+                    await ImportProductAttributesAsync(
+                        product.Id,
+                        connection.Id,
+                        targetCategoryId.Value,
+                        importedAttributes,
+                        ct);
+                    await Log("info", "Attributes imported");
+                }
+            }
+
+            if (externalProduct.ImageUrls?.Any() == true && userId > 0)
+            {
+                await Log("info", $"Queuing {externalProduct.ImageUrls.Count} photos for download...");
+                await ImportProductImagesAsync(
+                    product.Id,
+                    connection.storeId,
+                    userId,
+                    externalProduct.ImageUrls,
+                    ct,
+                    imageBatchId: operationId);
+                await Log("info", "Photos queued");
+            }
+
+            if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
+            {
+                await Log("info", $"Creating {externalProduct.Variants.Count} local variants (no marketplace size links)...");
+                await SyncVariantsAsync(
+                    product.Id, connection.Id, externalProduct.Variants, ct, createMarketplaceLinks: false);
+                await Log("info", "Variants created");
+            }
+
+            return ProductImportResult.SuccessUnlinked(
+                product.Id,
+                product.name,
+                "Product copied from the public catalog");
+        }
+        catch (ApiException ex) when (ex.Code == "product_limit_reached")
+        {
+            await Log("error", ex.Message);
+            return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Public catalog import error {PublicId}", publicId);
+            await Log("error", $"Import error {publicId}: {ex.Message}");
+            return ProductImportResult.Failure($"Import error: {ex.Message}");
+        }
+    }
+
+    internal async Task<string> ResolveUniqueSkuAsync(
+        int storeId,
+        string? vendor,
+        string publicId,
+        string? adapterKey,
+        CancellationToken ct)
+    {
+        var preferred = StringClip.ClipRequired(
+            vendor, Product.PRODUCT_SKU_MAX_LENGTH, $"MP-{publicId}");
+        if (!await SkuTakenAsync(storeId, preferred, ct))
+            return preferred;
+
+        var tag = string.IsNullOrWhiteSpace(adapterKey) ? "mp" : adapterKey.Trim().ToLowerInvariant();
+        if (tag.Length > 2)
+            tag = tag[..2];
+        var tagged = StringClip.ClipRequired(
+            $"{preferred}-{tag}-{publicId}", Product.PRODUCT_SKU_MAX_LENGTH, $"MP-{publicId}");
+        if (tagged != preferred && !await SkuTakenAsync(storeId, tagged, ct))
+            return tagged;
+
+        var mp = StringClip.ClipRequired($"MP-{publicId}", Product.PRODUCT_SKU_MAX_LENGTH, publicId);
+        if (!await SkuTakenAsync(storeId, mp, ct))
+            return mp;
+
+        for (var n = 2; n < 1000; n++)
+        {
+            var suffix = $"-{n}";
+            var maxStem = Product.PRODUCT_SKU_MAX_LENGTH - suffix.Length;
+            if (maxStem < 1)
+                break;
+            var stem = mp.Length <= maxStem ? mp : mp[..maxStem];
+            var candidate = stem + suffix;
+            if (!await SkuTakenAsync(storeId, candidate, ct))
+                return candidate;
+        }
+
+        return mp;
+    }
+
+    private Task<bool> SkuTakenAsync(int storeId, string sku, CancellationToken ct)
+        => _context.products.AnyAsync(
+            p => p.storeId == storeId && p.sku == sku && p.deletedAt == null, ct);
+
+    /// <summary>
+    /// When the product card has no selling price, load it from the marketplace prices API.
+    /// </summary>
+    internal async Task<ExternalProduct> WithImportedPriceAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        ExternalProduct product,
+        CancellationToken ct)
+    {
+        var filled = await WithImportedPricesAsync(adapter, connection, [product], ct);
+        return filled[0];
+    }
+
+    internal async Task<List<ExternalProduct>> WithImportedPricesAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        IReadOnlyList<ExternalProduct> products,
+        CancellationToken ct)
+    {
+        if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportPrices))
+            return products as List<ExternalProduct> ?? products.ToList();
+
+        return await MarketplaceImportPrice.FillMissingAsync(
+            products,
+            (ids, token) => adapter.ImportPricesAsync(connection, ids, token),
+            ct);
+    }
+
+    /// <summary>
     /// Import product attributes based on category field mappings.
     /// </summary>
-    private async Task ImportProductAttributesAsync(
+    internal async Task<int> ImportProductAttributesAsync(
         int productId,
         int connectionId,
         int categoryId,
@@ -1355,47 +1586,32 @@ public class ProductSyncService
         }
 
         if (categoryMapping == null)
-            return;
+            return 0;
 
         // Import is graph-native: project the node graph to per-field import descriptors.
         var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
 
-        // Pre-load valid CategoryAttribute IDs to avoid FK constraint failures
-        var categoryAttributeIdsList = await _context.categoryAttributes
-            .Where(ca => ca.categoryId == categoryId)
-            .Select(ca => ca.Id)
-            .ToListAsync(ct);
-        var categoryAttributeIds = new HashSet<int>(categoryAttributeIdsList);
-
-        // Pre-load valid StoreAttribute IDs
-        var storeAttributeIdsList = await _context.storeAttributes
-            .Select(sa => sa.Id)
-            .ToListAsync(ct);
-        var storeAttributeIds = new HashSet<int>(storeAttributeIdsList);
+        var (categoryAttributeSpecs, storeAttributeSpecs) =
+            await LoadAttributeSpecsAsync(categoryId, noTracking: true, ct);
 
         var importedCount = 0;
 
         foreach (var fieldMapping in enabledMappings)
         {
-            // Check whether the external attributes contain a value
-            if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
-            {
-                // Log: no match for this external field key
+            if (!ImportedAttributeValue.TryGet(
+                    byKey, fieldMapping.externalFieldKey, fieldMapping.externalFieldName, out var externalValue))
                 continue;
-            }
-
-            var stringValue = ConvertAttributeValueToString(externalValue);
-            if (string.IsNullOrEmpty(stringValue))
-                continue;
-
-            // Reverse-apply modifiers to convert marketplace values back to local format
-            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
-                          ?? stringValue;
 
             switch (fieldMapping.sourceType)
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
-                    if (!categoryAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                    if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
+                        continue;
+
+                    var productValue = FormatImportedAttribute(
+                        externalValue, categorySpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(productValue))
                         continue;
 
                     var productAttrValue = new ProductAttributeValue();
@@ -1403,14 +1619,19 @@ public class ProductSyncService
                     {
                         productId = productId,
                         attributeId = fieldMapping.sourceAttributeId.Value,
-                        value = stringValue
+                        value = productValue
                     });
                     _context.productAttributeValues.Add(productAttrValue);
                     importedCount++;
                     break;
 
                 case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
-                    if (!storeAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                    if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
+                        continue;
+
+                    var storeValue = FormatImportedAttribute(
+                        externalValue, storeSpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(storeValue))
                         continue;
 
                     var storeAttrValue = new StoreProductAttributeValue();
@@ -1418,7 +1639,7 @@ public class ProductSyncService
                     {
                         productId = productId,
                         storeAttributeId = fieldMapping.sourceAttributeId.Value,
-                        value = stringValue
+                        value = storeValue
                     });
                     _context.storeProductAttributeValues.Add(storeAttrValue);
                     importedCount++;
@@ -1430,6 +1651,8 @@ public class ProductSyncService
         {
             await _context.SaveChangesAsync(ct);
         }
+
+        return importedCount;
     }
 
     /// <summary>
@@ -1480,38 +1703,28 @@ public class ProductSyncService
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
-        // Pre-load valid IDs
-        var categoryAttributeIds = (await _context.categoryAttributes
-            .Where(ca => ca.categoryId == categoryId)
-            .Select(ca => ca.Id)
-            .ToListAsync(ct)).ToHashSet();
+        var (categoryAttributeSpecs, storeAttributeSpecs) =
+            await LoadAttributeSpecsAsync(categoryId, noTracking: false, ct);
 
-        var storeAttributeIds = (await _context.storeAttributes
-            .Select(sa => sa.Id)
-            .ToListAsync(ct)).ToHashSet();
+        var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
 
         _logger.LogDebug(
             "Updating attributes: productId={ProductId}, enabledMappings={Count}, externalKeys=[{Keys}]",
             productId, enabledMappings.Count,
-            string.Join(", ", externalAttributes.Keys.Take(20)));
+            string.Join(", ", byKey.Keys.Take(20)));
+
+        var dirty = false;
 
         foreach (var fieldMapping in enabledMappings)
         {
-            if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
+            if (!ImportedAttributeValue.TryGet(
+                    byKey, fieldMapping.externalFieldKey, fieldMapping.externalFieldName, out var externalValue))
             {
                 _logger.LogDebug(
                     "  Mapping '{FieldName}' (key={Key}): key not found in external attributes, sourceType={SourceType}",
                     fieldMapping.externalFieldName, fieldMapping.externalFieldKey, fieldMapping.sourceType);
                 continue;
             }
-
-            var stringValue = ConvertAttributeValueToString(externalValue);
-            if (string.IsNullOrEmpty(stringValue))
-                continue;
-
-            // Reverse-apply modifiers to convert marketplace values back to local format
-            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
-                          ?? stringValue;
 
             var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
 
@@ -1522,7 +1735,7 @@ public class ProductSyncService
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
                 {
-                    if (!categoryAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                    if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
                     {
                         _logger.LogWarning(
                             "  Mapping '{FieldName}': sourceAttributeId={AttrId} not found in attributes of category {CategoryId}",
@@ -1530,15 +1743,26 @@ public class ProductSyncService
                         continue;
                     }
 
+                    var stringValue = FormatImportedAttribute(
+                        externalValue, categorySpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(stringValue))
+                        continue;
+
                     var existing = existingProductAttrs.FirstOrDefault(
                         a => a.attributeId == fieldMapping.sourceAttributeId.Value);
 
                     if (existing != null)
                     {
+                        if (!ImportedAttributeValue.AreEquivalent(
+                                existing.value, stringValue, categorySpec.Type, categorySpec.Options))
+                        {
+                            changes.Add(PreviewChange(fieldName, existing.value, stringValue, categorySpec));
+                        }
+
                         if (existing.value != stringValue)
                         {
-                            changes.Add(new AttributeChangeDetail(fieldName, existing.value, stringValue));
                             existing.value = stringValue;
+                            dirty = true;
                         }
                     }
                     else
@@ -1551,14 +1775,20 @@ public class ProductSyncService
                             value = stringValue
                         });
                         _context.productAttributeValues.Add(productAttrValue);
-                        changes.Add(new AttributeChangeDetail(fieldName, null, stringValue));
+                        changes.Add(PreviewChange(fieldName, null, stringValue, categorySpec));
+                        dirty = true;
                     }
                     break;
                 }
 
                 case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
                 {
-                    if (!storeAttributeIds.Contains(fieldMapping.sourceAttributeId.Value))
+                    if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
+                        continue;
+
+                    var stringValue = FormatImportedAttribute(
+                        externalValue, storeSpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(stringValue))
                         continue;
 
                     var existing = existingStoreAttrs.FirstOrDefault(
@@ -1566,10 +1796,16 @@ public class ProductSyncService
 
                     if (existing != null)
                     {
+                        if (!ImportedAttributeValue.AreEquivalent(
+                                existing.value, stringValue, storeSpec.Type, storeSpec.Options))
+                        {
+                            changes.Add(PreviewChange(fieldName, existing.value, stringValue, storeSpec));
+                        }
+
                         if (existing.value != stringValue)
                         {
-                            changes.Add(new AttributeChangeDetail(fieldName, existing.value, stringValue));
                             existing.value = stringValue;
+                            dirty = true;
                         }
                     }
                     else
@@ -1582,7 +1818,8 @@ public class ProductSyncService
                             value = stringValue
                         });
                         _context.storeProductAttributeValues.Add(storeAttrValue);
-                        changes.Add(new AttributeChangeDetail(fieldName, null, stringValue));
+                        changes.Add(PreviewChange(fieldName, null, stringValue, storeSpec));
+                        dirty = true;
                     }
                     break;
                 }
@@ -1595,7 +1832,7 @@ public class ProductSyncService
             }
         }
 
-        if (changes.Count > 0)
+        if (dirty)
             await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -1639,18 +1876,16 @@ public class ProductSyncService
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
+        var (categoryAttributeSpecs, storeAttributeSpecs) =
+            await LoadAttributeSpecsAsync(categoryId, noTracking: true, ct);
+
+        var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
+
         foreach (var fieldMapping in enabledMappings)
         {
-            if (!externalAttributes.TryGetValue(fieldMapping.externalFieldKey, out var externalValue))
+            if (!ImportedAttributeValue.TryGet(
+                    byKey, fieldMapping.externalFieldKey, fieldMapping.externalFieldName, out var externalValue))
                 continue;
-
-            var stringValue = ConvertAttributeValueToString(externalValue);
-            if (string.IsNullOrEmpty(stringValue))
-                continue;
-
-            // Reverse-apply modifiers to convert marketplace values back to local format
-            stringValue = ModifierPipeline.ApplyModifiersReverse(stringValue, fieldMapping.modifiersJson)?.ToString()
-                          ?? stringValue;
 
             var fieldName = fieldMapping.externalFieldName ?? fieldMapping.externalFieldKey;
             var hasIrreversible = ModifierPipeline.HasIrreversibleModifiers(fieldMapping.modifiersJson);
@@ -1659,19 +1894,41 @@ public class ProductSyncService
             {
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
                 {
+                    if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
+                        continue;
+                    var stringValue = FormatImportedAttribute(
+                        externalValue, categorySpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(stringValue))
+                        continue;
                     var existing = existingProductAttrs.FirstOrDefault(
                         a => a.attributeId == fieldMapping.sourceAttributeId.Value);
-                    if (existing == null || existing.value != stringValue)
-                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue, hasIrreversible));
+                    if (existing == null ||
+                        !ImportedAttributeValue.AreEquivalent(
+                            existing.value, stringValue, categorySpec.Type, categorySpec.Options))
+                    {
+                        result.Add(PreviewChange(
+                            fieldName, existing?.value, stringValue, categorySpec, hasIrreversible));
+                    }
                     break;
                 }
 
                 case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
                 {
+                    if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
+                        continue;
+                    var stringValue = FormatImportedAttribute(
+                        externalValue, storeSpec, fieldMapping.modifiersJson);
+                    if (string.IsNullOrEmpty(stringValue))
+                        continue;
                     var existing = existingStoreAttrs.FirstOrDefault(
                         a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
-                    if (existing == null || existing.value != stringValue)
-                        result.Add(new AttributeChangeDetail(fieldName, existing?.value, stringValue, hasIrreversible));
+                    if (existing == null ||
+                        !ImportedAttributeValue.AreEquivalent(
+                            existing.value, stringValue, storeSpec.Type, storeSpec.Options))
+                    {
+                        result.Add(PreviewChange(
+                            fieldName, existing?.value, stringValue, storeSpec, hasIrreversible));
+                    }
                     break;
                 }
             }
@@ -1680,39 +1937,74 @@ public class ProductSyncService
         return result;
     }
 
-    /// <summary>
-    /// Convert an attribute value to its string representation.
-    /// </summary>
-    private static string? ConvertAttributeValueToString(object value)
+    private readonly record struct AttrSpec(AttributeType Type, string? Options);
+
+    private async Task<(Dictionary<int, AttrSpec> Category, Dictionary<int, AttrSpec> Store)> LoadAttributeSpecsAsync(
+        int categoryId,
+        bool noTracking,
+        CancellationToken ct)
     {
-        if (value == null)
+        IQueryable<CategoryAttribute> categoryQuery = _context.categoryAttributes
+            .Where(ca => ca.categoryId == categoryId);
+        IQueryable<StoreAttribute> storeQuery = _context.storeAttributes;
+        if (noTracking)
+        {
+            categoryQuery = categoryQuery.AsNoTracking();
+            storeQuery = storeQuery.AsNoTracking();
+        }
+
+        var category = await categoryQuery.ToDictionaryAsync(
+            ca => ca.Id, ca => new AttrSpec(ca.type, ca.options), ct);
+        var store = await storeQuery.ToDictionaryAsync(
+            sa => sa.Id, sa => new AttrSpec(sa.type, sa.options), ct);
+        return (category, store);
+    }
+
+    private static AttributeChangeDetail PreviewChange(
+        string fieldName,
+        string? oldStored,
+        string newStored,
+        AttrSpec spec,
+        bool hasIrreversible = false)
+    {
+        return new AttributeChangeDetail(
+            fieldName,
+            ImportedAttributeValue.ToDisplayString(oldStored, spec.Type, spec.Options),
+            ImportedAttributeValue.ToDisplayString(newStored, spec.Type, spec.Options),
+            hasIrreversible);
+    }
+
+    /// <summary>
+    /// Convert a marketplace attribute value to the invariant string stored on the product.
+    /// </summary>
+    private static string? FormatImportedAttribute(
+        object? value,
+        AttrSpec spec,
+        string? modifiersJson)
+        => FormatImportedAttribute(value, spec.Type, modifiersJson, spec.Options);
+
+    private static string? FormatImportedAttribute(
+        object? value,
+        AttributeType type,
+        string? modifiersJson,
+        string? optionsJson = null)
+    {
+        var stored = ImportedAttributeValue.ToStoredString(value, type, optionsJson);
+        if (string.IsNullOrEmpty(stored))
             return null;
 
-        // If it is a list, take the first value or join them with a comma
-        if (value is System.Collections.IList list)
-        {
-            if (list.Count == 0)
-                return null;
-            if (list.Count == 1)
-                return list[0]?.ToString();
-            return string.Join(", ", list.Cast<object>().Select(v => v?.ToString()));
-        }
+        if (string.IsNullOrWhiteSpace(modifiersJson))
+            return stored;
 
-        // JsonElement
-        if (value is System.Text.Json.JsonElement jsonElement)
-        {
-            return jsonElement.ValueKind switch
-            {
-                System.Text.Json.JsonValueKind.String => jsonElement.GetString(),
-                System.Text.Json.JsonValueKind.Number => jsonElement.GetRawText(),
-                System.Text.Json.JsonValueKind.True => "true",
-                System.Text.Json.JsonValueKind.False => "false",
-                System.Text.Json.JsonValueKind.Array => string.Join(", ", jsonElement.EnumerateArray().Select(e => e.ToString())),
-                _ => jsonElement.ToString()
-            };
-        }
+        var reversed = ModifierPipeline.ApplyModifiersReverse(stored, modifiersJson);
+        if (reversed == null)
+            return stored;
 
-        return value.ToString();
+        if (reversed is string reversedText && reversedText == stored)
+            return stored;
+
+        return ImportedAttributeValue.ToStoredString(reversed, type, optionsJson)
+               ?? reversed.ToString();
     }
 
     /// <summary>
@@ -1948,42 +2240,193 @@ public class ProductSyncService
         CancellationToken ct = default,
         string? imageBatchId = null)
     {
-        var imageIndex = 0;
+        await QueueImportImagesAsync(
+            productId, storeId, authorUserId, imageUrls, imageUrls, imageBatchId, ct);
+    }
 
-        foreach (var imageUrl in imageUrls)
+    /// <summary>
+    /// Preview marketplace photo URLs against the local product (no downloads).
+    /// </summary>
+    public async Task<ImportImagesPreview> PreviewImportImagesAsync(
+        int productId,
+        IReadOnlyList<string>? remoteUrls,
+        CancellationToken ct = default)
+    {
+        var galleryCount = await _context.images.CountAsync(i => i.productId == productId, ct);
+        var state = await LoadImageImportStateAsync(productId, ct);
+        var items = new List<ImportImagePreviewItem>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var raw in remoteUrls ?? Array.Empty<string>())
         {
-            // Check whether this image is already queued
-            var exists = await _context.pendingImageDownloads
-                .AnyAsync(p => p.productId == productId && p.imageUrl == imageUrl, ct);
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
 
-            if (exists)
+            var trimmed = raw.Trim();
+            var key = ImageSourceUrl.Normalize(trimmed) ?? trimmed;
+            if (!seen.Add(key))
+                continue;
+
+            items.Add(new ImportImagePreviewItem(trimmed, ClassifyImportImage(state, trimmed)));
+        }
+
+        return new ImportImagesPreview(items, galleryCount);
+    }
+
+    /// <summary>
+    /// Queue selected marketplace photo URLs for append-only download.
+    /// Selected URLs must match the adapter allowlist (normalized). URLs already
+    /// in flight are skipped; already-imported URLs may be queued again as extra
+    /// copies. Never replaces existing gallery slots.
+    /// </summary>
+    public async Task<ImportImagesQueueResult> QueueImportImagesAsync(
+        int productId,
+        int storeId,
+        int authorUserId,
+        IReadOnlyList<string>? selectedUrls,
+        IReadOnlyList<string>? allowlist,
+        string? batchId = null,
+        CancellationToken ct = default)
+    {
+        var selected = (selectedUrls ?? Array.Empty<string>())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Select(u => u.Trim())
+            .ToList();
+
+        var allowed = (allowlist ?? Array.Empty<string>())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Select(u => u.Trim())
+            .ToList();
+
+        var canonical = new List<string>();
+        foreach (var url in selected)
+        {
+            var match = allowed.FirstOrDefault(a => ImageSourceUrl.EqualsNormalized(a, url));
+            if (match == null)
             {
-                imageIndex++;
+                throw ApiException.BadRequest(
+                    "Photo URL is not from the marketplace product",
+                    code: "image_url_not_from_adapter");
+            }
+
+            if (!canonical.Any(c => ImageSourceUrl.EqualsNormalized(c, match)))
+                canonical.Add(match);
+        }
+
+        var state = await LoadImageImportStateAsync(productId, ct);
+        var nextIndex = await NextGalleryIndexAsync(productId, ct);
+        var queued = 0;
+        var skipped = 0;
+
+        foreach (var url in canonical)
+        {
+            if (ClassifyImportImage(state, url) == ImportImageStatuses.Queued)
+            {
+                skipped++;
                 continue;
             }
 
-            // Add to the background download queue
-            var pending = new PendingImageDownload
+            _context.pendingImageDownloads.Add(new PendingImageDownload
             {
                 productId = productId,
                 storeId = storeId,
                 authorUserId = authorUserId,
-                imageUrl = imageUrl,
-                imageIndex = imageIndex,
+                imageUrl = url,
+                imageIndex = nextIndex++,
                 status = ImageDownloadStatus.Pending,
                 createdAt = DateTime.UtcNow,
-                batchId = imageBatchId
-            };
+                batchId = batchId
+            });
 
-            _context.pendingImageDownloads.Add(pending);
-            imageIndex++;
+            var key = ImageSourceUrl.Normalize(url);
+            if (key != null)
+                state.QueuedKeys.Add(key);
+            queued++;
         }
 
-        await _context.SaveChangesAsync(ct);
+        if (queued > 0)
+            await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Queued {Count} images for download for product {ProductId}",
-            imageUrls.Count, productId);
+            "Queued {Count} images for download for product {ProductId} (skipped {Skipped})",
+            queued, productId, skipped);
+
+        return new ImportImagesQueueResult(queued, skipped);
+    }
+
+    private async Task<ImageImportState> LoadImageImportStateAsync(int productId, CancellationToken ct)
+    {
+        var state = new ImageImportState();
+
+        var sourceUrls = await _context.files.AsNoTracking()
+            .Where(f => f.productId == productId && f.sourceUrl != null)
+            .Select(f => f.sourceUrl!)
+            .ToListAsync(ct);
+
+        foreach (var sourceUrl in sourceUrls)
+        {
+            var key = ImageSourceUrl.Normalize(sourceUrl);
+            if (key != null)
+                state.ImportedKeys.Add(key);
+        }
+
+        var pending = await _context.pendingImageDownloads.AsNoTracking()
+            .Where(p => p.productId == productId)
+            .Select(p => new { p.imageUrl, p.status, p.retryCount })
+            .ToListAsync(ct);
+
+        foreach (var row in pending)
+        {
+            var key = ImageSourceUrl.Normalize(row.imageUrl);
+            if (key == null)
+                continue;
+
+            if (row.status == ImageDownloadStatus.Completed)
+                state.ImportedKeys.Add(key);
+            else if (IsActiveImageDownload(row.status, row.retryCount))
+                state.QueuedKeys.Add(key);
+        }
+
+        return state;
+    }
+
+    private async Task<int> NextGalleryIndexAsync(int productId, CancellationToken ct)
+    {
+        var maxGallery = await _context.images
+            .Where(i => i.productId == productId)
+            .Select(i => (int?)i.index)
+            .MaxAsync(ct) ?? -1;
+
+        var maxPending = await _context.pendingImageDownloads
+            .Where(p => p.productId == productId && (
+                p.status == ImageDownloadStatus.Pending
+                || p.status == ImageDownloadStatus.InProgress
+                || (p.status == ImageDownloadStatus.Failed
+                    && p.retryCount < PendingImageDownload.MAX_RETRIES)))
+            .Select(p => (int?)p.imageIndex)
+            .MaxAsync(ct) ?? -1;
+
+        return Math.Max(maxGallery, maxPending) + 1;
+    }
+
+    private static string ClassifyImportImage(ImageImportState state, string url)
+    {
+        var key = ImageSourceUrl.Normalize(url);
+        if (key != null && state.QueuedKeys.Contains(key))
+            return ImportImageStatuses.Queued;
+        if (key != null && state.ImportedKeys.Contains(key))
+            return ImportImageStatuses.AlreadyImported;
+        return ImportImageStatuses.New;
+    }
+
+    internal static bool IsActiveImageDownload(ImageDownloadStatus status, int retryCount) =>
+        status is ImageDownloadStatus.Pending or ImageDownloadStatus.InProgress
+        || (status == ImageDownloadStatus.Failed && retryCount < PendingImageDownload.MAX_RETRIES);
+
+    private sealed class ImageImportState
+    {
+        public HashSet<string> ImportedKeys { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> QueuedKeys { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -2142,7 +2585,8 @@ public class ProductSyncService
         int productId,
         int connectionId,
         List<ExternalProductVariant> variants,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool createMarketplaceLinks = true)
     {
         // Load existing local variants for this product
         var existingVariants = await _context.productVariants
@@ -2197,28 +2641,30 @@ public class ProductSyncService
                 localVariant.updatedAt = DateTime.UtcNow;
             }
 
-            // Create or update marketplace link
-            if (linkByVariantId.TryGetValue(localVariant.Id, out var existingLink))
+            if (createMarketplaceLinks)
             {
-                existingLink.externalVariantId = v.VariantId;
-                existingLink.marketplaceSize = v.MarketplaceSize;
-                existingLink.rawData = v.Extra != null
-                    ? System.Text.Json.JsonSerializer.Serialize(v.Extra)
-                    : null;
-            }
-            else
-            {
-                var link = new ProductVariantLink
+                if (linkByVariantId.TryGetValue(localVariant.Id, out var existingLink))
                 {
-                    variantId = localVariant.Id,
-                    connectionId = connectionId,
-                    externalVariantId = v.VariantId,
-                    marketplaceSize = v.MarketplaceSize,
-                    rawData = v.Extra != null
+                    existingLink.externalVariantId = v.VariantId;
+                    existingLink.marketplaceSize = v.MarketplaceSize;
+                    existingLink.rawData = v.Extra != null
                         ? System.Text.Json.JsonSerializer.Serialize(v.Extra)
-                        : null
-                };
-                _context.productVariantLinks.Add(link);
+                        : null;
+                }
+                else
+                {
+                    var link = new ProductVariantLink
+                    {
+                        variantId = localVariant.Id,
+                        connectionId = connectionId,
+                        externalVariantId = v.VariantId,
+                        marketplaceSize = v.MarketplaceSize,
+                        rawData = v.Extra != null
+                            ? System.Text.Json.JsonSerializer.Serialize(v.Extra)
+                            : null
+                    };
+                    _context.productVariantLinks.Add(link);
+                }
             }
         }
 
@@ -2300,6 +2746,33 @@ public class ProductExportResult
 }
 
 /// <summary>
+/// Status strings for marketplace photo re-import preview.
+/// </summary>
+public static class ImportImageStatuses
+{
+    public const string New = "new";
+    public const string AlreadyImported = "alreadyImported";
+    public const string Queued = "queued";
+}
+
+/// <summary>
+/// One marketplace photo in a re-import preview.
+/// </summary>
+public sealed record ImportImagePreviewItem(string Url, string Status);
+
+/// <summary>
+/// Preview of marketplace photos vs the local product gallery.
+/// </summary>
+public sealed record ImportImagesPreview(
+    IReadOnlyList<ImportImagePreviewItem> Images,
+    int LocalGalleryCount);
+
+/// <summary>
+/// Result of queueing selected marketplace photos for download.
+/// </summary>
+public sealed record ImportImagesQueueResult(int QueuedCount, int SkippedCount);
+
+/// <summary>
 /// Result of a product import operation.
 /// </summary>
 public class ProductImportResult
@@ -2311,6 +2784,8 @@ public class ProductImportResult
     public string? ProductName { get; private set; }
     public string? Message { get; private set; }
     public bool AlreadyLinked { get; private set; }
+    public string? ErrorCode { get; private set; }
+    public object? ErrorData { get; private set; }
 
     /// <summary>
     /// Create a successful import result.
@@ -2322,6 +2797,21 @@ public class ProductImportResult
             IsSuccess = true,
             ProductId = productId,
             LinkId = linkId,
+            ProductName = productName,
+            Message = message
+        };
+    }
+
+    /// <summary>
+    /// Successful copy of a public card with no marketplace link.
+    /// </summary>
+    public static ProductImportResult SuccessUnlinked(int productId, string productName, string message)
+    {
+        return new ProductImportResult
+        {
+            IsSuccess = true,
+            ProductId = productId,
+            LinkId = null,
             ProductName = productName,
             Message = message
         };
@@ -2345,12 +2835,14 @@ public class ProductImportResult
     /// <summary>
     /// Create a failure import result.
     /// </summary>
-    public static ProductImportResult Failure(string error)
+    public static ProductImportResult Failure(string error, string? code = null, object? data = null)
     {
         return new ProductImportResult
         {
             IsSuccess = false,
-            ErrorMessage = error
+            ErrorMessage = error,
+            ErrorCode = code,
+            ErrorData = data
         };
     }
 }

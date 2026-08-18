@@ -160,20 +160,17 @@ public class UserController : ControllerBase
         if (currentUser == null)
             throw ApiException.Unauthorized();
 
+        var user = await _userManager.FindByIdAsync(id.ToString());
+        if (user == null)
+            throw ApiException.NotFound("User not found", code: "user_not_found");
+
         // roles.manage is never assignable - only User.isAdmin receives it at hydrate time.
         var roles = input.roles ?? [];
         var grants = (input.permissionGrants ?? [])
             .Where(p => !Permissions.IsAdminOnly(p))
             .ToList();
-        if (!currentUser.isAdmin)
-        {
-            if (roles.Contains(AppRoles.Owner, StringComparer.OrdinalIgnoreCase))
-                throw ApiException.Forbidden("Only the instance owner can assign the Owner role");
-        }
 
-        var user = await _userManager.FindByIdAsync(id.ToString());
-        if (user == null)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+        UserAccessMutation.EnsureCanAssign(currentUser, user, roles);
 
         await _permissionService.SetUserAccessAsync(id, roles, grants, ct);
         return Ok(await _permissionService.GetUserAccessAsync(id, ct));

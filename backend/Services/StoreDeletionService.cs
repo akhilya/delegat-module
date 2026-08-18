@@ -148,6 +148,8 @@ public sealed class StoreDeletionService : IStoreDeletionService
             await _db.pendingProductBulkUpdates.Where(p => p.storeId == storeId).ToListAsync(ct));
         _db.pendingFolderJobs.RemoveRange(
             await _db.pendingFolderJobs.Where(p => p.storeId == storeId).ToListAsync(ct));
+        _db.pendingCategoryImports.RemoveRange(
+            await _db.pendingCategoryImports.Where(p => p.storeId == storeId).ToListAsync(ct));
         _db.pendingProductTransfers.RemoveRange(
             await _db.pendingProductTransfers
                 .Where(p => p.sourceStoreId == storeId || p.targetStoreId == storeId)

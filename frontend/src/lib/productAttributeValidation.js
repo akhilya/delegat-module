@@ -27,34 +27,113 @@ function buildSingleAttributeSchema(attr) {
   }
 
   if (isAttributeType(attr.type, "multiselect")) {
-    if (attr.isRequired) {
-      return z
-        .string()
-        .min(1, t("lib.productAttributeValidation.requiredField"))
-        .refine((value) => {
-          try {
-            const parsed = JSON.parse(value);
-            return Array.isArray(parsed) && parsed.length > 0;
-          } catch {
-            return value.split(",").map((part) => part.trim()).filter(Boolean).length > 0;
-          }
-        }, t("lib.productAttributeValidation.requiredField"));
+    let schema = attr.isRequired
+      ? z
+          .string()
+          .min(1, t("lib.productAttributeValidation.requiredField"))
+          .refine(
+            (value) => countMultiselectValues(value) > 0,
+            t("lib.productAttributeValidation.requiredField"),
+          )
+      : z.string().optional().default("");
+
+    const maxValues = positiveInt(attr.maxValues);
+    if (maxValues) {
+      schema = schema.refine(
+        (value) => countMultiselectValues(value) <= maxValues,
+        t("lib.productAttributeValidation.tooManyValues", { max: maxValues }),
+      );
     }
-    return z.string().optional().default("");
+    return schema;
   }
 
   let schema = attr.isRequired
     ? z.string().min(1, t("lib.productAttributeValidation.requiredField"))
     : z.string().optional().default("");
 
+  const maxLen = positiveInt(attr.maxLength);
+  if (
+    maxLen &&
+    !isAttributeType(attr.type, "boolean") &&
+    !isAttributeType(attr.type, "multiselect")
+  ) {
+    schema = schema.refine(
+      (value) => value === "" || value === undefined || String(value).length <= maxLen,
+      t("lib.productAttributeValidation.tooLong", { max: maxLen }),
+    );
+  }
+
   if (isAttributeType(attr.type, "number")) {
     schema = schema.refine(
       (value) => value === "" || value === undefined || /^-?\d+(\.\d+)?$/.test(String(value)),
       t("lib.productAttributeValidation.enterNumber"),
     );
+    const min = optionalNumber(attr.minValue);
+    const max = optionalNumber(attr.maxValue);
+    if (min != null || max != null) {
+      schema = schema.refine((value) => {
+        if (value === "" || value === undefined) return true;
+        const n = Number(value);
+        if (!Number.isFinite(n)) return true;
+        if (min != null && n < min) return false;
+        if (max != null && n > max) return false;
+        return true;
+      }, numberRangeMessage(min, max));
+    }
+  }
+
+  const pattern = typeof attr.validationPattern === "string"
+    ? attr.validationPattern.trim()
+    : "";
+  if (pattern && !isAttributeType(attr.type, "boolean")) {
+    try {
+      const re = new RegExp(pattern);
+      schema = schema.refine(
+        (value) => value === "" || value === undefined || re.test(String(value)),
+        t("lib.productAttributeValidation.patternMismatch"),
+      );
+    } catch {
+      // Marketplace regex that is not valid in JS — skip client-side pattern check.
+    }
   }
 
   return schema;
+}
+
+function positiveInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Number of selected values in a stored multiselect string (JSON array or CSV). */
+export function countMultiselectValues(raw) {
+  if (raw === "" || raw == null) return 0;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.length;
+  } catch {
+    /* CSV fallback below */
+  }
+  return String(raw)
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
+
+function optionalNumber(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function numberRangeMessage(min, max) {
+  if (min != null && max != null) {
+    return t("lib.productAttributeValidation.numberRange", { min, max });
+  }
+  if (min != null) {
+    return t("lib.productAttributeValidation.minValue", { min });
+  }
+  return t("lib.productAttributeValidation.maxValue", { max });
 }
 
 export function buildAttributesSchema(attributes) {
@@ -75,15 +154,7 @@ export function isEmptyAttributeValue(attr, raw) {
   if (isAttributeType(attr.type, "boolean")) return false;
   if (raw === "" || raw == null) return true;
   if (isAttributeType(attr.type, "multiselect")) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.length === 0;
-    } catch {
-      return String(raw)
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean).length === 0;
-    }
+    return countMultiselectValues(raw) === 0;
   }
   return false;
 }

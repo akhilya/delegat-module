@@ -1,6 +1,8 @@
 using Delegat.Marketplace.SDK.RateLimit;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
+using AdapterToolDescriptor = Delegat.Marketplace.SDK.AdapterToolDescriptor;
+using AdapterToolRunResult = Delegat.Marketplace.SDK.AdapterToolRunResult;
 
 namespace Delegat.Services.Marketplace;
 
@@ -70,6 +72,21 @@ public interface IMarketplaceAdapter
     /// Clears host metadata cache entries and plugin-local caches for this connection.
     /// </summary>
     int ClearMetadataCaches(MarketplaceConnection connection);
+
+    /// <summary>
+    /// Job-mode tools this adapter contributes to /tools. Empty by default.
+    /// </summary>
+    IReadOnlyList<AdapterToolDescriptor> GetTools() => [];
+
+    /// <summary>
+    /// Run a job-mode tool from <see cref="GetTools"/>. Connection is null when the tool does not need one.
+    /// </summary>
+    Task<AdapterToolRunResult> RunToolAsync(
+        MarketplaceConnection? connection,
+        string toolId,
+        IReadOnlyDictionary<string, string?> parameters,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("This adapter does not provide tools");
 
     #endregion
 
@@ -155,6 +172,26 @@ public interface IMarketplaceAdapter
         string? cursor = null,
         string? offerIdFilter = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Search the public storefront (any seller), not the connected cabinet.
+    /// </summary>
+    Task<PagedResult<ExternalProduct>> SearchPublicCatalogAsync(
+        MarketplaceConnection connection,
+        string query,
+        int pageSize = 50,
+        string? cursor = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException($"Adapter '{Key}' does not support SearchPublicCatalog");
+
+    /// <summary>
+    /// Fetch one public storefront card by marketplace id.
+    /// </summary>
+    Task<ExternalProduct?> GetPublicProductAsync(
+        MarketplaceConnection connection,
+        string publicId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException($"Adapter '{Key}' does not support GetPublicProduct");
 
     /// <summary>
     /// Export a product to the marketplace (create or update)

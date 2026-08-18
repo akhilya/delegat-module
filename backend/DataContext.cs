@@ -24,6 +24,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<PendingProductTransfer> pendingProductTransfers { get; set; }
     public DbSet<PendingProductBulkUpdate> pendingProductBulkUpdates { get; set; }
     public DbSet<PendingFolderJob> pendingFolderJobs { get; set; }
+    public DbSet<PendingCategoryImport> pendingCategoryImports { get; set; }
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }
@@ -181,12 +182,24 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasDefaultValue(false);
 
         builder.Entity<CategoryAttribute>()
+            .Property(a => a.allowCustomValues)
+            .HasDefaultValue(false);
+
+        builder.Entity<CategoryAttribute>()
             .Property(a => a.showOnProductPage)
             .HasDefaultValue(true);
 
         builder.Entity<CategoryAttribute>()
             .Property(a => a.descriptionInTooltip)
             .HasDefaultValue(false);
+
+        builder.Entity<CategoryAttribute>()
+            .Property(a => a.minValue)
+            .HasPrecision(18, 6);
+
+        builder.Entity<CategoryAttribute>()
+            .Property(a => a.maxValue)
+            .HasPrecision(18, 6);
 
         // CategoryMapping graphJson - LONGTEXT for the whole-category visual node graph
         builder.Entity<CategoryMapping>()
@@ -301,6 +314,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
         builder.Entity<Models.File>()
             .HasIndex(f => f.folderId);
+
+        builder.Entity<Models.File>()
+            .Property(f => f.sourceUrl)
+            .HasMaxLength(Models.File.SourceUrlMaxLength);
 
         builder.Entity<StoreFile>()
             .HasIndex(f => f.storeId);
@@ -498,5 +515,17 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(j => j.storeId);
         builder.Entity<PendingFolderJob>()
             .HasIndex(j => j.operationId);
+
+        builder.Entity<PendingCategoryImport>()
+            .Property(j => j.operationId)
+            .HasMaxLength(PendingCategoryImport.OPERATION_ID_MAX_LENGTH);
+        builder.Entity<PendingCategoryImport>()
+            .HasIndex(j => new { j.status, j.createdAt });
+        builder.Entity<PendingCategoryImport>()
+            .HasIndex(j => j.operationId);
+        builder.Entity<PendingCategoryImport>()
+            .HasIndex(j => new { j.connectionId, j.externalCategoryId, j.status });
+        builder.Entity<PendingProductImport>()
+            .HasIndex(p => new { p.connectionId, p.externalCategoryId });
     }
 }

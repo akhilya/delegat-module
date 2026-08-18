@@ -323,6 +323,7 @@ public class CategoryController : ControllerBase
             isRequired = input.isRequired,
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
+            allowCustomValues = input.allowCustomValues,
             showOnProductPage = input.showOnProductPage,
             sortOrder = maxSortOrder + 1,
             options = input.options,
@@ -330,10 +331,17 @@ public class CategoryController : ControllerBase
             description = input.description,
             descriptionInTooltip = input.descriptionInTooltip,
             group = input.group,
+            groupIcon = input.groupIcon,
+            maxLength = input.maxLength,
+            minValue = input.minValue,
+            maxValue = input.maxValue,
+            maxValues = input.maxValues,
+            validationPattern = input.validationPattern,
             categoryId = categoryId
         });
 
         await attrRepo.AddAsync(attribute);
+        await SyncAttributeGroupIconAsync(categoryId, attribute.group, attribute.groupIcon);
 
         return Ok(new { id = attribute.Id });
     }
@@ -381,6 +389,7 @@ public class CategoryController : ControllerBase
 
         attribute.UpdateFill(input);
         await attrRepo.UpdateAsync(attribute);
+        await SyncAttributeGroupIconAsync(categoryId, attribute.group, attribute.groupIcon);
 
         return Ok(new { success = true });
     }
@@ -465,5 +474,18 @@ public class CategoryController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(new { success = true });
+    }
+
+    private async Task SyncAttributeGroupIconAsync(int categoryId, string? group, string? groupIcon)
+    {
+        if (string.IsNullOrEmpty(group))
+            return;
+
+        var rows = await _context.categoryAttributes
+            .Where(a => a.categoryId == categoryId && a.group == group)
+            .ToListAsync();
+        foreach (var row in rows)
+            row.groupIcon = groupIcon;
+        await _context.SaveChangesAsync();
     }
 }

@@ -179,6 +179,7 @@ export default {
         {
           method: "POST",
           cache: false,
+          timeout: 120000,
           data,
         },
         http,
@@ -1432,6 +1433,41 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async importImagesFromLinkPreview(ctx, { linkId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/import-images-preview`,
+        {
+          method: "POST",
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    async importImagesFromLink(ctx, { linkId, urls, operationId, onSuccess, onError }) {
+      return await useAxios(
+        `/marketplace/links/${linkId}/import-images`,
+        {
+          method: "POST",
+          data: { urls: urls || [], operationId: operationId || null },
+          cache: false,
+        },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     /**
      * Exports product data to a marketplace using a specific product link.
      * @param {Object} ctx - Vuex action context.
@@ -1647,6 +1683,84 @@ export default {
 
     async deleteProductVariant(ctx, { productId, variantId }) {
       await http.delete(`/products/${productId}/variants/${variantId}`);
+    },
+
+    async importUnlinkedProducts(ctx, { connectionId, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/products/import-unlinked`,
+          {},
+          { cache: false, timeout: 5 * 60 * 1000 },
+        );
+        await onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async previewCatalogMatch(ctx, { connectionId, page, pageSize, status, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/match/preview`,
+          { page, pageSize, status },
+          { cache: false, timeout: 5 * 60 * 1000 },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async applyCatalogMatch(ctx, { connectionId, items, importUnmatched, operationId, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/match/apply`,
+          { items, importUnmatched: Boolean(importUnmatched), operationId },
+          { cache: false, timeout: 5 * 60 * 1000 },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async searchCatalogScrape(ctx, { connectionId, query, pageSize, cursor, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/catalog-scrape/search`,
+          { query, pageSize, cursor },
+          { cache: false, timeout: 60 * 1000 },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async applyCatalogScrape(ctx, { connectionId, publicIds, operationId, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/catalog-scrape/apply`,
+          { publicIds, operationId },
+          { cache: false, timeout: 5 * 60 * 1000 },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async repairCatalogMatch(ctx, { connectionId, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          `/marketplace/connections/${connectionId}/match/repair-mappings`,
+          {},
+          { cache: false, timeout: 5 * 60 * 1000 },
+        );
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
     },
   },
   mutations: {},

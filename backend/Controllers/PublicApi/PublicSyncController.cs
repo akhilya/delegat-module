@@ -25,19 +25,22 @@ public class PublicSyncController : ControllerBase
     private readonly IOperationLogger _operationLogger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PublicSyncController> _logger;
+    private readonly QuotaService _quotaService;
 
     public PublicSyncController(
         PublicApiStoreContext storeCtx,
         DataContext db,
         IOperationLogger operationLogger,
         IServiceScopeFactory scopeFactory,
-        ILogger<PublicSyncController> logger)
+        ILogger<PublicSyncController> logger,
+        QuotaService quotaService)
     {
         _storeCtx = storeCtx;
         _db = db;
         _operationLogger = operationLogger;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _quotaService = quotaService;
     }
 
     public class ProductIdsRequest
@@ -132,7 +135,10 @@ public class PublicSyncController : ControllerBase
         return PublicApiResults.AcceptedOperation(batchId, storeId);
     }
 
-    /// <summary>Queues product import by external ids. Returns 202; poll operations/{operationId}.</summary>
+    /// <summary>
+    /// Queues product import by external ids. Returns 202; poll operations/{operationId}.
+    /// Selling price is taken from the card, or from the prices API when the card omits it.
+    /// </summary>
     [HttpPost("import-products")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -147,6 +153,9 @@ public class PublicSyncController : ControllerBase
 
         if (body.products == null || body.products.Count == 0)
             throw ApiException.BadRequest("Provide products[] with externalId", code: "required_fields_missing");
+
+        await _quotaService.EnsureProductQuotaAsync(storeId);
+        var remainingSlots = await _quotaService.GetRemainingProductSlotsAsync(storeId);
 
         var mappings = await _db.categoryMappings
             .AsNoTracking()
@@ -173,6 +182,9 @@ public class PublicSyncController : ControllerBase
                     out var targetCategoryId))
                 continue;
 
+            if (remainingSlots is int cap && queued >= cap)
+                break;
+
             _db.pendingProductImports.Add(new PendingProductImport
             {
                 connectionId = connectionId,
@@ -197,6 +209,12 @@ public class PublicSyncController : ControllerBase
             $"Import {queued} products",
             connectionId: connectionId, connectionName: connection.name,
             batchId: batchId, batchType: "import", totalItems: queued);
+
+        if (remainingSlots is int slotCap && queued >= slotCap && body.products.Count > queued)
+        {
+            await _operationLogger.LogAsync(batchId, storeId, "warning",
+                $"Only {queued} of {body.products.Count} products were queued (product limit).");
+        }
 
         return PublicApiResults.AcceptedOperation(batchId, storeId);
     }

@@ -163,5 +163,10 @@ public class YandexManufacturerDataTests
         Assert.False(byKey["vendorCode"].IsRequired);
         Assert.False(byKey["manufacturer"].IsRequired);
         Assert.False(byKey["manufacturerCountries"].IsRequired);
+
+        Assert.Equal(256, byKey["name"].MaxLength);
+        Assert.Equal(255, byKey["offerId"].MaxLength);
+        Assert.Equal(6000, byKey["description"].MaxLength);
+        Assert.Equal(500, byKey["shelfLifeComment"].MaxLength);
     }
 }

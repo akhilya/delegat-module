@@ -3,6 +3,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import {
+  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -43,6 +44,7 @@ export default {
     Spinner,
     Button,
     Input,
+    Table,
     TableBody,
     TableCell,
     TableHead,
@@ -344,7 +346,7 @@ export default {
       @delete="deleteSelected"
       @clear-selection="clearSelection"
     >
-      <table class="w-full table-fixed caption-bottom text-sm">
+      <Table :contain="false" class="w-full">
         <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10">
@@ -439,7 +441,7 @@ export default {
             </TableCell>
           </TableRow>
         </TableBody>
-      </table>
+      </Table>
     </LogListPanel>
 
     <LogDetailSheet

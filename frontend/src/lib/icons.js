@@ -70,6 +70,8 @@ import {
   Key01Icon as Key01IconData,
   LanguageCircleIcon as LanguageCircleIconData,
   Layers01Icon as Layers01IconData,
+  LayoutThreeColumnIcon as LayoutThreeColumnIconData,
+  LayoutThreeRowIcon as LayoutThreeRowIconData,
   Link01Icon as Link01IconData,
   Link02Icon as Link02IconData,
   Loading03Icon as Loading03IconData,
@@ -193,6 +195,7 @@ export const CircleHelp = createHugeIcon(HelpCircleIconData, "CircleHelp");
 export const Clock = createHugeIcon(Clock01IconData, "Clock");
 export const Clock3 = createHugeIcon(Clock03IconData, "Clock3");
 export const Coins = createHugeIcon(Coins01IconData, "Coins");
+export const Columns3 = createHugeIcon(LayoutThreeColumnIconData, "Columns3");
 export const Copy = createHugeIcon(Copy01IconData, "Copy");
 export const CornerLeftUp = createHugeIcon(ArrowTurnBackwardIconData, "CornerLeftUp");
 export const Database = createHugeIcon(DatabaseIconData, "Database");
@@ -257,6 +260,7 @@ export const Plug = createHugeIcon(Plug01IconData, "Plug");
 export const Plus = createHugeIcon(Add01IconData, "Plus");
 export const Puzzle = createHugeIcon(PuzzleIconData, "Puzzle");
 export const RefreshCw = createHugeIcon(RefreshIconData, "RefreshCw");
+export const Rows3 = createHugeIcon(LayoutThreeRowIconData, "Rows3");
 export const Ruler = createHugeIcon(RulerIconData, "Ruler");
 export const Save = createHugeIcon(FloppyDiskIconData, "Save");
 export const ScrollText = createHugeIcon(ScrollIconData, "ScrollText");

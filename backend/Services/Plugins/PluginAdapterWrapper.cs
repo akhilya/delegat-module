@@ -119,6 +119,18 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         return removed;
     }
 
+    public IReadOnlyList<AdapterToolDescriptor> GetTools() => _plugin.GetTools();
+
+    public async Task<AdapterToolRunResult> RunToolAsync(
+        MarketplaceConnection? connection,
+        string toolId,
+        IReadOnlyDictionary<string, string?> parameters,
+        CancellationToken ct = default)
+    {
+        ConnectionContext? context = connection == null ? null : CreateContext(connection);
+        return await _plugin.RunToolAsync(context, toolId, parameters, ct);
+    }
+
     #endregion
 
     #region Connection
@@ -181,7 +193,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             f.ValidationPattern,
             f.Group,
             f.SortOrder,
-            f.IsAspect
+            f.IsAspect,
+            f.AllowCustomValues,
+            f.MaxValues
         )).ToList();
     }
 
@@ -256,7 +270,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 f.ValidationPattern,
                 f.Group,
                 f.SortOrder,
-                f.IsAspect
+                f.IsAspect,
+                f.AllowCustomValues,
+                f.MaxValues
             )).ToList(),
             result.ErrorMessage,
             result.Details);
@@ -276,23 +292,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
 
         if (product == null) return null;
 
-        return new Models.Marketplace.DTOs.ExternalProduct(
-            product.ExternalId,
-            product.Sku,
-            product.Name,
-            product.Description,
-            product.Price,
-            product.Quantity,
-            product.CategoryId,
-            product.CategoryName,
-            product.Attributes,
-            product.ImageUrls,
-            product.Barcode,
-            product.Brand,
-            product.RawData,
-            product.GroupId,
-            product.GroupName
-        );
+        var mapped = MapImportedProduct(product);
+        var filled = await AttachMissingPricesAsync(connection, [mapped], ct);
+        return filled[0];
     }
 
     public async Task<List<Models.Marketplace.DTOs.ExternalProduct>> ImportProductsBatchAsync(
@@ -303,7 +305,68 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         var context = CreateContext(connection);
         var products = await _plugin.ImportProductsBatchAsync(context, externalProductIds, ct);
 
-        return products.Select(p => new Models.Marketplace.DTOs.ExternalProduct(
+        return await AttachMissingPricesAsync(
+            connection,
+            products.Select(MapImportedProduct).ToList(),
+            ct);
+    }
+
+    public async Task<Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>> ImportAllProductsAsync(
+        MarketplaceConnection connection,
+        int pageSize = 100,
+        string? cursor = null,
+        string? offerIdFilter = null,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var result = await _plugin.ImportAllProductsAsync(context, pageSize, cursor, offerIdFilter, ct);
+
+        var items = await AttachMissingPricesAsync(
+            connection,
+            result.Items.Select(MapImportedProduct).ToList(),
+            ct);
+
+        return new Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>(
+            items,
+            result.HasMore,
+            result.NextCursor,
+            result.TotalCount
+        );
+    }
+
+    public async Task<Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>> SearchPublicCatalogAsync(
+        MarketplaceConnection connection,
+        string query,
+        int pageSize = 50,
+        string? cursor = null,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var result = await MarketplaceStorefrontError.GuardAsync(
+            () => _plugin.SearchPublicCatalogAsync(context, query, pageSize, cursor, ct));
+        return new Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>(
+            result.Items.Select(MapImportedProduct).ToList(),
+            result.HasMore,
+            result.NextCursor,
+            result.TotalCount
+        );
+    }
+
+    public async Task<Models.Marketplace.DTOs.ExternalProduct?> GetPublicProductAsync(
+        MarketplaceConnection connection,
+        string publicId,
+        CancellationToken ct = default)
+    {
+        var context = CreateContext(connection);
+        var product = await MarketplaceStorefrontError.GuardAsync(
+            () => _plugin.GetPublicProductAsync(context, publicId, ct));
+        return product == null ? null : MapImportedProduct(product);
+    }
+
+    private static Models.Marketplace.DTOs.ExternalProduct MapImportedProduct(
+        Delegat.Marketplace.SDK.DTOs.ExternalProduct p)
+    {
+        return new Models.Marketplace.DTOs.ExternalProduct(
             p.ExternalId,
             p.Sku,
             p.Name,
@@ -318,42 +381,30 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             p.Brand,
             p.RawData,
             p.GroupId,
-            p.GroupName
-        )).ToList();
+            p.GroupName,
+            p.Variants?.Select(v => new Models.Marketplace.DTOs.ExternalProductVariant(
+                v.VariantId,
+                v.TechSize,
+                v.MarketplaceSize,
+                v.Barcodes,
+                v.Price,
+                v.Quantity,
+                v.Extra)).ToList()
+        );
     }
 
-    public async Task<Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>> ImportAllProductsAsync(
+    private async Task<List<Models.Marketplace.DTOs.ExternalProduct>> AttachMissingPricesAsync(
         MarketplaceConnection connection,
-        int pageSize = 100,
-        string? cursor = null,
-        string? offerIdFilter = null,
-        CancellationToken ct = default)
+        List<Models.Marketplace.DTOs.ExternalProduct> products,
+        CancellationToken ct)
     {
-        var context = CreateContext(connection);
-        var result = await _plugin.ImportAllProductsAsync(context, pageSize, cursor, offerIdFilter, ct);
+        if (!Capabilities.HasFlag(Marketplace.MarketplaceCapabilities.ImportPrices))
+            return products;
 
-        return new Models.Marketplace.DTOs.PagedResult<Models.Marketplace.DTOs.ExternalProduct>(
-            result.Items.Select(p => new Models.Marketplace.DTOs.ExternalProduct(
-                p.ExternalId,
-                p.Sku,
-                p.Name,
-                p.Description,
-                p.Price,
-                p.Quantity,
-                p.CategoryId,
-                p.CategoryName,
-                p.Attributes,
-                p.ImageUrls,
-                p.Barcode,
-                p.Brand,
-                p.RawData,
-                p.GroupId,
-                p.GroupName
-            )).ToList(),
-            result.HasMore,
-            result.NextCursor,
-            result.TotalCount
-        );
+        return await MarketplaceImportPrice.FillMissingAsync(
+            products,
+            (ids, token) => ImportPricesAsync(connection, ids, token),
+            ct);
     }
 
     public async Task<Models.Marketplace.DTOs.ExportResult> ExportProductAsync(

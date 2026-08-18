@@ -54,7 +54,7 @@ function faviconFor(store) {
         :model-value="selectedStoreId != null ? String(selectedStoreId) : ''"
         @update:model-value="emit('select-store', Number($event))"
       >
-        <SelectTrigger class="h-9 w-full bg-background">
+        <SelectTrigger class="h-9 w-full rounded-xl border-sidebar-border bg-card shadow-none">
           <SelectValue :placeholder="t('components.appSidebarStoreSwitcher.storePlaceholder')">
             <span
               v-if="selectedStore"
@@ -95,7 +95,7 @@ function faviconFor(store) {
 
   <div
     v-else-if="showEmptyState"
-    class="rounded-md border border-dashed bg-muted/30 px-2.5 py-2 group-data-[collapsible=icon]:hidden"
+    class="rounded-xl border border-dashed border-sidebar-border bg-card px-2.5 py-2 group-data-[collapsible=icon]:hidden"
   >
     <p class="text-xs font-medium leading-snug text-foreground">
       {{

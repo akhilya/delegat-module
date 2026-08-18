@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-23T15:26:00.000Z",
+  "generatedAt": "2026-08-17T20:00:00.000Z",
   "title": "Design System: Delegat.Module Instance",
   "extensions": {
     "colorMeta": {
@@ -156,9 +156,17 @@
       "name": "Sidebar Nav Item",
       "kind": "nav",
       "refersTo": null,
-      "description": "Quiet sidebar row; active uses restrained primary weight.",
+      "description": "Inset grouped source-list row; the current page is a primary ink pill.",
       "html": "<a class=\"ds-nav-item ds-nav-item-active\" href=\"#\">Товары</a>",
-      "css": ".ds-nav-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 0.375rem; color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; text-decoration: none; } .ds-nav-item:hover { background: oklch(0.97 0 0); } .ds-nav-item-active { background: oklch(0.97 0 0); } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; text-decoration: none; } .ds-nav-item:hover { background: oklch(0.97 0 0); } .ds-nav-item-active { background: oklch(0.205 0 0); color: oklch(0.985 0 0); font-weight: 600; } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+    },
+    {
+      "name": "Inset Grouped List",
+      "kind": "list",
+      "refersTo": null,
+      "description": "Apple Settings grouped list for tools, pickers, and settings catalogs. Paper fill, one hairline ring, equal rows; selected row is a primary ink pill.",
+      "html": "<div class=\"ds-inset-group\"><button type=\"button\" class=\"ds-inset-row ds-inset-row-selected\">Связать каталоги</button><button type=\"button\" class=\"ds-inset-row\">Инструмент адаптера</button></div>",
+      "css": ".ds-inset-group { display: flex; flex-direction: column; padding: 0.25rem; border-radius: 0.75rem; background: oklch(1 0 0); box-shadow: 0 0 0 1px color-mix(in oklch, oklch(0.76676 0.00009 271.152) 70%, transparent); } .ds-inset-row { display: flex; width: 100%; align-items: center; gap: 0.75rem; padding: 0.625rem 0.625rem; border: none; border-radius: 0.5rem; background: transparent; color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; text-align: left; cursor: pointer; } .ds-inset-row:hover { background: oklch(0.97 0 0); } .ds-inset-row-selected { background: oklch(0.205 0 0); color: oklch(0.985 0 0); font-weight: 600; } .ds-inset-row:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
     },
     {
       "name": "Status Badge Success",
@@ -185,7 +193,8 @@
       "Restrained OKLCH neutrals; semantic color for status only",
       "Flat-by-default elevation; borders and tonal layers over heavy shadows",
       "Light default + full .dark token swap",
-      "shadcn-vue primitives only; no parallel custom control kits"
+      "shadcn-vue primitives only; no parallel custom control kits",
+      "Apple Settings language for catalogs: inset grouped lists (one paper group, equal rows, one shared ring)"
     ],
     "rules": [
       {
@@ -217,6 +226,11 @@
         "name": "The Portal Stack Rule",
         "body": "Overlays follow the z-index scale in style.css. Popovers above dialogs; toasts above popovers; blocking alerts at the ceiling.",
         "section": "elevation"
+      },
+      {
+        "name": "The Inset Grouped List Rule",
+        "body": "Settings, tools, and pickers use inset grouped lists: one paper group, one shared hairline ring, equal-height rows. Not a grid of separate cards and not a nested outline on children. Current or selected row is a primary ink pill with semibold label.",
+        "section": "components"
       }
     ],
     "dos": [
@@ -224,7 +238,8 @@
       "Do reuse shadcn-vue patterns with the same spacing and visual weight across pages.",
       "Do load Onest and keep the Cyrillic-safe fallback stack; avoid system-ui.",
       "Do honor WCAG AA, visible focus, keyboard paths, and prefers-reduced-motion.",
-      "Do favor tables, forms, and dialogs that optimize for sustained catalog work."
+      "Do favor tables, forms, and dialogs that optimize for sustained catalog work.",
+      "Do use inset grouped lists for tools, pickers, and settings-style catalogs."
     ],
     "donts": [
       "Don't apply playful, colorful, or marketing-heavy aesthetics to operational tooling.",
@@ -233,7 +248,8 @@
       "Don't introduce purple-on-white / purple-to-indigo themes, neon glow, or emoji chrome.",
       "Don't use side-stripe borders as colored accents.",
       "Don't use gradient text.",
-      "Don't invent a second component kit beside components/ui."
+      "Don't invent a second component kit beside components/ui.",
+      "Don't present a catalog of tools or settings as a grid of identical cards."
     ]
   }
 }

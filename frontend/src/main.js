@@ -37,7 +37,7 @@ import {
   resolveSetupNavigation,
   PAGE_SETUP,
 } from "./lib/setupGate";
-import { fetchSetupStoreCount } from "./lib/setupStoreCount";
+import { fetchSetupState } from "./lib/setupStoreCount";
 import { loadBranding } from "./brand";
 import "./theme";
 import { resolveApiBaseUrl } from "./utils/apiBaseUrl";
@@ -333,13 +333,14 @@ router.beforeEach(async (to) => {
       to.path.startsWith(`${PAGE_SETUP}/`) ||
       canEnterSetupWizard(me);
     if (needsSetupCheck) {
-      const storeCount = await fetchSetupStoreCount({
+      const setupState = await fetchSetupState({
         force: to.path === PAGE_SETUP,
       });
       const decision = resolveSetupNavigation({
         path: to.path,
         me,
-        storeCount,
+        storeCount: setupState.count,
+        onboardingIncomplete: setupState.onboardingIncomplete,
       });
       if (decision?.redirect && decision.redirect !== to.path) {
         return { path: decision.redirect };

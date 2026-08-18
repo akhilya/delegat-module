@@ -67,7 +67,7 @@ public class ProductImportBackgroundService : BackgroundService
         _logger.LogInformation("ProductImportBackgroundService stopped");
     }
 
-    private async Task ProcessPendingImportsAsync(CancellationToken ct)
+    internal async Task ProcessPendingImportsAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
@@ -75,16 +75,60 @@ public class ProductImportBackgroundService : BackgroundService
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
-        // Fetch a batch of pending imports. Stale InProgress rows are retried after a
-        // worker restart/crash; otherwise they would keep the operation running forever.
-        var pendingImports = await context.pendingProductImports
+        var candidates = await context.pendingProductImports
             .Where(p => p.status == ProductImportStatus.Pending ||
                        (p.status == ProductImportStatus.Failed && p.retryCount < PendingProductImport.MAX_RETRIES) ||
                        (p.status == ProductImportStatus.InProgress &&
                         (p.lastAttemptAt ?? p.createdAt) < staleInProgressBefore))
             .OrderBy(p => p.createdAt)
-            .Take(BATCH_SIZE)
+            .Take(100)
             .ToListAsync(ct);
+
+        if (candidates.Count == 0)
+            return;
+
+        var connIds = candidates.Select(p => p.connectionId).Distinct().ToList();
+        var extIds = candidates
+            .Select(p => p.externalCategoryId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .ToList();
+
+        var mappingByKey = new Dictionary<(int connectionId, string externalCategoryId), int>();
+        var failedCategoryByKey = new Dictionary<(int connectionId, string externalCategoryId), string>();
+
+        if (extIds.Count > 0)
+        {
+            var mappingKeys = await context.categoryMappings.AsNoTracking()
+                .Where(m => connIds.Contains(m.connectionId)
+                            && extIds.Contains(m.externalCategoryId))
+                .Select(m => new { m.connectionId, m.externalCategoryId, m.localCategoryId })
+                .ToListAsync(ct);
+            mappingByKey = mappingKeys
+                .GroupBy(m => (m.connectionId, m.externalCategoryId))
+                .ToDictionary(g => g.Key, g => g.First().localCategoryId);
+
+            var categoryJobs = await context.pendingCategoryImports.AsNoTracking()
+                .Where(j => connIds.Contains(j.connectionId)
+                            && extIds.Contains(j.externalCategoryId)
+                            && j.status != CategoryImportStatus.Cancelled
+                            && j.status != CategoryImportStatus.Completed)
+                .ToListAsync(ct);
+            failedCategoryByKey = categoryJobs
+                .Where(j => j.status == CategoryImportStatus.Failed
+                            && j.retryCount >= PendingCategoryImport.MAX_RETRIES)
+                .GroupBy(j => (j.connectionId, j.externalCategoryId))
+                .ToDictionary(g => g.Key, g => g.First().lastError ?? "Category import failed");
+        }
+
+        var pendingImports = new List<PendingProductImport>();
+        foreach (var p in candidates)
+        {
+            if (pendingImports.Count >= BATCH_SIZE)
+                break;
+            if (IsProductImportReady(p, mappingByKey, failedCategoryByKey))
+                pendingImports.Add(p);
+        }
 
         if (pendingImports.Count == 0)
             return;
@@ -122,7 +166,10 @@ public class ProductImportBackgroundService : BackgroundService
 
             try
             {
-                await ProcessSingleImportAsync(context, productSyncService, pending, ct);
+                var quotaExhausted = await ProcessSingleImportAsync(
+                    context, productSyncService, pending, mappingByKey, failedCategoryByKey, ct);
+                if (quotaExhausted)
+                    break;
             }
             catch (Exception ex)
             {
@@ -136,10 +183,32 @@ public class ProductImportBackgroundService : BackgroundService
         }
     }
 
-    private async Task ProcessSingleImportAsync(
+    internal static bool IsProductImportReady(
+        PendingProductImport pending,
+        Dictionary<(int connectionId, string externalCategoryId), int> mappingByKey,
+        Dictionary<(int connectionId, string externalCategoryId), string> failedCategoryByKey)
+    {
+        if (pending.forceImportWithoutMapping)
+            return true;
+        if (pending.targetCategoryId != null)
+            return true;
+        if (string.IsNullOrWhiteSpace(pending.externalCategoryId))
+            return true;
+        var key = (pending.connectionId, pending.externalCategoryId);
+        if (mappingByKey.ContainsKey(key))
+            return true;
+        if (failedCategoryByKey.ContainsKey(key))
+            return true;
+        return false;
+    }
+
+    /// <returns>True when MAX_PRODUCTS was hit and the rest of the batch was failed.</returns>
+    private async Task<bool> ProcessSingleImportAsync(
         DataContext context,
         ProductSyncService productSyncService,
         PendingProductImport pending,
+        Dictionary<(int connectionId, string externalCategoryId), int> mappingByKey,
+        Dictionary<(int connectionId, string externalCategoryId), string> failedCategoryByKey,
         CancellationToken ct)
     {
         _logger.LogDebug(
@@ -150,6 +219,29 @@ public class ProductImportBackgroundService : BackgroundService
         pending.lastAttemptAt = DateTime.UtcNow;
         pending.retryCount++;
         await context.SaveChangesAsync(ct);
+
+        if (pending.targetCategoryId == null
+            && !string.IsNullOrWhiteSpace(pending.externalCategoryId)
+            && !pending.forceImportWithoutMapping)
+        {
+            var key = (pending.connectionId, pending.externalCategoryId);
+            if (failedCategoryByKey.TryGetValue(key, out var catError))
+            {
+                pending.status = ProductImportStatus.Failed;
+                pending.lastError = catError;
+                await context.SaveChangesAsync(ct);
+                if (pending.batchId != null)
+                {
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
+                        $"Skipped: {pending.externalProductId} - {catError}");
+                    await EmitBatchProgressAsync(context, pending, ct);
+                }
+                return false;
+            }
+
+            if (mappingByKey.TryGetValue(key, out var localCategoryId))
+                pending.targetCategoryId = localCategoryId;
+        }
 
         _logger.LogDebug("Product {Id} status changed to InProgress", pending.Id);
 
@@ -202,48 +294,52 @@ public class ProductImportBackgroundService : BackgroundService
             {
                 pending.status = ProductImportStatus.Failed;
                 pending.lastError = result.ErrorMessage ?? "Unknown error";
+                var quotaHit = result.ErrorCode == "product_limit_reached";
+                if (quotaHit)
+                    pending.retryCount = PendingProductImport.MAX_RETRIES;
 
                 _logger.LogWarning(
                     "Failed to import product {ExternalId}: {Error} (attempt {Retry})",
                     pending.externalProductId, pending.lastError, pending.retryCount);
 
-                if (pending.batchId != null)
+                if (pending.batchId != null && !quotaHit)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
                         $"Error: {pending.productName ?? pending.externalProductId} - {pending.lastError}");
+
+                await context.SaveChangesAsync(ct);
+
+                if (quotaHit)
+                {
+                    var skipped = await FailRemainingForQuotaAsync(context, pending, ct);
+                    if (pending.batchId != null)
+                    {
+                        var msg = skipped > 0
+                            ? $"Product limit reached. Skipped the remaining {skipped} products."
+                            : pending.lastError ?? "Product limit reached";
+                        await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error", msg);
+                    }
+                }
+
+                if (pending.batchId != null)
+                    await EmitBatchProgressAsync(context, pending, ct);
+
+                _logger.LogInformation(
+                    "Product {Id}:{ExternalId} processed, final status: {Status}",
+                    pending.Id, pending.externalProductId, pending.status);
+
+                return quotaHit;
             }
 
             await context.SaveChangesAsync(ct);
 
-            // Emit progress via SignalR
             if (pending.batchId != null)
-            {
-                var batchItems = await context.pendingProductImports
-                    .AsNoTracking()
-                    .Where(p => p.batchId == pending.batchId)
-                    .ToListAsync(ct);
-                var total = batchItems.Count;
-                var completed = batchItems.Count(p => p.status == ProductImportStatus.Completed);
-                var failed = batchItems.Count(p => p.status == ProductImportStatus.Failed);
-                await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
-
-                if (total == completed + failed)
-                {
-                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
-                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
-                        $"Imported: {completed} succeeded, {failed} failed");
-
-                    // Pre-created empty image-download child would otherwise stay running forever.
-                    await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
-                        context,
-                        _operationLogger,
-                        ct,
-                        onlyBatchId: $"{pending.batchId}-img");
-                }
-            }
+                await EmitBatchProgressAsync(context, pending, ct);
 
             _logger.LogInformation(
                 "Product {Id}:{ExternalId} processed, final status: {Status}",
                 pending.Id, pending.externalProductId, pending.status);
+
+            return false;
         }
         catch (Exception ex)
         {
@@ -254,6 +350,59 @@ public class ProductImportBackgroundService : BackgroundService
             _logger.LogError(ex,
                 "Error importing product {Id}:{ExternalId} (attempt {Retry})",
                 pending.Id, pending.externalProductId, pending.retryCount);
+
+            return false;
         }
+    }
+
+    private async Task<int> FailRemainingForQuotaAsync(
+        DataContext context,
+        PendingProductImport hit,
+        CancellationToken ct)
+    {
+        var error = hit.lastError ?? "Product limit reached";
+        IQueryable<PendingProductImport> query = context.pendingProductImports;
+        if (!string.IsNullOrEmpty(hit.batchId))
+            query = query.Where(p => p.batchId == hit.batchId);
+        else
+            query = query.Where(p => p.storeId == hit.storeId && p.batchId == null);
+
+        var rows = await query.ToListAsync(ct);
+        var remaining = ProductImportQuotaStop.RemainingForQuota(rows, hit).ToList();
+        var skipped = ProductImportQuotaStop.MarkRemainingFailed(remaining, hit.Id, error);
+        if (skipped > 0)
+            await context.SaveChangesAsync(ct);
+        return skipped;
+    }
+
+    private async Task EmitBatchProgressAsync(
+        DataContext context,
+        PendingProductImport pending,
+        CancellationToken ct)
+    {
+        if (pending.batchId == null)
+            return;
+
+        var batchItems = await context.pendingProductImports
+            .AsNoTracking()
+            .Where(p => p.batchId == pending.batchId)
+            .ToListAsync(ct);
+        var total = batchItems.Count;
+        var completed = batchItems.Count(p => p.status == ProductImportStatus.Completed);
+        var failed = batchItems.Count(p => p.status == ProductImportStatus.Failed);
+        await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
+
+        if (total != completed + failed)
+            return;
+
+        await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
+            failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+            $"Imported: {completed} succeeded, {failed} failed");
+
+        await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(
+            context,
+            _operationLogger,
+            ct,
+            onlyBatchId: $"{pending.batchId}-img");
     }
 }

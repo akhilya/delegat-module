@@ -12,11 +12,18 @@ import { mapActions } from "vuex";
 import {
   displaySonnerError,
   displaySonnerSuccess,
+  displayImportFieldsUpdated,
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
+import { useSelectedStore } from "@/composables/useSelectedStore";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
+import { formatMoney } from "@/lib/currency";
+import { displayFieldValue } from "@/lib/fieldDiff";
 import { t } from "@/i18n";
+import { randomUuidCompact } from "@/utils/uuid";
+import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
+import ImportImagesPreviewDialog from "@/components/products/ImportImagesPreviewDialog.vue";
 import {
   adapterConnectionButtonClass,
   adapterConnectionStatusLabel,
@@ -33,11 +40,18 @@ export default {
     Spinner,
     AdapterIcon,
     ProductAdapterConnectionMenu,
+    FieldChangesPreviewDialog,
+    ImportImagesPreviewDialog,
   },
   props: {
     product: { type: Object, required: true },
     connections: { type: Array, default: () => [] },
     disabled: { type: Boolean, default: false },
+  },
+  setup() {
+    const { storeBaseCurrency, loadMemberships } = useSelectedStore();
+    loadMemberships();
+    return { storeBaseCurrency };
   },
   data() {
     return {
@@ -49,6 +63,17 @@ export default {
       categoryId: null,
       categoryName: null,
       mappingSelections: {},
+      showImportPreviewDialog: false,
+      importPreviewData: null,
+      isApplyingImport: false,
+      previewLinkId: null,
+      previewConnection: null,
+      importExcludedFields: new Set(),
+      showImportImagesDialog: false,
+      importImagesPreview: null,
+      isApplyingImportImages: false,
+      importImagesLinkId: null,
+      importImagesConnection: null,
     };
   },
   computed: {
@@ -66,6 +91,33 @@ export default {
       }
       return map;
     },
+    importPreviewItems() {
+      if (!this.importPreviewData?.updatedFields) return [];
+      return [
+        {
+          fields: this.importPreviewData.updatedFields.map((field) => ({
+            key: field,
+            label: this.getFieldLabel(field),
+            oldValue: this.formatFieldValue(
+              field,
+              this.importPreviewData.oldValues[field],
+            ),
+            newValue: this.formatFieldValue(
+              field,
+              this.importPreviewData.newValues[field],
+            ),
+          })),
+        },
+      ];
+    },
+    importWarning() {
+      return this.importIrreversibleFields.length > 0
+        ? this.$t("productMarketplaceIntegrations.irreversibleFieldsWarning")
+        : null;
+    },
+    importIrreversibleFields() {
+      return this.importPreviewData?.irreversibleFields || [];
+    },
   },
   methods: {
     ...mapActions([
@@ -75,6 +127,9 @@ export default {
       "exportPrices",
       "exportStocks",
       "importFromLink",
+      "importFromLinkPreview",
+      "importImagesFromLinkPreview",
+      "importImagesFromLink",
       "unlinkProduct",
       "verifyLink",
       "setLinkPreferredExportMode",
@@ -165,7 +220,8 @@ export default {
 
     configureMappingTo(conn) {
       const query = { tab: "mappings", createMapping: "true" };
-      if (this.categoryId != null) query.localCategoryId = String(this.categoryId);
+      if (this.categoryId != null)
+        query.localCategoryId = String(this.categoryId);
       if (this.categoryName) query.localCategoryName = this.categoryName;
       return { path: `/adapter/${conn.id}`, query };
     },
@@ -366,28 +422,185 @@ export default {
       if (!linkId || !rich?.canImport) return;
       this.busyKey = `import-${conn.id}`;
       try {
-        await this.importFromLink({
+        await this.importFromLinkPreview({
           linkId,
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
-            if (result.updatedFields?.length) {
-              displaySonnerSuccess(
-                t("productMarketplaceIntegrations.updatedFieldsMessage", {
-                  fields: result.updatedFields.join(", "),
-                }),
-              );
-            } else {
+            if (!result.hasChanges) {
               displaySonnerSuccess(
                 t("productMarketplaceIntegrations.noChangesFound"),
               );
+              return;
             }
-            this.$emit("changed");
+            this.importPreviewData = result;
+            this.importExcludedFields = new Set(
+              result.irreversibleFields || [],
+            );
+            this.previewLinkId = linkId;
+            this.previewConnection = rich || this.menuConnection(conn);
+            this.showImportPreviewDialog = true;
           },
           onError: (e) => displaySonnerError(e),
         });
       } finally {
         this.busyKey = null;
       }
+    },
+
+    async confirmImport() {
+      if (!this.previewLinkId) return;
+      this.isApplyingImport = true;
+      const excludeFields = [...this.importExcludedFields];
+      const operationId = randomUuidCompact();
+      const conn = this.previewConnection;
+      await this.$store.dispatch("operations/startOperation", {
+        id: operationId,
+        type: "single-import",
+        title: t("productMarketplaceIntegrations.importTitle", {
+          id: this.product?.id,
+        }),
+        connectionId: conn?.connectionId || null,
+        connectionName: conn?.connectionName || null,
+      });
+
+      await this.importFromLink({
+        linkId: this.previewLinkId,
+        excludeFields: excludeFields.length > 0 ? excludeFields : undefined,
+        operationId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          if (result.updatedFields?.length) {
+            displayImportFieldsUpdated(result.updatedFields);
+          } else {
+            displayImportFieldsUpdated([]);
+          }
+          this.$emit("changed");
+        },
+        onError: (e) => displaySonnerError(e),
+      });
+      this.isApplyingImport = false;
+      this.cancelImport();
+    },
+
+    cancelImport() {
+      this.showImportPreviewDialog = false;
+      this.importPreviewData = null;
+      this.previewLinkId = null;
+      this.previewConnection = null;
+      this.importExcludedFields = new Set();
+    },
+
+    resetImportPreview() {
+      this.importPreviewData = null;
+      this.previewLinkId = null;
+      this.previewConnection = null;
+      this.importExcludedFields = new Set();
+    },
+
+    getFieldLabel(field) {
+      if (field.startsWith("attr:")) return field.substring(5);
+      const known = [
+        "name",
+        "description",
+        "price",
+        "storageQuantity",
+        "barcode",
+      ];
+      return known.includes(field)
+        ? t(`productMarketplaceIntegrations.fieldLabels.${field}`)
+        : field;
+    },
+
+    formatFieldValue(field, value) {
+      if (value === null || value === undefined) return null;
+      if (field === "price") {
+        return formatMoney(value, this.storeBaseCurrency);
+      }
+      return displayFieldValue(value, "");
+    },
+
+    async runImportImages(conn) {
+      const rich = this.richFor(conn);
+      const linkId = rich?.linkId || this.linkFor(conn)?.linkId;
+      if (!linkId || !this.menuConnection(conn).canImport) return;
+      this.busyKey = `import-images-${conn.id}`;
+      try {
+        await this.importImagesFromLinkPreview({
+          linkId,
+          onSuccess: (response) => {
+            const result = extractResponseData(response, {});
+            const images = result.images || [];
+            if (images.length === 0) {
+              displaySonnerSuccess(
+                t("productMarketplaceIntegrations.importImagesNoneOnAdapter"),
+              );
+              return;
+            }
+            this.importImagesPreview = result;
+            this.importImagesLinkId = linkId;
+            this.importImagesConnection = rich || this.menuConnection(conn);
+            this.showImportImagesDialog = true;
+          },
+          onError: (e) => displaySonnerError(e),
+        });
+      } finally {
+        this.busyKey = null;
+      }
+    },
+
+    async confirmImportImages(urls) {
+      if (!this.importImagesLinkId) return;
+      this.isApplyingImportImages = true;
+      const operationId = randomUuidCompact();
+      const conn = this.importImagesConnection;
+      await this.$store.dispatch("operations/startOperation", {
+        id: operationId,
+        type: "image-download",
+        title: t("productMarketplaceIntegrations.importImagesOpTitle", {
+          id: this.product?.id,
+        }),
+        connectionId: conn?.connectionId || null,
+        connectionName: conn?.connectionName || null,
+        batchType: "image-download",
+      });
+
+      await this.importImagesFromLink({
+        linkId: this.importImagesLinkId,
+        urls,
+        operationId,
+        onSuccess: (response) => {
+          const result = extractResponseData(response, {});
+          const queued = result.queued ?? 0;
+          if (queued > 0) {
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.importImagesQueuedToast", {
+                count: queued,
+              }),
+            );
+            this.$emit("changed");
+          } else {
+            displaySonnerSuccess(
+              t("productMarketplaceIntegrations.importImagesNoneSelected"),
+            );
+          }
+        },
+        onError: (e) => displaySonnerError(e),
+      });
+      this.isApplyingImportImages = false;
+      this.cancelImportImages();
+    },
+
+    cancelImportImages() {
+      this.showImportImagesDialog = false;
+      this.importImagesPreview = null;
+      this.importImagesLinkId = null;
+      this.importImagesConnection = null;
+    },
+
+    resetImportImagesPreview() {
+      this.importImagesPreview = null;
+      this.importImagesLinkId = null;
+      this.importImagesConnection = null;
     },
 
     async runVerify(conn) {
@@ -509,7 +722,10 @@ export default {
       align="start"
       :loading="detailsLoading && !detailsLoaded"
       :export-busy="busyKey === `export-${conn.id}`"
-      :import-busy="busyKey === `import-${conn.id}`"
+      :import-busy="
+        busyKey === `import-${conn.id}` ||
+        busyKey === `import-images-${conn.id}`
+      "
       :verify-busy="busyKey === `verify-${conn.id}`"
       :unlink-busy="busyKey === `unlink-${conn.id}`"
       show-link-on-product
@@ -517,6 +733,7 @@ export default {
       @export="runExport(conn)"
       @update:export-mode="setExportMode(conn, $event)"
       @import="runImport(conn)"
+      @import-images="runImportImages(conn)"
       @verify="runVerify(conn)"
       @unlink="runUnlink(conn)"
       @update:mapping="handleMappingChange(conn, $event)"
@@ -540,4 +757,30 @@ export default {
       </template>
     </ProductAdapterConnectionMenu>
   </ButtonGroup>
+  <FieldChangesPreviewDialog
+    v-if="showImportPreviewDialog"
+    :open="showImportPreviewDialog"
+    :title="$t('productMarketplaceIntegrations.importDialogTitle')"
+    :description="$t('productMarketplaceIntegrations.importDialogDescription')"
+    :items="importPreviewItems"
+    selectable
+    :excluded-fields="importExcludedFields"
+    :irreversible-fields="importIrreversibleFields"
+    :warning="importWarning"
+    :confirm-loading="isApplyingImport"
+    @update:open="(v) => (showImportPreviewDialog = v)"
+    @update:excluded-fields="importExcludedFields = $event"
+    @confirm="confirmImport"
+    @cancel="resetImportPreview"
+  />
+  <ImportImagesPreviewDialog
+    v-if="showImportImagesDialog"
+    :open="showImportImagesDialog"
+    :images="importImagesPreview?.images || []"
+    :local-gallery-count="importImagesPreview?.localGalleryCount || 0"
+    :confirm-loading="isApplyingImportImages"
+    @update:open="(v) => (showImportImagesDialog = v)"
+    @confirm="confirmImportImages"
+    @cancel="resetImportImagesPreview"
+  />
 </template>

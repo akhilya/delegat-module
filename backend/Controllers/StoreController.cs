@@ -86,7 +86,16 @@ public class StoreController : ControllerBase
             throw ApiException.Unauthorized("User not found", code: "user_not_found");
 
         var storeRepo = _unitOfWork.Repository<Store>();
-        var existingStore = await storeRepo.FindAsync(s => s.name == input.name);
+        var name = (input.name ?? "").Trim();
+        if (string.IsNullOrEmpty(name))
+            throw ApiException.BadRequest("Store name cannot be empty", code: "required_fields_missing");
+        if (name.Length > Store.STORE_NAME_MAX_LENGTH)
+            throw ApiException.BadRequest(
+                $"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters",
+                code: "store_name_too_long");
+
+        input.name = name;
+        var existingStore = await storeRepo.FindAsync(s => s.name == name);
 
         if (existingStore != null)
             throw ApiException.BadRequest("A store with this name already exists");
@@ -125,6 +134,8 @@ public class StoreController : ControllerBase
         }
 
         await storeRepo.AddWithoutSaveAsync(newStore);
+        if (!input.fromSetup)
+            newStore.onboardingCompletedAt = DateTime.UtcNow;
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(newStore.MapToDTO(_serviceProvider));
@@ -217,7 +228,9 @@ public class StoreController : ControllerBase
                 throw ApiException.BadRequest("Store name cannot be empty", code: "required_fields_missing");
 
             if (name.Length > Store.STORE_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters");
+                throw ApiException.BadRequest(
+                    $"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters",
+                    code: "store_name_too_long");
 
             var duplicate = await storeRepo.FindAsync(s => s.Id != id && s.name == name);
             if (duplicate != null)
@@ -466,6 +479,25 @@ public class StoreController : ControllerBase
     {
         await EnsureStoreExistsAsync(id);
         return Ok(await _brandingSettings.UploadFaviconAsync(id, file, ct));
+    }
+
+    /// <summary>
+    /// Marks first-run Setup as finished for this store.
+    /// </summary>
+    [HttpPost]
+    [Route("/stores/{id}/onboarding/complete")]
+    [RequiresPermission(Permissions.StoresCreate, requireStoreMembership: true)]
+    public async Task<IActionResult> CompleteOnboarding(int id)
+    {
+        var storeRepo = _unitOfWork.Repository<Store>();
+        var store = await storeRepo.GetByIdTrackingAsync(id);
+        if (store == null)
+            throw ApiException.NotFound("Store not found");
+
+        store.onboardingCompletedAt ??= DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync();
+
+        return Ok(store.MapToDTO(_serviceProvider));
     }
 
     public struct DeleteStoreForm

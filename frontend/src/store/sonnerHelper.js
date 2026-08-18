@@ -1,11 +1,21 @@
 import { toast } from "vue-sonner";
-import { t } from "@/i18n";
+import { getLocale, t } from "@/i18n";
+
+/** Stable API error code from an Axios error or payload. */
+export function apiErrorCode(errorOrPayload) {
+  const payload = errorOrPayload?.response?.data ?? errorOrPayload;
+  if (!payload || typeof payload !== "object") return "";
+  return payload.code || payload.error?.code || "";
+}
 
 /**
  * Resolve a localized API error title from response payload.
  * Prefers stable `code` → errors.* i18n key; falls back to English title/message.
  */
-export function resolveApiErrorMessage(payload, fallbackKey = "errors.generic") {
+export function resolveApiErrorMessage(
+  payload,
+  fallbackKey = "errors.generic",
+) {
   if (!payload) return t(fallbackKey);
 
   const code = payload.code || payload.error?.code;
@@ -20,10 +30,7 @@ export function resolveApiErrorMessage(payload, fallbackKey = "errors.generic") 
   }
 
   return (
-    payload.title ||
-    payload.message ||
-    payload.error?.message ||
-    t(fallbackKey)
+    payload.title || payload.message || payload.error?.message || t(fallbackKey)
   );
 }
 
@@ -113,6 +120,45 @@ function truncateDetails(value) {
 export function displaySonnerSuccess(title, action) {
   toast.success(title, {
     action,
+  });
+}
+
+function fieldUnitForCount(count) {
+  const n = Number(count) || 0;
+  if (getLocale() !== "ru") {
+    return t(
+      n === 1
+        ? "productMarketplaceIntegrations.fieldUnitOne"
+        : "productMarketplaceIntegrations.fieldUnitMany",
+    );
+  }
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) {
+    return t("productMarketplaceIntegrations.fieldUnitMany");
+  }
+  if (mod10 === 1) return t("productMarketplaceIntegrations.fieldUnitOne");
+  if (mod10 >= 2 && mod10 <= 4) {
+    return t("productMarketplaceIntegrations.fieldUnitFew");
+  }
+  return t("productMarketplaceIntegrations.fieldUnitMany");
+}
+
+/**
+ * Compact success after marketplace field import. Preview already listed the fields.
+ * @param {unknown} updatedFields
+ */
+export function displayImportFieldsUpdated(updatedFields) {
+  const count = Array.isArray(updatedFields) ? updatedFields.length : 0;
+  if (count <= 0) {
+    displaySonnerSuccess(t("productMarketplaceIntegrations.noChangesFound"));
+    return;
+  }
+  toast.success(t("productMarketplaceIntegrations.importApplied"), {
+    description: t("productMarketplaceIntegrations.updatedFieldsCount", {
+      count,
+      unit: fieldUnitForCount(count),
+    }),
   });
 }
 

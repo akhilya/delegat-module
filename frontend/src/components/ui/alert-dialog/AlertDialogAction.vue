@@ -9,7 +9,7 @@ const props = defineProps({
   as: { type: null, required: false },
   class: { type: null, required: false },
   variant: { type: null, required: false, default: "default" },
-  size: { type: null, required: false, default: "default" },
+  size: { type: null, required: false, default: "lg" },
 });
 
 const delegatedProps = reactiveOmit(props, "class", "variant", "size");
@@ -19,7 +19,16 @@ const delegatedProps = reactiveOmit(props, "class", "variant", "size");
   <AlertDialogAction
     data-slot="alert-dialog-action"
     v-bind="delegatedProps"
-    :class="cn(buttonVariants({ variant, size }), props.class)"
+    :class="
+      cn(
+        buttonVariants({ variant, size }),
+        'w-full shadow-none',
+        variant === 'outline' || variant === 'ghost' || variant === 'link'
+          ? undefined
+          : 'border border-transparent',
+        props.class,
+      )
+    "
   >
     <slot />
   </AlertDialogAction>

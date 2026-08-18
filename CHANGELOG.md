@@ -11,6 +11,30 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [1.6.0] - 2026-08-18
+
+### Added
+
+- Product edit: unsaved-changes confirm can save and leave; three actions stack full-width (Apple-style), two-action confirms stay side by side
+- Category attribute groups can have an icon (marketplace brand or a symbol); category import assigns the adapter icon to the auto-created marketplace group
+- Product category attributes: switch to a side-by-side compare view (marketplace groups as columns, similar fields on one row)
+- Linked products can import marketplace photos with a picker (Adapters menu); already-imported photos can be downloaded again as extra copies; existing gallery photos are not replaced or deleted; picker tiles show the full photo
+- Product groups: select rows and bulk-delete from a table footer (same chrome as products and logs)
+- First-run Setup adapter step: add one or more marketplace API keys (testable, skippable); wizard resumes after store create until Done
+- Creating a marketplace connection tests credentials against the adapter first; a failed test does not save the connection (Setup and Adapters)
+- A store may have several connections of the same adapter, but not two that point at the same marketplace shop (same Client ID, store URL, campaign, or API key)
+- Tools catalog (`GET /api/tools`): platform page tools plus job tools from loaded adapters (`{adapterKey}.{id}`); adapter jobs run with `POST /api/tools/{id}/run` (Operations type `tool`)
+- Catalog Connect tool (`/tools/catalog-connect`): import one marketplace catalog as the local source of truth, then bulk-link existing cards on other marketplaces by barcode or SKU
+- Catalog scrape tool (`/tools/catalog-scrape`): search a marketplace public storefront (Wildberries in v1), tick cards, and copy them into the local catalog without linking; a later export creates new listings instead of updating someone else’s card
+- Category import copies marketplace field limits (max length, min/max number, max selected values, regex) onto local category attributes; the product form enforces them
+- Category import does not create attributes for marketplace barcode / EAN / GTIN fields; the mapping graph binds them to the product barcode
+- When several adapter fields auto-bind to the same product field (e.g. `name` and `product_name`), the mapping keeps one primary binding and merges the rest as “same as another adapter field”
+- Select and multiselect category attributes can cap how many values are selected (`maxValues`); category import copies it from marketplace fields (Wildberries `MaxCount`, Ozon `MaxValueCount`), and the product form blocks extra selections
+- Select and multiselect category attributes can accept typed custom values (Wildberries characteristics, Yandex `allowCustomValues`); category import copies the flag, and the product form offers Add for a value that is not in the list
 - Honor Control Plane `API_USAGE_ENABLED` (Lite off, Pro+ on): `/api/v1` and `/swagger` return `503 API_USAGE_DISABLED` when the plan does not include API; Administration lock and hide API keys until upgrade
 - Sidebar warning icon on Settings / Administration when the instance is over plan quota (pending trim)
 - Products table **Adapters** column: ButtonGroup of store connections with status colors; each opens a sync/link menu (export, import, verify, unlink, open on marketplace / Adapters tab)
@@ -20,16 +44,74 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Instance frontend reads docs origin from runtime `DOCS_PUBLIC_URL` (injected by Control Plane at provision into `runtime-config.js`)
 - File manager: upload date/time column (store timezone); infinite scroll for store and product file lists
 - File manager: Tag action next to Upload (same button style), for selected files
+- Mapping editor shows staged loading text (adapter dictionaries, graph layout) instead of a silent spinner
 
 ### Changed
 
+- Product SKU change dialog matches other form dialogs (Field stack, no extra padding); current SKU can be copied
+- Administration → Users: edit-user dialog uses the same bar chrome, Field stack, and inset grouped lists as other Apple-style form dialogs; roles and extra permissions use trailing checks, not a primary fill on every selected row
+- Administration (Overview) uses inset grouped lists: plan usage is a Settings-style list, not progress cards
+- Settings pages (User, Stores, Users, API, Plugins, AI) use the same Apple inset grouped lists, Field stacks, and table rings as Administration
+- App sidebar uses inset grouped lists (space between sections; parent and child rows share one outline and the same row height); the current page is a primary ink pill
+- Tools catalog, Catalog Connect, and adapter job tools use the same inset grouped lists (not a grid of cards); selected connection is a primary ink pill
+- Multi-select shows selected values as pills when they fit on one line, otherwise the count summary
+- Form dialogs, side sheets, and the product photo lightbox use the same dimmed overlay (`bg-black/50`) as confirmation alerts
+- Catalog, logs, files, and import-preview tables use the shared Table primitive (sticky lists keep the page scroller)
+- Adapter connection **Create local** import dialog uses the same bar chrome and Field stack as other platform forms (category radios, full-width category picker)
+- Confirmation alerts (delete, unlink, trash) use the platform Apple-style pause: more padding, centered copy, equal-width Cancel / Confirm
+- Catalog Connect review table has a header checkbox to select or clear all visible rows (matched links and unmatched import-as-new)
+- Catalog Connect match table has column headers (local product vs marketplace connection)
+- Catalog Connect: when local products already exist, match by barcode/SKU instead of importing the other marketplace as new products; confirming a link imports that adapter’s category (or creates a local category when the product has none) and builds a mapping so export is not blocked
+- Catalog Connect recognizes adapter capabilities reported as `FullProducts` / `Basic` (Wildberries, Ozon, Yandex Market), so connections no longer look like they have no import
+- File manager: the name column takes leftover width; MIME/content type stays a compact truncated chip (full type on hover)
+- Store edit dialog keeps a stable height when switching General / Branding / Currencies / Members
+- Create-store dialog uses the same bar chrome and field stack as first-run Setup (name, currency, time zone, members switch)
+- Product group create dialog uses the same bar chrome and field stack as create store; product edit/create can open it from the group field and assign the product without leaving the page
+- First-run Setup is a full-viewport assistant: welcome, then store, look, marketplace, done. Connection status and catalog internals stay off the screen; failed marketplace tests still block save.
+- Sign-in, sign-up, and the unavailable screen share the same full-viewport canvas as Setup (large title, no card).
+- Setup wizard keeps the same column width on every step (store, look, marketplace, done).
+- Setup wizard no longer flashes the previous step when Continue advances (stable chrome, instant leave, fade-in only).
 - Products table reuses the last list/trash page for ~60s when navigating back from a product (avoids re-fetching large pages; list paints from cache without waiting on categories/attributes); cache clears after delete/restore/import/bulk/adapters changes
 - Product image hover preview (same as products table) on product group members table, add-to-group picker, and group variants sidebar
 - File manager share dialog rebuilt to Catalog Workbench patterns: Field stacks, dialog description for the item name, expiration help text, and a dedicated link field with copy
 - Products table row menu: separate **Clone to store** and **Move to store** actions; transfer dialog opens locked to that mode (no clone/move tabs)
+- Setup store and look steps submit through HTML forms (Continue is a real submit); marketplace add-connection uses a form too
+- Create/edit fields that map to database string columns cap length in the UI (store name 40, product name 100, and the rest of the same backend limits) so overlong input never reaches a server error first
+- Category import (from the category page and when importing products) runs in the background; the UI returns immediately and progress is in Operations
+- Product import queues unique category jobs first; products wait until the marketplace category is mapped (or fail if that category job is exhausted)
+- Catalog Connect confirm loads the chosen marketplace cards by id in one batch, copies mapped field values into local attributes, and shows live progress on the page and in Operations
 
 ### Fixed
 
+- Catalog scrape copies the public card into a local category after the marketplace category job finishes (name, SKU, price, and mapped attributes including storefront options such as color), instead of creating the product with an empty category
+- Catalog scrape: a Wildberries storefront 429 is returned as `rate_limited` (retry toast) instead of an unhandled 500
+- Adapter connection menu: mapping picker uses the same row layout as other actions (icon, spacing, trailing check) instead of a radio list
+- Catalog Connect no longer tries to match the same marketplace that was just imported as the source of truth (it skips that connection and fully linked catalogs, then looks up the others — e.g. Ozon import then Wildberries)
+- Catalog Connect match looks up the other marketplace by local article/barcode when there are few unlinked products, instead of paging that marketplace’s whole catalog (e.g. ten local cards vs every Wildberries nmId)
+- Catalog Connect empty-store import and “import as new” now queue marketplace categories first (same as import-selected), so products get a local category and mapping graph; linking a second adapter also creates a category when the local product has none, and already-linked cards without a mapping are repaired
+- Catalog Connect / batch product import no longer keeps processing hundreds of leftover rows after `MAX_PRODUCTS` is reached (remaining queue fails in one pass; new batches enqueue only the free slots)
+- Error logs and other settings tables show their outline again (`overflow-hidden` had clipped the ring)
+- Instance owners can no longer remove their own roles or extra permissions (that dropped `users.manage` and locked them out of Administration → Users)
+- File manager last row shows a bottom rule when the list does not scroll
+- On narrow screens, AI and background-job buttons sit in the top bar instead of reserving a right gutter for floating actions
+- Wide viewports (above 2000px, including 2K) keep 8vw page gutters so catalog tables do not stretch edge to edge; Full HD stays tight
+- Sidebar Trash link shows again (it was dropped as a duplicate of Products because both use `/products`)
+- Products table last row (and the actions column) shows a bottom rule when the list does not scroll; row height stays even with a single product
+- Product photo lightbox close, prev/next, and the 1 / N index sit on paper chips so they stay readable on the photo
+- Sidebar groups show their child links again (catalog pages, adapter connections, tools, settings). The grouped-list restyle had collapsed some lists and clipped others.
+- Products table (and other catalog tables) show names and cell text again; converting them to the shared Table had left empty white rows
+- Products table Adapters column import now shows the same field-change preview/confirm dialog as the product Adapters tab (it applied immediately before)
+- Adapter import preview no longer treats the same select/multiselect as a change when one side is labels (`другу, любимому`) and the other is JSON or marketplace dictionary ids (`901542` vs `Серый`); the dialog shows option labels
+- Adapter product import writes numbers with a dot (`1.5`, not `1,5`), booleans as `true`/`false`, and multiselect as JSON; Wildberries package size/weight and brand are copied onto the product; marketplace “required” flags stay on the mapping for export and are not copied onto local category attributes (a card often omits those fields)
+- Folder archive download from Operations no longer stops after 30 seconds (the API client timeout); the browser downloads the ZIP directly
+- Adapter product import no longer exceeds `MAX_PRODUCTS` (same cap as create); already-linked re-imports do not consume a slot
+- Wildberries product import no longer fails when `nmID` is larger than a 32-bit integer (or sent as a string)
+- Importing many products with unmapped categories no longer hits the 30s HTTP timeout; category import no longer runs inside the request
+- Setup wizard language switcher sits in the top-right corner instead of crowding the step progress dots
+- Marketplace product and category import clip overlong names (and related fields) to column limits instead of failing with a database “Data too long” 500
+- Setup and Adapters stop offering another connection after the plan connection quota is reached (`MAX_CONNECTIONS`)
+- Creating a store with a name over 40 characters is blocked in Setup and Stores; create-store API returns 400 `store_name_too_long` instead of a database error
+- Sign-up / sign-in username hint and charset errors no longer throw in the browser (`@` in the allowed-character list was parsed as a vue-i18n linked message)
 - Sign-up / sign-in: clearer validation errors for username charset (Latin / allowed symbols), password policy, duplicate username, and account lockout (instead of a generic “Bad request”)
 - File manager: empty-row Tag control matches Share icon color; permanent public shares can be revoked from the share dialog (and via context menu)
 - File manager: tag assign control is available on every file row again (not only when the file already has tags)
@@ -37,7 +119,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Administration Overview: Public API section shows the same section title/description typography as Logging and the other blocks
 - Category import: section titles (Adapter category, Where to import, Attributes to import) use shadcn FieldLegend / FieldDescription at label scale under the page heading
 - Create mapping dialog (adapter page): fixed tall height, spacing under the header before Mapping name, single bottom border (no double rule with footer), and adapter category search runs automatically after 1s idle
-- Adapter product import now fills the local product barcode from marketplace data (valid EAN-8/13, including variant barcodes); re-import preview/apply includes barcode too
+- Adapter product import fills local price from the marketplace prices API when the product card itself has no price (Wildberries content cards, and Ozon/Yandex when the offer payload omits it); field re-import does the same
 - File manager: dragging a file/folder into another folder updates the current list immediately (no page reload)
 - Products table: **Move to store** is disabled when the user has only one store membership; API rejects `mode=move` when the instance has a single store
 - Product **Clone** dialog skips the target-store picker when only one store is available (same-store duplicate)
@@ -286,7 +368,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 - Initial Delegat.Module release
 
-[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/akhilya/delegat-module/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/akhilya/delegat-module/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/akhilya/delegat-module/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/akhilya/delegat-module/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/akhilya/delegat-module/compare/v1.3.1...v1.3.2

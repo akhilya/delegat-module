@@ -76,9 +76,15 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
     /// </summary>
     public virtual ICollection<ProductGroup> productGroups { get; set; } = new List<ProductGroup>();
 
+    /// <summary>
+    /// When set, first-run Setup is finished for this store.
+    /// Null means the wizard may resume (adapters / catalog connect).
+    /// </summary>
+    public DateTime? onboardingCompletedAt { get; set; }
+
     public bool AddFill(AddForm form)
     {
-        name = form.name;
+        name = (form.name ?? "").Trim();
         if (!string.IsNullOrWhiteSpace(form.timezone))
             timezone = form.timezone.Trim();
         else if (string.IsNullOrWhiteSpace(timezone))
@@ -109,6 +115,7 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
             baseCurrency = baseCurrency,
             currencies = MapCurrencyDtos(),
             membersCount = members?.Count(m => m.isActive) ?? 0,
+            onboardingCompletedAt = onboardingCompletedAt,
         };
     }
 
@@ -126,7 +133,8 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
             {
                 id = m.Id,
                 userName = m.UserName ?? "",
-            }).ToList() ?? new List<MemberDTO>()
+            }).ToList() ?? new List<MemberDTO>(),
+            onboardingCompletedAt = onboardingCompletedAt,
         };
     }
 
@@ -178,6 +186,12 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Optional ISO 4217 base currency (defaults to <see cref="DEFAULT_BASE_CURRENCY"/>).
         /// </summary>
         public string? baseCurrency { get; set; }
+
+        /// <summary>
+        /// When true, leave <see cref="onboardingCompletedAt"/> null so Setup can resume.
+        /// Settings-created stores omit this (default false) and are marked complete.
+        /// </summary>
+        public bool fromSetup { get; set; }
     }
 
     /// <summary>
@@ -228,6 +242,11 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// Store favicon URL for switchers/lists (default CP square when unset).
         /// </summary>
         public string? faviconUrl { get; set; }
+
+        /// <summary>
+        /// When null, first-run Setup may resume on this store.
+        /// </summary>
+        public DateTime? onboardingCompletedAt { get; set; }
     }
 
     /// <summary>
@@ -257,6 +276,11 @@ public class Store : IEntity, IMapToDTO<Store.StoreDTO>, IAddable<Store.AddForm>
         /// List of store members.
         /// </summary>
         public List<MemberDTO> members { get; set; }
+
+        /// <summary>
+        /// When null, first-run Setup may resume on this store.
+        /// </summary>
+        public DateTime? onboardingCompletedAt { get; set; }
     }
 
     public struct CurrencyDTO

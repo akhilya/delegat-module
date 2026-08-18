@@ -89,10 +89,31 @@ public class ExternalCategoryEligibilityTests
             adapter, new MarketplaceConnection(), leafId);
 
         Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Category);
-        Assert.False(result.Category!.HasChildren);
         Assert.Equal(2, result.Fields.Count); // _hasSizes stripped
         Assert.DoesNotContain(result.Fields, f => f.Key == "_hasSizes");
+        Assert.Equal(0, adapter.GetCategoriesCalls);
+    }
+
+    [Fact]
+    public async Task EnsureMappable_SkipsTreeWalkWhenFieldsExist()
+    {
+        var adapter = FakeCategoryAdapter.Create(
+            root: [new ExternalCategory("parent", "Parent", HasChildren: true)],
+            children: new Dictionary<string, List<ExternalCategory>>(StringComparer.Ordinal),
+            fieldsByCategoryId: new Dictionary<string, List<ExternalField>>(StringComparer.Ordinal)
+            {
+                ["236"] =
+                [
+                    new ExternalField("sku", "SKU", true, "string"),
+                    new ExternalField("brand", "Brand", false, "string"),
+                ],
+            });
+
+        var result = await ExternalCategoryEligibility.EnsureMappableAsync(
+            adapter, new MarketplaceConnection(), "236");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, adapter.GetCategoriesCalls);
     }
 
     [Fact]
@@ -114,8 +135,9 @@ public class ExternalCategoryEligibilityTests
         Assert.Equal(leafId, found!.Id);
         Assert.False(found.HasChildren);
     }
+}
 
-    private sealed class FakeCategoryAdapter : IMarketplaceAdapter
+internal sealed class FakeCategoryAdapter : IMarketplaceAdapter
     {
         private const string RootKey = "__root__";
         private readonly Dictionary<string, List<ExternalCategory>> _categoriesByParent;
@@ -141,6 +163,8 @@ public class ExternalCategoryEligibilityTests
             return new FakeCategoryAdapter(map, fieldsByCategoryId);
         }
 
+        public int GetCategoriesCalls { get; private set; }
+
         public string Key => "fake";
         public string DisplayName => "Fake";
         public string? Description => null;
@@ -164,6 +188,7 @@ public class ExternalCategoryEligibilityTests
             string? searchQuery = null,
             CancellationToken ct = default)
         {
+            GetCategoriesCalls++;
             var key = parentId ?? RootKey;
             if (_categoriesByParent.TryGetValue(key, out var cats))
                 return Task.FromResult(cats);
@@ -218,4 +243,3 @@ public class ExternalCategoryEligibilityTests
         public Task<PagedResult<ExternalGroup>> ImportGroupsAsync(MarketplaceConnection connection, int pageSize = 100, string? cursor = null, CancellationToken ct = default)
             => throw new NotImplementedException();
     }
-}

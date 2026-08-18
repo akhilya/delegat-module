@@ -10,6 +10,7 @@ import Switch from "@/components/ui/switch/Switch.vue";
 import Label from "@/components/ui/label/Label.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Table,
   TableHead,
   TableHeader,
   TableRow,
@@ -120,6 +122,7 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
+    Table,
     TableHead,
     TableHeader,
     TableRow,
@@ -141,6 +144,7 @@ export default {
       isAddingAttribute: false,
       isDeletingAttribute: false,
       isReordering: false,
+      FIELD_LIMITS,
       showAttributeDialog: false,
       editingAttribute: null,
       attributeForm: {
@@ -353,12 +357,56 @@ export default {
     },
 
     async handleSaveAttribute() {
-      if (!this.attributeForm.name.trim()) {
+      const nameIssue = fieldLimitIssue(
+        this.attributeForm.name,
+        FIELD_LIMITS.attributeName,
+      );
+      if (nameIssue === "empty") {
         displaySonnerError(this.$t("pages.storeAttributesPage.validation.nameRequired"));
         return;
       }
-      if (!this.attributeForm.key.trim()) {
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeName }),
+        );
+        return;
+      }
+      const keyIssue = fieldLimitIssue(
+        this.attributeForm.key,
+        FIELD_LIMITS.attributeKey,
+      );
+      if (keyIssue === "empty") {
         displaySonnerError(this.$t("pages.storeAttributesPage.validation.keyRequired"));
+        return;
+      }
+      if (keyIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeKey }),
+        );
+        return;
+      }
+      if (
+        fieldLimitIssue(
+          this.attributeForm.description,
+          FIELD_LIMITS.attributeDescription,
+          { required: false },
+        ) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeDescription }),
+        );
+        return;
+      }
+      if (
+        fieldLimitIssue(
+          this.attributeForm.defaultValue,
+          FIELD_LIMITS.attributeDefault,
+          { required: false },
+        ) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeDefault }),
+        );
         return;
       }
 
@@ -708,16 +756,15 @@ export default {
       </template>
 
         <Card class="gap-0 overflow-hidden p-0 py-0">
-          <div class="overflow-x-auto">
-            <table class="w-full caption-bottom text-sm">
+          <Table>
               <TableHeader>
                 <TableRow class="hover:bg-transparent">
                   <TableHead class="w-9 px-3" />
                   <TableHead class="px-3">{{ $t("pages.storeAttributesPage.table.name") }}</TableHead>
-                  <TableHead class="hidden sm:table-cell px-3">{{ $t("pages.storeAttributesPage.table.key") }}</TableHead>
-                  <TableHead class="px-3">{{ $t("pages.storeAttributesPage.table.type") }}</TableHead>
-                  <TableHead class="hidden md:table-cell w-28 text-right px-3">{{ $t("pages.storeAttributesPage.table.options") }}</TableHead>
-                  <TableHead class="w-16 text-center px-2">{{ $t("pages.storeAttributesPage.table.requiredShort") }}</TableHead>
+                  <TableHead class="hidden w-40 px-3 sm:table-cell">{{ $t("pages.storeAttributesPage.table.key") }}</TableHead>
+                  <TableHead class="w-32 px-3">{{ $t("pages.storeAttributesPage.table.type") }}</TableHead>
+                  <TableHead class="hidden w-28 px-3 text-right md:table-cell">{{ $t("pages.storeAttributesPage.table.options") }}</TableHead>
+                  <TableHead class="w-16 px-2 text-center">{{ $t("pages.storeAttributesPage.table.requiredShort") }}</TableHead>
                   <TableHead class="hidden lg:table-cell px-3">{{ $t("pages.storeAttributesPage.table.description") }}</TableHead>
                   <TableHead class="w-24 px-2" />
                 </TableRow>
@@ -743,8 +790,8 @@ export default {
                         {{ attribute.key }}
                       </span>
                     </TableCell>
-                    <TableCell class="hidden sm:table-cell px-3 font-mono text-xs text-muted-foreground">
-                      {{ attribute.key }}
+                    <TableCell class="text-muted-foreground hidden max-w-0 px-3 font-mono text-xs sm:table-cell">
+                      <span class="block truncate">{{ attribute.key }}</span>
                     </TableCell>
                     <TableCell class="px-3 text-muted-foreground">
                       {{ getAttributeTypeLabel(attribute.type) }}
@@ -761,8 +808,8 @@ export default {
                       >{{ $t("pages.storeAttributesPage.dialog.uniqueBadge") }}</span>
                       <span v-if="!attribute.isRequired && !attribute.isUnique">-</span>
                     </TableCell>
-                    <TableCell class="hidden lg:table-cell px-3 text-muted-foreground max-w-xs truncate">
-                      {{ attribute.description || "-" }}
+                    <TableCell class="text-muted-foreground hidden max-w-0 px-3 lg:table-cell">
+                      <span class="block truncate">{{ attribute.description || "-" }}</span>
                     </TableCell>
                     <TableCell class="px-2">
                       <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
@@ -809,8 +856,7 @@ export default {
                   </TableRow>
                 </template>
               </draggable>
-            </table>
-          </div>
+          </Table>
         </Card>
     </PageSection>
 
@@ -839,6 +885,7 @@ export default {
                     id="store-attr-name"
                     v-model="attributeForm.name"
                     :placeholder="$t('pages.storeAttributesPage.dialog.namePlaceholder')"
+                    :maxlength="FIELD_LIMITS.attributeName"
                     @input="!editingAttribute && generateKey()"
                   />
                 </SettingsFormField>
@@ -849,6 +896,7 @@ export default {
                     v-model="attributeForm.key"
                     placeholder="brand, country, sku"
                     class="font-mono text-sm"
+                    :maxlength="FIELD_LIMITS.attributeKey"
                   />
                 </SettingsFormField>
               </div>
@@ -984,6 +1032,7 @@ export default {
                   v-model="attributeForm.defaultValue"
                   :placeholder="attributeForm.type === 4 ? $t('pages.storeAttributesPage.dialog.multiValuePlaceholder') : $t('pages.storeAttributesPage.dialog.optionalPlaceholder')"
                   :type="attributeForm.type === 1 ? 'number' : 'text'"
+                  :maxlength="FIELD_LIMITS.attributeDefault"
                 />
                 <template
                   v-if="attributeForm.type === 4 && editingOptionsCount"
@@ -999,6 +1048,7 @@ export default {
                   v-model="attributeForm.description"
                   :placeholder="$t('pages.storeAttributesPage.dialog.descriptionPlaceholder')"
                   class="min-h-20 resize-none"
+                  :maxlength="FIELD_LIMITS.attributeDescription"
                 />
               </SettingsFormField>
 

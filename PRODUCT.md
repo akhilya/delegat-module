@@ -27,7 +27,7 @@ Professional, Organized, Trustworthy — in the spirit of Notion or Linear. Comp
 
 1. **Clarity over decoration** — every element serves a purpose; no ornamental UI. Structure is carried by whitespace, type weight, and layout hierarchy.
 2. **Data density with breathing room** — show enough to be efficient across tables and forms, but keep comfortable spacing so the interface never feels cramped.
-3. **Consistent patterns** — reuse the established component library (Card, Table, Form, Dialog) uniformly: same spacing, same interaction patterns, same visual weight across pages.
+3. **Consistent patterns** — reuse the established component library (Table, Form, Dialog, inset grouped lists) uniformly: same spacing, same interaction patterns, same visual weight across pages. Catalogs of tools and settings are grouped lists, not card grids.
 4. **Semantic color only** — neutral palette by default; reserve color for status and actions (destructive / warning / success) so attention stays on content, not chrome.
 5. **Accessible by default** — WCAG AA: sufficient contrast, visible focus states, proper ARIA, full keyboard navigation.
 

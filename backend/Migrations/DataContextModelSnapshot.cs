@@ -350,6 +350,11 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("allowCustomValues")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("categoryId")
                         .HasColumnType("int");
 
@@ -370,6 +375,10 @@ namespace Delegat.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<string>("groupIcon")
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
                     b.Property<bool>("isMultiline")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
@@ -385,6 +394,20 @@ namespace Delegat.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("maxLength")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("maxValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<int?>("maxValues")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("minValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
 
                     b.Property<string>("name")
                         .IsRequired()
@@ -404,6 +427,10 @@ namespace Delegat.Migrations
 
                     b.Property<int>("type")
                         .HasColumnType("int");
+
+                    b.Property<string>("validationPattern")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.HasKey("Id");
 
@@ -510,6 +537,10 @@ namespace Delegat.Migrations
                     b.Property<string>("publicToken")
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
+
+                    b.Property<string>("sourceUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("varchar(2048)");
 
                     b.Property<DateTime>("uploadDateTime")
                         .HasColumnType("datetime(6)");
@@ -1275,6 +1306,82 @@ namespace Delegat.Migrations
                     b.ToTable("operationLogEntries");
                 });
 
+            modelBuilder.Entity("Delegat.Models.PendingCategoryImport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("externalCategoryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("externalCategoryName")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("localCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("localCategoryName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int?>("resultLocalCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("resultMappingId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("retryCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("selectedFieldKeysJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("operationId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.HasIndex("connectionId", "externalCategoryId", "status");
+
+                    b.ToTable("pendingCategoryImports");
+                });
+
             modelBuilder.Entity("Delegat.Models.PendingFolderJob", b =>
                 {
                     b.Property<int>("Id")
@@ -1539,9 +1646,16 @@ namespace Delegat.Migrations
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("externalCategoryId")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("externalProductId")
                         .IsRequired()
                         .HasColumnType("longtext");
+
+                    b.Property<bool>("forceImportWithoutMapping")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<int?>("importedProductId")
                         .HasColumnType("int");
@@ -1572,6 +1686,8 @@ namespace Delegat.Migrations
                     b.HasIndex("batchId");
 
                     b.HasIndex("importedProductId");
+
+                    b.HasIndex("connectionId", "externalCategoryId");
 
                     b.HasIndex("status", "createdAt");
 
@@ -2087,6 +2203,9 @@ namespace Delegat.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("onboardingCompletedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("timezone")
                         .IsRequired()

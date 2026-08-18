@@ -308,7 +308,7 @@ export default {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead class="w-12">
+                <TableHead class="w-10">
                   <Checkbox
                     :model-value="allPageSelected"
                     :indeterminate="somePageSelected"
@@ -329,11 +329,11 @@ export default {
                     @update:model-value="(v) => toggleRow(row, v === true)"
                   />
                 </TableCell>
-                <TableCell class="font-medium">
+                <TableCell class="max-w-0 font-medium whitespace-normal">
                   <span class="line-clamp-2">{{ row.name }}</span>
                 </TableCell>
-                <TableCell class="font-mono text-sm text-muted-foreground">
-                  {{ row.sku || "-" }}
+                <TableCell class="text-muted-foreground max-w-0 font-mono text-sm">
+                  <span class="block truncate">{{ row.sku || "-" }}</span>
                 </TableCell>
                 <TableCell>
                   <BarcodeCell :barcode="row.barcode" />

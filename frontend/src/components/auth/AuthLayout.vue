@@ -1,137 +1,156 @@
 <script setup>
 import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
-import { Card, CardContent } from "@/components/ui/card";
-import { brandLogo, brandName } from "@/brand";
-import { computed } from "vue";
+import { brandLogo } from "@/brand";
 
-const props = defineProps({
-  /** Page action under the brand (e.g. Sign in / Sign up) */
+defineProps({
+  /** Large page title (Sign in / Create your account). */
   title: { type: String, required: true },
-  /**
-   * Card width: default (auth), wide (short wizard), xl (branding / multi-column).
-   * Boolean `wide` is a legacy alias for size="wide".
-   */
-  size: {
+  subtitle: { type: String, default: "" },
+  /** center: short screens (sign-in). start: taller forms (sign-up). */
+  align: {
     type: String,
-    default: "default",
-    validator: (v) => ["default", "wide", "xl"].includes(v),
+    default: "center",
+    validator: (v) => ["center", "start"].includes(v),
   },
-  /** @deprecated Prefer size="wide" */
-  wide: { type: Boolean, default: false },
-});
-
-const centerClass = computed(() => {
-  const size = props.size !== "default" ? props.size : (props.wide ? "wide" : "default");
-  if (size === "xl") return "auth-center--xl";
-  if (size === "wide") return "auth-center--wide";
-  return undefined;
 });
 </script>
 
 <template>
   <main class="auth-shell">
-    <div class="auth-lang">
-      <LanguageSwitcher variant="corner" />
+    <header class="auth-chrome">
+      <div class="auth-chrome-spacer" aria-hidden="true" />
+      <div class="auth-lang">
+        <LanguageSwitcher variant="corner" />
+      </div>
+    </header>
+
+    <div class="auth-main" :class="{ 'auth-main--start': align === 'start' }">
+      <div class="auth-panel">
+        <header class="auth-heading">
+          <Logo v-if="brandLogo" class="auth-logo" />
+          <h1 class="auth-title">{{ title }}</h1>
+          <p v-if="subtitle" class="auth-subtitle">{{ subtitle }}</p>
+        </header>
+        <div class="auth-body">
+          <slot />
+        </div>
+      </div>
     </div>
 
-    <div class="auth-center" :class="centerClass">
-      <header class="auth-brand">
-        <Logo v-if="brandLogo" class="auth-logo" />
-        <h1 class="auth-brand-name">{{ brandName }}</h1>
-        <p class="auth-title">{{ title }}</p>
-      </header>
-
-      <Card class="auth-card gap-0 py-6">
-        <CardContent class="auth-card-body">
-          <slot />
-        </CardContent>
-      </Card>
-
-      <p v-if="$slots.footer" class="auth-footer">
+    <footer v-if="$slots.footer" class="auth-footer-wrap">
+      <p class="auth-footer">
         <slot name="footer" />
       </p>
-    </div>
+    </footer>
   </main>
 </template>
 
 <style scoped>
 .auth-shell {
-  position: relative;
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   background: var(--sidebar);
   color: var(--foreground);
 }
 
-.auth-lang {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
+.auth-chrome {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 1.25rem 1.5rem 0.5rem;
 }
 
-.auth-center {
+.auth-chrome-spacer {
+  min-height: 2.25rem;
+}
+
+.auth-lang {
+  justify-self: end;
+}
+
+.auth-main {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: auto;
+  padding: 2vh 1.5rem 1.5rem;
+}
+
+.auth-main--start {
+  align-items: flex-start;
+  padding-top: 6vh;
+}
+
+.auth-panel {
   width: 100%;
-  max-width: 22.5rem;
+  max-width: 26rem;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 1.5rem;
-  animation: auth-enter 280ms ease-out both;
+  gap: 1.75rem;
+  animation: auth-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.auth-center--wide {
-  max-width: 26rem;
-}
-
-.auth-center--xl {
-  max-width: 36rem;
-}
-
-.auth-brand {
+.auth-heading {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.375rem;
+  gap: 0.75rem;
 }
 
 .auth-logo {
-  width: 2.75rem !important;
+  width: 3.25rem !important;
   height: auto;
+  margin-bottom: 0.25rem;
   opacity: 1 !important;
-  margin-bottom: 0.375rem;
-}
-
-.auth-brand-name {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 650;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: var(--foreground);
 }
 
 .auth-title {
-  font-size: 0.875rem;
-  line-height: 1.35;
+  font-family: var(--font-display);
+  font-size: 2.375rem;
+  font-weight: 650;
+  letter-spacing: -0.038em;
+  line-height: 1.05;
+  color: var(--foreground);
+}
+
+.auth-subtitle {
+  max-width: 40ch;
+  font-size: 1.0625rem;
+  line-height: 1.45;
+  letter-spacing: -0.011em;
   color: var(--muted-foreground);
 }
 
-.auth-card-body {
+.auth-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
+}
+
+.auth-body :deep(.auth-submit) {
+  min-width: 10rem;
+  transition: transform 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-body :deep(.auth-submit:active:not(:disabled)) {
+  transform: scale(0.97);
+}
+
+.auth-footer-wrap {
+  padding: 0.75rem 1.5rem 1.75rem;
 }
 
 .auth-footer {
+  width: 100%;
+  max-width: 26rem;
+  margin: 0 auto;
   text-align: center;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
   color: var(--muted-foreground);
-  line-height: 1.4;
 }
 
 .auth-footer :deep(a) {
@@ -148,7 +167,7 @@ const centerClass = computed(() => {
 @keyframes auth-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -157,8 +176,24 @@ const centerClass = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-center {
+  .auth-panel {
     animation: none;
+  }
+
+  .auth-body :deep(.auth-submit:active:not(:disabled)) {
+    transform: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .auth-body :deep(.auth-submit) {
+    width: 100%;
+  }
+}
+
+@media (min-width: 640px) {
+  .auth-title {
+    font-size: 2.75rem;
   }
 }
 </style>

@@ -21,6 +21,11 @@ public sealed class FieldSpec
     public int? sourceAttributeId { get; set; }
     public string? modifiersJson { get; set; }
     public string? staticValue { get; set; }
+    /// <summary>
+    /// When set, this field is an alias of another adapter field (by <see cref="externalFieldKey"/>).
+    /// Export copies the primary's value; import ignores the alias.
+    /// </summary>
+    public string? aliasOf { get; set; }
 }
 
 /// <summary>
@@ -94,8 +99,10 @@ public static class GraphGenerator
         var seq = 0;
         string NewId(string prefix) => $"{prefix}{seq++}";
 
+        var cardSpecs = AliasDuplicateProductFieldSources(
+            specs.Where(f => f.isEnabled).ToList());
         var cardFields = AppendSpecsToSink(
-            specs.Where(f => f.isEnabled).OrderBy(f => f.sortOrder),
+            cardSpecs.OrderBy(f => f.sortOrder),
             "adapter-fields", nodes, edges, NewId);
 
         nodes.Add(new GraphNode
@@ -105,10 +112,11 @@ public static class GraphGenerator
             data = new GraphNodeData { fields = cardFields },
         });
 
-        var priceList = priceSpecs?.Where(f => f.isEnabled).OrderBy(f => f.sortOrder).ToList();
+        var priceList = AliasDuplicateProductFieldSources(
+            priceSpecs?.Where(f => f.isEnabled).ToList() ?? []);
         if (priceList is { Count: > 0 })
         {
-            var priceFields = AppendSpecsToSink(priceList, "adapter-price-fields", nodes, edges, NewId);
+            var priceFields = AppendSpecsToSink(priceList.OrderBy(f => f.sortOrder), "adapter-price-fields", nodes, edges, NewId);
             nodes.Add(new GraphNode
             {
                 id = "adapter-price-fields",
@@ -137,6 +145,13 @@ public static class GraphGenerator
                 outputType = fm.externalFieldType ?? "string",
                 isRequired = fm.isRequired,
             };
+
+            if (!string.IsNullOrEmpty(fm.aliasOf))
+            {
+                field.aliasOf = fm.aliasOf;
+                fields.Add(field);
+                continue;
+            }
 
             var mods = ParseActiveModifiers(fm.modifiersJson);
 
@@ -209,7 +224,9 @@ public static class GraphGenerator
             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
             .Select(f => f.fieldKey!));
 
-        foreach (var fm in specs.Where(f => f.isEnabled).OrderBy(f => f.sortOrder))
+        var incoming = AliasDuplicateProductFieldSources(
+            specs.Where(f => f.isEnabled).ToList());
+        foreach (var fm in incoming.OrderBy(f => f.sortOrder))
         {
             if (string.IsNullOrEmpty(fm.externalFieldKey) || have.Contains(fm.externalFieldKey))
                 continue;
@@ -219,7 +236,10 @@ public static class GraphGenerator
                 label = fm.externalFieldName ?? fm.externalFieldKey,
                 outputType = fm.externalFieldType ?? "string",
                 isRequired = fm.isRequired,
-                source = ParseActiveModifiers(fm.modifiersJson).Count == 0 ? DirectBinding(fm) : null,
+                aliasOf = fm.aliasOf,
+                source = string.IsNullOrEmpty(fm.aliasOf) && ParseActiveModifiers(fm.modifiersJson).Count == 0
+                    ? DirectBinding(fm)
+                    : null,
             });
             have.Add(fm.externalFieldKey);
         }
@@ -269,7 +289,9 @@ public static class GraphGenerator
             adapter.data.fields ??= new List<AdapterField>();
         }
 
-        foreach (var fm in specs.Where(f => f.isEnabled).OrderBy(f => f.sortOrder))
+        var incoming = AliasDuplicateProductFieldSources(
+            specs.Where(f => f.isEnabled).ToList());
+        foreach (var fm in incoming.OrderBy(f => f.sortOrder))
         {
             if (string.IsNullOrEmpty(fm.externalFieldKey))
                 continue;
@@ -319,7 +341,11 @@ public static class GraphGenerator
                 label = migratedLabel ?? fm.externalFieldName ?? fm.externalFieldKey,
                 outputType = migratedType ?? fm.externalFieldType ?? "string",
                 isRequired = migratedRequired ?? fm.isRequired,
-                source = migratedSource ?? (ParseActiveModifiers(fm.modifiersJson).Count == 0 ? DirectBinding(fm) : null),
+                aliasOf = fm.aliasOf,
+                source = migratedSource ?? (string.IsNullOrEmpty(fm.aliasOf)
+                    && ParseActiveModifiers(fm.modifiersJson).Count == 0
+                    ? DirectBinding(fm)
+                    : null),
             });
             have.Add(fm.externalFieldKey);
         }
@@ -327,18 +353,71 @@ public static class GraphGenerator
         return JsonSerializer.Serialize(graph, SerializeOpts);
     }
 
-    private static AdapterFieldSource? DirectBinding(FieldSpec fm) => fm.sourceType switch
+    /// <summary>
+    /// When several adapter fields auto-bind to the same product field (e.g. <c>name</c> and
+    /// <c>product_name</c>), keep one primary on that product field and merge the rest via
+    /// <see cref="FieldSpec.aliasOf"/> ("same as another adapter field").
+    /// </summary>
+    internal static List<FieldSpec> AliasDuplicateProductFieldSources(List<FieldSpec> specs)
     {
-        FieldMappingSourceType.CategoryAttribute when fm.sourceAttributeId != null =>
-            new AdapterFieldSource { type = "attribute", attributeId = fm.sourceAttributeId },
-        FieldMappingSourceType.StoreAttribute when fm.sourceAttributeId != null =>
-            new AdapterFieldSource { type = "storeAttribute", attributeId = fm.sourceAttributeId },
-        FieldMappingSourceType.ProductField when !string.IsNullOrEmpty(fm.sourceField) =>
-            new AdapterFieldSource { type = "productField", field = fm.sourceField },
-        FieldMappingSourceType.GroupName =>
-            new AdapterFieldSource { type = "groupName" },
-        _ => null,
-    };
+        var groups = specs
+            .Where(s =>
+                string.IsNullOrEmpty(s.aliasOf) &&
+                s.sourceType == FieldMappingSourceType.ProductField &&
+                !string.IsNullOrEmpty(s.sourceField))
+            .GroupBy(s => s.sourceField!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            var members = group.ToList();
+            if (members.Count < 2)
+                continue;
+
+            var primary = PickPrimaryProductField(members);
+            foreach (var other in members)
+            {
+                if (ReferenceEquals(other, primary))
+                    continue;
+                other.aliasOf = primary.externalFieldKey;
+                other.sourceType = FieldMappingSourceType.Static;
+                other.sourceField = null;
+                other.sourceAttributeId = null;
+                other.staticValue = null;
+            }
+        }
+
+        return specs;
+    }
+
+    private static FieldSpec PickPrimaryProductField(List<FieldSpec> members)
+    {
+        var target = members[0].sourceField ?? "";
+        return members
+            .OrderByDescending(m =>
+                string.Equals(m.externalFieldKey, target, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(m => m.sortOrder)
+            .ThenBy(m => m.externalFieldKey.Length)
+            .ThenBy(m => m.externalFieldKey, StringComparer.OrdinalIgnoreCase)
+            .First();
+    }
+
+    private static AdapterFieldSource? DirectBinding(FieldSpec fm)
+    {
+        if (!string.IsNullOrEmpty(fm.aliasOf))
+            return null;
+        return fm.sourceType switch
+        {
+            FieldMappingSourceType.CategoryAttribute when fm.sourceAttributeId != null =>
+                new AdapterFieldSource { type = "attribute", attributeId = fm.sourceAttributeId },
+            FieldMappingSourceType.StoreAttribute when fm.sourceAttributeId != null =>
+                new AdapterFieldSource { type = "storeAttribute", attributeId = fm.sourceAttributeId },
+            FieldMappingSourceType.ProductField when !string.IsNullOrEmpty(fm.sourceField) =>
+                new AdapterFieldSource { type = "productField", field = fm.sourceField },
+            FieldMappingSourceType.GroupName =>
+                new AdapterFieldSource { type = "groupName" },
+            _ => null,
+        };
+    }
 
     private static GraphNode MakeSourceNode(FieldSpec fm, Func<string, string> newId)
     {

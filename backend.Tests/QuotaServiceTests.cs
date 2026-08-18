@@ -5,6 +5,7 @@ using Delegat.Tests.Infrastructure;
 
 namespace Delegat.Tests;
 
+[Collection("EnvVars")]
 public class QuotaServiceTests
 {
     private static (DataContext db, QuotaService quota, TestDataBuilder data) Create()
@@ -64,6 +65,43 @@ public class QuotaServiceTests
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureProductQuotaAsync(store.Id));
         Assert.Equal(409, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetRemainingProductSlots_Unlimited_IsNull()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", null);
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        Assert.Null(await quota.GetRemainingProductSlotsAsync(store.Id));
+    }
+
+    [Fact]
+    public async Task GetRemainingProductSlots_AtLimit_IsZero()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "1");
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        Assert.Equal(0, await quota.GetRemainingProductSlotsAsync(store.Id));
+    }
+
+    [Fact]
+    public async Task GetRemainingProductSlots_UnderLimit_ReturnsDifference()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "10");
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        data.AddProduct(store.Id);
+        await data.SaveAsync();
+
+        Assert.Equal(8, await quota.GetRemainingProductSlotsAsync(store.Id));
     }
 
     [Fact]

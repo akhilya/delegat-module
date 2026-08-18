@@ -22,6 +22,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 export default {
   components: {
@@ -64,6 +65,7 @@ export default {
       importSelectedFieldKeys: [],
       isLoadingFields: false,
       isImporting: false,
+      FIELD_LIMITS,
 
       externalCategorySearch: "",
       currentParentId: null,
@@ -311,7 +313,19 @@ export default {
         },
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
-          displaySonnerSuccess(result.message || this.$t("marketplace.categoryImportPage.categoryImported"));
+          if (result.alreadyMapped) {
+            displaySonnerSuccess(
+              this.$t("marketplace.categoryImportPage.alreadyMapped"),
+            );
+          } else if (result.queued) {
+            displaySonnerSuccess(
+              this.$t("marketplace.categoryImportPage.categoryQueued"),
+            );
+          } else {
+            displaySonnerSuccess(
+              result.message || this.$t("marketplace.categoryImportPage.categoryImported"),
+            );
+          }
           this.$router.push(`/adapter/${this.connectionId}?tab=mappings`);
         },
         onError: (error) => {

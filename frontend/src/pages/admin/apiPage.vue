@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import { FieldGroup } from "@/components/ui/field";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import {
   Table,
   TableBody,
@@ -21,6 +28,7 @@ import {
   displaySonnerSuccess,
 } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
   Copy,
@@ -36,6 +44,11 @@ export default {
     Button,
     Badge,
     Input,
+    SettingsFormField,
+    FieldGroup,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Table,
     TableBody,
     TableCell,
@@ -60,6 +73,7 @@ export default {
       apiKeys: [],
       apiKeysLoading: false,
       newKeyName: "",
+      FIELD_LIMITS,
       isCreatingKey: false,
       createdPlaintext: null,
       revokingId: null,
@@ -110,8 +124,18 @@ export default {
     },
 
     async createApiKey() {
+      const nameIssue = fieldLimitIssue(
+        this.newKeyName,
+        FIELD_LIMITS.apiKeyName,
+      );
+      if (nameIssue === "empty") return;
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.apiKeyName }),
+        );
+        return;
+      }
       const name = this.newKeyName.trim();
-      if (!name) return;
       this.isCreatingKey = true;
       try {
         const response = await http.post("/api-keys", { name }, { cache: false });
@@ -190,55 +214,70 @@ export default {
   >
     <div
       v-if="!publicApiEnabled"
-      class="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
+      class="mb-6 max-w-xl"
     >
-      {{ $t("pages.apiPage.disabledBanner") }}
+      <InsetGroup>
+        <InsetGroupItem as="div">
+          <template #leading>
+            <KeyRound class="size-4" />
+          </template>
+          <p>{{ $t("pages.apiPage.disabledBanner") }}</p>
+        </InsetGroupItem>
+      </InsetGroup>
     </div>
 
     <div v-show="showKeys" class="keys-panel">
       <PageSection>
-        <div
-          v-if="createdPlaintext"
-          class="mb-5 flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 sm:max-w-2xl"
-        >
-          <div class="text-sm font-medium">{{ $t("pages.apiPage.keys.copyWarning") }}</div>
-          <div class="flex flex-wrap items-center gap-2">
-            <code class="break-all text-xs">{{ createdPlaintext }}</code>
-            <Button variant="outline" size="sm" @click="copyPlaintext">
-              <Copy class="mr-1 size-3.5" />
-              {{ $t("common.copy") }}
+        <section v-if="createdPlaintext" class="mb-6 max-w-xl">
+          <InsetGroupLabel>{{ $t("pages.apiPage.keys.copyWarning") }}</InsetGroupLabel>
+          <InsetGroup>
+            <InsetGroupItem as="div">
+              <code class="block break-all text-xs">{{ createdPlaintext }}</code>
+              <template #trailing>
+                <Button variant="outline" size="sm" @click="copyPlaintext">
+                  <Copy class="mr-1 size-3.5" />
+                  {{ $t("common.copy") }}
+                </Button>
+              </template>
+            </InsetGroupItem>
+          </InsetGroup>
+        </section>
+
+        <form class="mb-6 max-w-xl" @submit.prevent="createApiKey">
+          <FieldGroup class="gap-3 sm:flex-row sm:items-end">
+            <SettingsFormField
+              class="min-w-0 flex-1"
+              :label="$t('pages.apiPage.keys.nameLabel')"
+              label-for="api-key-name"
+            >
+              <Input
+                id="api-key-name"
+                v-model="newKeyName"
+                :placeholder="$t('pages.apiPage.keys.namePlaceholder')"
+                :disabled="isCreatingKey"
+                :maxlength="FIELD_LIMITS.apiKeyName"
+              />
+            </SettingsFormField>
+            <Button type="submit" class="shrink-0" :disabled="isCreatingKey || !newKeyName.trim()">
+              <Spinner v-if="isCreatingKey" class="mr-2" />
+              <KeyRound v-else class="mr-2 size-4" />
+              {{ $t("pages.apiPage.keys.create") }}
+            </Button>
+          </FieldGroup>
+          <div class="mt-2 px-1">
+            <Button
+              as="a"
+              href="/swagger"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="link"
+              class="h-auto px-0 text-xs"
+            >
+              {{ $t("pages.apiPage.openSwagger") }}
+              <ExternalLink class="size-3.5" />
             </Button>
           </div>
-        </div>
-
-        <div class="mb-5 flex flex-wrap items-end gap-3">
-          <div class="grid min-w-[220px] max-w-md flex-1 gap-1.5">
-            <label class="text-sm font-medium" for="api-key-name">{{ $t("pages.apiPage.keys.nameLabel") }}</label>
-            <Input
-              id="api-key-name"
-              v-model="newKeyName"
-              :placeholder="$t('pages.apiPage.keys.namePlaceholder')"
-              :disabled="isCreatingKey"
-              @keydown.enter="createApiKey"
-            />
-          </div>
-          <Button :disabled="isCreatingKey || !newKeyName.trim()" @click="createApiKey">
-            <Spinner v-if="isCreatingKey" class="mr-2" />
-            <KeyRound v-else class="mr-2 size-4" />
-            {{ $t("pages.apiPage.keys.create") }}
-          </Button>
-          <Button
-            as="a"
-            href="/swagger"
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="link"
-            class="h-9 px-0"
-          >
-            {{ $t("pages.apiPage.openSwagger") }}
-            <ExternalLink class="size-3.5" />
-          </Button>
-        </div>
+        </form>
 
         <div v-if="apiKeysLoading" class="flex min-h-[12rem] flex-1 items-center justify-center">
           <Spinner size="2xl" class="text-muted-foreground" />
@@ -266,7 +305,9 @@ export default {
               </TableHeader>
               <TableBody>
                 <TableRow v-for="key in apiKeys" :key="key.id">
-                  <TableCell class="font-medium">{{ key.name }}</TableCell>
+                  <TableCell class="max-w-0 font-medium">
+                    <span class="block truncate" :title="key.name">{{ key.name }}</span>
+                  </TableCell>
                   <TableCell>
                     <code class="text-xs text-muted-foreground">{{ key.displayHint }}</code>
                   </TableCell>
@@ -312,7 +353,7 @@ export default {
 
     <div
       v-if="showLogs && !logsEnabled"
-      class="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground"
+      class="rounded-xl px-4 py-8 text-center text-sm text-muted-foreground ring-1 ring-border/70"
     >
       {{ $t("pages.apiPage.logs.disabledHint") }}
     </div>

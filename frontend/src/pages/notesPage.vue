@@ -402,11 +402,11 @@ export default {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead class="w-36">{{ $t("pages.notesPage.columnImportance") }}</TableHead>
+                <TableHead class="w-32">{{ $t("pages.notesPage.columnImportance") }}</TableHead>
                 <TableHead>{{ $t("pages.notesPage.columnNote") }}</TableHead>
-                <TableHead class="w-56">{{ $t("pages.notesPage.columnProduct") }}</TableHead>
-                <TableHead class="w-40">{{ $t("pages.notesPage.columnAuthor") }}</TableHead>
-                <TableHead class="w-44">{{ $t("pages.notesPage.columnCreated") }}</TableHead>
+                <TableHead class="w-48">{{ $t("pages.notesPage.columnProduct") }}</TableHead>
+                <TableHead class="w-36">{{ $t("pages.notesPage.columnAuthor") }}</TableHead>
+                <TableHead class="w-40">{{ $t("pages.notesPage.columnCreated") }}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -424,28 +424,28 @@ export default {
                     {{ importanceLabel(row.importance) }}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  <p class="line-clamp-2 whitespace-pre-wrap text-sm">
+                <TableCell class="max-w-0 whitespace-normal">
+                  <p class="line-clamp-2 text-sm whitespace-pre-wrap">
                     {{ row.text || $t("common.emDash") }}
                   </p>
                 </TableCell>
-                <TableCell>
+                <TableCell class="max-w-0">
                   <RouterLink
                     :to="productEditTo(row)"
-                    class="block font-medium text-foreground hover:underline"
+                    class="text-foreground block font-medium hover:underline"
                     @click.stop
                   >
                     <span class="line-clamp-1">{{ row.productName }}</span>
                   </RouterLink>
                   <p
                     v-if="row.productSku"
-                    class="mt-0.5 font-mono text-xs text-muted-foreground tabular-nums"
+                    class="text-muted-foreground mt-0.5 truncate font-mono text-xs tabular-nums"
                   >
                     {{ row.productSku }}
                   </p>
                 </TableCell>
-                <TableCell class="text-sm text-muted-foreground">
-                  {{ row.authorUserName || $t("pages.notesPage.authorUnknown") }}
+                <TableCell class="text-muted-foreground max-w-0 text-sm">
+                  <span class="block truncate">{{ row.authorUserName || $t("pages.notesPage.authorUnknown") }}</span>
                 </TableCell>
                 <TableCell class="text-sm text-muted-foreground tabular-nums">
                   {{ formatStoreDateTime(row.createdAt) || $t("common.emDash") }}

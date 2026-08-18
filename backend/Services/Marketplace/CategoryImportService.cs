@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Enums;
+using Delegat.Infrastructure;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
@@ -68,12 +69,20 @@ public class CategoryImportService
         // Leaf-validated fields from the marketplace (meta keys already stripped)
         var fields = eligibility.Fields.ToList();
 
-        // Use the provided local category name or fall back to the marketplace name
-        localCategoryName ??= externalCategoryName ?? eligibility.Category?.Name ?? $"Category {externalCategoryId}";
-        // External category name comes from the provided parameter or falls back to local name
-        externalCategoryName ??= eligibility.Category?.Name ?? localCategoryName;
+        var marketplaceName = MarketplaceCategoryLabel.FirstReal(
+            externalCategoryId,
+            externalCategoryName,
+            MarketplaceCategoryLabel.FromExternalCategory(eligibility.Category));
+        if (marketplaceName == null)
+        {
+            var resolved = await ExternalCategoryEligibility.ResolveCategoryAsync(
+                adapter, connection, externalCategoryId, ct);
+            marketplaceName = MarketplaceCategoryLabel.FirstReal(
+                externalCategoryId,
+                MarketplaceCategoryLabel.FromExternalCategory(resolved));
+        }
 
-        // Filter fields - exclude base product fields (sku, name, description, price, stock, images)
+        // Filter fields - exclude base product fields (sku, barcode, name, description, price, stock, images)
         // and grouping fields (e.g. Ozon 9048), since they don't need attribute creation
         var fieldsForAttributes = fields.Where(f => !IsBaseOrSpecialField(f)).ToList();
 
@@ -123,6 +132,12 @@ public class CategoryImportService
         }
         else
         {
+            localCategoryName = StringClip.ClipRequired(
+                MarketplaceCategoryLabel.FirstReal(
+                    externalCategoryId, localCategoryName, marketplaceName),
+                Category.CATEGORY_NAME_MAX_LENGTH,
+                $"Category {externalCategoryId}");
+
             // Create the local category
             category = new Category();
             category.AddFill(new Category.AddForm
@@ -135,23 +150,44 @@ public class CategoryImportService
             await _context.SaveChangesAsync(ct);
         }
 
+        externalCategoryName = StringClip.ClipRequired(
+            MarketplaceCategoryLabel.FirstReal(
+                externalCategoryId, marketplaceName, localCategoryName),
+            CategoryMapping.EXTERNAL_CATEGORY_NAME_MAX_LENGTH,
+            localCategoryName);
+        var mappingName = StringClip.ClipOptional(
+            MarketplaceCategoryLabel.FirstReal(
+                externalCategoryId, marketplaceName, localCategoryName),
+            CategoryMapping.NAME_MAX_LENGTH);
+
         // Create category attributes only from additional marketplace fields
-        // (excluding base product fields: sku, name, description, price, stock)
+        // (excluding base product fields: sku, barcode, name, description, price, stock)
         int attributesCreated = 0;
+        var pendingAttributes = new List<(ExternalField Field, CategoryAttribute Attribute, string SanitizedKey)>();
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
         {
             var sanitizedKey = SanitizeKey(field.Key);
 
             // Skip if attribute with this key already exists
-            if (attributeMap.ContainsKey(sanitizedKey))
+            if (attributeMap.TryGetValue(sanitizedKey, out var existingId))
+            {
+                var existingByKey = category.attributes?.FirstOrDefault(a => a.Id == existingId);
+                if (existingByKey != null)
+                    AttributeFieldConstraints.ApplyIfEmpty(existingByKey, field);
                 continue;
+            }
 
             // Reuse existing attribute with the same display name (prevents duplicate "Material" / "Material")
             var existingByName = category.attributes?
-                .FirstOrDefault(a => string.Equals(a.name, field.Name, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(a => string.Equals(a.name, field.Name, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(
+                        a.name,
+                        StringClip.Clip(field.Name, CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH),
+                        StringComparison.OrdinalIgnoreCase));
             if (existingByName != null)
             {
+                AttributeFieldConstraints.ApplyIfEmpty(existingByName, field);
                 attributeMap[field.Key] = existingByName.Id;
                 if (!attributeMap.ContainsKey(sanitizedKey))
                     attributeMap[sanitizedKey] = existingByName.Id;
@@ -165,35 +201,61 @@ public class CategoryImportService
                 defaultValue = DetermineDefaultValue(field);
             }
 
-            var attribute = new CategoryAttribute();
-            attribute.AddFill(new CategoryAttribute.AddForm
+            var addForm = new CategoryAttribute.AddForm
             {
-                name = field.Name,
+                name = StringClip.ClipRequired(
+                    field.Name,
+                    CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH,
+                    sanitizedKey),
                 key = sanitizedKey,
                 type = MapExternalFieldType(field.Type),
-                isRequired = field.IsRequired,
+                isRequired = false,
                 sortOrder = sortOrder++,
                 options = field.Options != null ? SerializeOptions(field.Options) : null,
-                defaultValue = defaultValue,
-                description = field.Description,
-                group = adapter.DisplayName,
+                defaultValue = StringClip.ClipOptional(
+                    defaultValue,
+                    CategoryAttribute.ATTRIBUTE_DEFAULT_MAX_LENGTH),
+                description = StringClip.ClipOptional(
+                    field.Description,
+                    CategoryAttribute.ATTRIBUTE_DESCRIPTION_MAX_LENGTH),
+                group = StringClip.ClipOptional(
+                    adapter.DisplayName,
+                    CategoryAttribute.ATTRIBUTE_GROUP_MAX_LENGTH),
+                groupIcon = StringClip.ClipOptional(
+                    AttributeGroupIconValue.ForAdapter(adapter.Key),
+                    CategoryAttribute.ATTRIBUTE_GROUP_ICON_MAX_LENGTH),
                 categoryId = category.Id,
                 showOnProductPage = true,
-            });
+            };
+            AttributeFieldConstraints.ApplyTo(ref addForm, field);
+
+            var attribute = new CategoryAttribute();
+            attribute.AddFill(addForm);
 
             _context.categoryAttributes.Add(attribute);
+            category.attributes ??= new List<CategoryAttribute>();
+            category.attributes.Add(attribute);
+            pendingAttributes.Add((field, attribute, sanitizedKey));
+        }
+
+        if (pendingAttributes.Count > 0)
             await _context.SaveChangesAsync(ct);
 
+        foreach (var (field, attribute, sanitizedKey) in pendingAttributes)
+        {
             attributeMap[field.Key] = attribute.Id;
-            // Also index by sanitized key for consistent lookup
             if (sanitizedKey != field.Key)
                 attributeMap[sanitizedKey] = attribute.Id;
             attributesCreated++;
         }
 
-        // Check for existing mapping (localCategoryId + connectionId is unique)
+        // Reuse only the mapping for this exact external category. One local category
+        // may map to several marketplace types (per-link categoryMappingId).
         var categoryMapping = await _context.categoryMappings
-            .FirstOrDefaultAsync(m => m.localCategoryId == category.Id && m.connectionId == connection.Id, ct);
+            .FirstOrDefaultAsync(m =>
+                m.localCategoryId == category.Id
+                && m.connectionId == connection.Id
+                && m.externalCategoryId == externalCategoryId, ct);
 
         // Remove meta-field from processing (plugin may still emit _hasSizes)
         fields = fields.Where(f => f.Key != "_hasSizes").ToList();
@@ -203,9 +265,12 @@ public class CategoryImportService
 
         if (categoryMapping != null)
         {
-            // Existing mapping found - reuse it, update external category info.
-            categoryMapping.externalCategoryId = externalCategoryId;
             categoryMapping.externalCategoryName = externalCategoryName ?? localCategoryName;
+            if (string.IsNullOrWhiteSpace(categoryMapping.name)
+                || MarketplaceCategoryLabel.IsSynthetic(categoryMapping.name, externalCategoryId))
+            {
+                categoryMapping.name = mappingName;
+            }
         }
         else
         {
@@ -215,7 +280,8 @@ public class CategoryImportService
                 connectionId = connection.Id,
                 localCategoryId = category.Id,
                 externalCategoryId = externalCategoryId,
-                externalCategoryName = externalCategoryName ?? localCategoryName
+                externalCategoryName = externalCategoryName ?? localCategoryName,
+                name = mappingName
             });
             _context.categoryMappings.Add(categoryMapping);
         }
@@ -306,6 +372,9 @@ public class CategoryImportService
         if (IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
+        if (IsBarcodeField(field))
+            return (FieldMappingSourceType.ProductField, "barcode", null);
+
         if (IsNameField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "name", null);
 
@@ -335,7 +404,7 @@ public class CategoryImportService
     }
 
     /// <summary>
-    /// Check whether a field is a base product field (SKU, name, description, price, stock, images, grouping).
+    /// Check whether a field is a base product field (SKU, barcode, name, description, price, stock, images, grouping).
     /// These fields don't need attribute creation - they are handled by product fields or special mappings.
     /// </summary>
     internal static bool IsBaseOrSpecialField(ExternalField field)
@@ -343,12 +412,39 @@ public class CategoryImportService
         var keyLower = field.Key.ToLowerInvariant();
         var nameLower = field.Name.ToLowerInvariant();
         return IsSkuField(keyLower, nameLower) ||
+               IsBarcodeField(field) ||
                IsNameField(keyLower, nameLower) ||
                IsDescriptionField(keyLower, nameLower) ||
                IsPriceField(keyLower, nameLower) ||
                IsStockField(keyLower, nameLower) ||
                IsGroupingField(field.Key, field.Name) ||
                IsImageField(field.Key, field.Name);
+    }
+
+    /// <summary>
+    /// Adapter barcode / EAN / GTIN fields map to the product barcode, not a category attribute.
+    /// </summary>
+    internal static bool IsBarcodeField(ExternalField field)
+    {
+        if (string.Equals(field.Type, "barcode", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return IsBarcodeField(field.Key.ToLowerInvariant(), field.Name.ToLowerInvariant());
+    }
+
+    internal static bool IsBarcodeField(string key, string name)
+    {
+        var exact = new[] { "barcode", "barcodes", "ean", "ean8", "ean13", "gtin", "upc" };
+        if (exact.Any(p => key == p || name == p))
+            return true;
+
+        var contains = new[]
+        {
+            "barcode",
+            "gtin",
+            "\u0448\u0442\u0440\u0438\u0445\u043a\u043e\u0434",
+            "\u0448\u0442\u0440\u0438\u0445-\u043a\u043e\u0434",
+        };
+        return contains.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     internal static bool IsSkuField(string key, string name)
@@ -370,8 +466,10 @@ public class CategoryImportService
         // (otherwise "Color name" 10097, "Group name" 22390, etc. would also match)
         var exactPatterns = new[] { "name", "title" };
         var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435\u0020\u0442\u043e\u0432\u0430\u0440\u0430", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
+        var compactKey = key.Replace("-", "", StringComparison.Ordinal);
 
-        return exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
+        return compactKey is "productname" or "itemname" ||
+               exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
                containsPatterns.Any(p => name.Contains(p));
     }
 
@@ -725,6 +823,7 @@ public class CategoryImportService
             "boolean" or "bool" => AttributeType.Boolean,
             "select" or "enum" => AttributeType.Select,
             "multiselect" or "multi" or "array" => AttributeType.MultiSelect,
+            "barcode" => AttributeType.Barcode,
             _ => AttributeType.Text
         };
     }

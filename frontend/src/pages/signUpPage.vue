@@ -21,6 +21,7 @@ import {
   translateApiFieldErrors,
   usernameSchema,
 } from "@/lib/authValidation";
+import { FIELD_LIMITS } from "@/lib/fieldLimits";
 
 import { useI18n } from "vue-i18n";
 
@@ -47,7 +48,10 @@ export default {
         .object({
           userName: usernameSchema(t),
           password: passwordSchema(t, { requirePolicy: true }),
-          confirmPassword: z.string().min(8, { message: t("auth.passwordTooShort") }).max(128),
+          confirmPassword: z
+            .string()
+            .min(8, { message: t("auth.passwordTooShort") })
+            .max(128),
           invitationToken: z.string(),
         })
         .refine((data) => data.password === data.confirmPassword, {
@@ -93,15 +97,20 @@ export default {
       isSubmitting,
       PAGE_SIGN_IN,
       t,
+      FIELD_LIMITS,
     };
   },
 };
 </script>
 
 <template>
-  <AuthLayout :title="t('auth.signUp')">
-    <form class="auth-form" @submit="onSubmit">
-      <FieldGroup class="gap-4">
+  <AuthLayout
+    :title="t('auth.signUpTitle')"
+    :subtitle="t('auth.signUpBody')"
+    align="start"
+  >
+    <form @submit="onSubmit">
+      <FieldGroup class="gap-5">
         <FormField v-slot="{ componentField, errorMessage }" name="userName">
           <SettingsFormField
             :label="t('auth.userName')"
@@ -112,8 +121,8 @@ export default {
             <Input
               id="sign-up-username"
               type="text"
-              :placeholder="t('auth.userNamePlaceholder')"
               autocomplete="username"
+              :maxlength="FIELD_LIMITS.userName"
               v-bind="componentField"
             />
           </SettingsFormField>
@@ -128,12 +137,16 @@ export default {
             <PasswordInput
               id="sign-up-password"
               autocomplete="new-password"
+              :maxlength="FIELD_LIMITS.password"
               v-bind="componentField"
             />
           </SettingsFormField>
         </FormField>
 
-        <FormField v-slot="{ componentField, errorMessage }" name="confirmPassword">
+        <FormField
+          v-slot="{ componentField, errorMessage }"
+          name="confirmPassword"
+        >
           <SettingsFormField
             :label="t('auth.confirmPassword')"
             label-for="sign-up-confirm-password"
@@ -142,12 +155,16 @@ export default {
             <PasswordInput
               id="sign-up-confirm-password"
               autocomplete="new-password"
+              :maxlength="FIELD_LIMITS.password"
               v-bind="componentField"
             />
           </SettingsFormField>
         </FormField>
 
-        <FormField v-slot="{ componentField, errorMessage }" name="invitationToken">
+        <FormField
+          v-slot="{ componentField, errorMessage }"
+          name="invitationToken"
+        >
           <SettingsFormField
             :label="t('auth.invitationToken')"
             label-for="sign-up-invite"
@@ -157,14 +174,19 @@ export default {
             <Input
               id="sign-up-invite"
               type="text"
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              :placeholder="t('auth.invitationTokenPlaceholder')"
               autocomplete="off"
               v-bind="componentField"
             />
           </SettingsFormField>
         </FormField>
 
-        <Button type="submit" class="w-full" :disabled="isSubmitting">
+        <Button
+          type="submit"
+          size="lg"
+          class="auth-submit w-full"
+          :disabled="isSubmitting"
+        >
           <Spinner v-if="isSubmitting" />
           <span v-else>{{ t("auth.createAccount") }}</span>
         </Button>

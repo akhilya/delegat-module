@@ -67,7 +67,15 @@ public class PublicCategoriesController : ControllerBase
                 key = a.key,
                 type = a.type.ToString(),
                 isRequired = a.isRequired,
-                isUnique = a.isUnique
+                isUnique = a.isUnique,
+                allowCustomValues = a.allowCustomValues,
+                group = a.group,
+                groupIcon = a.groupIcon,
+                maxLength = a.maxLength,
+                minValue = a.minValue,
+                maxValue = a.maxValue,
+                maxValues = a.maxValues,
+                validationPattern = a.validationPattern
             })
         }).ToList();
 

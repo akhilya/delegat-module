@@ -37,4 +37,28 @@ public class WildberriesCardDeserializationTests
         Assert.Equal(12L, response.Cards[3].ImtId);
         Assert.Null(response.Cards[4].ImtId);
     }
+
+    [Fact]
+    public void CardsList_DeserializesNmIdOutsideInt32AndAsString()
+    {
+        const string json = """
+            {
+              "cards": [
+                { "nmID": 3147483647, "vendorCode": "a", "title": "A" },
+                { "nmID": "42", "vendorCode": "b", "title": "B" },
+                { "nmID": 12.0, "vendorCode": "c", "title": "C" }
+              ],
+              "cursor": { "nmID": "3147483647", "total": 3 }
+            }
+            """;
+
+        var response = JsonSerializer.Deserialize<WbCardsListResponse>(json, Options);
+
+        Assert.NotNull(response?.Cards);
+        Assert.Equal(3, response.Cards.Count);
+        Assert.Equal(3147483647L, response.Cards[0].NmId);
+        Assert.Equal(42L, response.Cards[1].NmId);
+        Assert.Equal(12L, response.Cards[2].NmId);
+        Assert.Equal(3147483647L, response.Cursor!.NmId);
+    }
 }

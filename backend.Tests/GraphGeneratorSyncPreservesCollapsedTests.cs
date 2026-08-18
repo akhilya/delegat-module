@@ -164,4 +164,60 @@ public class GraphGeneratorSyncPreservesCollapsedTests
 
         Assert.True(src.GetProperty("data").GetProperty("collapsed").GetBoolean());
     }
+
+    [Fact]
+    public void BuildGraphJson_AliasesSecondaryNameFieldToPrimary()
+    {
+        var json = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "product_name",
+                externalFieldName = "Product name",
+                externalFieldType = "string",
+                isEnabled = true,
+                sortOrder = 20,
+                sourceType = FieldMappingSourceType.ProductField,
+                sourceField = "name",
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "name",
+                externalFieldName = "Name",
+                externalFieldType = "string",
+                isEnabled = true,
+                sortOrder = 0,
+                sourceType = FieldMappingSourceType.ProductField,
+                sourceField = "name",
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "brand",
+                externalFieldName = "Brand",
+                externalFieldType = "string",
+                isEnabled = true,
+                sortOrder = 30,
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = 7,
+            },
+        ]);
+
+        using var doc = JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        var name = fields["name"];
+        Assert.Equal("productField", name.GetProperty("source").GetProperty("type").GetString());
+        Assert.Equal("name", name.GetProperty("source").GetProperty("field").GetString());
+        Assert.False(name.TryGetProperty("aliasOf", out var nameAlias) && nameAlias.ValueKind != JsonValueKind.Null);
+
+        var duplicate = fields["product_name"];
+        Assert.Equal("name", duplicate.GetProperty("aliasOf").GetString());
+        Assert.False(duplicate.TryGetProperty("source", out var dupSource) && dupSource.ValueKind != JsonValueKind.Null);
+
+        var brand = fields["brand"];
+        Assert.Equal("attribute", brand.GetProperty("source").GetProperty("type").GetString());
+    }
 }

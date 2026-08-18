@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FIELD_LIMITS } from "./fieldLimits.js";
 
 /** ASP.NET Identity default AllowedUserNameCharacters */
 export const USERNAME_ALLOWED_PATTERN = /^[a-zA-Z0-9\-._@+]+$/;
@@ -7,7 +8,7 @@ export function usernameSchema(t) {
   return z
     .string()
     .min(4, { message: t("auth.userNameTooShort") })
-    .max(45, { message: t("auth.userNameTooLong") })
+    .max(FIELD_LIMITS.userName, { message: t("auth.userNameTooLong") })
     .regex(USERNAME_ALLOWED_PATTERN, {
       message: t("auth.userNameInvalidChars"),
     });
@@ -21,7 +22,7 @@ export function passwordSchema(t, { requirePolicy = false } = {}) {
   let schema = z
     .string()
     .min(8, { message: t("auth.passwordTooShort") })
-    .max(128, { message: t("auth.passwordTooLong") });
+    .max(FIELD_LIMITS.password, { message: t("auth.passwordTooLong") });
 
   if (requirePolicy) {
     schema = schema

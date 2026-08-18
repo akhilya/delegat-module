@@ -2,6 +2,7 @@ using Delegat.Enums;
 using Delegat.Marketplace.SDK.RateLimit;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
+using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -123,7 +124,8 @@ public class ProductMarketplaceLinkRemoteMissingTests
             mappingService: null!,
             storageService: null!,
             NullLogger<ProductSyncService>.Instance,
-            operationLogger: null!);
+            operationLogger: null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
 
         var result = await service.VerifyLinksAsync(connection.Id);
 
@@ -159,7 +161,8 @@ public class ProductMarketplaceLinkRemoteMissingTests
             null!,
             null!,
             NullLogger<ProductSyncService>.Instance,
-            null!);
+            null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
 
         var result = await service.VerifyLinksAsync(connection.Id, linkA.Id);
 

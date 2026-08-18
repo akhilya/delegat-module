@@ -206,6 +206,11 @@ public sealed class PermissionService : IPermissionService
     private async Task<UserAccessDto> BuildUserAccessAsync(User user, CancellationToken ct)
     {
         var roleNames = (await _userManager.GetRolesAsync(user)).OrderBy(r => r).ToList();
+        if (UserAccessMutation.OwnerRoleOutOfSync(user.isAdmin, roleNames))
+        {
+            await EnsureOwnerAccessAsync(user, ct);
+            roleNames = (await _userManager.GetRolesAsync(user)).OrderBy(r => r).ToList();
+        }
         var fromRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var roleName in roleNames)
         {
@@ -267,10 +272,7 @@ public sealed class PermissionService : IPermissionService
         var user = await _userManager.FindByIdAsync(userId.ToString())
             ?? throw new InvalidOperationException($"User {userId} not found");
 
-        var desiredRoles = roleNames
-            .Where(r => AppRoles.All.Contains(r, StringComparer.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var desiredRoles = UserAccessMutation.NormalizeRoleNames(user.isAdmin, roleNames);
 
         var currentRoles = await _userManager.GetRolesAsync(user);
         var toRemove = currentRoles.Where(r => !desiredRoles.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();

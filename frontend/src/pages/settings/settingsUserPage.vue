@@ -3,17 +3,22 @@ import { Spinner } from "@/components/ui/spinner";
 import { computed, onMounted, ref } from "vue";
 import { useStore } from "vuex";
 import PageSection from "@/components/pageSection.vue";
-import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import SettingsSettingRow from "@/components/settings/SettingsSettingRow.vue";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { FieldGroup } from "@/components/ui/field";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import { Activity, Save } from "lucide-vue-next";
 
 import { t } from "@/i18n";
 
@@ -40,6 +45,10 @@ const autoOpenOperationsPanel = computed({
   set: (value) => store.dispatch("operations/setAutoOpenPanel", value),
 });
 
+function toggleAutoOpenOperations() {
+  autoOpenOperationsPanel.value = !autoOpenOperationsPanel.value;
+}
+
 async function fetchMe() {
   isLoading.value = true;
   try {
@@ -55,8 +64,13 @@ async function fetchMe() {
 
 async function saveProfile() {
   const userName = userNameDraft.value.trim();
-  if (!userName) {
+  const nameIssue = fieldLimitIssue(userName, FIELD_LIMITS.userNameStored);
+  if (nameIssue === "empty") {
     displaySonnerError(t("pages.settingsUserPage.userNameEmptyError"));
+    return;
+  }
+  if (nameIssue === "tooLong") {
+    displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.userNameStored }));
     return;
   }
 
@@ -97,62 +111,101 @@ onMounted(fetchMe);
 </script>
 
 <template>
-  <div>
+  <div class="flex w-full max-w-xl flex-col gap-8 pb-10">
     <PageSection :loading="isLoading">
-      <SettingsFormSection>
-        <FieldGroup>
-          <SettingsFormField :label="$t('pages.settingsUserPage.userNameLabel')" label-for="user-name">
-            <Input id="user-name" v-model="userNameDraft" :disabled="isSavingProfile" />
-          </SettingsFormField>
-        </FieldGroup>
-        <template #footer>
-          <Button
-            :disabled="isSavingProfile || !hasProfileChanges"
-            @click="saveProfile"
-          >
-            <Spinner v-if="isSavingProfile" class="mr-2" />
-            {{ $t("pages.settingsUserPage.saveProfileButton") }}
-          </Button>
-        </template>
-      </SettingsFormSection>
+      <div class="flex flex-col gap-8">
+      <section>
+        <InsetGroupLabel>{{ $t("pages.settingsUserPage.profileTitle") }}</InsetGroupLabel>
+        <p class="mb-2 px-1 text-xs text-muted-foreground">
+          {{ $t("pages.settingsUserPage.profileDescription") }}
+        </p>
+        <form id="profile-form" @submit.prevent="saveProfile">
+          <FieldGroup class="gap-5">
+            <SettingsFormField :label="$t('pages.settingsUserPage.userNameLabel')" label-for="user-name">
+              <Input
+                id="user-name"
+                v-model="userNameDraft"
+                :disabled="isSavingProfile"
+                :maxlength="FIELD_LIMITS.userNameStored"
+              />
+            </SettingsFormField>
+          </FieldGroup>
+          <div class="mt-2 flex justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              :disabled="isSavingProfile || !hasProfileChanges"
+            >
+              <Spinner v-if="isSavingProfile" class="mr-2" />
+              <Save v-else class="mr-2 size-4" />
+              {{ $t("pages.settingsUserPage.saveProfileButton") }}
+            </Button>
+          </div>
+        </form>
+      </section>
 
-      <SettingsFormSection
-        v-if="canManageOperations"
-        :title="$t('pages.settingsUserPage.operationsTitle')"
-        :description="$t('pages.settingsUserPage.operationsDescription')"
-        class="mt-8"
-      >
-        <SettingsSettingRow
-          :title="$t('pages.settingsUserPage.autoOpenOperationsLabel')"
-          :description="$t('pages.settingsUserPage.autoOpenOperationsHint')"
-        >
-          <Switch v-model="autoOpenOperationsPanel" />
-        </SettingsSettingRow>
-      </SettingsFormSection>
-
-      <SettingsFormSection
-        :title="$t('pages.settingsUserPage.passwordTitle')"
-        :description="$t('pages.settingsUserPage.passwordDescription')"
-        class="mt-8"
-      >
-        <FieldGroup>
-          <SettingsFormField :label="$t('pages.settingsUserPage.currentPasswordLabel')" label-for="current-password">
-            <PasswordInput id="current-password" v-model="currentPassword" :disabled="isChangingPassword" />
-          </SettingsFormField>
-          <SettingsFormField :label="$t('pages.settingsUserPage.newPasswordLabel')" label-for="new-password">
-            <PasswordInput id="new-password" v-model="newPassword" :disabled="isChangingPassword" />
-          </SettingsFormField>
-        </FieldGroup>
-        <template #footer>
-          <Button
-            :disabled="isChangingPassword || !currentPassword || !newPassword"
-            @click="changePassword"
+      <section v-if="canManageOperations">
+        <InsetGroupLabel>{{ $t("pages.settingsUserPage.operationsTitle") }}</InsetGroupLabel>
+        <InsetGroup>
+          <InsetGroupItem
+            :aria-pressed="autoOpenOperationsPanel"
+            @click="toggleAutoOpenOperations"
           >
-            <Spinner v-if="isChangingPassword" class="mr-2" />
-            {{ $t("pages.settingsUserPage.changePasswordButton") }}
-          </Button>
-        </template>
-      </SettingsFormSection>
+            <template #leading>
+              <Activity class="size-4" />
+            </template>
+            <p>{{ $t("pages.settingsUserPage.autoOpenOperationsLabel") }}</p>
+            <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+              {{ $t("pages.settingsUserPage.autoOpenOperationsHint") }}
+            </p>
+            <template #trailing>
+              <Switch
+                :model-value="autoOpenOperationsPanel"
+                tabindex="-1"
+                class="pointer-events-none"
+              />
+            </template>
+          </InsetGroupItem>
+        </InsetGroup>
+      </section>
+
+      <section>
+        <InsetGroupLabel>{{ $t("pages.settingsUserPage.passwordTitle") }}</InsetGroupLabel>
+        <p class="mb-2 px-1 text-xs text-muted-foreground">
+          {{ $t("pages.settingsUserPage.passwordDescription") }}
+        </p>
+        <form id="password-form" @submit.prevent="changePassword">
+          <FieldGroup class="gap-5">
+            <SettingsFormField :label="$t('pages.settingsUserPage.currentPasswordLabel')" label-for="current-password">
+              <PasswordInput
+                id="current-password"
+                v-model="currentPassword"
+                :disabled="isChangingPassword"
+                :maxlength="FIELD_LIMITS.password"
+              />
+            </SettingsFormField>
+            <SettingsFormField :label="$t('pages.settingsUserPage.newPasswordLabel')" label-for="new-password">
+              <PasswordInput
+                id="new-password"
+                v-model="newPassword"
+                :disabled="isChangingPassword"
+                :maxlength="FIELD_LIMITS.password"
+              />
+            </SettingsFormField>
+          </FieldGroup>
+          <div class="mt-2 flex justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              :disabled="isChangingPassword || !currentPassword || !newPassword"
+            >
+              <Spinner v-if="isChangingPassword" class="mr-2" />
+              {{ $t("pages.settingsUserPage.changePasswordButton") }}
+            </Button>
+          </div>
+        </form>
+      </section>
+      </div>
     </PageSection>
   </div>
 </template>

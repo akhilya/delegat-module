@@ -6,7 +6,7 @@ const props = defineProps({ class: { type: null, required: false } });
 <template>
   <ul
     data-slot="sidebar-menu-sub"
-    :class="cn('ml-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5', props.class)"
+    :class="cn('flex min-w-0 flex-col gap-0.5 border-t border-sidebar-border/80 pt-0.5 group-data-[collapsible=icon]:hidden', props.class)"
   >
     <slot />
   </ul>

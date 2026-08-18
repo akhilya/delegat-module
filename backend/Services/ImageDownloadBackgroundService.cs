@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Delegat.Enums;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 
@@ -70,6 +71,7 @@ public class ImageDownloadBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
         var storageService = scope.ServiceProvider.GetRequiredService<IStorageService>();
+        var quotaService = scope.ServiceProvider.GetRequiredService<QuotaService>();
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
@@ -156,7 +158,7 @@ public class ImageDownloadBackgroundService : BackgroundService
                 }
             }
 
-            await ProcessSingleImageAsync(context, storageService, pending, ct);
+            await ProcessSingleImageAsync(context, storageService, quotaService, pending, ct);
 
             // Report progress for batched images
             if (pending.batchId != null)
@@ -193,9 +195,10 @@ public class ImageDownloadBackgroundService : BackgroundService
         }
     }
 
-    private async Task ProcessSingleImageAsync(
+    internal async Task ProcessSingleImageAsync(
         DataContext context,
         IStorageService storageService,
+        QuotaService quotaService,
         PendingImageDownload pending,
         CancellationToken ct)
     {
@@ -217,12 +220,20 @@ public class ImageDownloadBackgroundService : BackgroundService
 
         try
         {
-            // Generate the file path
+            try
+            {
+                await quotaService.EnsureFileQuotaAsync(pending.storeId);
+            }
+            catch (ApiException ex) when (ex.Code is "quota_files_reached")
+            {
+                await FailWithoutRetryAsync(context, pending, ex.Message, Log);
+                return;
+            }
+
             var fileId = Guid.NewGuid().ToString("N");
             var extension = GetExtensionFromUrl(pending.imageUrl) ?? ".jpg";
             var filePath = $"stores/{pending.storeId}/products/{pending.productId}/images/{fileId}{extension}";
 
-            // Download and upload to storage
             var uploadResult = await storageService.UploadFromUriWithMetadataAsync(pending.imageUrl, filePath, ct);
 
             if (uploadResult == null)
@@ -239,43 +250,52 @@ public class ImageDownloadBackgroundService : BackgroundService
                 return;
             }
 
-            // Create the File record
+            try
+            {
+                await quotaService.EnsureStorageQuotaAsync(pending.storeId, uploadResult.Length);
+            }
+            catch (ApiException ex) when (ex.Code is "quota_storage_reached")
+            {
+                await storageService.DeleteAsync(filePath, ct);
+                await FailWithoutRetryAsync(context, pending, ex.Message, Log);
+                return;
+            }
+
             var file = new Models.File();
             file.AddFill(new Models.File.AddForm(
                 filePath,
                 pending.authorUserId,
                 pending.productId,
                 uploadResult.ContentType,
-                uploadResult.Length
+                uploadResult.Length,
+                pending.imageUrl
             ));
             file.fileType = FileType.Image;
 
             context.files.Add(file);
             await context.SaveChangesAsync(ct);
 
-            // Check whether an image with this index already exists
-            var existingImage = await context.images
-                .FirstOrDefaultAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
+            var occupied = await context.images
+                .AnyAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
 
-            if (existingImage == null)
+            var index = pending.imageIndex;
+            if (occupied)
             {
-                // Create the ImageReference
-                var imageRef = new ImageReference();
-                imageRef.AddFill(new ImageReference.AddForm(
-                    file.Id,
-                    pending.productId,
-                    pending.imageIndex
-                ));
-
-                context.images.Add(imageRef);
-            }
-            else
-            {
-                // Update the existing one
-                existingImage.fileId = file.Id;
+                var maxIndex = await context.images
+                    .Where(i => i.productId == pending.productId)
+                    .Select(i => (int?)i.index)
+                    .MaxAsync(ct) ?? -1;
+                index = maxIndex + 1;
             }
 
-            // Mark as completed
+            var imageRef = new ImageReference();
+            imageRef.AddFill(new ImageReference.AddForm(
+                file.Id,
+                pending.productId,
+                index
+            ));
+            context.images.Add(imageRef);
+
             pending.status = ImageDownloadStatus.Completed;
             pending.completedAt = DateTime.UtcNow;
             pending.lastError = null;
@@ -284,7 +304,7 @@ public class ImageDownloadBackgroundService : BackgroundService
 
             _logger.LogDebug(
                 "Downloaded image {Index} for product {ProductId}: {ImageUrl}",
-                pending.imageIndex, pending.productId, pending.imageUrl);
+                index, pending.productId, pending.imageUrl);
         }
         catch (Exception ex)
         {
@@ -298,6 +318,19 @@ public class ImageDownloadBackgroundService : BackgroundService
 
             await Log("error", $"Error downloading image #{pending.imageIndex}: {ex.Message}");
         }
+    }
+
+    private static async Task FailWithoutRetryAsync(
+        DataContext context,
+        PendingImageDownload pending,
+        string error,
+        Func<string, string, Task> log)
+    {
+        pending.status = ImageDownloadStatus.Failed;
+        pending.lastError = error;
+        pending.retryCount = PendingImageDownload.MAX_RETRIES;
+        await context.SaveChangesAsync();
+        await log("error", error);
     }
 
     private static string? GetExtensionFromUrl(string url)

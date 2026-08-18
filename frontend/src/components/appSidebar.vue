@@ -5,9 +5,14 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import AppSidebarStoreSwitcher from "@/components/sidebar/AppSidebarStoreSwitcher.vue";
 import AppSidebarNavCollapsible from "@/components/sidebar/AppSidebarNavCollapsible.vue";
@@ -60,20 +65,18 @@ export default {
   },
   computed: {
     selectedStoreMembership() {
-      return this.memberships.find((store) => store.id === this.me?.selectedStoreId);
-    },
-    canManageSelectedStore() {
-      return hasAnyPermission(this.me, [
-        PERMS.StoreSettingsManage,
-        PERMS.StoreMembersManage,
-        PERMS.CatalogManage,
-      ]);
+      return this.memberships.find(
+        (store) => store.id === this.me?.selectedStoreId,
+      );
     },
     hasStore() {
       return this.memberships.length > 0;
     },
     canCreateStores() {
-      return Boolean(this.me?.isAdmin) || hasAnyPermission(this.me, [PERMS.StoresCreate]);
+      return (
+        Boolean(this.me?.isAdmin) ||
+        hasAnyPermission(this.me, [PERMS.StoresCreate])
+      );
     },
     storeSwitcherEmptyMode() {
       if (this.hasStore) return null;
@@ -87,7 +90,6 @@ export default {
     sidebarContext() {
       return {
         me: this.me,
-        canManageStore: this.canManageSelectedStore,
         isAdmin: Boolean(this.me?.isAdmin),
         hasStore: this.hasStore,
         hasPermission: (p) => hasAnyPermission(this.me, [p]),
@@ -125,7 +127,9 @@ export default {
       "postSelectStore",
     ]),
     showConfirm(title, message) {
-      return new Promise((r) => { this.confirmDialog = { open: true, title, message, resolve: r }; });
+      return new Promise((r) => {
+        this.confirmDialog = { open: true, title, message, resolve: r };
+      });
     },
     async refreshPlatformStoreCount() {
       if (this.memberships.length > 0 || !this.canCreateStores) {
@@ -135,7 +139,9 @@ export default {
       await this.getAllStores({
         onSuccess: (response) => {
           const payload = response.data?.value ?? response.data;
-          this.platformStoreCount = Number(payload?.total ?? payload?.items?.length ?? 0);
+          this.platformStoreCount = Number(
+            payload?.total ?? payload?.items?.length ?? 0,
+          );
         },
         onError: () => {
           this.platformStoreCount = null;
@@ -197,14 +203,21 @@ export default {
 
       await this.refreshPlatformStoreCount();
 
-      http.get("/health").then((response) => {
-        this.platformVersion = normalizeAppVersion(response.data?.version);
-      }).catch(() => {});
+      http
+        .get("/health")
+        .then((response) => {
+          this.platformVersion = normalizeAppVersion(response.data?.version);
+        })
+        .catch(() => {});
 
-      if (autoSelectStore && this.memberships.length > 0 && (
-        !this.me?.selectedStoreId ||
-        !this.memberships.some((store) => store.id === this.me.selectedStoreId)
-      )) {
+      if (
+        autoSelectStore &&
+        this.memberships.length > 0 &&
+        (!this.me?.selectedStoreId ||
+          !this.memberships.some(
+            (store) => store.id === this.me.selectedStoreId,
+          ))
+      ) {
         await this.selectStore(this.memberships[0].id);
         return;
       }
@@ -233,11 +246,12 @@ export default {
       this.refreshQuotaAttention();
     },
     async selectStore(storeId) {
-      const hasUploads = this.$store.getters["operations/hasLocalActiveUploads"];
+      const hasUploads =
+        this.$store.getters["operations/hasLocalActiveUploads"];
       if (hasUploads) {
         const confirmed = await this.showConfirm(
           this.$t("components.appSidebar.switchStoreTitle"),
-          this.$t("components.appSidebar.switchStoreUploadWarning")
+          this.$t("components.appSidebar.switchStoreUploadWarning"),
         );
         if (!confirmed) return;
       }
@@ -256,10 +270,7 @@ export default {
           invalidateMeCache();
           resetSelectedStoreCache();
           invalidateBrandingCache();
-          await Promise.all([
-            this.loadShellData(false),
-            loadBranding(http),
-          ]);
+          await Promise.all([this.loadShellData(false), loadBranding(http)]);
           notifyMeUpdated(this.me);
           this.$store.dispatch("operations/reconnectSignalR");
           const next = response.data.value.next;
@@ -300,8 +311,14 @@ export default {
       this.refreshQuotaAttention();
     };
     window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
-    window.addEventListener("store-branding-updated", this._onStoreBrandingUpdated);
-    window.addEventListener(QUOTA_ATTENTION_REFRESH_EVENT, this._onQuotaAttentionRefresh);
+    window.addEventListener(
+      "store-branding-updated",
+      this._onStoreBrandingUpdated,
+    );
+    window.addEventListener(
+      QUOTA_ATTENTION_REFRESH_EVENT,
+      this._onQuotaAttentionRefresh,
+    );
     this.loadShellData();
   },
   beforeUnmount() {
@@ -309,10 +326,16 @@ export default {
       window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
     }
     if (this._onStoreBrandingUpdated) {
-      window.removeEventListener("store-branding-updated", this._onStoreBrandingUpdated);
+      window.removeEventListener(
+        "store-branding-updated",
+        this._onStoreBrandingUpdated,
+      );
     }
     if (this._onQuotaAttentionRefresh) {
-      window.removeEventListener(QUOTA_ATTENTION_REFRESH_EVENT, this._onQuotaAttentionRefresh);
+      window.removeEventListener(
+        QUOTA_ATTENTION_REFRESH_EVENT,
+        this._onQuotaAttentionRefresh,
+      );
     }
   },
 };
@@ -320,7 +343,7 @@ export default {
 
 <template>
   <Sidebar collapsible="icon">
-    <SidebarHeader class="border-b p-2">
+    <SidebarHeader class="border-b border-sidebar-border p-2">
       <AppSidebarStoreSwitcher
         :memberships="memberships"
         :selected-store-id="me?.selectedStoreId"
@@ -329,7 +352,7 @@ export default {
       />
     </SidebarHeader>
 
-    <SidebarContent class="gap-0.5">
+    <SidebarContent class="gap-2.5 px-2 py-2">
       <AppSidebarNavCollapsible
         v-for="group in navGroups"
         :key="group.id"
@@ -341,24 +364,40 @@ export default {
       />
     </SidebarContent>
 
-    <AppSidebarFooter
-      :user-name="me?.userName"
-      :version="displayVersion"
-    />
+    <AppSidebarFooter :user-name="me?.userName" :version="displayVersion" />
   </Sidebar>
 
   <AlertDialog
     :open="confirmDialog.open"
-    @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+    @update:open="
+      (v) => {
+        if (!v) confirmDialog.resolve?.(false);
+        confirmDialog.open = v;
+      }
+    "
   >
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
-        <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+        <AlertDialogDescription>{{
+          confirmDialog.message
+        }}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t('common.cancel') }}</AlertDialogCancel>
-        <AlertDialogAction @click="confirmDialog.resolve(true); confirmDialog.open = false">{{ $t('app.continue') }}</AlertDialogAction>
+        <AlertDialogCancel
+          @click="
+            confirmDialog.resolve(false);
+            confirmDialog.open = false;
+          "
+          >{{ $t("common.cancel") }}</AlertDialogCancel
+        >
+        <AlertDialogAction
+          @click="
+            confirmDialog.resolve(true);
+            confirmDialog.open = false;
+          "
+          >{{ $t("app.continue") }}</AlertDialogAction
+        >
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

@@ -24,6 +24,9 @@ const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const UnavailablePage = () => import("./pages/unavailablePage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
+const CatalogConnectPage = () => import("./pages/tools/CatalogConnectPage.vue");
+const CatalogScrapePage = () => import("./pages/tools/CatalogScrapePage.vue");
+const ToolJobPage = () => import("./pages/tools/ToolJobPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
 const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
@@ -59,6 +62,9 @@ export const PAGE_SETTINGS_OPERATIONS = "/settings/operations";
 export const PAGE_SETTINGS_USER = "/settings/user";
 export const PAGE_NOT_FOUND = "/:pathMatch(.*)*";
 export const PAGE_TOOLS = "/tools";
+export const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
+export const PAGE_CATALOG_SCRAPE = "/tools/catalog-scrape";
+export const PAGE_TOOL_JOB = "/tools/:toolId";
 export const PAGE_ADMIN_STORES = "/settings/admin/stores";
 export const PAGE_ADMIN_STORE_DETAIL = "/settings/admin/stores/:id";
 export const PAGE_ADMIN_USERS = "/settings/admin/users";
@@ -142,7 +148,11 @@ export const routes = [
     component: storeAttributesPage,
     meta: { titleKey: "routes.attributes", permissions: [PERMS.CatalogManage] },
   },
-  { path: PAGE_STORE_STORAGE, component: storeStoragePage, meta: { titleKey: "routes.storage" } },
+  {
+    path: PAGE_STORE_STORAGE,
+    component: storeStoragePage,
+    meta: { titleKey: "routes.storage", permissions: [PERMS.FilesManage] },
+  },
   {
     path: PAGE_SETTINGS,
     component: SettingsShell,
@@ -216,9 +226,33 @@ export const routes = [
   { path: "/adapter-logs", redirect: PAGE_ADAPTER_LOGS },
   { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { titleKey: "routes.notFound" } },
   {
+    path: PAGE_CATALOG_CONNECT,
+    component: CatalogConnectPage,
+    meta: {
+      titleKey: "routes.catalogConnect",
+      permissions: [PERMS.MarketplaceManage],
+    },
+  },
+  {
+    path: PAGE_CATALOG_SCRAPE,
+    component: CatalogScrapePage,
+    meta: {
+      titleKey: "routes.catalogScrape",
+      permissions: [PERMS.MarketplaceManage],
+    },
+  },
+  {
+    path: PAGE_TOOL_JOB,
+    component: ToolJobPage,
+    meta: {
+      titleKey: "routes.toolJob",
+      permissions: [PERMS.MarketplaceManage],
+    },
+  },
+  {
     path: PAGE_TOOLS,
     component: ToolsPage,
-    meta: { titleKey: "routes.tools", permissions: [PERMS.OperationsManage, PERMS.CatalogManage] },
+    meta: { titleKey: "routes.tools", permissions: [PERMS.OperationsManage, PERMS.CatalogManage, PERMS.MarketplaceManage] },
   },
   {
     path: PAGE_MARKETPLACE,

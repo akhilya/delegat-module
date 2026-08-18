@@ -291,7 +291,7 @@ const actions = {
     dispatch("loadHistory");
   },
 
-  async startOperation({ commit, state }, { id, type, title, connectionId, connectionName }) {
+  async startOperation({ commit, state }, { id, type, title, connectionId, connectionName, batchType }) {
     const op = {
       id,
       type,
@@ -307,15 +307,22 @@ const actions = {
       logs: [],
       products: [],
       canRetry: false,
-      batchId: null,
-      batchType: null,
+      batchId: batchType ? id : null,
+      batchType: batchType || null,
       summary: null,
       isLocalClientOperation: false,
     };
     commit("ADD_OPERATION", op);
     if (state.autoOpenPanel) commit("SET_PANEL_OPEN", true);
     try {
-      await http.post("/operations/start", { operationId: id, type, title, connectionId, connectionName });
+      await http.post("/operations/start", {
+        operationId: id,
+        type,
+        title,
+        connectionId,
+        connectionName,
+        batchType: batchType || null,
+      });
     } catch { /* SignalR will handle */ }
   },
 

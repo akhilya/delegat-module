@@ -11,10 +11,17 @@ import { t } from "@/i18n";
 
 const props = defineProps({
   aiEnabled: { type: Boolean, default: false },
+  /** float = corner FABs (lg+). navbar = compact icons in the top bar (< lg). */
+  placement: {
+    type: String,
+    default: "float",
+    validator: (value) => ["float", "navbar"].includes(value),
+  },
 });
 
 const store = useStore();
 
+const isNavbar = computed(() => props.placement === "navbar");
 const isAiOpen = computed(() => store.state.aiChat?.isOpen);
 const isAiLoading = computed(() => store.state.aiChat?.isLoading);
 const activeCount = computed(() => store.getters["operations/activeCount"]);
@@ -28,7 +35,7 @@ function toggleOps() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport v-if="!isNavbar" to="body">
     <Transition
       enter-active-class="transition-all duration-200 ease-out"
       enter-from-class="opacity-0 translate-y-2"
@@ -39,12 +46,12 @@ function toggleOps() {
     >
       <div
         v-if="!isAiOpen"
-        class="fixed bottom-6 right-4 z-[9996] flex flex-col-reverse gap-2.5"
+        class="fixed bottom-6 right-4 z-[9996] hidden flex-col-reverse gap-2.5 lg:flex"
       >
         <Button
           v-if="aiEnabled"
           size="icon"
-          class="relative size-12 rounded-full shadow-lg shrink-0"
+          class="relative size-12 shrink-0 rounded-full shadow-lg"
           :title="t('components.fabGroup.aiAssistantTitle')"
           @click="toggleAi"
         >
@@ -52,22 +59,20 @@ function toggleOps() {
           <Sparkles v-else class="size-5" />
           <span
             v-if="isAiLoading"
-            class="absolute inset-0 rounded-full bg-white/10 animate-pulse pointer-events-none"
+            class="pointer-events-none absolute inset-0 animate-pulse rounded-full bg-white/10"
           />
         </Button>
 
         <Button
           size="icon"
-          class="relative size-12 rounded-full shadow-lg shrink-0"
+          class="relative size-12 shrink-0 rounded-full shadow-lg"
           :title="t('components.fabGroup.backgroundJobsTitle')"
           @click="toggleOps"
         >
           <Activity class="size-5" />
           <span
             v-if="activeCount > 0"
-            class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full
-                   bg-destructive text-destructive-foreground text-[9px] font-bold
-                   leading-none flex items-center justify-center"
+            class="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground"
           >
             {{ activeCount > 9 ? "9+" : activeCount }}
           </span>
@@ -75,4 +80,31 @@ function toggleOps() {
       </div>
     </Transition>
   </Teleport>
+
+  <div v-else class="flex items-center gap-0.5 lg:hidden">
+    <Button
+      variant="ghost"
+      size="icon"
+      class="relative size-9 shrink-0"
+      :title="t('components.fabGroup.backgroundJobsTitle')"
+      @click="toggleOps"
+    >
+      <Activity class="size-4" />
+      <span
+        v-if="activeCount > 0"
+        class="absolute top-1 right-1 size-1.5 rounded-full bg-destructive"
+      />
+    </Button>
+    <Button
+      v-if="aiEnabled"
+      variant="ghost"
+      size="icon"
+      class="relative size-9 shrink-0"
+      :title="t('components.fabGroup.aiAssistantTitle')"
+      @click="toggleAi"
+    >
+      <Spinner v-if="isAiLoading" size="sm" />
+      <Sparkles v-else class="size-4" />
+    </Button>
+  </div>
 </template>

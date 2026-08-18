@@ -10,6 +10,14 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { AlertTriangle } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import FieldDiffValue from "@/components/products/FieldDiffValue.vue";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const props = defineProps({
   items: { type: Array, required: true },
@@ -75,10 +83,10 @@ function isExcludedRow(key) {
     <template v-if="isSingleItem && items.length === 1">
       <p class="text-xs text-muted-foreground">{{ $t("fieldChangesTable.diffHint") }}</p>
       <div class="overflow-hidden rounded-md border border-border">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border bg-muted/40">
-              <th
+        <Table>
+          <TableHeader>
+            <TableRow class="hover:bg-transparent border-border bg-muted/40">
+              <TableHead
                 v-if="selectable"
                 class="w-10 px-3 py-2.5"
               >
@@ -86,41 +94,41 @@ function isExcludedRow(key) {
                   :model-value="allIncluded"
                   @update:model-value="toggleAll"
                 />
-              </th>
-              <th
-                class="px-3 py-2.5 text-left text-xs font-medium tracking-tight text-muted-foreground"
+              </TableHead>
+              <TableHead
+                class="px-3 py-2.5 text-xs font-medium tracking-tight"
                 :class="selectable ? 'w-[8.5rem]' : 'w-[9.5rem]'"
               >
                 {{ $t("fieldChangesTable.fieldHeader") }}
-              </th>
-              <th class="min-w-0 px-3 py-2.5 text-left text-xs font-medium tracking-tight text-muted-foreground">
+              </TableHead>
+              <TableHead class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight">
                 <span class="inline-flex items-center gap-1.5">
                   <span class="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden="true" />
                   {{ $t("fieldChangesTable.currentHeader") }}
                 </span>
-              </th>
-              <th class="min-w-0 px-3 py-2.5 text-left text-xs font-medium tracking-tight text-muted-foreground">
+              </TableHead>
+              <TableHead class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight">
                 <span class="inline-flex items-center gap-1.5">
                   <span class="size-1.5 rounded-full bg-success" aria-hidden="true" />
                   {{ $t("fieldChangesTable.newHeader") }}
                 </span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="field in items[0].fields"
               :key="field.key"
-              class="border-b border-border last:border-b-0"
+              class="border-border last:border-b-0"
               :class="isExcludedRow(field.key) ? 'opacity-45' : ''"
             >
-              <td v-if="selectable" class="px-3 py-3 align-top">
+              <TableCell v-if="selectable" class="px-3 py-3 align-top whitespace-normal">
                 <Checkbox
                   :model-value="isIncluded(field.key)"
                   @update:model-value="toggleField(field.key)"
                 />
-              </td>
-              <td class="px-3 py-3 align-top">
+              </TableCell>
+              <TableCell class="px-3 py-3 align-top whitespace-normal">
                 <div class="flex items-start gap-1.5">
                   <span class="text-sm font-medium leading-snug text-foreground">
                     {{ field.label }}
@@ -133,25 +141,25 @@ function isExcludedRow(key) {
                     <AlertTriangle class="size-3.5" />
                   </span>
                 </div>
-              </td>
-              <td class="border-l border-border bg-muted/20 px-3 py-3 align-top">
+              </TableCell>
+              <TableCell class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top">
                 <FieldDiffValue
                   side="old"
                   :old-value="field.oldValue"
                   :new-value="field.newValue"
                   show-whitespace-note
                 />
-              </td>
-              <td class="border-l border-border px-3 py-3 align-top">
+              </TableCell>
+              <TableCell class="whitespace-normal border-l border-border px-3 py-3 align-top">
                 <FieldDiffValue
                   side="new"
                   :old-value="field.oldValue"
                   :new-value="field.newValue"
                 />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
     </template>
 
@@ -171,53 +179,53 @@ function isExcludedRow(key) {
         >
           {{ item.label }}
         </div>
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border bg-muted/20">
-              <th class="w-[9.5rem] px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+        <Table>
+          <TableHeader>
+            <TableRow class="hover:bg-transparent border-border bg-muted/20">
+              <TableHead class="w-[9.5rem] px-3 py-2 text-xs font-medium">
                 {{ $t("fieldChangesTable.fieldHeader") }}
-              </th>
-              <th class="min-w-0 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              </TableHead>
+              <TableHead class="min-w-0 px-3 py-2 text-xs font-medium">
                 <span class="inline-flex items-center gap-1.5">
                   <span class="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden="true" />
                   {{ $t("fieldChangesTable.currentHeader") }}
                 </span>
-              </th>
-              <th class="min-w-0 px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+              </TableHead>
+              <TableHead class="min-w-0 px-3 py-2 text-xs font-medium">
                 <span class="inline-flex items-center gap-1.5">
                   <span class="size-1.5 rounded-full bg-success" aria-hidden="true" />
                   {{ $t("fieldChangesTable.newHeader") }}
                 </span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="field in item.fields"
               :key="field.key"
-              class="border-b border-border last:border-b-0"
+              class="border-border last:border-b-0"
             >
-              <td class="px-3 py-3 align-top text-sm text-muted-foreground">
+              <TableCell class="px-3 py-3 align-top text-sm text-muted-foreground whitespace-normal">
                 {{ field.label }}
-              </td>
-              <td class="border-l border-border bg-muted/20 px-3 py-3 align-top">
+              </TableCell>
+              <TableCell class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top">
                 <FieldDiffValue
                   side="old"
                   :old-value="field.oldValue"
                   :new-value="field.newValue"
                   show-whitespace-note
                 />
-              </td>
-              <td class="border-l border-border px-3 py-3 align-top">
+              </TableCell>
+              <TableCell class="whitespace-normal border-l border-border px-3 py-3 align-top">
                 <FieldDiffValue
                   side="new"
                   :old-value="field.oldValue"
                   :new-value="field.newValue"
                 />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <EmptyState

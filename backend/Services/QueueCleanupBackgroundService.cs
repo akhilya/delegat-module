@@ -82,11 +82,14 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         var orphanedFolderJobs = await QueryOrphanedFolderJobs(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
 
-        if (orphanedImages + orphanedImports + orphanedExports + orphanedTransfers + orphanedBulkUpdates + orphanedFolderJobs > 0)
+        var orphanedCategoryImports = await QueryOrphanedCategoryImports(db)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
+
+        if (orphanedImages + orphanedImports + orphanedExports + orphanedTransfers + orphanedBulkUpdates + orphanedFolderJobs + orphanedCategoryImports > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}, transfers={Transfers}, bulk={Bulk}, folders={Folders}",
-                orphanedImages, orphanedImports, orphanedExports, orphanedTransfers, orphanedBulkUpdates, orphanedFolderJobs);
+                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}, transfers={Transfers}, bulk={Bulk}, folders={Folders}, categories={Categories}",
+                orphanedImages, orphanedImports, orphanedExports, orphanedTransfers, orphanedBulkUpdates, orphanedFolderJobs, orphanedCategoryImports);
         }
 
         // Cancel stale InProgress whose operation is cancelled/missing
@@ -241,6 +244,13 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                         && p.resultObjectKey == null)
             .ExecuteDeleteAsync(ct);
 
+        var deletedCategoryImports = await db.pendingCategoryImports
+            .Where(p => (p.status == CategoryImportStatus.Completed
+                         || p.status == CategoryImportStatus.Failed
+                         || p.status == CategoryImportStatus.Cancelled)
+                        && p.createdAt < cutoff)
+            .ExecuteDeleteAsync(ct);
+
         var deletedOps = await db.operations
             .Where(o => (o.status == "completed"
                          || o.status == "failed"
@@ -249,12 +259,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                         && (o.finishedAt ?? o.createdAt) < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedBulkUpdates + deletedFolderJobs + deletedOps;
+        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedBulkUpdates + deletedFolderJobs + deletedCategoryImports + deletedOps;
         if (total > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, bulkUpdates={BulkUpdates}, folderJobs={FolderJobs}, operations={Ops} older than {Days}d",
-                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedBulkUpdates, deletedFolderJobs, deletedOps, retentionDays);
+                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, bulkUpdates={BulkUpdates}, folderJobs={FolderJobs}, categoryImports={CategoryImports}, operations={Ops} older than {Days}d",
+                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedBulkUpdates, deletedFolderJobs, deletedCategoryImports, deletedOps, retentionDays);
         }
     }
 
@@ -310,5 +320,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
             (p.status == FolderJobStatus.Pending
              || p.status == FolderJobStatus.InProgress
              || p.status == FolderJobStatus.Failed)
+            && db.operations.Any(o => o.operationId == p.operationId && o.status == "cancelled"));
+
+    internal static IQueryable<PendingCategoryImport> QueryOrphanedCategoryImports(DataContext db) =>
+        db.pendingCategoryImports.Where(p =>
+            (p.status == CategoryImportStatus.Pending
+             || p.status == CategoryImportStatus.InProgress
+             || p.status == CategoryImportStatus.Failed)
             && db.operations.Any(o => o.operationId == p.operationId && o.status == "cancelled"));
 }

@@ -88,13 +88,16 @@ public class CategoryDomainTests
             categoryId = 2, name = "Color", key = "color", type = AttributeType.Select,
             isRequired = true, isMultiline = false, showOnProductPage = true, sortOrder = 4,
             options = "[\"red\"]", defaultValue = "red", description = "Main color",
-            descriptionInTooltip = true, group = "Appearance"
+            descriptionInTooltip = true, group = "Appearance", groupIcon = "Palette",
+            maxValues = 3
         });
         Assert.Equal(2, attribute.categoryId);
         Assert.Equal(AttributeType.Select, attribute.type);
         Assert.True(attribute.isRequired);
         Assert.Equal(4, attribute.sortOrder);
         Assert.Equal("Appearance", attribute.group);
+        Assert.Equal("Palette", attribute.groupIcon);
+        Assert.Equal(3, attribute.maxValues);
     }
 
     [Fact]
@@ -142,12 +145,15 @@ public class CategoryDomainTests
         {
             name = "Size", key = "size", type = AttributeType.Select, isRequired = true,
             sortOrder = 8, options = "[\"S\"]", defaultValue = "M", description = "Sizing",
-            descriptionInTooltip = true, group = "Variants"
+            descriptionInTooltip = true, group = "Variants", groupIcon = "Ruler",
+            maxValues = 2
         });
         Assert.Equal("Size", attribute.name);
         Assert.Equal(AttributeType.Select, attribute.type);
         Assert.Equal(8, attribute.sortOrder);
         Assert.Equal("Variants", attribute.group);
+        Assert.Equal("Ruler", attribute.groupIcon);
+        Assert.Equal(2, attribute.maxValues);
     }
 
     [Fact]

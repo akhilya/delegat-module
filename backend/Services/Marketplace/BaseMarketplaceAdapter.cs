@@ -41,6 +41,15 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
 
     public virtual int ClearMetadataCaches(MarketplaceConnection connection) => 0;
 
+    public virtual IReadOnlyList<Delegat.Marketplace.SDK.AdapterToolDescriptor> GetTools() => [];
+
+    public virtual Task<Delegat.Marketplace.SDK.AdapterToolRunResult> RunToolAsync(
+        MarketplaceConnection? connection,
+        string toolId,
+        IReadOnlyDictionary<string, string?> parameters,
+        CancellationToken ct = default)
+        => throw new NotSupportedException($"Marketplace {DisplayName} does not provide tools");
+
     #endregion
 
     #region Abstract Methods (must be implemented)
@@ -123,6 +132,26 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
     {
         EnsureCapability(MarketplaceCapabilities.ImportAllProducts);
         throw new NotImplementedException($"ImportAllProductsAsync not implemented for {Key}");
+    }
+
+    public virtual Task<PagedResult<ExternalProduct>> SearchPublicCatalogAsync(
+        MarketplaceConnection connection,
+        string query,
+        int pageSize = 50,
+        string? cursor = null,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.SearchPublicCatalog);
+        throw new NotImplementedException($"SearchPublicCatalogAsync not implemented for {Key}");
+    }
+
+    public virtual Task<ExternalProduct?> GetPublicProductAsync(
+        MarketplaceConnection connection,
+        string publicId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.SearchPublicCatalog);
+        throw new NotImplementedException($"GetPublicProductAsync not implemented for {Key}");
     }
 
     public virtual Task<ExportResult> ExportProductAsync(

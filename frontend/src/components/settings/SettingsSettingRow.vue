@@ -1,26 +1,31 @@
 <script setup>
-import { Card, CardContent } from "@/components/ui/card";
+import { InsetGroupItem } from "@/components/ui/inset-group";
 import { cn } from "@/lib/utils";
 
-defineProps({
+const props = defineProps({
   title: { type: String, required: true },
   description: { type: String, default: "" },
+  as: { type: null, default: "div" },
+  disabled: { type: Boolean, default: false },
   class: { type: null, default: undefined },
 });
 </script>
 
 <template>
-  <Card :class="cn('gap-0 py-0 shadow-none', $props.class)">
-    <CardContent class="flex items-center justify-between gap-4 px-4 py-3">
-      <div class="min-w-0">
-        <div class="text-sm font-medium">{{ title }}</div>
-        <div v-if="description" class="text-xs text-muted-foreground">
-          {{ description }}
-        </div>
-      </div>
-      <div class="shrink-0">
-        <slot />
-      </div>
-    </CardContent>
-  </Card>
+  <InsetGroupItem
+    :as="as"
+    :disabled="disabled"
+    :class="cn(props.class)"
+  >
+    <p>{{ title }}</p>
+    <p
+      v-if="description"
+      class="mt-0.5 text-xs font-normal text-muted-foreground"
+    >
+      {{ description }}
+    </p>
+    <template #trailing>
+      <slot />
+    </template>
+  </InsetGroupItem>
 </template>

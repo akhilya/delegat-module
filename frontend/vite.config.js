@@ -145,6 +145,8 @@ export default defineConfig(({ command }) => {
         "/api": {
           target: "http://localhost:5000",
           changeOrigin: true,
+          timeout: 60 * 60 * 1000,
+          proxyTimeout: 60 * 60 * 1000,
         },
         "/hubs": {
           target: "http://localhost:5000",

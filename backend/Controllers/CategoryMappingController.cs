@@ -25,7 +25,7 @@ public class CategoryMappingController : ControllerBase
     private readonly DataContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
-    private readonly CategoryImportService _categoryImportService;
+    private readonly CategoryImportQueueService _categoryImportQueue;
     private readonly PluginVersionSyncService _pluginVersionSyncService;
     private readonly IMarketplaceMetadataCache _metadataCache;
     private readonly ILogger<CategoryMappingController> _logger;
@@ -38,7 +38,7 @@ public class CategoryMappingController : ControllerBase
         DataContext context,
         IServiceProvider serviceProvider,
         IMarketplaceAdapterRegistry adapterRegistry,
-        CategoryImportService categoryImportService,
+        CategoryImportQueueService categoryImportQueue,
         PluginVersionSyncService pluginVersionSyncService,
         IMarketplaceMetadataCache metadataCache,
         ILogger<CategoryMappingController> logger,
@@ -49,7 +49,7 @@ public class CategoryMappingController : ControllerBase
         _context = context;
         _serviceProvider = serviceProvider;
         _adapterRegistry = adapterRegistry;
-        _categoryImportService = categoryImportService;
+        _categoryImportQueue = categoryImportQueue;
         _pluginVersionSyncService = pluginVersionSyncService;
         _metadataCache = metadataCache;
         _logger = logger;
@@ -723,38 +723,57 @@ public class CategoryMappingController : ControllerBase
         }
 
         var storeId = connection.storeId;
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var operationId = string.IsNullOrWhiteSpace(input.operationId)
+            ? Guid.NewGuid().ToString("N")
+            : input.operationId.Trim();
 
-        if (!string.IsNullOrEmpty(input.operationId))
-            await _operationLogger.LogAsync(input.operationId, storeId, "info",
-                $"Importing category: {input.externalCategoryName ?? input.externalCategoryId}...");
-
-        var result = await _categoryImportService.ImportExternalCategoryAsync(
+        var queued = await _categoryImportQueue.EnqueueIfNeededAsync(
             connection,
             input.externalCategoryId,
-            input.localCategoryName,
             input.externalCategoryName,
+            input.localCategoryName,
             input.localCategoryId,
             input.selectedFieldKeys,
+            operationId,
+            userId,
             ct);
 
-        if (!result.IsSuccess)
+        if (queued == null)
         {
-            if (!string.IsNullOrEmpty(input.operationId))
-                await _operationLogger.LogAsync(input.operationId, storeId, "error",
-                    $"Failed to import category: {result.ErrorMessage}");
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Import failed", code: "import_failed");
+            var existing = await _context.categoryMappings.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    m => m.connectionId == connectionId
+                         && m.externalCategoryId == input.externalCategoryId.Trim(),
+                    ct);
+            return Ok(new
+            {
+                queued = false,
+                alreadyMapped = true,
+                categoryMappingId = existing?.Id,
+                localCategoryId = existing?.localCategoryId,
+                operationId,
+                message = "Category is already mapped"
+            });
         }
 
-        if (!string.IsNullOrEmpty(input.operationId))
-            await _operationLogger.LogAsync(input.operationId, storeId, "success",
-                $"Category imported: {result.Message} (attributes: {result.AttributesCreated})");
+        var opExists = await _context.operations.AsNoTracking()
+            .AnyAsync(o => o.operationId == operationId, ct);
+        if (!opExists)
+        {
+            var label = input.externalCategoryName ?? input.localCategoryName ?? input.externalCategoryId;
+            await _operationLogger.StartAsync(
+                operationId, storeId, userId, "category-import",
+                $"Import category: {label}",
+                connectionId: connectionId, connectionName: connection.name,
+                batchId: operationId, batchType: "category-import", totalItems: 1);
+        }
 
         return Ok(new
         {
-            categoryMappingId = result.CategoryMappingId,
-            localCategoryId = result.LocalCategoryId,
-            attributesCreated = result.AttributesCreated,
-            message = result.Message
+            queued = true,
+            operationId,
+            message = "Category import queued"
         });
     }
 
@@ -904,7 +923,8 @@ public class CategoryMappingController : ControllerBase
                     id = m.Id,
                     name = m.name,
                     externalCategoryId = m.externalCategoryId,
-                    externalCategoryName = m.externalCategoryName
+                    externalCategoryName = m.externalCategoryName,
+                    localCategoryName = product.category?.name
                 }),
                 needsSelection = needsSelection
             };
@@ -1089,6 +1109,9 @@ public class CategoryMappingController : ControllerBase
         if (IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
+        if (CategoryImportService.IsBarcodeField(field))
+            return (FieldMappingSourceType.ProductField, "barcode", null);
+
         if (IsNameField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "name", null);
 
@@ -1142,8 +1165,10 @@ public class CategoryMappingController : ControllerBase
         // Use Contains for name so it matches Ozon's product-name field
         var exactPatterns = new[] { "name", "title" };
         var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
+        var compactKey = key.Replace("-", "", StringComparison.Ordinal);
 
-        return exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
+        return compactKey is "productname" or "itemname" ||
+               exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
                containsPatterns.Any(p => name.Contains(p));
     }
 

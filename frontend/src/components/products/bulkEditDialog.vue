@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
 import { BarcodeInput } from "@/components/ui/barcode";
@@ -77,6 +78,11 @@ function parseMultiSelectLabels(attribute, value) {
 
 function setMultiSelectValue(attribute, labels) {
   return JSON.stringify(labelsToStoredValues(attribute.options, labels));
+}
+
+function maxSelections(attribute) {
+  const n = Number(attribute?.maxValues);
+  return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
 const props = defineProps({
@@ -266,9 +272,21 @@ async function handleSubmit() {
   const updates = {};
 
   if (enabledFields.name) {
+    if (fieldLimitIssue(formData.name, FIELD_LIMITS.productName) === "tooLong") {
+      toast.error(t("common.tooLong", { max: FIELD_LIMITS.productName }));
+      return;
+    }
     updates.name = formData.name || "";
   }
   if (enabledFields.description) {
+    if (
+      fieldLimitIssue(formData.description, FIELD_LIMITS.productDescription, {
+        required: false,
+      }) === "tooLong"
+    ) {
+      toast.error(t("common.tooLong", { max: FIELD_LIMITS.productDescription }));
+      return;
+    }
     updates.description = formData.description || "";
   }
   if (enabledFields.storageQuantity && formData.storageQuantity !== null && formData.storageQuantity !== "") {
@@ -409,6 +427,7 @@ async function handleSubmit() {
                     v-model="formData.name"
                     :disabled="!enabledFields.name"
                     :placeholder="t('products.bulkEditDialog.namePlaceholder')"
+                    :maxlength="FIELD_LIMITS.productName"
                   />
                 </SettingsFormField>
               </div>
@@ -430,6 +449,7 @@ async function handleSubmit() {
                     v-model="formData.description"
                     :disabled="!enabledFields.description"
                     :placeholder="t('products.bulkEditDialog.descriptionPlaceholder')"
+                    :maxlength="FIELD_LIMITS.productDescription"
                     rows="3"
                   />
                 </SettingsFormField>
@@ -580,6 +600,7 @@ async function handleSubmit() {
                         :options="getSelectOptions(attr)"
                         :placeholder="attr.name"
                         :disabled="!enabledCategoryAttributes[attr.id]"
+                        :allow-create="!!attr.allowCustomValues"
                       />
                       <MultiSelectDropdown
                         v-else-if="isType(attr.type, 'multiselect')"
@@ -592,6 +613,8 @@ async function handleSubmit() {
                         "
                         :placeholder="attr.name"
                         :disabled="!enabledCategoryAttributes[attr.id]"
+                        :allow-create="!!attr.allowCustomValues"
+                        :max-selections="maxSelections(attr)"
                       />
                       <Textarea
                         v-else-if="isType(attr.type, 'text') && attr.isMultiline"
@@ -701,6 +724,7 @@ async function handleSubmit() {
                         "
                         :placeholder="attr.name"
                         :disabled="!enabledStoreAttributes[attr.id]"
+                        :max-selections="maxSelections(attr)"
                       />
                       <Textarea
                         v-else-if="isType(attr.type, 'text') && attr.isMultiline"

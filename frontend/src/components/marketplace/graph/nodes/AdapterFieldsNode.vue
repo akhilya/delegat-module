@@ -79,6 +79,15 @@ function fieldTooltip(f) {
       .join(" ");
     if (range) parts.push(range);
   }
+  if (f.maxLength != null) {
+    parts.push(t("marketplace.graph.maxLengthLabel", { max: f.maxLength }));
+  }
+  if (f.maxValues != null) {
+    parts.push(t("marketplace.graph.maxValuesLabel", { max: f.maxValues }));
+  }
+  if (f.allowCustomValues) {
+    parts.push(t("marketplace.graph.allowCustomValuesLabel"));
+  }
   parts.push(t("marketplace.graph.keyLabel", { key: f.fieldKey }));
   return parts.filter(Boolean).join("\n");
 }

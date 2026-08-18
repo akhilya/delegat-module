@@ -7,13 +7,14 @@ export const confirmState = reactive({
   description: "",
   confirmLabel: "",
   cancelLabel: "",
+  saveLabel: "",
   destructive: true,
   _resolve: null,
 });
 
 /**
  * Programmatic confirmation dialog (ConfirmDialogHost in app.vue).
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean | 'save'>} true = confirm, false = cancel, 'save' = saveLabel
  */
 export function confirm(options) {
   const opts =
@@ -39,6 +40,7 @@ export function confirm(options) {
         description: opts.description ?? "",
         confirmLabel: opts.confirmLabel ?? t("common.delete"),
         cancelLabel: opts.cancelLabel ?? t("common.cancel"),
+        saveLabel: opts.saveLabel ?? "",
         destructive: opts.destructive !== false,
         _resolve: resolve,
       });

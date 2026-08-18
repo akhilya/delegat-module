@@ -45,8 +45,17 @@ const frameClass = computed(() =>
     v-if="loading"
     :class="frameClass"
     v-bind="attrs"
+    aria-busy="true"
   >
     <Spinner size="2xl" class="text-muted-foreground" />
+    <p
+      v-if="title || description"
+      class="text-sm text-muted-foreground text-center max-w-sm"
+      role="status"
+      aria-live="polite"
+    >
+      {{ title || description }}
+    </p>
   </div>
   <Empty v-else :class="frameClass" v-bind="attrs">
     <EmptyHeader>

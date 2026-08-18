@@ -87,7 +87,37 @@ function diffTokens(a, b) {
  */
 export function displayFieldValue(value, emptyLabel) {
   if (value === null || value === undefined || value === "") return emptyLabel;
+  if (Array.isArray(value)) return formatList(value);
+  if (typeof value === "string") {
+    const pretty = prettyJsonArray(value);
+    if (pretty != null) return pretty;
+  }
   return String(value);
+}
+
+function formatList(items) {
+  return items.map((item) => String(item)).join(", ");
+}
+
+/** Unwrap a JSON array (and one extra nested array-as-string) into a comma-separated list. */
+function prettyJsonArray(s) {
+  const t = s.trim();
+  if (!t.startsWith("[")) return null;
+  try {
+    const parsed = JSON.parse(t);
+    if (!Array.isArray(parsed)) return null;
+    if (
+      parsed.length === 1 &&
+      typeof parsed[0] === "string" &&
+      parsed[0].trim().startsWith("[")
+    ) {
+      const inner = prettyJsonArray(parsed[0]);
+      if (inner != null) return inner;
+    }
+    return formatList(parsed);
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -88,6 +88,9 @@ public class FieldMappingController : ControllerBase
                 unit = f.Unit,
                 minValue = f.MinValue,
                 maxValue = f.MaxValue,
+                maxLength = f.MaxLength,
+                maxValues = f.MaxValues,
+                allowCustomValues = f.AllowCustomValues,
                 sortOrder = f.SortOrder,
                 isAspect = f.IsAspect
             }));
@@ -136,6 +139,9 @@ public class FieldMappingController : ControllerBase
                 group = f.Group,
                 minValue = f.MinValue,
                 maxValue = f.MaxValue,
+                maxLength = f.MaxLength,
+                maxValues = f.MaxValues,
+                allowCustomValues = f.AllowCustomValues,
             }));
         }
         catch (Exception ex)

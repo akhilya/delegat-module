@@ -28,19 +28,15 @@ public static class ExternalCategoryEligibility
             return MappableExternalCategoryResult.Fail("External category ID is required");
         }
 
-        var resolved = await ResolveCategoryAsync(adapter, connection, externalCategoryId.Trim(), ct);
-        if (resolved is { HasChildren: true })
-        {
-            return MappableExternalCategoryResult.Fail(
-                "Selected marketplace category is not a leaf category. Choose a terminal category that accepts products and has fields.");
-        }
-
+        var id = externalCategoryId.Trim();
         var fields = new List<ExternalField>();
-        if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
+        var hasFieldCap = adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields);
+
+        if (hasFieldCap)
         {
             try
             {
-                fields = await adapter.GetCategoryFieldsAsync(connection, externalCategoryId.Trim(), ct);
+                fields = await adapter.GetCategoryFieldsAsync(connection, id, ct);
             }
             catch (Exception ex)
             {
@@ -49,11 +45,24 @@ public static class ExternalCategoryEligibility
             }
 
             fields = fields.Where(f => f.Key != "_hasSizes").ToList();
-            if (fields.Count == 0)
+            if (fields.Count > 0)
             {
-                return MappableExternalCategoryResult.Fail(
-                    "Selected marketplace category has no fields. Choose a terminal category that can be used for export.");
+                // Non-empty schema means a mappable leaf; skip walking the category tree.
+                return MappableExternalCategoryResult.Ok(category: null, fields);
             }
+        }
+
+        var resolved = await ResolveCategoryAsync(adapter, connection, id, ct);
+        if (resolved is { HasChildren: true })
+        {
+            return MappableExternalCategoryResult.Fail(
+                "Selected marketplace category is not a leaf category. Choose a terminal category that accepts products and has fields.");
+        }
+
+        if (hasFieldCap)
+        {
+            return MappableExternalCategoryResult.Fail(
+                "Selected marketplace category has no fields. Choose a terminal category that can be used for export.");
         }
 
         return MappableExternalCategoryResult.Ok(resolved, fields);

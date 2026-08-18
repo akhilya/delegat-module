@@ -181,6 +181,22 @@ const helperLineVertical = ref(undefined);
 const showAutoArrangeConfirm = ref(false);
 
 const loading = ref(true);
+const loadingPhase = ref("graph");
+const LOAD_STATUS_BY_PHASE = {
+  "load:api:getMappingGraph": "graph",
+  "load:prepareGraph": "graph",
+  "load:setNodes": "layout",
+  "load:setEdges": "layout",
+  "load:relayoutMeasured": "layout",
+  "load:finalizeNodes": "layout",
+  "load:refreshAnalysis": "layout",
+  "load:applyEdgeLaneTypes": "layout",
+  "load:fitView": "layout",
+  "load:historySnapshot": "layout",
+};
+const loadingStatusText = computed(() =>
+  t(`marketplace.fieldMappingPage.loadStatus.${loadingPhase.value}`),
+);
 const saving = ref(false);
 const syncingFields = ref(false);
 const dirty = ref(false);
@@ -358,7 +374,12 @@ function waitForPaint() {
   });
 }
 
-async function loadStep(_phase, fn) {
+async function loadStep(phase, fn) {
+  const status = LOAD_STATUS_BY_PHASE[phase];
+  if (status && loadingPhase.value !== status) {
+    loadingPhase.value = status;
+    await waitForPaint();
+  }
   try {
     return await fn();
   } catch (e) {
@@ -392,6 +413,9 @@ function enrichFieldsWithDefs(fields, defs) {
       unit: def?.unit ?? f.unit ?? null,
       minValue: def?.minValue ?? f.minValue ?? null,
       maxValue: def?.maxValue ?? f.maxValue ?? null,
+      maxLength: def?.maxLength ?? f.maxLength ?? null,
+      allowCustomValues: def?.allowCustomValues ?? f.allowCustomValues ?? false,
+      maxValues: def?.maxValues ?? f.maxValues ?? null,
     };
   });
 }
@@ -1250,6 +1274,8 @@ async function load(options = {}) {
   }
   if (previewTimer) clearTimeout(previewTimer);
   loading.value = true;
+  loadingPhase.value = "graph";
+  await waitForPaint();
   try {
     const data = await loadStep("load:api:getMappingGraph", () =>
       store.dispatch("getMappingGraph", {
@@ -2267,9 +2293,17 @@ async function importMappingFile(event) {
 
       <div
         v-if="loading"
-        class="absolute inset-0 z-40 flex items-center justify-center bg-background/60"
+        class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/60"
+        aria-busy="true"
       >
         <Spinner size="xl" class="text-muted-foreground" />
+        <p
+          class="text-sm text-muted-foreground text-center max-w-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {{ loadingStatusText }}
+        </p>
       </div>
       </div>
     </SplitterPanel>

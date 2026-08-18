@@ -37,6 +37,8 @@ import {
   Boxes,
   Layers,
   RefreshCw,
+  Image,
+  Check,
 } from "lucide-vue-next";
 import {
   adapterConnectionMenuMode,
@@ -45,6 +47,7 @@ import {
   hasMappingIssue,
   normalizeExportMode,
 } from "@/lib/adapterConnectionStatus";
+import { mappingDisplayName } from "@/lib/mappingDisplayName";
 
 export default {
   name: "ProductAdapterConnectionMenuItems",
@@ -79,6 +82,8 @@ export default {
     Boxes,
     Layers,
     RefreshCw,
+    Image,
+    Check,
   },
   props: {
     /** "dropdown" | "context" */
@@ -108,6 +113,7 @@ export default {
     "export",
     "update:exportMode",
     "import",
+    "import-images",
     "verify",
     "unlink",
     "update:mapping",
@@ -182,11 +188,13 @@ export default {
   },
   methods: {
     mappingLabel(m) {
-      return (
-        m.name ||
-        m.externalCategoryName ||
-        this.$t("productMarketplaceIntegrations.mappingFallback", { id: m.id })
+      return mappingDisplayName(
+        m,
+        this.$t("productMarketplaceIntegrations.mappingFallback", { id: m.id }),
       );
+    },
+    isSelectedMapping(id) {
+      return Number(this.selectedMappingId) === Number(id);
     },
   },
 };
@@ -233,19 +241,17 @@ export default {
         </component>
         <component :is="ui.SubContent" class="w-52">
           <component
-            :is="ui.RadioGroup"
-            :model-value="String(selectedMappingId ?? '')"
-            @update:model-value="$emit('update:mapping', Number($event))"
+            :is="ui.Item"
+            v-for="m in connection.availableMappings"
+            :key="m.id"
+            @click="$emit('update:mapping', m.id)"
           >
-            <component
-              :is="ui.RadioItem"
-              v-for="m in connection.availableMappings"
-              :key="m.id"
-              :value="String(m.id)"
-              class="truncate"
-            >
-              {{ mappingLabel(m) }}
-            </component>
+            <Layers />
+            <span class="min-w-0 flex-1 truncate">{{ mappingLabel(m) }}</span>
+            <Check
+              v-if="isSelectedMapping(m.id)"
+              class="ml-auto text-foreground"
+            />
           </component>
         </component>
       </component>
@@ -302,19 +308,17 @@ export default {
         </component>
         <component :is="ui.SubContent" class="w-52">
           <component
-            :is="ui.RadioGroup"
-            :model-value="String(selectedMappingId ?? '')"
-            @update:model-value="$emit('update:mapping', Number($event))"
+            :is="ui.Item"
+            v-for="m in connection.availableMappings"
+            :key="m.id"
+            @click="$emit('update:mapping', m.id)"
           >
-            <component
-              :is="ui.RadioItem"
-              v-for="m in connection.availableMappings"
-              :key="m.id"
-              :value="String(m.id)"
-              class="truncate"
-            >
-              {{ mappingLabel(m) }}
-            </component>
+            <Layers />
+            <span class="min-w-0 flex-1 truncate">{{ mappingLabel(m) }}</span>
+            <Check
+              v-if="isSelectedMapping(m.id)"
+              class="ml-auto text-foreground"
+            />
           </component>
         </component>
       </component>
@@ -385,6 +389,15 @@ export default {
         <Download />
         {{ $t("productMarketplaceIntegrations.menuImport") }}
       </component>
+      <component
+        :is="ui.Item"
+        v-if="connection.canImport"
+        :disabled="importBusy"
+        @click="$emit('import-images')"
+      >
+        <Image />
+        {{ $t("productMarketplaceIntegrations.menuImportImages") }}
+      </component>
     </component>
 
     <component :is="ui.Separator" />
@@ -416,19 +429,17 @@ export default {
         </component>
         <component :is="ui.SubContent" class="w-52">
           <component
-            :is="ui.RadioGroup"
-            :model-value="String(selectedMappingId ?? '')"
-            @update:model-value="$emit('update:mapping', Number($event))"
+            :is="ui.Item"
+            v-for="m in connection.availableMappings"
+            :key="m.id"
+            @click="$emit('update:mapping', m.id)"
           >
-            <component
-              :is="ui.RadioItem"
-              v-for="m in connection.availableMappings"
-              :key="m.id"
-              :value="String(m.id)"
-              class="truncate"
-            >
-              {{ mappingLabel(m) }}
-            </component>
+            <Layers />
+            <span class="min-w-0 flex-1 truncate">{{ mappingLabel(m) }}</span>
+            <Check
+              v-if="isSelectedMapping(m.id)"
+              class="ml-auto text-foreground"
+            />
           </component>
         </component>
       </component>

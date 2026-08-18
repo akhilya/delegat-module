@@ -23,7 +23,7 @@ const props = defineProps({
   blurBackdrop: { type: Boolean, default: false },
   /** Extra classes on the wrapper (merged with relative overflow-hidden) */
   class: { type: null, default: undefined },
-  /** Extra classes on the Spinner (e.g. light color on dark lightbox) */
+  /** Extra classes on the Spinner (e.g. contrast on a dim overlay) */
   spinnerClass: { type: null, default: undefined },
 });
 

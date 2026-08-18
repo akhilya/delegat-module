@@ -21,14 +21,23 @@ public class StoreDomainTests
         var store = new Store();
         Assert.Equal(Store.DEFAULT_BASE_CURRENCY, store.baseCurrency);
         Assert.Equal("RUB", store.baseCurrency);
+        Assert.Null(store.onboardingCompletedAt);
     }
 
     [Fact]
-    public void AddFill_SetsNameFromForm()
+    public void AddFill_TrimsStoreName()
     {
         var store = new Store();
-        Assert.True(store.AddFill(new Store.AddForm { name = "Acme" }));
+        Assert.True(store.AddFill(new Store.AddForm { name = "  Acme  " }));
         Assert.Equal("Acme", store.name);
+    }
+
+    [Fact]
+    public void StoreName_MaxLengthIsForty()
+    {
+        Assert.Equal(40, Store.STORE_NAME_MAX_LENGTH);
+        Assert.True("x".PadRight(40, 'x').Length <= Store.STORE_NAME_MAX_LENGTH);
+        Assert.False("x".PadRight(41, 'x').Length <= Store.STORE_NAME_MAX_LENGTH);
     }
 
     [Theory]

@@ -21,6 +21,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import AppImage from "@/components/AppImage.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +97,7 @@ export default {
       },
       storeFiles: [],
       isLoading: false,
+      loadStatus: "mapping",
       isSaving: false,
       hasChanges: false,
       mappingInfo: null,
@@ -153,7 +156,9 @@ export default {
       ];
       if (this.mappingInfo) {
         items.push({
-          label: this.mappingInfo.externalCategoryName || this.$t("marketplace.fieldMappingPage.category"),
+          label:
+            mappingDisplayName(this.mappingInfo) ||
+            this.$t("marketplace.fieldMappingPage.category"),
         });
       }
       return items;
@@ -173,6 +178,9 @@ export default {
     },
     hasUnmappedRequired() {
       return this.unmappedRequiredFields.length > 0;
+    },
+    loadStatusText() {
+      return this.$t(`marketplace.fieldMappingPage.loadStatus.${this.loadStatus}`);
     },
     previewSummary() {
       return this.fieldMappings
@@ -240,19 +248,35 @@ export default {
       "getAttributeOptions",
     ]),
 
+    waitForPaint() {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
+    },
+
     async fetchData() {
       this.isLoading = true;
-      await Promise.all([
-        this.fetchFieldMappings(),
-        this.fetchAvailableSources(),
-        this.fetchStoreFiles(),
-        this.fetchExternalFieldDescriptions(),
-        this.fetchPriceFieldDescriptions(),
-      ]);
-      // fetchPreviewProducts needs localCategoryId from mappingInfo, so run after fetchFieldMappings
-      await this.fetchPreviewProducts();
-      await this.ensureSelectedPreviewInOptions();
-      this.isLoading = false;
+      this.loadStatus = "mapping";
+      await this.waitForPaint();
+      try {
+        const dictionaries = this.fetchExternalFieldDescriptions();
+        const priceFields = this.fetchPriceFieldDescriptions();
+        const sources = this.fetchAvailableSources();
+        const files = this.fetchStoreFiles();
+        await this.fetchFieldMappings();
+        this.loadStatus = "dictionaries";
+        await this.waitForPaint();
+        await Promise.all([dictionaries, priceFields]);
+        this.loadStatus = "sources";
+        await this.waitForPaint();
+        await Promise.all([sources, files]);
+        this.loadStatus = "products";
+        await this.waitForPaint();
+        await this.fetchPreviewProducts();
+        await this.ensureSelectedPreviewInOptions();
+      } finally {
+        this.isLoading = false;
+      }
     },
 
     async fetchFieldMappings() {
@@ -293,7 +317,9 @@ export default {
             externalCategoryName: data.externalCategoryName,
           };
 
-          setPageTitle(data.externalCategoryName || data.localCategoryName);
+          setPageTitle(
+            mappingDisplayName(data) || data.localCategoryName,
+          );
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -346,6 +372,9 @@ export default {
               unit: f.unit || null,
               minValue: f.minValue ?? null,
               maxValue: f.maxValue ?? null,
+              maxLength: f.maxLength ?? null,
+              allowCustomValues: f.allowCustomValues ?? false,
+              maxValues: f.maxValues ?? null,
             };
           }
           this.externalFieldDescriptions = descMap;
@@ -1091,6 +1120,7 @@ export default {
   <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
     <PageSection
       :loading="isLoading"
+      :loading-message="loadStatusText"
       class="!mb-0 flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       <template v-if="!isLoading">

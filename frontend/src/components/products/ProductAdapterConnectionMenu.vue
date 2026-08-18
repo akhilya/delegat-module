@@ -46,6 +46,7 @@ export default {
     "export",
     "update:exportMode",
     "import",
+    "import-images",
     "verify",
     "unlink",
     "update:mapping",
@@ -88,6 +89,7 @@ export default {
         @export="$emit('export')"
         @update:export-mode="$emit('update:exportMode', $event)"
         @import="$emit('import')"
+        @import-images="$emit('import-images')"
         @verify="$emit('verify')"
         @unlink="$emit('unlink')"
         @update:mapping="$emit('update:mapping', $event)"

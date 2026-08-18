@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref, watch, nextTick } from "vue";
-import { ChevronDown, X, Search } from "lucide-vue-next";
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ChevronDown, X, Search, Plus } from "lucide-vue-next";
 import {
   Popover,
   PopoverTrigger,
@@ -8,8 +8,11 @@ import {
 } from "@/components/ui/popover";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
+
+const PILL_CLASS = "h-5 max-w-none px-1.5 font-medium";
 
 function focusSearchInput() {
   const el = searchInputRef.value?.$el ?? searchInputRef.value;
@@ -49,6 +52,16 @@ const props = defineProps({
     type: Number,
     default: 100, // Maximum options to display at once for performance
   },
+  /** Allow typing a value that is not in `options`. */
+  allowCreate: {
+    type: Boolean,
+    default: false,
+  },
+  /** Max selected values. 0 / omitted = unlimited. */
+  maxSelections: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -61,8 +74,7 @@ const searchInputRef = ref(null);
 watch(open, (isOpen) => {
   if (!isOpen) {
     searchQuery.value = "";
-  } else if (isLargeList.value) {
-    // Auto-focus search input for large lists
+  } else if (isLargeList.value || props.allowCreate) {
     nextTick(() => {
       focusSearchInput();
     });
@@ -72,7 +84,9 @@ watch(open, (isOpen) => {
 // Check if this is a large list that needs special handling
 const isLargeList = computed(() => props.options.length > props.maxDisplayOptions);
 
-const showSearch = computed(() => props.options.length > props.searchThreshold);
+const showSearch = computed(
+  () => props.allowCreate || props.options.length > props.searchThreshold,
+);
 
 const filteredOptions = computed(() => {
   if (!searchQuery.value) {
@@ -113,16 +127,87 @@ const remainingCount = computed(() => {
   return filteredOptions.value.length - displayedOptions.value.length;
 });
 
+const trimmedQuery = computed(() => searchQuery.value.trim());
+
 const selectedCount = computed(() => props.modelValue.length);
+
+const maxCap = computed(() => {
+  const n = Number(props.maxSelections);
+  return Number.isInteger(n) && n > 0 ? n : null;
+});
+
+const atLimit = computed(
+  () => maxCap.value != null && selectedCount.value >= maxCap.value,
+);
+
+const canAddCustom = computed(() => {
+  if (!props.allowCreate || atLimit.value) return false;
+  const q = trimmedQuery.value;
+  if (!q) return false;
+  const lower = q.toLowerCase();
+  if (props.modelValue.some((value) => String(value).toLowerCase() === lower)) {
+    return false;
+  }
+  return !props.options.some((option) => String(option).toLowerCase() === lower);
+});
+
+const extraSelected = computed(() =>
+  props.modelValue.filter((value) => !props.options.includes(value)),
+);
+
+const addCustom = () => {
+  if (!canAddCustom.value) return;
+  emit("update:modelValue", [...props.modelValue, trimmedQuery.value]);
+  searchQuery.value = "";
+};
 
 const displayText = computed(() => {
   if (selectedCount.value === 0) {
     return props.placeholder;
   }
-  if (selectedCount.value === 1) {
-    return props.modelValue[0];
+  return t(
+    "components.multiSelectDropdown.selectedCount",
+    selectedCount.value,
+    { count: selectedCount.value },
+  );
+});
+
+const viewportRef = ref(null);
+const measureRef = ref(null);
+const pillsFit = ref(false);
+let pillsObserver = null;
+
+function measurePills() {
+  const viewport = viewportRef.value;
+  const measure = measureRef.value;
+  if (!viewport || !measure || props.modelValue.length === 0) {
+    pillsFit.value = false;
+    return;
   }
-  return t("components.multiSelectDropdown.selectedCount", { count: selectedCount.value });
+  pillsFit.value = measure.scrollWidth <= viewport.clientWidth + 0.5;
+}
+
+function scheduleMeasure() {
+  nextTick(() => {
+    requestAnimationFrame(measurePills);
+  });
+}
+
+watch(
+  () => props.modelValue,
+  scheduleMeasure,
+  { deep: true },
+);
+
+onMounted(() => {
+  pillsObserver = new ResizeObserver(scheduleMeasure);
+  if (viewportRef.value) pillsObserver.observe(viewportRef.value);
+  scheduleMeasure();
+});
+
+onBeforeUnmount(() => {
+  pillsObserver?.disconnect();
+  pillsObserver = null;
 });
 
 const isSelected = (option) => {
@@ -135,6 +220,8 @@ const toggleOption = (option) => {
 
   if (index >= 0) {
     newValue.splice(index, 1);
+  } else if (atLimit.value) {
+    return;
   } else {
     newValue.push(option);
   }
@@ -161,15 +248,40 @@ const clearAll = () => {
           selectedCount === 0 && 'text-muted-foreground',
           props.class
         )"
+        :title="selectedCount > 0 ? modelValue.join(', ') : undefined"
       >
-        <span class="min-w-0 flex-1 truncate">{{ displayText }}</span>
-        <div class="flex shrink-0 items-center gap-1">
+        <span ref="viewportRef" class="relative min-h-5 min-w-0 flex-1 overflow-hidden">
           <span
-            v-if="selectedCount > 0"
-            class="flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs w-5 h-5"
+            ref="measureRef"
+            class="invisible pointer-events-none absolute inset-y-0 left-0 flex w-max items-center gap-1 whitespace-nowrap"
+            aria-hidden="true"
           >
-            {{ selectedCount }}
+            <Badge
+              v-for="(value, index) in modelValue"
+              :key="'measure-' + index + '-' + value"
+              as="span"
+              variant="secondary"
+              :class="PILL_CLASS"
+            >{{ value }}</Badge>
           </span>
+          <span
+            v-if="selectedCount > 0 && pillsFit"
+            class="flex h-5 items-center gap-1"
+          >
+            <Badge
+              v-for="(value, index) in modelValue"
+              :key="'pill-' + index + '-' + value"
+              as="span"
+              variant="secondary"
+              :class="PILL_CLASS"
+            >{{ value }}</Badge>
+          </span>
+          <span
+            v-else
+            class="block truncate"
+          >{{ displayText }}</span>
+        </span>
+        <div class="flex shrink-0 items-center gap-1">
           <X
             v-if="selectedCount > 0 && !disabled"
             class="size-4 opacity-50 hover:opacity-100 cursor-pointer"
@@ -195,6 +307,7 @@ const clearAll = () => {
             :placeholder="isLargeList ? t('components.multiSelectDropdown.searchPlaceholderLarge') : t('components.multiSelectDropdown.searchPlaceholder')"
             class="h-8 bg-background pl-8"
             @click.stop
+            @keydown.enter.prevent.stop="addCustom"
           />
         </div>
         <!-- Info for large lists without search -->
@@ -205,19 +318,51 @@ const clearAll = () => {
 
       <!-- Options list -->
       <div class="overflow-auto flex-1">
-        <div v-if="options.length === 0" class="p-3 text-sm text-muted-foreground text-center">
-          {{ t('components.multiSelectDropdown.noOptions') }}
+        <div v-if="options.length === 0 && extraSelected.length === 0 && !canAddCustom" class="p-3 text-sm text-muted-foreground text-center">
+          {{ allowCreate ? t('components.multiSelectDropdown.typeToAdd') : t('components.multiSelectDropdown.noOptions') }}
         </div>
-        <div v-else-if="filteredOptions.length === 0" class="p-3 text-sm text-muted-foreground text-center">
+        <div v-else-if="filteredOptions.length === 0 && extraSelected.length === 0 && !canAddCustom" class="p-3 text-sm text-muted-foreground text-center">
           {{ t('components.multiSelectDropdown.nothingFound') }}
         </div>
         <div v-else class="p-1">
+          <button
+            v-if="canAddCustom"
+            type="button"
+            class="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+            @click="addCustom"
+          >
+            <Plus class="size-4 shrink-0" />
+            <span class="text-sm flex-1 truncate">{{
+              t("components.multiSelectDropdown.addCustom", { value: trimmedQuery })
+            }}</span>
+          </button>
+          <div
+            v-for="option in extraSelected"
+            :key="`custom-${option}`"
+            role="option"
+            :aria-selected="true"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+            @click="toggleOption(option)"
+          >
+            <Checkbox
+              :model-value="true"
+              class="pointer-events-none"
+              tabindex="-1"
+            />
+            <span class="text-sm flex-1 truncate" :title="option">{{ option }}</span>
+          </div>
           <div
             v-for="option in displayedOptions"
             :key="option"
             role="option"
             :aria-selected="isSelected(option)"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+            :aria-disabled="atLimit && !isSelected(option) || undefined"
+            :class="[
+              'flex items-center gap-2 px-2 py-1.5 rounded-sm transition-colors',
+              atLimit && !isSelected(option)
+                ? 'opacity-50 cursor-not-allowed'
+                : 'cursor-pointer hover:bg-accent hover:text-accent-foreground',
+            ]"
             @click="toggleOption(option)"
           >
             <Checkbox
@@ -236,6 +381,12 @@ const clearAll = () => {
             <template v-else>
               {{ t('components.multiSelectDropdown.remainingOptionsHint', { count: remainingCount.toLocaleString() }) }}
             </template>
+          </div>
+          <div
+            v-if="maxCap"
+            class="px-2 py-1.5 text-xs text-muted-foreground text-center border-t"
+          >
+            {{ t("components.multiSelectDropdown.maxSelections", { count: selectedCount, max: maxCap }) }}
           </div>
         </div>
       </div>

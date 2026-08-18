@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
-import Label from "@/components/ui/label/Label.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,9 +15,12 @@ import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
 import { randomUuidCompact } from "@/utils/uuid";
+import { FIELD_LIMITS, clipToLimit, fieldLimitIssue } from "@/lib/fieldLimits";
+import { displayFieldValue } from "@/lib/fieldDiff";
 import {
   displaySonnerError,
   displaySonnerSuccess,
+  displayImportFieldsUpdated,
   extractResponseData,
 } from "@/store/sonnerHelper";
 import {
@@ -44,8 +46,6 @@ import {
   Upload,
   Download,
   AlertTriangle,
-  FolderOpen,
-  Sparkles,
   Ban,
   DollarSign,
   Boxes,
@@ -61,6 +61,7 @@ import {
   SearchCheck,
   BookOpen,
   ExternalLink,
+  X,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -122,18 +123,27 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Separator from "@/components/ui/separator/Separator.vue";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
 import FieldChangesPreviewDialog from "@/components/products/FieldChangesPreviewDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
-import { FieldGroup } from "@/components/ui/field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
 import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
 import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
+import { mappingDisplayName } from "@/lib/mappingDisplayName";
 
 export default {
   components: {
@@ -143,7 +153,6 @@ export default {
     PageSection,
     Button,
     Input,
-    Label,
     Badge,
     ButtonGroup,
     Checkbox,
@@ -169,9 +178,8 @@ export default {
     Search,
     Upload,
     Download,
+    X,
     AlertTriangle,
-    FolderOpen,
-    Sparkles,
     Ban,
     DollarSign,
     Boxes,
@@ -218,7 +226,6 @@ export default {
     TabsTrigger,
     RadioGroup,
     RadioGroupItem,
-    Separator,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -238,13 +245,20 @@ export default {
     PasswordInput,
     SettingsFormField,
     SettingsFormSection,
+    SearchableSelect,
+    Field,
+    FieldContent,
+    FieldDescription,
     FieldGroup,
+    FieldLabel,
+    FieldLegend,
+    FieldSet,
     ExternalCategoryBrowser,
     Progress,
     Tooltip,
     TooltipContent,
     TooltipProvider,
-    TooltipTrigger
+    TooltipTrigger,
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
@@ -263,6 +277,7 @@ export default {
 
       // Connection settings
       connection: null,
+      FIELD_LIMITS,
       capabilities: null,
       categoryMappings: [],
       localCategories: [],
@@ -468,27 +483,65 @@ export default {
     },
     capabilityLabels() {
       return {
-        getCategories: this.$t("marketplace.connectionPage.capabilities.getCategories"),
-        getCategoryFields: this.$t("marketplace.connectionPage.capabilities.getCategoryFields"),
-        createCategory: this.$t("marketplace.connectionPage.capabilities.createCategory"),
-        importProduct: this.$t("marketplace.connectionPage.capabilities.importProduct"),
-        importAllProducts: this.$t("marketplace.connectionPage.capabilities.importAllProducts"),
-        importProductBatch: this.$t("marketplace.connectionPage.capabilities.importProductBatch"),
-        exportProduct: this.$t("marketplace.connectionPage.capabilities.exportProduct"),
-        exportProductBulk: this.$t("marketplace.connectionPage.capabilities.exportProductBulk"),
+        getCategories: this.$t(
+          "marketplace.connectionPage.capabilities.getCategories",
+        ),
+        getCategoryFields: this.$t(
+          "marketplace.connectionPage.capabilities.getCategoryFields",
+        ),
+        createCategory: this.$t(
+          "marketplace.connectionPage.capabilities.createCategory",
+        ),
+        importProduct: this.$t(
+          "marketplace.connectionPage.capabilities.importProduct",
+        ),
+        importAllProducts: this.$t(
+          "marketplace.connectionPage.capabilities.importAllProducts",
+        ),
+        importProductBatch: this.$t(
+          "marketplace.connectionPage.capabilities.importProductBatch",
+        ),
+        exportProduct: this.$t(
+          "marketplace.connectionPage.capabilities.exportProduct",
+        ),
+        exportProductBulk: this.$t(
+          "marketplace.connectionPage.capabilities.exportProductBulk",
+        ),
         updateSku: this.$t("marketplace.connectionPage.capabilities.updateSku"),
-        importPrices: this.$t("marketplace.connectionPage.capabilities.importPrices"),
-        exportPrices: this.$t("marketplace.connectionPage.capabilities.exportPrices"),
-        importStocks: this.$t("marketplace.connectionPage.capabilities.importStocks"),
-        exportStocks: this.$t("marketplace.connectionPage.capabilities.exportStocks"),
+        importPrices: this.$t(
+          "marketplace.connectionPage.capabilities.importPrices",
+        ),
+        exportPrices: this.$t(
+          "marketplace.connectionPage.capabilities.exportPrices",
+        ),
+        importStocks: this.$t(
+          "marketplace.connectionPage.capabilities.importStocks",
+        ),
+        exportStocks: this.$t(
+          "marketplace.connectionPage.capabilities.exportStocks",
+        ),
         getOrders: this.$t("marketplace.connectionPage.capabilities.getOrders"),
-        updateOrderStatus: this.$t("marketplace.connectionPage.capabilities.updateOrderStatus"),
-        fieldBasedGrouping: this.$t("marketplace.connectionPage.capabilities.fieldBasedGrouping"),
-        endpointBasedGrouping: this.$t("marketplace.connectionPage.capabilities.endpointBasedGrouping"),
-        importGroups: this.$t("marketplace.connectionPage.capabilities.importGroups"),
-        deleteGroups: this.$t("marketplace.connectionPage.capabilities.deleteGroups"),
-        modifyGroupMembership: this.$t("marketplace.connectionPage.capabilities.modifyGroupMembership"),
-        archiveProduct: this.$t("marketplace.connectionPage.capabilities.archiveProduct"),
+        updateOrderStatus: this.$t(
+          "marketplace.connectionPage.capabilities.updateOrderStatus",
+        ),
+        fieldBasedGrouping: this.$t(
+          "marketplace.connectionPage.capabilities.fieldBasedGrouping",
+        ),
+        endpointBasedGrouping: this.$t(
+          "marketplace.connectionPage.capabilities.endpointBasedGrouping",
+        ),
+        importGroups: this.$t(
+          "marketplace.connectionPage.capabilities.importGroups",
+        ),
+        deleteGroups: this.$t(
+          "marketplace.connectionPage.capabilities.deleteGroups",
+        ),
+        modifyGroupMembership: this.$t(
+          "marketplace.connectionPage.capabilities.modifyGroupMembership",
+        ),
+        archiveProduct: this.$t(
+          "marketplace.connectionPage.capabilities.archiveProduct",
+        ),
       };
     },
     breadcrumbs() {
@@ -498,9 +551,16 @@ export default {
         products: this.$t("marketplace.connectionPage.tabs.products"),
       };
       return [
-        { label: this.$t("marketplace.connectionPage.breadcrumbs.adapters"), to: PAGE_MARKETPLACE },
         {
-          label: this.connection?.name || this.$t("marketplace.connectionPage.breadcrumbs.connectionFallback"),
+          label: this.$t("marketplace.connectionPage.breadcrumbs.adapters"),
+          to: PAGE_MARKETPLACE,
+        },
+        {
+          label:
+            this.connection?.name ||
+            this.$t(
+              "marketplace.connectionPage.breadcrumbs.connectionFallback",
+            ),
           to: this.$route.fullPath.split("?")[0],
         },
         { label: tabLabels[this.activeTab] || tabLabels.settings },
@@ -561,8 +621,7 @@ export default {
     allBulkCreateSelected() {
       const cats = this.unmappedLocalCategories;
       return (
-        cats.length > 0 &&
-        cats.every((c) => this.bulkCreateSelectedIds[c.id])
+        cats.length > 0 && cats.every((c) => this.bulkCreateSelectedIds[c.id])
       );
     },
     rpsUsagePercent() {
@@ -737,9 +796,12 @@ export default {
         .map((item) => ({
           label:
             item.productName ||
-            this.$t("marketplace.connectionPage.mappingSelection.linkFallback", {
-              id: item.linkId,
-            }),
+            this.$t(
+              "marketplace.connectionPage.mappingSelection.linkFallback",
+              {
+                id: item.linkId,
+              },
+            ),
           fields: item.updatedFields.map((field) => ({
             key: field,
             label: this.getImportFieldLabel(field),
@@ -750,6 +812,7 @@ export default {
     },
   },
   methods: {
+    mappingDisplayName,
     ...mapActions([
       "getConnection",
       "updateConnection",
@@ -762,7 +825,6 @@ export default {
       "createCategoryMapping",
       "createExternalCategoryMapping",
       "deleteCategoryMapping",
-      "importCategory",
       "createCategory",
       // Products actions
       "getExternalProducts",
@@ -913,11 +975,14 @@ export default {
     },
 
     getUsageLoadLabel(usage, limit) {
-      if (limit < 0) return this.$t("marketplace.connectionPage.limits.unlimited");
+      if (limit < 0)
+        return this.$t("marketplace.connectionPage.limits.unlimited");
       if (limit <= 0) return this.$t("common.emDash");
       const ratio = usage / limit;
-      if (ratio < 0.5) return this.$t("marketplace.connectionPage.limits.loadNormal");
-      if (ratio < 0.8) return this.$t("marketplace.connectionPage.limits.loadHigh");
+      if (ratio < 0.5)
+        return this.$t("marketplace.connectionPage.limits.loadNormal");
+      if (ratio < 0.8)
+        return this.$t("marketplace.connectionPage.limits.loadHigh");
       return this.$t("marketplace.connectionPage.limits.loadCritical");
     },
 
@@ -1030,7 +1095,9 @@ export default {
           this.credentialValues[field.key] = "";
         } else {
           this.credentialValues[field.key] =
-            publicCreds[field.key] != null ? String(publicCreds[field.key]) : "";
+            publicCreds[field.key] != null
+              ? String(publicCreds[field.key])
+              : "";
         }
       }
     },
@@ -1071,6 +1138,22 @@ export default {
     },
 
     async handleSave() {
+      const nameIssue = fieldLimitIssue(
+        this.connection?.name,
+        FIELD_LIMITS.connectionName,
+      );
+      if (nameIssue === "empty") {
+        displaySonnerError(
+          this.$t("marketplace.marketplacePage.enterConnectionName"),
+        );
+        return;
+      }
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.connectionName }),
+        );
+        return;
+      }
       this.isSaving = true;
       const credentialsJson = this.buildCredentialsJson();
       const data = {
@@ -1170,7 +1253,10 @@ export default {
         },
         onError: (error) => {
           displaySonnerError(
-            error || this.$t("marketplace.connectionPage.notifications.linksVerifyError"),
+            error ||
+              this.$t(
+                "marketplace.connectionPage.notifications.linksVerifyError",
+              ),
           );
         },
       });
@@ -1179,18 +1265,32 @@ export default {
 
     async handleCreateMapping() {
       if (
+        fieldLimitIssue(this.newMapping.name, FIELD_LIMITS.mappingName, {
+          required: false,
+        }) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.mappingName }),
+        );
+        return;
+      }
+      if (
         !this.newMapping.localCategoryId ||
         !this.newMapping.externalCategoryId
       ) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectBothCategories"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectBothCategories",
+          ),
         );
         return;
       }
 
       if (this.selectedExternalIsFolder) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLeafCategory"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLeafCategory",
+          ),
         );
         return;
       }
@@ -1206,11 +1306,15 @@ export default {
           this.fetchMappings();
           if (data.fieldsCreated === 0) {
             displaySonnerError(
-              this.$t("marketplace.connectionPage.notifications.mappingCreatedWithoutFields"),
+              this.$t(
+                "marketplace.connectionPage.notifications.mappingCreatedWithoutFields",
+              ),
             );
           } else {
             displaySonnerSuccess(
-              this.$t("marketplace.connectionPage.notifications.mappingCreated"),
+              this.$t(
+                "marketplace.connectionPage.notifications.mappingCreated",
+              ),
             );
           }
         },
@@ -1224,14 +1328,18 @@ export default {
     async handleCreateExternalCategoryMapping() {
       if (!this.newMapping.localCategoryId) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLocalCategory"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLocalCategory",
+          ),
         );
         return;
       }
 
       if (!this.capabilities?.capabilities?.createCategory) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.createCategoryUnsupported"),
+          this.$t(
+            "marketplace.connectionPage.notifications.createCategoryUnsupported",
+          ),
         );
         return;
       }
@@ -1249,7 +1357,9 @@ export default {
         },
         onSuccess: () => {
           displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.categoryCreatedAndLinked"),
+            this.$t(
+              "marketplace.connectionPage.notifications.categoryCreatedAndLinked",
+            ),
           );
           this.showCreateMappingDialog = false;
           this.resetNewMapping();
@@ -1276,9 +1386,12 @@ export default {
       // No linked products — plain confirmation, no reassign/force UI
       if (linkedCount === 0) {
         const ok = await confirm({
-          title: this.$t("marketplace.connectionPage.dialogs.deleteMappingTitle", {
-            name: target.name || target.localCategoryName,
-          }),
+          title: this.$t(
+            "marketplace.connectionPage.dialogs.deleteMappingTitle",
+            {
+              name: target.name || target.localCategoryName,
+            },
+          ),
           description: this.$t(
             "marketplace.connectionPage.dialogs.deleteMappingSimpleDescription",
           ),
@@ -1292,8 +1405,7 @@ export default {
       this.deleteMappingTarget = target;
       const replacements = this.categoryMappings.filter(
         (m) =>
-          m.id !== target.id &&
-          m.localCategoryId === target.localCategoryId,
+          m.id !== target.id && m.localCategoryId === target.localCategoryId,
       );
       this.deleteMappingImpact = {
         linkedProductsCount: linkedCount,
@@ -1304,7 +1416,11 @@ export default {
       this.showDeleteMappingDialog = true;
     },
 
-    async confirmDeleteMapping(mappingId = null, reassignToMappingId = null, force = false) {
+    async confirmDeleteMapping(
+      mappingId = null,
+      reassignToMappingId = null,
+      force = false,
+    ) {
       const targetId = mappingId || this.deleteMappingTarget?.id;
       if (!targetId) return;
 
@@ -1328,7 +1444,9 @@ export default {
                     "marketplace.connectionPage.notifications.mappingDeletedDetached",
                     { count: detached },
                   )
-                : this.$t("marketplace.connectionPage.notifications.mappingDeleted"),
+                : this.$t(
+                    "marketplace.connectionPage.notifications.mappingDeleted",
+                  ),
           );
           this.showDeleteMappingDialog = false;
           this.deleteMappingTarget = null;
@@ -1341,8 +1459,10 @@ export default {
             const impact = error.response.data.data;
             this.deleteMappingImpact = impact;
             const replacements = impact.replacementMappings || [];
-            this.deleteMappingMode = replacements.length > 0 ? "reassign" : "force";
-            this.deleteMappingReplacementId = replacements[0]?.id?.toString() ?? null;
+            this.deleteMappingMode =
+              replacements.length > 0 ? "reassign" : "force";
+            this.deleteMappingReplacementId =
+              replacements[0]?.id?.toString() ?? null;
             this.showDeleteMappingDialog = true;
           } else {
             displaySonnerError(error);
@@ -1413,6 +1533,16 @@ export default {
 
     async handleRenameMapping() {
       if (this.renameMappingId == null) return;
+      if (
+        fieldLimitIssue(this.renameMappingValue, FIELD_LIMITS.mappingName, {
+          required: false,
+        }) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.mappingName }),
+        );
+        return;
+      }
       this.isRenamingMapping = true;
       try {
         await this.updateCategoryMapping({
@@ -1443,6 +1573,16 @@ export default {
 
     async saveMappingSettingsDialog() {
       if (this.mappingSettingsId == null) return;
+      if (
+        fieldLimitIssue(this.mappingSettingsName, FIELD_LIMITS.mappingName, {
+          required: false,
+        }) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.mappingName }),
+        );
+        return;
+      }
       this.isSavingMappingSettings = true;
       try {
         await this.updateCategoryMapping({
@@ -1549,7 +1689,9 @@ export default {
             this.productsListUnsupported = true;
             this.productsListUnsupportedMessage =
               data.message ||
-              this.$t("marketplace.connectionPage.products.fetchUnsupportedTitle");
+              this.$t(
+                "marketplace.connectionPage.products.fetchUnsupportedTitle",
+              );
             return;
           }
           this.products = data.items || [];
@@ -1653,6 +1795,15 @@ export default {
       this.lastSelectedExternalId = null;
     },
 
+    clearExternalSelection() {
+      this.selectedItems = [];
+      this.lastSelectedExternalId = null;
+    },
+
+    clearLocalSelection() {
+      this.selectedLocalItemsMap = {};
+    },
+
     captureShiftSelection(event) {
       this.isShiftSelecting = !!event?.shiftKey;
     },
@@ -1752,7 +1903,9 @@ export default {
           const result = extractResponseData(response, {});
           if (!result.hasChanges) {
             displaySonnerSuccess(
-              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
+              this.$t(
+                "marketplace.connectionPage.notifications.noChangesDetected",
+              ),
             );
           } else {
             this.singleImportPreviewData = result;
@@ -1779,15 +1932,9 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           if (result.updatedFields && result.updatedFields.length > 0) {
-            displaySonnerSuccess(
-              this.$t("marketplace.connectionPage.notifications.fieldsUpdated", {
-                fields: result.updatedFields.join(", "),
-              }),
-            );
+            displayImportFieldsUpdated(result.updatedFields);
           } else {
-            displaySonnerSuccess(
-              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
-            );
+            displayImportFieldsUpdated([]);
           }
           this.fetchProducts(true);
         },
@@ -1837,8 +1984,12 @@ export default {
 
       const ok = await confirm({
         title: this.$t("marketplace.connectionPage.confirm.unlinkTitle"),
-        description: this.$t("marketplace.connectionPage.confirm.unlinkDescription"),
-        confirmLabel: this.$t("marketplace.connectionPage.confirm.unlinkConfirm"),
+        description: this.$t(
+          "marketplace.connectionPage.confirm.unlinkDescription",
+        ),
+        confirmLabel: this.$t(
+          "marketplace.connectionPage.confirm.unlinkConfirm",
+        ),
       });
       if (!ok) return;
 
@@ -1866,7 +2017,9 @@ export default {
     async openImportDialog() {
       if (this.selectedUnlinkedItems.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectUnlinkedProducts"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectUnlinkedProducts",
+          ),
         );
         return;
       }
@@ -1971,6 +2124,48 @@ export default {
       );
     },
 
+    importAssignmentKey(group) {
+      return group.externalCategoryId || "__none__";
+    },
+
+    importLocalCategoryValue(group) {
+      const id =
+        this.categoryAssignments[this.importAssignmentKey(group)]
+          ?.localCategoryId;
+      return id != null ? String(id) : "";
+    },
+
+    importLocalCategoryOptions(group) {
+      const mappedId = this.getExistingMappingForCategory(
+        group.externalCategoryId,
+      )?.localCategoryId;
+      const mappedHint = this.$t(
+        "marketplace.connectionPage.dialogs.mappingParenthetical",
+      );
+      return this.localCategories.map((cat) => ({
+        value: String(cat.id),
+        label: mappedId === cat.id ? `${cat.name} ${mappedHint}` : cat.name,
+      }));
+    },
+
+    onImportLocalCategory(group, value) {
+      this.setAssignmentCategory(
+        this.importAssignmentKey(group),
+        value ? parseInt(value, 10) : null,
+      );
+    },
+
+    setAssignmentNewName(extCatId, name) {
+      if (!this.categoryAssignments[extCatId]) {
+        this.categoryAssignments[extCatId] = {
+          mode: "new",
+          localCategoryId: null,
+          newCategoryName: "",
+        };
+      }
+      this.categoryAssignments[extCatId].newCategoryName = name;
+    },
+
     async handleImportWithCategories() {
       if (!this.canConfirmImportWithCategories) {
         displaySonnerError(
@@ -2006,25 +2201,15 @@ export default {
 
       try {
         const categoryIdMap = {};
-        let cancelled = false;
+        const categoryNameMap = {};
+        const externalNameMap = {};
 
         for (const group of this.productsByExternalCategory) {
-          // Check if operation was paused or stopped
-          try {
-            const { data } = await http.get(
-              `/operations/${operationId}/status`,
-            );
-            if (data.status === "paused" || data.status === "cancelled") {
-              cancelled = true;
-              break;
-            }
-          } catch {
-            /* ignore */
-          }
-
           const extCatId = group.externalCategoryId;
           const key = extCatId || "__none__";
           const assignment = this.categoryAssignments[key];
+          const marketplaceName = (group.externalCategoryName || "").trim();
+          externalNameMap[key] = marketplaceName || null;
 
           if (!assignment || assignment.mode === "none") {
             categoryIdMap[key] = null;
@@ -2032,9 +2217,10 @@ export default {
             categoryIdMap[key] = assignment.localCategoryId;
           } else if (assignment.mode === "new") {
             const typedName = (assignment.newCategoryName || "").trim();
-            const marketplaceName = (group.externalCategoryName || "").trim();
-            // Never use the i18n "uncategorized" display label as a create name.
-            const categoryName = typedName || (extCatId ? marketplaceName : "");
+            const categoryName = clipToLimit(
+              typedName || (extCatId ? marketplaceName : ""),
+              FIELD_LIMITS.categoryName,
+            );
             if (!categoryName) {
               displaySonnerError(
                 this.$t(
@@ -2044,30 +2230,12 @@ export default {
               categoryIdMap[key] = null;
               continue;
             }
-            let createdCategoryId = null;
 
             if (extCatId) {
-              await this.importCategory({
-                connectionId: this.connectionId,
-                data: {
-                  externalCategoryId: extCatId,
-                  externalCategoryName: marketplaceName || categoryName,
-                  localCategoryName: categoryName,
-                  operationId,
-                },
-                onSuccess: (response) => {
-                  const result = extractResponseData(response, {});
-                  createdCategoryId = result.localCategoryId;
-                },
-                onError: (error) => {
-                  displaySonnerError(
-                    this.$t("marketplace.connectionPage.notifications.categoryCreateError", {
-                      error,
-                    }),
-                  );
-                },
-              });
+              categoryIdMap[key] = null;
+              categoryNameMap[key] = categoryName;
             } else {
+              let createdCategoryId = null;
               await this.createCategory({
                 name: categoryName,
                 description: "",
@@ -2077,21 +2245,18 @@ export default {
                 },
                 onError: (error) => {
                   displaySonnerError(
-                    this.$t("marketplace.connectionPage.notifications.categoryCreateError", {
-                      error,
-                    }),
+                    this.$t(
+                      "marketplace.connectionPage.notifications.categoryCreateError",
+                      {
+                        error,
+                      },
+                    ),
                   );
                 },
               });
+              categoryIdMap[key] = createdCategoryId;
             }
-            categoryIdMap[key] = createdCategoryId;
           }
-        }
-
-        if (cancelled) {
-          this.showImportDialog = false;
-          this.selectedItems = [];
-          return;
         }
 
         const productsToImport = this.selectedUnlinkedItems.map((p) => {
@@ -2102,7 +2267,10 @@ export default {
           return {
             externalId: p.externalId,
             externalCategoryId: p.externalCategoryId || null,
+            externalCategoryName:
+              externalNameMap[key] || p.externalCategoryName || null,
             targetCategoryId: targetCategoryId || null,
+            targetCategoryName: categoryNameMap[key] || null,
             forceImportWithoutMapping:
               !assignment || assignment.mode === "none",
             productName: p.name || p.externalId,
@@ -2117,19 +2285,25 @@ export default {
             const result = extractResponseData(response, {});
             if (result.batchId) {
               displaySonnerSuccess(
-                this.$t("marketplace.connectionPage.notifications.queuedForImport", {
-                  count: result.queued,
-                }),
+                this.$t(
+                  "marketplace.connectionPage.notifications.queuedForImport",
+                  {
+                    count: result.queued,
+                  },
+                ),
               );
               this.showImportDialog = false;
               this.selectedItems = [];
             } else {
               displaySonnerSuccess(
-                this.$t("marketplace.connectionPage.notifications.importSummary", {
-                  created: result.imported || 0,
-                  skipped: result.skipped || 0,
-                  failed: result.failed || 0,
-                }),
+                this.$t(
+                  "marketplace.connectionPage.notifications.importSummary",
+                  {
+                    created: result.imported || 0,
+                    skipped: result.skipped || 0,
+                    failed: result.failed || 0,
+                  },
+                ),
               );
               this.showImportDialog = false;
               this.selectedItems = [];
@@ -2152,7 +2326,9 @@ export default {
       if (this.isImportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLinkedProducts",
+          ),
         );
         return;
       }
@@ -2167,7 +2343,9 @@ export default {
           const result = extractResponseData(response, {});
           if (result.totalWithChanges === 0) {
             displaySonnerSuccess(
-              this.$t("marketplace.connectionPage.notifications.noChangesDetected"),
+              this.$t(
+                "marketplace.connectionPage.notifications.noChangesDetected",
+              ),
             );
           } else {
             this.bulkImportPreviewData = result;
@@ -2193,10 +2371,13 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.bulkImportSummary", {
-              success: result.successCount || 0,
-              failed: result.failedCount || 0,
-            }),
+            this.$t(
+              "marketplace.connectionPage.notifications.bulkImportSummary",
+              {
+                success: result.successCount || 0,
+                failed: result.failedCount || 0,
+              },
+            ),
           );
           this.selectedItems = [];
         },
@@ -2224,7 +2405,9 @@ export default {
       if (this.isExportingBulk) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLinkedProducts",
+          ),
         );
         return;
       }
@@ -2252,7 +2435,9 @@ export default {
         }
       } catch (error) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.mappingCheckError") +
+          this.$t(
+            "marketplace.connectionPage.notifications.mappingCheckError",
+          ) +
             ": " +
             (error.response?.data?.message || error.message),
         );
@@ -2278,7 +2463,9 @@ export default {
       } catch (error) {
         displaySonnerError(
           error.response?.data?.message ||
-            this.$t("marketplace.connectionPage.notifications.exportBatchError"),
+            this.$t(
+              "marketplace.connectionPage.notifications.exportBatchError",
+            ),
         );
       } finally {
         this.isExportingBulk = false;
@@ -2289,7 +2476,9 @@ export default {
       if (this.isExportingPrices) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLinkedProducts",
+          ),
         );
         return;
       }
@@ -2303,10 +2492,13 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.pricesExportSummary", {
-              updated: result.updatedCount || 0,
-              skipped: result.skippedCount || 0,
-            }),
+            this.$t(
+              "marketplace.connectionPage.notifications.pricesExportSummary",
+              {
+                updated: result.updatedCount || 0,
+                skipped: result.skippedCount || 0,
+              },
+            ),
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -2322,7 +2514,9 @@ export default {
       if (this.isExportingStocks) return;
       if (this.selectedLinkedItems.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectLinkedProducts"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectLinkedProducts",
+          ),
         );
         return;
       }
@@ -2336,10 +2530,13 @@ export default {
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
           displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.stocksExportSummary", {
-              updated: result.updatedCount || 0,
-              skipped: result.skippedCount || 0,
-            }),
+            this.$t(
+              "marketplace.connectionPage.notifications.stocksExportSummary",
+              {
+                updated: result.updatedCount || 0,
+                skipped: result.skippedCount || 0,
+              },
+            ),
           );
           this.selectedItems = [];
           this.fetchProducts(true);
@@ -2387,7 +2584,9 @@ export default {
     openBulkCreateCategoriesDialog() {
       if (!this.canCreateCategory) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.createCategoryUnsupported"),
+          this.$t(
+            "marketplace.connectionPage.notifications.createCategoryUnsupported",
+          ),
         );
         return;
       }
@@ -2482,10 +2681,13 @@ export default {
       await this.fetchLocalCategories();
 
       displaySonnerSuccess(
-        this.$t("marketplace.connectionPage.mappings.categoriesCreatedSuccess", {
-          success: progress.success,
-          failed: progress.failed,
-        }),
+        this.$t(
+          "marketplace.connectionPage.mappings.categoriesCreatedSuccess",
+          {
+            success: progress.success,
+            failed: progress.failed,
+          },
+        ),
       );
 
       if (progress.failed === 0) {
@@ -2592,7 +2794,9 @@ export default {
       const productIds = this.selectedLocalIds;
       if (productIds.length === 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectProductsToExport"),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectProductsToExport",
+          ),
         );
         return;
       }
@@ -2618,7 +2822,9 @@ export default {
         }
       } catch (error) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.mappingCheckError") +
+          this.$t(
+            "marketplace.connectionPage.notifications.mappingCheckError",
+          ) +
             ": " +
             (error.response?.data?.message || error.message),
         );
@@ -2644,7 +2850,9 @@ export default {
       } catch (error) {
         displaySonnerError(
           error.response?.data?.message ||
-            this.$t("marketplace.connectionPage.notifications.exportBatchError"),
+            this.$t(
+              "marketplace.connectionPage.notifications.exportBatchError",
+            ),
         );
       } finally {
         this.isExportingNewBulk = false;
@@ -2659,9 +2867,12 @@ export default {
       );
       if (unselected.length > 0) {
         displaySonnerError(
-          this.$t("marketplace.connectionPage.notifications.selectMappingForAll", {
-            count: unselected.length,
-          }),
+          this.$t(
+            "marketplace.connectionPage.notifications.selectMappingForAll",
+            {
+              count: unselected.length,
+            },
+          ),
         );
         return;
       }
@@ -2721,7 +2932,9 @@ export default {
         name: this.$t("common.name"),
         description: this.$t("common.description"),
         price: this.$t("marketplace.connectionPage.fields.price"),
-        storageQuantity: this.$t("marketplace.connectionPage.fields.storageQuantity"),
+        storageQuantity: this.$t(
+          "marketplace.connectionPage.fields.storageQuantity",
+        ),
         barcode: this.$t("marketplace.connectionPage.fields.barcode"),
       };
       if (field.startsWith("attr:")) return field.substring(5);
@@ -2731,7 +2944,7 @@ export default {
     formatImportFieldValue(field, value) {
       if (value === null || value === undefined) return null;
       if (field === "price") return this.formatPrice(value);
-      return String(value);
+      return displayFieldValue(value, "");
     },
 
     getStatusInfo(product) {
@@ -2811,7 +3024,8 @@ export default {
     },
 
     formatPrice(price) {
-      if (price === null || price === undefined) return this.$t("common.emDash");
+      if (price === null || price === undefined)
+        return this.$t("common.emDash");
       return formatMoney(price, this.storeBaseCurrency);
     },
 
@@ -2923,8 +3137,12 @@ export default {
     <template #nav-center>
       <Tabs v-model="activeTab">
         <TabsList>
-          <TabsTrigger value="settings">{{ $t("marketplace.connectionPage.tabs.settings") }}</TabsTrigger>
-          <TabsTrigger value="mappings">{{ $t("marketplace.connectionPage.tabs.mappings") }}</TabsTrigger>
+          <TabsTrigger value="settings">{{
+            $t("marketplace.connectionPage.tabs.settings")
+          }}</TabsTrigger>
+          <TabsTrigger value="mappings">{{
+            $t("marketplace.connectionPage.tabs.mappings")
+          }}</TabsTrigger>
           <TabsTrigger value="products" @click="onProductsTabActivated">
             {{ $t("marketplace.connectionPage.tabs.products") }}
           </TabsTrigger>
@@ -2935,22 +3153,43 @@ export default {
     <PageSection
       :loading="isLoading"
       class="!min-h-0 flex flex-col"
-      :class="activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden mb-4' : ''"
+      :class="
+        activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden mb-4' : ''
+      "
     >
       <div
         v-if="connection"
         class="flex flex-col gap-4"
-        :class="activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden' : ''"
+        :class="
+          activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden' : ''
+        "
       >
         <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col min-h-0">
           <TabsContent value="settings" class="mt-0">
             <div class="max-w-2xl">
-              <SettingsFormSection :title="$t('marketplace.connectionPage.settings.connectionTitle')">
-                <SettingsFormField :label="$t('common.name')" label-for="connection-name">
-                  <Input id="connection-name" v-model="connection.name" />
+              <SettingsFormSection
+                :title="
+                  $t('marketplace.connectionPage.settings.connectionTitle')
+                "
+              >
+                <SettingsFormField
+                  :label="$t('common.name')"
+                  label-for="connection-name"
+                >
+                  <Input
+                    id="connection-name"
+                    v-model="connection.name"
+                    :maxlength="FIELD_LIMITS.connectionName"
+                  />
                 </SettingsFormField>
 
-                <SettingsFormField :label="$t('marketplace.connectionPage.settings.activeConnection')" label-for="active" inline>
+                <SettingsFormField
+                  :label="
+                    $t('marketplace.connectionPage.settings.activeConnection')
+                  "
+                  label-for="active"
+                  inline
+                >
                   <Switch
                     id="active"
                     :model-value="connection.isActive"
@@ -2961,7 +3200,9 @@ export default {
 
               <SettingsFormSection
                 v-if="credentialFields?.length"
-                :title="$t('marketplace.connectionPage.settings.credentialsTitle')"
+                :title="
+                  $t('marketplace.connectionPage.settings.credentialsTitle')
+                "
               >
                 <a
                   v-if="credentialsDocsUrl"
@@ -2971,7 +3212,11 @@ export default {
                   class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 >
                   <BookOpen class="size-3.5 shrink-0" />
-                  {{ $t("marketplace.connectionPage.settings.credentialsDocsLink") }}
+                  {{
+                    $t(
+                      "marketplace.connectionPage.settings.credentialsDocsLink",
+                    )
+                  }}
                   <ExternalLink class="size-3 shrink-0 opacity-70" />
                 </a>
                 <SettingsFormField
@@ -2999,7 +3244,9 @@ export default {
                       class="h-auto px-0"
                       @click="startEditSecret(field.key)"
                     >
-                      {{ $t("marketplace.connectionPage.settings.changeSecret") }}
+                      {{
+                        $t("marketplace.connectionPage.settings.changeSecret")
+                      }}
                     </Button>
                   </div>
                   <div v-else-if="field.isSecret" class="w-full space-y-1.5">
@@ -3008,6 +3255,7 @@ export default {
                       v-model="credentialValues[field.key]"
                       class="w-full"
                       :placeholder="field.placeholder || field.description"
+                      :maxlength="FIELD_LIMITS.credentialValue"
                     />
                     <Button
                       v-if="connection?.hasCredentials"
@@ -3016,7 +3264,11 @@ export default {
                       class="h-auto px-0 text-muted-foreground"
                       @click="cancelEditSecret(field.key)"
                     >
-                      {{ $t("marketplace.connectionPage.settings.cancelSecretEdit") }}
+                      {{
+                        $t(
+                          "marketplace.connectionPage.settings.cancelSecretEdit",
+                        )
+                      }}
                     </Button>
                   </div>
                   <Input
@@ -3025,6 +3277,7 @@ export default {
                     v-model="credentialValues[field.key]"
                     type="text"
                     :placeholder="field.placeholder || field.description"
+                    :maxlength="FIELD_LIMITS.credentialValue"
                   />
                   <template v-if="field.description" #description>
                     {{ field.description }}
@@ -3044,13 +3297,18 @@ export default {
                       <Button
                         size="icon"
                         class="h-9 w-9 shrink-0"
-                        :aria-label="$t('marketplace.connectionPage.header.moreActions')"
+                        :aria-label="
+                          $t('marketplace.connectionPage.header.moreActions')
+                        "
                       >
                         <EllipsisVertical class="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" class="w-56">
-                      <DropdownMenuItem :disabled="isTesting" @click="handleTest">
+                      <DropdownMenuItem
+                        :disabled="isTesting"
+                        @click="handleTest"
+                      >
                         <Spinner v-if="isTesting" class="mr-2" />
                         <TestTube v-else class="size-4 mr-2" />
                         {{ $t("marketplace.connectionPage.header.test") }}
@@ -3061,10 +3319,14 @@ export default {
                       >
                         <Spinner v-if="isVerifyingLinks" class="mr-2" />
                         <SearchCheck v-else class="size-4 mr-2" />
-                        {{ $t("marketplace.connectionPage.header.verifyLinks") }}
+                        {{
+                          $t("marketplace.connectionPage.header.verifyLinks")
+                        }}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        :disabled="limitsData != null && limitsData.supported === false"
+                        :disabled="
+                          limitsData != null && limitsData.supported === false
+                        "
                         @click="showLimitsDialog = true"
                       >
                         <Activity class="size-4 mr-2" />
@@ -3091,20 +3353,29 @@ export default {
                   class="h-auto px-0"
                   @click="showCapabilitiesDialog = true"
                 >
-                  {{ $t("marketplace.connectionPage.settings.capabilitiesLink") }}
+                  {{
+                    $t("marketplace.connectionPage.settings.capabilitiesLink")
+                  }}
                 </Button>
 
                 <Dialog v-model:open="showCapabilitiesDialog">
                   <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>
-                        {{ $t("marketplace.connectionPage.settings.capabilitiesTitle") }}
+                        {{
+                          $t(
+                            "marketplace.connectionPage.settings.capabilitiesTitle",
+                          )
+                        }}
                       </DialogTitle>
                       <DialogDescription>
                         {{
-                          $t("marketplace.connectionPage.settings.capabilitiesDescription", {
-                            adapter: adapterDisplayName,
-                          })
+                          $t(
+                            "marketplace.connectionPage.settings.capabilitiesDescription",
+                            {
+                              adapter: adapterDisplayName,
+                            },
+                          )
                         }}
                       </DialogDescription>
                     </DialogHeader>
@@ -3122,8 +3393,13 @@ export default {
                           v-if="value"
                           class="size-4 shrink-0 text-success-foreground"
                         />
-                        <XCircle v-else class="size-4 shrink-0 text-muted-foreground" />
-                        <span class="text-sm">{{ capabilityLabels[key] || key }}</span>
+                        <XCircle
+                          v-else
+                          class="size-4 shrink-0 text-muted-foreground"
+                        />
+                        <span class="text-sm">{{
+                          capabilityLabels[key] || key
+                        }}</span>
                       </div>
                     </div>
                   </DialogContent>
@@ -3150,40 +3426,71 @@ export default {
                     <EmptyState
                       v-else-if="limitsData && !limitsData.supported"
                       class="flex-1 py-12"
-                      :title="$t('marketplace.connectionPage.limits.unavailableTitle')"
-                      :description="$t('marketplace.connectionPage.limits.unavailableDescription')"
+                      :title="
+                        $t('marketplace.connectionPage.limits.unavailableTitle')
+                      "
+                      :description="
+                        $t(
+                          'marketplace.connectionPage.limits.unavailableDescription',
+                        )
+                      "
                     >
                       <template #icon>
                         <Activity />
                       </template>
                     </EmptyState>
 
-                    <div
-                      v-else-if="limitsData?.supported"
-                      class="space-y-4"
-                    >
+                    <div v-else-if="limitsData?.supported" class="space-y-4">
                       <Card>
                         <CardHeader class="pb-2">
-                          <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
+                          <CardTitle
+                            class="flex items-center justify-between gap-3 text-sm font-medium"
+                          >
                             <span class="flex items-center gap-2">
                               <Gauge class="size-4 text-muted-foreground" />
-                              {{ $t("marketplace.connectionPage.limits.requestsPerSecond") }}
+                              {{
+                                $t(
+                                  "marketplace.connectionPage.limits.requestsPerSecond",
+                                )
+                              }}
                             </span>
-                            <Badge variant="secondary" class="font-normal tabular-nums">
+                            <Badge
+                              variant="secondary"
+                              class="font-normal tabular-nums"
+                            >
                               {{ limitsData.currentWindowRequests }} /
                               {{ limitsData.maxRequestsPerSecond }} RPS
                             </Badge>
                           </CardTitle>
                         </CardHeader>
                         <CardContent class="space-y-3">
-                          <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span>{{ $t("marketplace.connectionPage.limits.currentWindow") }}</span>
-                            <span>{{ getUsageLoadLabel(limitsData.currentWindowRequests, limitsData.maxRequestsPerSecond) }}</span>
+                          <div
+                            class="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                          >
+                            <span>{{
+                              $t(
+                                "marketplace.connectionPage.limits.currentWindow",
+                              )
+                            }}</span>
+                            <span>{{
+                              getUsageLoadLabel(
+                                limitsData.currentWindowRequests,
+                                limitsData.maxRequestsPerSecond,
+                              )
+                            }}</span>
                           </div>
                           <Progress :model-value="rpsUsagePercent" :max="100" />
                           <p class="text-xs text-muted-foreground">
-                            {{ $t("marketplace.connectionPage.limits.totalRequestsSinceStart") }}
-                            {{ limitsData.totalRequestsSinceStart.toLocaleString("ru-RU") }}
+                            {{
+                              $t(
+                                "marketplace.connectionPage.limits.totalRequestsSinceStart",
+                              )
+                            }}
+                            {{
+                              limitsData.totalRequestsSinceStart.toLocaleString(
+                                "ru-RU",
+                              )
+                            }}
                           </p>
                         </CardContent>
                       </Card>
@@ -3192,7 +3499,11 @@ export default {
                         v-if="limitsData.quotasAvailable === false"
                         class="text-xs text-muted-foreground"
                       >
-                        {{ $t("marketplace.connectionPage.limits.quotasUnavailable") }}
+                        {{
+                          $t(
+                            "marketplace.connectionPage.limits.quotasUnavailable",
+                          )
+                        }}
                       </p>
 
                       <div
@@ -3204,11 +3515,23 @@ export default {
                           :key="quota.key"
                         >
                           <CardHeader class="pb-2">
-                            <CardTitle class="flex items-center justify-between gap-3 text-sm font-medium">
-                              <span class="truncate">{{ quota.displayName }}</span>
-                              <Badge variant="secondary" class="shrink-0 font-normal tabular-nums">
+                            <CardTitle
+                              class="flex items-center justify-between gap-3 text-sm font-medium"
+                            >
+                              <span class="truncate">{{
+                                quota.displayName
+                              }}</span>
+                              <Badge
+                                variant="secondary"
+                                class="shrink-0 font-normal tabular-nums"
+                              >
                                 <template v-if="quota.limit < 0">
-                                  {{ quota.usage.toLocaleString("ru-RU") }} · {{ $t("marketplace.connectionPage.limits.unlimited") }}
+                                  {{ quota.usage.toLocaleString("ru-RU") }} ·
+                                  {{
+                                    $t(
+                                      "marketplace.connectionPage.limits.unlimited",
+                                    )
+                                  }}
                                 </template>
                                 <template v-else>
                                   {{ quota.usage.toLocaleString("ru-RU") }} /
@@ -3218,16 +3541,21 @@ export default {
                             </CardTitle>
                           </CardHeader>
                           <CardContent class="space-y-3">
-                            <div
-                              v-if="quota.limit > 0"
-                              class="space-y-2"
-                            >
-                              <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                                <span>{{ $t("marketplace.connectionPage.limits.usage") }}</span>
-                                <span>{{ getUsageLoadLabel(quota.usage, quota.limit) }}</span>
+                            <div v-if="quota.limit > 0" class="space-y-2">
+                              <div
+                                class="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                              >
+                                <span>{{
+                                  $t("marketplace.connectionPage.limits.usage")
+                                }}</span>
+                                <span>{{
+                                  getUsageLoadLabel(quota.usage, quota.limit)
+                                }}</span>
                               </div>
                               <Progress
-                                :model-value="getUsagePercent(quota.usage, quota.limit)"
+                                :model-value="
+                                  getUsagePercent(quota.usage, quota.limit)
+                                "
                                 :max="100"
                               />
                             </div>
@@ -3235,7 +3563,9 @@ export default {
                               v-if="quota.resetsAt"
                               class="text-xs text-muted-foreground"
                             >
-                              {{ $t("marketplace.connectionPage.limits.reset") }}: {{ formatQuotaResetTime(quota.resetsAt) }}
+                              {{
+                                $t("marketplace.connectionPage.limits.reset")
+                              }}: {{ formatQuotaResetTime(quota.resetsAt) }}
                             </p>
                           </CardContent>
                         </Card>
@@ -3257,7 +3587,10 @@ export default {
                     v-if="testResult.success"
                     class="size-5 text-success-foreground shrink-0"
                   />
-                  <XCircle v-else class="size-5 text-error-foreground shrink-0" />
+                  <XCircle
+                    v-else
+                    class="size-5 text-error-foreground shrink-0"
+                  />
                   <span
                     :class="
                       testResult.success
@@ -3267,13 +3600,29 @@ export default {
                   >
                     {{
                       testResult.success
-                        ? testResult.message || $t("marketplace.connectionPage.notifications.testSuccess")
-                        : testResult.errorMessage || $t("marketplace.connectionPage.notifications.testError")
+                        ? testResult.message ||
+                          $t(
+                            "marketplace.connectionPage.notifications.testSuccess",
+                          )
+                        : testResult.errorMessage ||
+                          $t(
+                            "marketplace.connectionPage.notifications.testError",
+                          )
                     }}
                   </span>
                   <AiErrorExplainer
-                    v-if="aiEnabled && !testResult.success && (testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError'))"
-                    :error-message="testResult.errorMessage || $t('marketplace.connectionPage.notifications.testError')"
+                    v-if="
+                      aiEnabled &&
+                      !testResult.success &&
+                      (testResult.errorMessage ||
+                        $t(
+                          'marketplace.connectionPage.notifications.testError',
+                        ))
+                    "
+                    :error-message="
+                      testResult.errorMessage ||
+                      $t('marketplace.connectionPage.notifications.testError')
+                    "
                     :context="`test_connection`"
                     :connection-id="connection?.id"
                   />
@@ -3283,16 +3632,21 @@ export default {
           </TabsContent>
 
           <!-- Mappings Tab -->
-          <TabsContent value="mappings" class="mt-0 flex flex-col min-h-0 gap-3">
-            <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
-                <p class="text-sm font-medium flex items-center gap-2">
-                  <FolderTree class="size-4" />
-                  {{ $t("marketplace.connectionPage.mappings.title") }}
-                  <span class="text-muted-foreground font-normal tabular-nums">
-                    ({{ categoryMappings.length }})
-                  </span>
-                </p>
-                <div class="flex shrink-0 flex-wrap gap-2">
+          <TabsContent
+            value="mappings"
+            class="mt-0 flex flex-col min-h-0 gap-3"
+          >
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 shrink-0"
+            >
+              <p class="text-sm font-medium flex items-center gap-2">
+                <FolderTree class="size-4" />
+                {{ $t("marketplace.connectionPage.mappings.title") }}
+                <span class="text-muted-foreground font-normal tabular-nums">
+                  ({{ categoryMappings.length }})
+                </span>
+              </p>
+              <div class="flex shrink-0 flex-wrap gap-2">
                 <TooltipProvider v-if="canCreateCategory" :delay-duration="200">
                   <Tooltip>
                     <TooltipTrigger as-child>
@@ -3301,7 +3655,9 @@ export default {
                         @click="openBulkCreateCategoriesDialog"
                       >
                         <Upload class="size-4 mr-2" />
-                        {{ $t("marketplace.connectionPage.mappings.createShort") }}
+                        {{
+                          $t("marketplace.connectionPage.mappings.createShort")
+                        }}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" class="max-w-xs">
@@ -3323,7 +3679,9 @@ export default {
                   <DialogTrigger as-child>
                     <Button variant="outline">
                       <Link class="size-4 mr-2" />
-                      {{ $t("marketplace.connectionPage.mappings.createMapping") }}
+                      {{
+                        $t("marketplace.connectionPage.mappings.createMapping")
+                      }}
                     </Button>
                   </DialogTrigger>
                   <DialogContent
@@ -3332,34 +3690,72 @@ export default {
                   >
                     <DialogHeader variant="bar">
                       <DialogTitle>
-                        {{ $t("marketplace.connectionPage.mappings.createMapping") }}
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.createMapping",
+                          )
+                        }}
                       </DialogTitle>
                       <DialogDescription>
-                        {{ $t("marketplace.connectionPage.mappings.createMappingDescription", { adapter: adapterDisplayName }) }}
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.createMappingDescription",
+                            { adapter: adapterDisplayName },
+                          )
+                        }}
                       </DialogDescription>
                     </DialogHeader>
 
                     <div class="px-6 pt-5 pb-4">
-                      <SettingsFormField :label="$t('marketplace.connectionPage.mappings.mappingNameLabel')">
+                      <SettingsFormField
+                        :label="
+                          $t(
+                            'marketplace.connectionPage.mappings.mappingNameLabel',
+                          )
+                        "
+                      >
                         <Input
                           v-model="newMapping.name"
-                          :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
+                          :placeholder="
+                            $t(
+                              'marketplace.connectionPage.mappings.mappingNamePlaceholder',
+                            )
+                          "
+                          :maxlength="FIELD_LIMITS.mappingName"
                         />
                         <template #description>
-                          {{ $t("marketplace.connectionPage.mappings.mappingNameHint") }}
+                          {{
+                            $t(
+                              "marketplace.connectionPage.mappings.mappingNameHint",
+                            )
+                          }}
                         </template>
                       </SettingsFormField>
                     </div>
 
-                    <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-t px-6">
+                    <div
+                      class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-t px-6"
+                    >
                       <div class="flex min-h-0 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.localCategory") }}</p>
-                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+                        <p class="text-sm font-medium">
+                          {{
+                            $t(
+                              "marketplace.connectionPage.mappings.localCategory",
+                            )
+                          }}
+                        </p>
+                        <div
+                          class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border"
+                        >
                           <div
                             v-if="!localCategories.length"
                             class="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground"
                           >
-                            {{ $t("marketplace.connectionPage.mappings.noCategories") }}
+                            {{
+                              $t(
+                                "marketplace.connectionPage.mappings.noCategories",
+                              )
+                            }}
                           </div>
                           <div
                             v-else
@@ -3370,16 +3766,26 @@ export default {
                               :key="cat.id"
                               type="button"
                               class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent"
-                              :class="{ 'bg-accent': newMapping.localCategoryId === cat.id }"
+                              :class="{
+                                'bg-accent':
+                                  newMapping.localCategoryId === cat.id,
+                              }"
                               @click="newMapping.localCategoryId = cat.id"
                             >
-                              <span class="truncate font-medium">{{ cat.name }}</span>
+                              <span class="truncate font-medium">{{
+                                cat.name
+                              }}</span>
                               <Badge
                                 v-if="cat.attributesCount"
                                 variant="secondary"
                                 class="ml-2 shrink-0 font-normal tabular-nums"
                               >
-                                {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: cat.attributesCount }) }}
+                                {{
+                                  $t(
+                                    "marketplace.connectionPage.mappings.attributesCountAbbr",
+                                    { count: cat.attributesCount },
+                                  )
+                                }}
                               </Badge>
                             </button>
                           </div>
@@ -3388,16 +3794,35 @@ export default {
                           v-if="selectedLocalCategory"
                           class="text-xs text-muted-foreground"
                         >
-                          {{ $t("marketplace.connectionPage.mappings.selected") }}
-                          <span class="font-medium text-foreground">{{ selectedLocalCategory.name }}</span>
+                          {{
+                            $t("marketplace.connectionPage.mappings.selected")
+                          }}
+                          <span class="font-medium text-foreground">{{
+                            selectedLocalCategory.name
+                          }}</span>
                           <span v-if="selectedLocalCategory.attributesCount">
-                            · {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: selectedLocalCategory.attributesCount }) }}
+                            ·
+                            {{
+                              $t(
+                                "marketplace.connectionPage.mappings.attributesCountAbbr",
+                                {
+                                  count: selectedLocalCategory.attributesCount,
+                                },
+                              )
+                            }}
                           </span>
                         </p>
                       </div>
 
                       <div class="flex min-h-0 flex-1 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">{{ $t("marketplace.connectionPage.mappings.categoryOf", { adapter: adapterDisplayName }) }}</p>
+                        <p class="text-sm font-medium">
+                          {{
+                            $t(
+                              "marketplace.connectionPage.mappings.categoryOf",
+                              { adapter: adapterDisplayName },
+                            )
+                          }}
+                        </p>
 
                         <ExternalCategoryBrowser
                           v-model:search="externalCategorySearch"
@@ -3406,13 +3831,31 @@ export default {
                           :path="categoryPath"
                           :loading="isLoadingCategories"
                           :selected-id="newMapping.externalCategoryId"
-                          :search-placeholder="$t('marketplace.connectionPage.mappings.searchByNamePlaceholder')"
-                          :search-aria-label="$t('marketplace.connectionPage.mappings.findCategoriesAria')"
-                          :empty-title="$t('marketplace.connectionPage.mappings.categoriesNotFoundTitle')"
+                          :search-placeholder="
+                            $t(
+                              'marketplace.connectionPage.mappings.searchByNamePlaceholder',
+                            )
+                          "
+                          :search-aria-label="
+                            $t(
+                              'marketplace.connectionPage.mappings.findCategoriesAria',
+                            )
+                          "
+                          :empty-title="
+                            $t(
+                              'marketplace.connectionPage.mappings.categoriesNotFoundTitle',
+                            )
+                          "
                           :empty-description="
-                            capabilities?.capabilities?.createCategory && selectedLocalCategory
-                              ? $t('marketplace.connectionPage.mappings.categoriesNotFoundHintWithCreate', { adapter: adapterDisplayName })
-                              : $t('marketplace.connectionPage.mappings.categoriesNotFoundHint')
+                            capabilities?.capabilities?.createCategory &&
+                            selectedLocalCategory
+                              ? $t(
+                                  'marketplace.connectionPage.mappings.categoriesNotFoundHintWithCreate',
+                                  { adapter: adapterDisplayName },
+                                )
+                              : $t(
+                                  'marketplace.connectionPage.mappings.categoriesNotFoundHint',
+                                )
                           "
                           @search="searchExternalCategories"
                           @select="selectExternalCategory"
@@ -3424,12 +3867,27 @@ export default {
                               v-if="capabilities?.capabilities?.createCategory"
                               size="sm"
                               variant="outline"
-                              :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                              :disabled="
+                                !newMapping.localCategoryId ||
+                                isCreatingExternalCategory
+                              "
                               @click="handleCreateExternalCategoryMapping"
                             >
-                              <Spinner v-if="isCreatingExternalCategory" class="mr-2" />
+                              <Spinner
+                                v-if="isCreatingExternalCategory"
+                                class="mr-2"
+                              />
                               <FolderTree v-else class="size-4 mr-2" />
-                              {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
+                              {{
+                                isCreatingExternalCategory
+                                  ? $t(
+                                      "marketplace.connectionPage.mappings.creating",
+                                    )
+                                  : $t(
+                                      "marketplace.connectionPage.mappings.createInAdapter",
+                                      { adapter: adapterDisplayName },
+                                    )
+                              }}
                             </Button>
                           </template>
                         </ExternalCategoryBrowser>
@@ -3438,9 +3896,14 @@ export default {
                           v-if="newMapping.externalCategoryId"
                           class="text-xs text-muted-foreground"
                         >
-                          {{ $t("marketplace.connectionPage.mappings.selected") }}
+                          {{
+                            $t("marketplace.connectionPage.mappings.selected")
+                          }}
                           <span class="font-medium text-foreground">
-                            {{ newMapping.externalCategoryName || newMapping.externalCategoryId }}
+                            {{
+                              newMapping.externalCategoryName ||
+                              newMapping.externalCategoryId
+                            }}
                           </span>
                         </p>
                       </div>
@@ -3448,17 +3911,32 @@ export default {
 
                     <DialogFooter variant="bar">
                       <DialogClose as-child>
-                        <Button variant="outline">{{ $t("common.cancel") }}</Button>
+                        <Button variant="outline">{{
+                          $t("common.cancel")
+                        }}</Button>
                       </DialogClose>
                       <Button
                         v-if="capabilities?.capabilities?.createCategory"
                         variant="outline"
                         @click="handleCreateExternalCategoryMapping"
-                        :disabled="!newMapping.localCategoryId || isCreatingExternalCategory"
+                        :disabled="
+                          !newMapping.localCategoryId ||
+                          isCreatingExternalCategory
+                        "
                       >
-                        <Spinner v-if="isCreatingExternalCategory" class="mr-2" />
+                        <Spinner
+                          v-if="isCreatingExternalCategory"
+                          class="mr-2"
+                        />
                         <FolderTree v-else class="size-4 mr-2" />
-                        {{ isCreatingExternalCategory ? $t("marketplace.connectionPage.mappings.creating") : $t("marketplace.connectionPage.mappings.createInAdapter", { adapter: adapterDisplayName }) }}
+                        {{
+                          isCreatingExternalCategory
+                            ? $t("marketplace.connectionPage.mappings.creating")
+                            : $t(
+                                "marketplace.connectionPage.mappings.createInAdapter",
+                                { adapter: adapterDisplayName },
+                              )
+                        }}
                       </Button>
                       <Button
                         @click="handleCreateMapping"
@@ -3471,7 +3949,11 @@ export default {
                         "
                       >
                         <Spinner v-if="isCreatingMapping" class="mr-2" />
-                        {{ isCreatingMapping ? $t("marketplace.connectionPage.mappings.linking") : $t("marketplace.connectionPage.mappings.link") }}
+                        {{
+                          isCreatingMapping
+                            ? $t("marketplace.connectionPage.mappings.linking")
+                            : $t("marketplace.connectionPage.mappings.link")
+                        }}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -3493,13 +3975,22 @@ export default {
               class="flex-1 py-12"
               :title="
                 canCreateCategory
-                  ? $t('marketplace.connectionPage.mappings.noMappingsYetCreateTitle', { adapter: adapterDisplayName })
+                  ? $t(
+                      'marketplace.connectionPage.mappings.noMappingsYetCreateTitle',
+                      { adapter: adapterDisplayName },
+                    )
                   : $t('marketplace.connectionPage.mappings.noMappingsYetTitle')
               "
               :description="
                 canCreateCategory
-                  ? $t('marketplace.connectionPage.mappings.noMappingsYetCreateDescription', { adapter: adapterDisplayName })
-                  : $t('marketplace.connectionPage.mappings.noMappingsYetDescription', { adapter: adapterDisplayName })
+                  ? $t(
+                      'marketplace.connectionPage.mappings.noMappingsYetCreateDescription',
+                      { adapter: adapterDisplayName },
+                    )
+                  : $t(
+                      'marketplace.connectionPage.mappings.noMappingsYetDescription',
+                      { adapter: adapterDisplayName },
+                    )
               "
             >
               <template #icon>
@@ -3514,7 +4005,9 @@ export default {
                         @click="openBulkCreateCategoriesDialog"
                       >
                         <Upload class="size-4 mr-1.5" />
-                        {{ $t("marketplace.connectionPage.mappings.createShort") }}
+                        {{
+                          $t("marketplace.connectionPage.mappings.createShort")
+                        }}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" class="max-w-xs">
@@ -3540,11 +4033,19 @@ export default {
                         @click="showCreateMappingDialog = true"
                       >
                         <Link class="size-4 mr-1.5" />
-                        {{ $t("marketplace.connectionPage.mappings.linkShort") }}
+                        {{
+                          $t("marketplace.connectionPage.mappings.linkShort")
+                        }}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" class="max-w-xs">
-                      <p>{{ $t("marketplace.connectionPage.mappings.createMapping") }}</p>
+                      <p>
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.createMapping",
+                          )
+                        }}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
@@ -3553,40 +4054,66 @@ export default {
                         variant="outline"
                         class="rounded-l-none"
                         @click="
-                          $router.push(`/adapter/${connectionId}/categories/import`)
+                          $router.push(
+                            `/adapter/${connectionId}/categories/import`,
+                          )
                         "
                       >
                         <Download class="size-4 mr-1.5" />
-                        {{ $t("marketplace.connectionPage.mappings.importShort") }}
+                        {{
+                          $t("marketplace.connectionPage.mappings.importShort")
+                        }}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" class="max-w-xs">
-                      <p>{{ $t("marketplace.connectionPage.mappings.importCategory") }}</p>
+                      <p>
+                        {{
+                          $t(
+                            "marketplace.connectionPage.mappings.importCategory",
+                          )
+                        }}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
               </TooltipProvider>
             </EmptyState>
 
-            <Dialog
-              v-model:open="showBulkCreateCategoriesDialog"
-            >
-              <DialogContent class="sm:max-w-lg flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
+            <Dialog v-model:open="showBulkCreateCategoriesDialog">
+              <DialogContent
+                class="sm:max-w-lg flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+              >
                 <DialogHeader variant="bar">
                   <DialogTitle>
-                    {{ $t("marketplace.connectionPage.mappings.createCategoriesFromLocal", { adapter: adapterDisplayName }) }}
+                    {{
+                      $t(
+                        "marketplace.connectionPage.mappings.createCategoriesFromLocal",
+                        { adapter: adapterDisplayName },
+                      )
+                    }}
                   </DialogTitle>
                   <DialogDescription>
-                    {{ $t("marketplace.connectionPage.mappings.createCategoriesFromLocalDescription", { adapter: adapterDisplayName }) }}
+                    {{
+                      $t(
+                        "marketplace.connectionPage.mappings.createCategoriesFromLocalDescription",
+                        { adapter: adapterDisplayName },
+                      )
+                    }}
                   </DialogDescription>
                 </DialogHeader>
 
-                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto border-y px-6 py-4">
+                <div
+                  class="min-h-0 flex-1 space-y-3 overflow-y-auto border-y px-6 py-4"
+                >
                   <div
                     v-if="unmappedLocalCategories.length === 0"
                     class="py-8 text-center text-sm text-muted-foreground"
                   >
-                    {{ $t("marketplace.connectionPage.mappings.noUnmappedCategories") }}
+                    {{
+                      $t(
+                        "marketplace.connectionPage.mappings.noUnmappedCategories",
+                      )
+                    }}
                   </div>
                   <template v-else>
                     <div class="flex items-center justify-between gap-2">
@@ -3599,12 +4126,17 @@ export default {
                       >
                         {{
                           allBulkCreateSelected
-                            ? $t("marketplace.connectionPage.mappings.deselectAllCategories")
-                            : $t("marketplace.connectionPage.mappings.selectAllCategories")
+                            ? $t(
+                                "marketplace.connectionPage.mappings.deselectAllCategories",
+                              )
+                            : $t(
+                                "marketplace.connectionPage.mappings.selectAllCategories",
+                              )
                         }}
                       </Button>
                       <span class="text-xs text-muted-foreground tabular-nums">
-                        {{ bulkCreateSelectedCount }} / {{ unmappedLocalCategories.length }}
+                        {{ bulkCreateSelectedCount }} /
+                        {{ unmappedLocalCategories.length }}
                       </span>
                     </div>
                     <div class="space-y-1 rounded-lg border p-1.5">
@@ -3616,15 +4148,25 @@ export default {
                         <Checkbox
                           :model-value="!!bulkCreateSelectedIds[cat.id]"
                           :disabled="isBulkCreatingCategories"
-                          @update:model-value="(checked) => toggleBulkCreateCategory(cat.id, checked)"
+                          @update:model-value="
+                            (checked) =>
+                              toggleBulkCreateCategory(cat.id, checked)
+                          "
                         />
-                        <span class="min-w-0 flex-1 truncate font-medium">{{ cat.name }}</span>
+                        <span class="min-w-0 flex-1 truncate font-medium">{{
+                          cat.name
+                        }}</span>
                         <Badge
                           v-if="cat.attributesCount"
                           variant="secondary"
                           class="shrink-0 font-normal tabular-nums"
                         >
-                          {{ $t("marketplace.connectionPage.mappings.attributesCountAbbr", { count: cat.attributesCount }) }}
+                          {{
+                            $t(
+                              "marketplace.connectionPage.mappings.attributesCountAbbr",
+                              { count: cat.attributesCount },
+                            )
+                          }}
                         </Badge>
                       </label>
                     </div>
@@ -3633,16 +4175,21 @@ export default {
                   <div v-if="bulkCreateProgress" class="space-y-2 pt-2">
                     <p class="text-sm text-muted-foreground">
                       {{
-                        $t("marketplace.connectionPage.mappings.creatingCategoriesProgress", {
-                          done: bulkCreateProgress.done,
-                          total: bulkCreateProgress.total,
-                        })
+                        $t(
+                          "marketplace.connectionPage.mappings.creatingCategoriesProgress",
+                          {
+                            done: bulkCreateProgress.done,
+                            total: bulkCreateProgress.total,
+                          },
+                        )
                       }}
                     </p>
                     <Progress
                       :model-value="
                         bulkCreateProgress.total
-                          ? (bulkCreateProgress.done / bulkCreateProgress.total) * 100
+                          ? (bulkCreateProgress.done /
+                              bulkCreateProgress.total) *
+                            100
                           : 0
                       "
                     />
@@ -3662,7 +4209,10 @@ export default {
 
                 <DialogFooter variant="bar">
                   <DialogClose as-child>
-                    <Button variant="outline" :disabled="isBulkCreatingCategories">
+                    <Button
+                      variant="outline"
+                      :disabled="isBulkCreatingCategories"
+                    >
                       {{ $t("common.cancel") }}
                     </Button>
                   </DialogClose>
@@ -3679,99 +4229,151 @@ export default {
                     {{
                       isBulkCreatingCategories
                         ? $t("marketplace.connectionPage.mappings.creating")
-                        : $t("marketplace.connectionPage.mappings.createSelectedCategories", {
-                            count: bulkCreateSelectedCount,
-                          })
+                        : $t(
+                            "marketplace.connectionPage.mappings.createSelectedCategories",
+                            {
+                              count: bulkCreateSelectedCount,
+                            },
+                          )
                     }}
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
-            <div v-if="categoryMappings.length > 0" class="border rounded-xl overflow-hidden">
-              <div class="overflow-x-auto">
-                <table class="w-full caption-bottom text-sm">
-                  <TableHeader>
-                    <TableRow class="hover:bg-transparent">
-                      <TableHead class="px-3">{{ $t("marketplace.connectionPage.mappings.localCategory") }}</TableHead>
-                      <TableHead class="hidden sm:table-cell px-3">
-                        {{ $t("marketplace.connectionPage.mappings.categoryOf", { adapter: adapterDisplayName }) }}
-                      </TableHead>
-                      <TableHead class="hidden md:table-cell px-3">{{ $t("common.name") }}</TableHead>
-                      <TableHead class="w-24 text-right px-3">{{ $t("marketplace.connectionPage.tabs.products") }}</TableHead>
-                      <TableHead class="w-12 px-2" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow
-                      v-for="mapping in categoryMappings"
-                      :key="mapping.id"
-                      class="group cursor-pointer"
-                      @click="openFieldMapping(mapping.id)"
+            <div
+              v-if="categoryMappings.length > 0"
+              class="overflow-hidden rounded-xl border"
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow class="hover:bg-transparent">
+                    <TableHead class="px-3">{{
+                      $t("marketplace.connectionPage.mappings.localCategory")
+                    }}</TableHead>
+                    <TableHead class="hidden px-3 sm:table-cell">
+                      {{
+                        $t("marketplace.connectionPage.mappings.categoryOf", {
+                          adapter: adapterDisplayName,
+                        })
+                      }}
+                    </TableHead>
+                    <TableHead class="hidden w-40 px-3 md:table-cell">{{
+                      $t("common.name")
+                    }}</TableHead>
+                    <TableHead class="w-24 px-3 text-right">{{
+                      $t("marketplace.connectionPage.tabs.products")
+                    }}</TableHead>
+                    <TableHead class="w-12 px-2" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="mapping in categoryMappings"
+                    :key="mapping.id"
+                    class="group cursor-pointer"
+                    @click="openFieldMapping(mapping.id)"
+                  >
+                    <TableCell class="font-medium max-w-0">
+                      <span class="truncate block">{{
+                        mapping.localCategoryName
+                      }}</span>
+                      <span
+                        class="text-xs text-muted-foreground truncate block sm:hidden"
+                      >
+                        {{
+                          mappingDisplayName(mapping) ||
+                          mapping.localCategoryName
+                        }}
+                      </span>
+                      <span
+                        v-if="mapping.name"
+                        class="text-xs text-muted-foreground truncate block md:hidden"
+                      >
+                        {{ mapping.name }}
+                      </span>
+                    </TableCell>
+                    <TableCell
+                      class="text-muted-foreground hidden max-w-0 sm:table-cell"
                     >
-                      <TableCell class="font-medium max-w-0">
-                        <span class="truncate block">{{ mapping.localCategoryName }}</span>
-                        <span class="text-xs text-muted-foreground truncate block sm:hidden">
-                          {{ mapping.externalCategoryName || mapping.externalCategoryId }}
-                        </span>
-                        <span
-                          v-if="mapping.name"
-                          class="text-xs text-muted-foreground truncate block md:hidden"
-                        >
-                          {{ mapping.name }}
-                        </span>
-                      </TableCell>
-                      <TableCell class="hidden sm:table-cell text-muted-foreground max-w-xs truncate">
-                        {{ mapping.externalCategoryName || mapping.externalCategoryId }}
-                      </TableCell>
-                      <TableCell class="hidden md:table-cell text-muted-foreground max-w-xs truncate">
-                        {{ mapping.name || $t("common.emDash") }}
-                      </TableCell>
-                      <TableCell class="text-right tabular-nums text-muted-foreground">
-                        {{ mapping.productsCount ?? mapping.linkedProductsCount ?? 0 }}
-                      </TableCell>
-                      <TableCell class="px-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger as-child>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              :aria-label="$t('marketplace.connectionPage.mappings.mappingActionsAria')"
-                              @click.stop
-                            >
-                              <EllipsisVertical class="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem @click.stop="openRenameMapping(mapping)">
-                              <Pencil />
-                              {{ $t("marketplace.connectionPage.mappings.rename") }}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem @click.stop="requestDuplicateMapping(mapping.id)">
-                              <Copy />
-                              {{ $t("marketplace.connectionPage.mappings.duplicate") }}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              @click.stop="handleDeleteMapping(mapping)"
-                            >
-                              <Trash2 />
-                              {{ $t("common.delete") }}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </table>
-              </div>
+                      <span class="block truncate">{{
+                        mappingDisplayName(mapping) || mapping.localCategoryName
+                      }}</span>
+                    </TableCell>
+                    <TableCell
+                      class="text-muted-foreground hidden max-w-0 md:table-cell"
+                    >
+                      <span class="block truncate">{{
+                        mapping.name || $t("common.emDash")
+                      }}</span>
+                    </TableCell>
+                    <TableCell
+                      class="text-right tabular-nums text-muted-foreground"
+                    >
+                      {{
+                        mapping.productsCount ??
+                        mapping.linkedProductsCount ??
+                        0
+                      }}
+                    </TableCell>
+                    <TableCell class="px-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            :aria-label="
+                              $t(
+                                'marketplace.connectionPage.mappings.mappingActionsAria',
+                              )
+                            "
+                            @click.stop
+                          >
+                            <EllipsisVertical class="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            @click.stop="openRenameMapping(mapping)"
+                          >
+                            <Pencil />
+                            {{
+                              $t("marketplace.connectionPage.mappings.rename")
+                            }}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            @click.stop="requestDuplicateMapping(mapping.id)"
+                          >
+                            <Copy />
+                            {{
+                              $t(
+                                "marketplace.connectionPage.mappings.duplicate",
+                              )
+                            }}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            @click.stop="handleDeleteMapping(mapping)"
+                          >
+                            <Trash2 />
+                            {{ $t("common.delete") }}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
           </TabsContent>
 
           <!-- Products Tab -->
-          <TabsContent value="products" class="flex flex-1 flex-col mt-0 min-h-0 gap-3 overflow-hidden data-[state=inactive]:hidden">
+          <TabsContent
+            value="products"
+            class="flex flex-1 flex-col mt-0 min-h-0 gap-3 overflow-hidden data-[state=inactive]:hidden"
+          >
             <div class="flex flex-wrap items-center gap-2 shrink-0">
               <Tabs
                 :model-value="productsViewMode"
@@ -3780,10 +4382,14 @@ export default {
               >
                 <TabsList>
                   <TabsTrigger value="external">
-                    {{ $t("marketplace.connectionPage.products.adapterProducts") }}
+                    {{
+                      $t("marketplace.connectionPage.products.adapterProducts")
+                    }}
                   </TabsTrigger>
                   <TabsTrigger value="local">
-                    {{ $t("marketplace.connectionPage.products.localForExport") }}
+                    {{
+                      $t("marketplace.connectionPage.products.localForExport")
+                    }}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -3794,13 +4400,21 @@ export default {
                 <Input
                   v-if="productsViewMode === 'external'"
                   v-model="searchQuery"
-                  :placeholder="$t('marketplace.connectionPage.products.searchBySkuPlaceholder')"
+                  :placeholder="
+                    $t(
+                      'marketplace.connectionPage.products.searchBySkuPlaceholder',
+                    )
+                  "
                   class="pl-10"
                 />
                 <Input
                   v-else
                   v-model="localSearchQuery"
-                  :placeholder="$t('marketplace.connectionPage.products.searchByNameOrSkuPlaceholder')"
+                  :placeholder="
+                    $t(
+                      'marketplace.connectionPage.products.searchByNameOrSkuPlaceholder',
+                    )
+                  "
                   class="pl-10"
                 />
               </div>
@@ -3808,549 +4422,758 @@ export default {
                 v-if="productsViewMode === 'local'"
                 class="text-sm text-muted-foreground whitespace-nowrap"
               >
-                {{ $t("marketplace.connectionPage.products.foundCount", { count: localTotalCount }) }}
+                {{
+                  $t("marketplace.connectionPage.products.foundCount", {
+                    count: localTotalCount,
+                  })
+                }}
               </div>
             </div>
 
             <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <!-- ==================== EXTERNAL VIEW ==================== -->
-            <template v-if="productsViewMode === 'external'">
-              <!-- Loading state -->
-              <div v-if="isLoadingProducts" class="flex flex-1 items-center justify-center py-12">
-                <Spinner size="2xl" class="text-muted-foreground" />
-              </div>
-
-              <EmptyState
-                v-else-if="productsListUnsupported"
-                class="flex-1 py-12"
-                :title="
-                  productsListUnsupportedMessage ||
-                  $t('marketplace.connectionPage.products.fetchUnsupportedTitle')
-                "
-                :description="
-                  $t('marketplace.connectionPage.products.fetchUnsupportedDescription')
-                "
-              >
-                <template #icon>
-                  <AlertTriangle />
-                </template>
-              </EmptyState>
-
-              <EmptyState
-                v-else-if="filteredProducts.length === 0"
-                class="flex-1 py-12"
-                :title="$t('marketplace.connectionPage.products.noProductsTitle')"
-                :description="$t('marketplace.connectionPage.products.noProductsDescription')"
-              >
-                <template #icon>
-                  <Package />
-                </template>
-              </EmptyState>
-
-              <!-- Products table (border only around data, not EmptyState) -->
-              <div
-                v-else
-                class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
-              >
-                <div class="min-h-0 flex-1 overflow-auto">
-                <table class="w-full caption-bottom text-sm">
-                  <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
-                    <TableRow class="hover:bg-transparent">
-                      <TableHead class="w-[50px]">
-                        <Checkbox
-                          :model-value="allSelected"
-                          :indeterminate="someSelected"
-                          @update:model-value="toggleSelectAll"
-                        />
-                      </TableHead>
-                      <TableHead>{{ $t("common.name") }}</TableHead>
-                      <TableHead>{{ $t("marketplace.connectionPage.products.externalIdHeader") }}</TableHead>
-                      <TableHead>{{ $t("marketplace.connectionPage.products.localSkuHeader") }}</TableHead>
-                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.price") }}</TableHead>
-                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.storageQuantity") }}</TableHead>
-                      <TableHead>{{ $t("common.status") }}</TableHead>
-                      <TableHead class="w-[100px]">{{ $t("common.actions") }}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow
-                      v-for="product in filteredProducts"
-                      :key="product.externalId"
-                      :class="[
-                        'cursor-pointer select-none',
-                        { 'bg-muted/30': !product.isLinked },
-                      ]"
-                      @click="handleExternalRowClick(product, $event)"
-                    >
-                      <TableCell>
-                        <Checkbox
-                          :model-value="isSelected(product.externalId)"
-                          @click.capture="captureShiftSelection"
-                          @update:model-value="
-                            (checked) =>
-                              toggleSelect(product.externalId, checked)
-                          "
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <RouterLink
-                          v-if="product.localProductId"
-                          :to="`/products/${product.localProductId}/edit`"
-                          class="font-medium hover:underline underline-offset-2"
-                          @click.stop
-                          >{{ product.name }}</RouterLink
-                        >
-                        <div v-else class="font-medium">{{ product.name }}</div>
-                        <div
-                          v-if="product.sku"
-                          class="text-xs text-muted-foreground"
-                        >
-                          SKU: {{ product.sku }}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <a
-                          v-if="getMarketplaceProductUrl(product.externalId)"
-                          :href="getMarketplaceProductUrl(product.externalId)"
-                          target="_blank"
-                          rel="noopener"
-                          class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
-                          >{{ product.externalId }}</a
-                        >
-                        <code
-                          v-else
-                          class="text-sm bg-muted px-1.5 py-0.5 rounded"
-                          >{{ product.externalId }}</code
-                        >
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          v-if="product.isLinked"
-                          class="flex items-center gap-1.5"
-                        >
-                          <Link2 class="size-3 text-success-foreground" />
-                          <code class="text-sm">{{
-                            product.localProductSku
-                          }}</code>
-                        </div>
-                        <span v-else class="text-muted-foreground">-</span>
-                      </TableCell>
-                      <TableCell class="text-right">
-                        <div v-if="product.isLinked" class="space-y-0.5">
-                          <div class="font-medium">
-                            {{ formatPrice(product.localPrice) }}
-                          </div>
-                          <div
-                            v-if="
-                              product.externalPrice !== null &&
-                              product.externalPrice !== product.localPrice
-                            "
-                            class="text-xs text-muted-foreground"
-                          >
-                            {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ formatPrice(product.externalPrice) }}
-                          </div>
-                        </div>
-                        <span v-else class="text-muted-foreground">-</span>
-                      </TableCell>
-                      <TableCell class="text-right">
-                        <div v-if="product.isLinked" class="space-y-0.5">
-                          <div class="font-medium">
-                            {{ product.localStock ?? "-" }}
-                          </div>
-                          <div
-                            v-if="
-                              product.externalStock !== null &&
-                              product.externalStock !== product.localStock
-                            "
-                            class="text-xs text-muted-foreground"
-                          >
-                            {{ $t("marketplace.connectionPage.products.adapterValuePrefix") }} {{ product.externalStock }}
-                          </div>
-                        </div>
-                        <span v-else class="text-muted-foreground">-</span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          :variant="
-                            productStatusMap[product.externalId].variant
-                          "
-                        >
-                          <component
-                            :is="productStatusMap[product.externalId].icon"
-                            class="size-3 mr-1"
-                          />
-                          {{ productStatusMap[product.externalId].label }}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          v-if="product.isLinked"
-                          class="flex items-center gap-1"
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            @click="handleImportSingle(product)"
-                            :disabled="importingLinkId === product.linkId"
-                            :title="$t('marketplace.connectionPage.products.importFromAdapter')"
-                            :aria-label="$t('marketplace.connectionPage.products.importFromAdapter')"
-                          >
-                            <Spinner v-if="importingLinkId === product.linkId" />
-                            <Download v-else class="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            @click="handleExportSingle(product)"
-                            :disabled="
-                              exportingLinkId === product.linkId ||
-                              product.mappingMissing
-                            "
-                            :title="$t('marketplace.connectionPage.products.exportToAdapter')"
-                            :aria-label="$t('marketplace.connectionPage.products.exportToAdapter')"
-                          >
-                            <Spinner v-if="exportingLinkId === product.linkId" />
-                            <Upload v-else class="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            @click="handleUnlinkProduct(product)"
-                            :disabled="unlinkingLinkId === product.linkId"
-                            :title="$t('marketplace.connectionPage.products.unlinkProduct')"
-                            :aria-label="$t('marketplace.connectionPage.products.unlinkProduct')"
-                          >
-                            <Spinner v-if="unlinkingLinkId === product.linkId" />
-                            <Ban v-else class="size-4" />
-                          </Button>
-                        </div>
-                        <span v-else class="text-muted-foreground">-</span>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </table>
-
-                <div v-if="canLoadMore" class="flex justify-center py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    :disabled="isLoadingMore"
-                    @click="loadMoreProducts"
-                  >
-                    <Spinner v-if="isLoadingMore" class="mr-2" />
-                    {{ isLoadingMore ? $t("common.loading") : $t("marketplace.connectionPage.products.loadMore") }}
-                  </Button>
-                </div>
-              </div>
-
-              <!-- Bulk actions bar -->
-              <div
-                v-if="hasAnySelected"
-                class="shrink-0 border-t p-3 flex flex-wrap items-center justify-between gap-2 bg-background"
-              >
-                <div class="text-sm text-muted-foreground">
-                  {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedItems.length }}
-                  <span v-if="hasSelectedLinked && hasSelectedUnlinked">
-                    ({{ $t("marketplace.connectionPage.products.linkedCount", { count: selectedLinkedItems.length }) }},
-                    {{ $t("marketplace.connectionPage.products.unlinkedCount", { count: selectedUnlinkedItems.length }) }})
-                  </span>
-                  <span v-else-if="hasSelectedLinked">
-                    ({{ $t("marketplace.connectionPage.products.linkedCount", { count: selectedLinkedItems.length }) }})
-                  </span>
-                  <span v-else-if="hasSelectedUnlinked">
-                    ({{ $t("marketplace.connectionPage.products.unlinkedCount", { count: selectedUnlinkedItems.length }) }})
-                  </span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <!-- Create local products from unlinked -->
-                  <Button
-                    v-if="hasSelectedUnlinked"
-                    variant="outline"
-                    @click="openImportDialog"
-                    :disabled="isCreatingLocal"
-                  >
-                    <Spinner v-if="isCreatingLocal" class="mr-2" />
-                    <Plus v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.products.createLocal", { count: selectedUnlinkedItems.length }) }}
-                  </Button>
-
-                  <!-- Import from marketplace for linked -->
-                  <Button
-                    v-if="hasSelectedLinked"
-                    variant="outline"
-                    @click="handleImportBulk"
-                    :disabled="isImportingBulk"
-                  >
-                    <Spinner v-if="isImportingBulk" class="mr-2" />
-                    <Download v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.products.importCount", { count: selectedLinkedItems.length }) }}
-                  </Button>
-
-                  <!-- Export to marketplace for linked -->
-                  <Button
-                    v-if="hasSelectedLinked"
-                    variant="outline"
-                    @click="handleExportBulk"
-                    :disabled="isExportingBulk"
-                  >
-                    <Spinner v-if="isExportingBulk" class="mr-2" />
-                    <Upload v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.products.exportCount", { count: selectedLinkedItems.length }) }}
-                  </Button>
-
-                  <!-- Export prices -->
-                  <Button
-                    v-if="hasSelectedLinked"
-                    variant="outline"
-                    @click="handleExportPricesBulk"
-                    :disabled="isExportingPrices"
-                  >
-                    <Spinner v-if="isExportingPrices" class="mr-2" />
-                    <DollarSign v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.products.exportPrices") }}
-                  </Button>
-
-                  <!-- Export stocks -->
-                  <Button
-                    v-if="hasSelectedLinked"
-                    @click="handleExportStocksBulk"
-                    :disabled="isExportingStocks"
-                  >
-                    <Spinner v-if="isExportingStocks" class="mr-2" />
-                    <Boxes v-else class="size-4 mr-2" />
-                    {{ $t("marketplace.connectionPage.products.exportStocks") }}
-                  </Button>
-                </div>
-              </div>
-              </div>
-            </template>
-
-            <!-- ==================== LOCAL VIEW ==================== -->
-            <template v-if="productsViewMode === 'local'">
-              <!-- Loading state -->
-              <div
-                v-if="isLoadingLocalProducts && localProducts.length === 0"
-                class="flex flex-1 items-center justify-center py-12"
-              >
-                <Spinner size="2xl" class="text-muted-foreground" />
-              </div>
-
-              <EmptyState
-                v-else-if="
-                  localProducts.length === 0 &&
-                  (localExportReason === 'no_mappings' || categoryMappings.length === 0)
-                "
-                class="flex-1 py-12"
-                :title="$t('marketplace.connectionPage.products.needMappingsTitle')"
-                :description="
-                  $t('marketplace.connectionPage.products.needMappingsDescription', {
-                    adapter: adapterDisplayName,
-                  })
-                "
-              >
-                <template #icon>
-                  <FolderTree />
-                </template>
-                <Button @click="goToMappingsForCreate">
-                  <Upload v-if="canCreateCategory" class="size-4 mr-2" />
-                  <FolderTree v-else class="size-4 mr-2" />
-                  {{
-                    canCreateCategory
-                      ? $t("marketplace.connectionPage.mappings.createCategoriesFromLocal", {
-                          adapter: adapterDisplayName,
-                        })
-                      : $t("marketplace.connectionPage.products.goToMappings")
-                  }}
-                </Button>
-              </EmptyState>
-
-              <EmptyState
-                v-else-if="localProducts.length === 0"
-                class="flex-1 py-12"
-                :title="$t('marketplace.connectionPage.products.noProductsToExportTitle')"
-                :description="$t('marketplace.connectionPage.products.noProductsToExportDescription')"
-              >
-                <template #icon>
-                  <Package />
-                </template>
-              </EmptyState>
-
-              <!-- Local products table (border only around data, not EmptyState) -->
-              <div
-                v-else
-                class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
-              >
-              <div class="min-h-0 flex-1 overflow-auto">
-                <table class="w-full caption-bottom text-sm">
-                  <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background">
-                    <TableRow class="hover:bg-transparent">
-                      <TableHead class="w-[50px]">
-                        <Checkbox
-                          :model-value="allLocalSelected"
-                          :indeterminate="someLocalSelected"
-                          @update:model-value="toggleSelectAllLocal"
-                        />
-                      </TableHead>
-                      <TableHead>{{ $t("common.name") }}</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.price") }}</TableHead>
-                      <TableHead class="text-right">{{ $t("marketplace.connectionPage.fields.storageQuantity") }}</TableHead>
-                      <TableHead>{{ $t("marketplace.connectionPage.products.categoryHeader") }}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow
-                      v-for="product in localProducts"
-                      :key="product.id"
-                      class="cursor-pointer select-none"
-                      @click="handleLocalRowClick(product, $event)"
-                    >
-                      <TableCell>
-                        <Checkbox
-                          :model-value="isLocalSelected(product.id)"
-                          @click.capture="captureShiftSelection"
-                          @update:model-value="
-                            (checked) => toggleSelectLocal(product.id, checked)
-                          "
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <RouterLink
-                          :to="`/products/${product.id}/edit`"
-                          class="font-medium hover:underline underline-offset-2"
-                          >{{ product.name }}</RouterLink
-                        >
-                      </TableCell>
-                      <TableCell>
-                        <code class="text-sm bg-muted px-1.5 py-0.5 rounded">{{
-                          product.sku
-                        }}</code>
-                      </TableCell>
-                      <TableCell class="text-right">
-                        {{ formatPrice(product.price) }}
-                      </TableCell>
-                      <TableCell class="text-right">
-                        {{ product.storageQuantity ?? "-" }}
-                      </TableCell>
-                      <TableCell>
-                        <span class="text-sm text-muted-foreground">{{
-                          product.categoryName || "-"
-                        }}</span>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </table>
-              </div>
-
-              <!-- Pagination -->
-              <div
-                v-if="localTotalCount > 0"
-                class="shrink-0 flex items-center justify-between px-4 py-3"
-              >
-                <div class="flex items-center gap-2">
-                  <p class="text-sm text-muted-foreground">{{ $t("marketplace.connectionPage.products.pageSizeLabel") }}</p>
-                  <Select
-                    :model-value="String(localPageSize)"
-                    @update:model-value="
-                      (val) => {
-                        localPageSize = Number(val);
-                        localPage = 1;
-                        fetchLocalProducts();
-                      }
-                    "
-                  >
-                    <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem as="button" value="10">10</SelectItem>
-                        <SelectItem as="button" value="25">25</SelectItem>
-                        <SelectItem as="button" value="50">50</SelectItem>
-                        <SelectItem as="button" value="100">100</SelectItem>
-                        <SelectItem as="button" value="250">250</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <p class="text-sm text-muted-foreground">
-                    {{ $t("marketplace.connectionPage.products.totalLabel") }} {{ localTotalCount }}
-                  </p>
-                </div>
-                <div class="flex items-center gap-2">
-                  <p class="text-sm text-muted-foreground mr-2">
-                    {{ localPage }} / {{ localLastPage }}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="h-8 w-8 p-0"
-                    :disabled="localPage <= 1"
-                    @click="
-                      localPage = 1;
-                      fetchLocalProducts();
-                    "
-                  >
-                    <ChevronsLeft class="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="h-8 w-8 p-0"
-                    :disabled="localPage <= 1"
-                    @click="
-                      localPage--;
-                      fetchLocalProducts();
-                    "
-                  >
-                    <ChevronLeft class="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="h-8 w-8 p-0"
-                    :disabled="localPage >= localLastPage"
-                    @click="
-                      localPage++;
-                      fetchLocalProducts();
-                    "
-                  >
-                    <ChevronRight class="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="h-8 w-8 p-0"
-                    :disabled="localPage >= localLastPage"
-                    @click="
-                      localPage = localLastPage;
-                      fetchLocalProducts();
-                    "
-                  >
-                    <ChevronsRight class="size-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <!-- Bulk export bar -->
-              <div
-                v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
-                class="shrink-0 border-t p-3 flex flex-wrap items-center justify-between gap-2 bg-background"
-              >
-                <div class="text-sm text-muted-foreground">
-                  {{ $t("marketplace.connectionPage.products.selectedLabel") }} {{ selectedLocalIds.length }}
-                </div>
-                <Button
-                  @click="handleExportNewBulk"
-                  :disabled="isExportingNewBulk"
+              <!-- ==================== EXTERNAL VIEW ==================== -->
+              <template v-if="productsViewMode === 'external'">
+                <!-- Loading state -->
+                <div
+                  v-if="isLoadingProducts"
+                  class="flex flex-1 items-center justify-center py-12"
                 >
-                  <Spinner v-if="isExportingNewBulk" class="mr-2" />
-                  <Upload v-else class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.products.exportToAdapterCount", { count: selectedLocalIds.length }) }}
-                </Button>
-              </div>
-              </div>
-            </template>
+                  <Spinner size="2xl" class="text-muted-foreground" />
+                </div>
+
+                <EmptyState
+                  v-else-if="productsListUnsupported"
+                  class="flex-1 py-12"
+                  :title="
+                    productsListUnsupportedMessage ||
+                    $t(
+                      'marketplace.connectionPage.products.fetchUnsupportedTitle',
+                    )
+                  "
+                  :description="
+                    $t(
+                      'marketplace.connectionPage.products.fetchUnsupportedDescription',
+                    )
+                  "
+                >
+                  <template #icon>
+                    <AlertTriangle />
+                  </template>
+                </EmptyState>
+
+                <EmptyState
+                  v-else-if="filteredProducts.length === 0"
+                  class="flex-1 py-12"
+                  :title="
+                    $t('marketplace.connectionPage.products.noProductsTitle')
+                  "
+                  :description="
+                    $t(
+                      'marketplace.connectionPage.products.noProductsDescription',
+                    )
+                  "
+                >
+                  <template #icon>
+                    <Package />
+                  </template>
+                </EmptyState>
+
+                <!-- Products table (border only around data, not EmptyState) -->
+                <div
+                  v-else
+                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+                >
+                  <div class="min-h-0 flex-1 overflow-auto">
+                    <Table :contain="false" class="w-full">
+                      <TableHeader
+                        class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"
+                      >
+                        <TableRow class="hover:bg-transparent">
+                          <TableHead class="w-10">
+                            <Checkbox
+                              :model-value="allSelected"
+                              :indeterminate="someSelected"
+                              @update:model-value="toggleSelectAll"
+                            />
+                          </TableHead>
+                          <TableHead>{{ $t("common.name") }}</TableHead>
+                          <TableHead class="w-36">{{
+                            $t(
+                              "marketplace.connectionPage.products.externalIdHeader",
+                            )
+                          }}</TableHead>
+                          <TableHead class="w-36">{{
+                            $t(
+                              "marketplace.connectionPage.products.localSkuHeader",
+                            )
+                          }}</TableHead>
+                          <TableHead class="w-24 text-right">{{
+                            $t("marketplace.connectionPage.fields.price")
+                          }}</TableHead>
+                          <TableHead class="w-24 text-right">{{
+                            $t(
+                              "marketplace.connectionPage.fields.storageQuantity",
+                            )
+                          }}</TableHead>
+                          <TableHead class="w-28">{{
+                            $t("common.status")
+                          }}</TableHead>
+                          <TableHead class="w-28">{{
+                            $t("common.actions")
+                          }}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow
+                          v-for="product in filteredProducts"
+                          :key="product.externalId"
+                          :class="[
+                            'cursor-pointer select-none',
+                            { 'bg-muted/30': !product.isLinked },
+                          ]"
+                          @click="handleExternalRowClick(product, $event)"
+                        >
+                          <TableCell>
+                            <Checkbox
+                              :model-value="isSelected(product.externalId)"
+                              @click.capture="captureShiftSelection"
+                              @update:model-value="
+                                (checked) =>
+                                  toggleSelect(product.externalId, checked)
+                              "
+                            />
+                          </TableCell>
+                          <TableCell class="max-w-0">
+                            <RouterLink
+                              v-if="product.localProductId"
+                              :to="`/products/${product.localProductId}/edit`"
+                              class="block truncate font-medium underline-offset-2 hover:underline"
+                              @click.stop
+                              >{{ product.name }}</RouterLink
+                            >
+                            <div v-else class="truncate font-medium">
+                              {{ product.name }}
+                            </div>
+                            <div
+                              v-if="product.sku"
+                              class="text-xs text-muted-foreground"
+                            >
+                              SKU: {{ product.sku }}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              v-if="
+                                getMarketplaceProductUrl(product.externalId)
+                              "
+                              :href="
+                                getMarketplaceProductUrl(product.externalId)
+                              "
+                              target="_blank"
+                              rel="noopener"
+                              class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
+                              >{{ product.externalId }}</a
+                            >
+                            <code
+                              v-else
+                              class="text-sm bg-muted px-1.5 py-0.5 rounded"
+                              >{{ product.externalId }}</code
+                            >
+                          </TableCell>
+                          <TableCell>
+                            <div
+                              v-if="product.isLinked"
+                              class="flex items-center gap-1.5"
+                            >
+                              <Link2 class="size-3 text-success-foreground" />
+                              <code class="text-sm">{{
+                                product.localProductSku
+                              }}</code>
+                            </div>
+                            <span v-else class="text-muted-foreground">-</span>
+                          </TableCell>
+                          <TableCell class="text-right">
+                            <div v-if="product.isLinked" class="space-y-0.5">
+                              <div class="font-medium">
+                                {{ formatPrice(product.localPrice) }}
+                              </div>
+                              <div
+                                v-if="
+                                  product.externalPrice !== null &&
+                                  product.externalPrice !== product.localPrice
+                                "
+                                class="text-xs text-muted-foreground"
+                              >
+                                {{
+                                  $t(
+                                    "marketplace.connectionPage.products.adapterValuePrefix",
+                                  )
+                                }}
+                                {{ formatPrice(product.externalPrice) }}
+                              </div>
+                            </div>
+                            <span v-else class="text-muted-foreground">-</span>
+                          </TableCell>
+                          <TableCell class="text-right">
+                            <div v-if="product.isLinked" class="space-y-0.5">
+                              <div class="font-medium">
+                                {{ product.localStock ?? "-" }}
+                              </div>
+                              <div
+                                v-if="
+                                  product.externalStock !== null &&
+                                  product.externalStock !== product.localStock
+                                "
+                                class="text-xs text-muted-foreground"
+                              >
+                                {{
+                                  $t(
+                                    "marketplace.connectionPage.products.adapterValuePrefix",
+                                  )
+                                }}
+                                {{ product.externalStock }}
+                              </div>
+                            </div>
+                            <span v-else class="text-muted-foreground">-</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              :variant="
+                                productStatusMap[product.externalId].variant
+                              "
+                            >
+                              <component
+                                :is="productStatusMap[product.externalId].icon"
+                                class="size-3 mr-1"
+                              />
+                              {{ productStatusMap[product.externalId].label }}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div
+                              v-if="product.isLinked"
+                              class="flex items-center gap-1"
+                            >
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="handleImportSingle(product)"
+                                :disabled="importingLinkId === product.linkId"
+                                :title="
+                                  $t(
+                                    'marketplace.connectionPage.products.importFromAdapter',
+                                  )
+                                "
+                                :aria-label="
+                                  $t(
+                                    'marketplace.connectionPage.products.importFromAdapter',
+                                  )
+                                "
+                              >
+                                <Spinner
+                                  v-if="importingLinkId === product.linkId"
+                                />
+                                <Download v-else class="size-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="handleExportSingle(product)"
+                                :disabled="
+                                  exportingLinkId === product.linkId ||
+                                  product.mappingMissing
+                                "
+                                :title="
+                                  $t(
+                                    'marketplace.connectionPage.products.exportToAdapter',
+                                  )
+                                "
+                                :aria-label="
+                                  $t(
+                                    'marketplace.connectionPage.products.exportToAdapter',
+                                  )
+                                "
+                              >
+                                <Spinner
+                                  v-if="exportingLinkId === product.linkId"
+                                />
+                                <Upload v-else class="size-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                @click="handleUnlinkProduct(product)"
+                                :disabled="unlinkingLinkId === product.linkId"
+                                :title="
+                                  $t(
+                                    'marketplace.connectionPage.products.unlinkProduct',
+                                  )
+                                "
+                                :aria-label="
+                                  $t(
+                                    'marketplace.connectionPage.products.unlinkProduct',
+                                  )
+                                "
+                              >
+                                <Spinner
+                                  v-if="unlinkingLinkId === product.linkId"
+                                />
+                                <Ban v-else class="size-4" />
+                              </Button>
+                            </div>
+                            <span v-else class="text-muted-foreground">-</span>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+
+                    <div v-if="canLoadMore" class="flex justify-center py-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="isLoadingMore"
+                        @click="loadMoreProducts"
+                      >
+                        <Spinner v-if="isLoadingMore" class="mr-2" />
+                        {{
+                          isLoadingMore
+                            ? $t("common.loading")
+                            : $t("marketplace.connectionPage.products.loadMore")
+                        }}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <!-- Bulk actions bar -->
+                  <div
+                    v-if="hasAnySelected"
+                    class="bg-background flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+                  >
+                    <span class="text-sm font-medium">
+                      {{
+                        $t("marketplace.connectionPage.products.selectedLabel")
+                      }}
+                      {{ selectedItems.length }}
+                      <span v-if="hasSelectedLinked && hasSelectedUnlinked">
+                        ({{
+                          $t(
+                            "marketplace.connectionPage.products.linkedCount",
+                            { count: selectedLinkedItems.length },
+                          )
+                        }},
+                        {{
+                          $t(
+                            "marketplace.connectionPage.products.unlinkedCount",
+                            { count: selectedUnlinkedItems.length },
+                          )
+                        }})
+                      </span>
+                      <span v-else-if="hasSelectedLinked">
+                        ({{
+                          $t(
+                            "marketplace.connectionPage.products.linkedCount",
+                            { count: selectedLinkedItems.length },
+                          )
+                        }})
+                      </span>
+                      <span v-else-if="hasSelectedUnlinked">
+                        ({{
+                          $t(
+                            "marketplace.connectionPage.products.unlinkedCount",
+                            { count: selectedUnlinkedItems.length },
+                          )
+                        }})
+                      </span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="h-8"
+                      @click="clearExternalSelection"
+                    >
+                      <X class="h-4 w-4" />
+                    </Button>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <!-- Create local products from unlinked -->
+                      <Button
+                        v-if="hasSelectedUnlinked"
+                        variant="outline"
+                        size="sm"
+                        class="h-8"
+                        @click="openImportDialog"
+                        :disabled="isCreatingLocal"
+                      >
+                        <Spinner v-if="isCreatingLocal" class="mr-2" />
+                        <Plus v-else class="mr-1 size-4" />
+                        {{
+                          $t(
+                            "marketplace.connectionPage.products.createLocal",
+                            { count: selectedUnlinkedItems.length },
+                          )
+                        }}
+                      </Button>
+
+                      <!-- Import from marketplace for linked -->
+                      <Button
+                        v-if="hasSelectedLinked"
+                        variant="outline"
+                        size="sm"
+                        class="h-8"
+                        @click="handleImportBulk"
+                        :disabled="isImportingBulk"
+                      >
+                        <Spinner v-if="isImportingBulk" class="mr-2" />
+                        <Download v-else class="size-4 mr-2" />
+                        {{
+                          $t(
+                            "marketplace.connectionPage.products.importCount",
+                            { count: selectedLinkedItems.length },
+                          )
+                        }}
+                      </Button>
+
+                      <!-- Export to marketplace for linked -->
+                      <Button
+                        v-if="hasSelectedLinked"
+                        variant="outline"
+                        size="sm"
+                        class="h-8"
+                        @click="handleExportBulk"
+                        :disabled="isExportingBulk"
+                      >
+                        <Spinner v-if="isExportingBulk" class="mr-2" />
+                        <Upload v-else class="mr-1 size-4" />
+                        {{
+                          $t(
+                            "marketplace.connectionPage.products.exportCount",
+                            { count: selectedLinkedItems.length },
+                          )
+                        }}
+                      </Button>
+
+                      <!-- Export prices -->
+                      <Button
+                        v-if="hasSelectedLinked"
+                        variant="outline"
+                        size="sm"
+                        class="h-8"
+                        @click="handleExportPricesBulk"
+                        :disabled="isExportingPrices"
+                      >
+                        <Spinner v-if="isExportingPrices" class="mr-2" />
+                        <DollarSign v-else class="mr-1 size-4" />
+                        {{
+                          $t("marketplace.connectionPage.products.exportPrices")
+                        }}
+                      </Button>
+
+                      <!-- Export stocks -->
+                      <Button
+                        v-if="hasSelectedLinked"
+                        variant="outline"
+                        size="sm"
+                        class="h-8"
+                        @click="handleExportStocksBulk"
+                        :disabled="isExportingStocks"
+                      >
+                        <Spinner v-if="isExportingStocks" class="mr-2" />
+                        <Boxes v-else class="mr-1 size-4" />
+                        {{
+                          $t("marketplace.connectionPage.products.exportStocks")
+                        }}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- ==================== LOCAL VIEW ==================== -->
+              <template v-if="productsViewMode === 'local'">
+                <!-- Loading state -->
+                <div
+                  v-if="isLoadingLocalProducts && localProducts.length === 0"
+                  class="flex flex-1 items-center justify-center py-12"
+                >
+                  <Spinner size="2xl" class="text-muted-foreground" />
+                </div>
+
+                <EmptyState
+                  v-else-if="
+                    localProducts.length === 0 &&
+                    (localExportReason === 'no_mappings' ||
+                      categoryMappings.length === 0)
+                  "
+                  class="flex-1 py-12"
+                  :title="
+                    $t('marketplace.connectionPage.products.needMappingsTitle')
+                  "
+                  :description="
+                    $t(
+                      'marketplace.connectionPage.products.needMappingsDescription',
+                      {
+                        adapter: adapterDisplayName,
+                      },
+                    )
+                  "
+                >
+                  <template #icon>
+                    <FolderTree />
+                  </template>
+                  <Button @click="goToMappingsForCreate">
+                    <Upload v-if="canCreateCategory" class="size-4 mr-2" />
+                    <FolderTree v-else class="size-4 mr-2" />
+                    {{
+                      canCreateCategory
+                        ? $t(
+                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
+                            {
+                              adapter: adapterDisplayName,
+                            },
+                          )
+                        : $t("marketplace.connectionPage.products.goToMappings")
+                    }}
+                  </Button>
+                </EmptyState>
+
+                <EmptyState
+                  v-else-if="localProducts.length === 0"
+                  class="flex-1 py-12"
+                  :title="
+                    $t(
+                      'marketplace.connectionPage.products.noProductsToExportTitle',
+                    )
+                  "
+                  :description="
+                    $t(
+                      'marketplace.connectionPage.products.noProductsToExportDescription',
+                    )
+                  "
+                >
+                  <template #icon>
+                    <Package />
+                  </template>
+                </EmptyState>
+
+                <!-- Local products table (border only around data, not EmptyState) -->
+                <div
+                  v-else
+                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+                >
+                  <div class="min-h-0 flex-1 overflow-auto">
+                    <Table :contain="false" class="w-full">
+                      <TableHeader
+                        class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"
+                      >
+                        <TableRow class="hover:bg-transparent">
+                          <TableHead class="w-10">
+                            <Checkbox
+                              :model-value="allLocalSelected"
+                              :indeterminate="someLocalSelected"
+                              @update:model-value="toggleSelectAllLocal"
+                            />
+                          </TableHead>
+                          <TableHead>{{ $t("common.name") }}</TableHead>
+                          <TableHead class="w-36">SKU</TableHead>
+                          <TableHead class="w-24 text-right">{{
+                            $t("marketplace.connectionPage.fields.price")
+                          }}</TableHead>
+                          <TableHead class="w-24 text-right">{{
+                            $t(
+                              "marketplace.connectionPage.fields.storageQuantity",
+                            )
+                          }}</TableHead>
+                          <TableHead>{{
+                            $t(
+                              "marketplace.connectionPage.products.categoryHeader",
+                            )
+                          }}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow
+                          v-for="product in localProducts"
+                          :key="product.id"
+                          class="cursor-pointer select-none"
+                          @click="handleLocalRowClick(product, $event)"
+                        >
+                          <TableCell>
+                            <Checkbox
+                              :model-value="isLocalSelected(product.id)"
+                              @click.capture="captureShiftSelection"
+                              @update:model-value="
+                                (checked) =>
+                                  toggleSelectLocal(product.id, checked)
+                              "
+                            />
+                          </TableCell>
+                          <TableCell class="max-w-0">
+                            <RouterLink
+                              :to="`/products/${product.id}/edit`"
+                              class="block truncate font-medium underline-offset-2 hover:underline"
+                              >{{ product.name }}</RouterLink
+                            >
+                          </TableCell>
+                          <TableCell class="max-w-0">
+                            <code
+                              class="block truncate rounded bg-muted px-1.5 py-0.5 text-sm"
+                              >{{ product.sku }}</code
+                            >
+                          </TableCell>
+                          <TableCell class="text-right">
+                            {{ formatPrice(product.price) }}
+                          </TableCell>
+                          <TableCell class="text-right">
+                            {{ product.storageQuantity ?? "-" }}
+                          </TableCell>
+                          <TableCell>
+                            <span class="text-sm text-muted-foreground">{{
+                              product.categoryName || "-"
+                            }}</span>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <!-- Pagination -->
+                  <div
+                    v-if="localTotalCount > 0"
+                    class="shrink-0 flex items-center justify-between px-4 py-3"
+                  >
+                    <div class="flex items-center gap-2">
+                      <p class="text-sm text-muted-foreground">
+                        {{
+                          $t(
+                            "marketplace.connectionPage.products.pageSizeLabel",
+                          )
+                        }}
+                      </p>
+                      <Select
+                        :model-value="String(localPageSize)"
+                        @update:model-value="
+                          (val) => {
+                            localPageSize = Number(val);
+                            localPage = 1;
+                            fetchLocalProducts();
+                          }
+                        "
+                      >
+                        <SelectTrigger
+                          class="h-8 w-[100px] bg-primary-foreground"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem as="button" value="10">10</SelectItem>
+                            <SelectItem as="button" value="25">25</SelectItem>
+                            <SelectItem as="button" value="50">50</SelectItem>
+                            <SelectItem as="button" value="100">100</SelectItem>
+                            <SelectItem as="button" value="250">250</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <p class="text-sm text-muted-foreground">
+                        {{
+                          $t("marketplace.connectionPage.products.totalLabel")
+                        }}
+                        {{ localTotalCount }}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <p class="text-sm text-muted-foreground mr-2">
+                        {{ localPage }} / {{ localLastPage }}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 w-8 p-0"
+                        :disabled="localPage <= 1"
+                        @click="
+                          localPage = 1;
+                          fetchLocalProducts();
+                        "
+                      >
+                        <ChevronsLeft class="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 w-8 p-0"
+                        :disabled="localPage <= 1"
+                        @click="
+                          localPage--;
+                          fetchLocalProducts();
+                        "
+                      >
+                        <ChevronLeft class="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 w-8 p-0"
+                        :disabled="localPage >= localLastPage"
+                        @click="
+                          localPage++;
+                          fetchLocalProducts();
+                        "
+                      >
+                        <ChevronRight class="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 w-8 p-0"
+                        :disabled="localPage >= localLastPage"
+                        @click="
+                          localPage = localLastPage;
+                          fetchLocalProducts();
+                        "
+                      >
+                        <ChevronsRight class="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <!-- Bulk export bar -->
+                  <div
+                    v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
+                    class="bg-background flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+                  >
+                    <span class="text-sm font-medium">
+                      {{
+                        $t("marketplace.connectionPage.products.selectedLabel")
+                      }}
+                      {{ selectedLocalIds.length }}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="h-8"
+                      @click="clearLocalSelection"
+                    >
+                      <X class="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-8"
+                      @click="handleExportNewBulk"
+                      :disabled="isExportingNewBulk"
+                    >
+                      <Spinner v-if="isExportingNewBulk" class="mr-2" />
+                      <Upload v-else class="mr-1 size-4" />
+                      {{
+                        $t(
+                          "marketplace.connectionPage.products.exportToAdapterCount",
+                          { count: selectedLocalIds.length },
+                        )
+                      }}
+                    </Button>
+                  </div>
+                </div>
+              </template>
             </div>
           </TabsContent>
         </Tabs>
@@ -4362,7 +5185,9 @@ export default {
       v-if="showSingleImportPreviewDialog"
       :open="showSingleImportPreviewDialog"
       :title="$t('productMarketplaceIntegrations.importDialogTitle')"
-      :description="$t('productMarketplaceIntegrations.importDialogDescription')"
+      :description="
+        $t('productMarketplaceIntegrations.importDialogDescription')
+      "
       :items="singleImportPreviewItems"
       selectable
       :excluded-fields="singleImportExcludedFields"
@@ -4397,179 +5222,191 @@ export default {
 
     <!-- Import Dialog (create local products from unlinked) -->
     <Dialog v-model:open="showImportDialog">
-      <DialogContent size="2xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        size="2xl"
+        class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+      >
         <DialogHeader variant="bar">
           <DialogTitle>
             {{ $t("marketplace.connectionPage.dialogs.importProductsTitle") }}
           </DialogTitle>
           <DialogDescription>
-            {{ $t("marketplace.connectionPage.dialogs.importProductsDescription") }}
+            {{
+              $t("marketplace.connectionPage.dialogs.importProductsDescription")
+            }}
           </DialogDescription>
         </DialogHeader>
 
-        <div v-if="isLoadingDialogData" class="flex flex-1 items-center justify-center py-12">
+        <div
+          v-if="isLoadingDialogData"
+          class="flex flex-1 items-center justify-center py-12"
+        >
           <Spinner size="2xl" class="text-muted-foreground" />
         </div>
 
-        <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          <div class="text-sm text-muted-foreground">
-            {{ $t("marketplace.connectionPage.dialogs.selectedProductsCount", { count: selectedUnlinkedItems.length }) }}
-          </div>
+        <div v-else class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <FieldGroup class="gap-5">
+            <FieldDescription>
+              {{
+                $t("marketplace.connectionPage.dialogs.selectedProductsCount", {
+                  count: selectedUnlinkedItems.length,
+                })
+              }}
+            </FieldDescription>
 
-          <div
-            v-for="group in productsByExternalCategory"
-            :key="group.externalCategoryId || '__none__'"
-            class="border rounded-lg p-4"
-          >
-            <div class="flex items-center gap-2 mb-3">
-              <FolderOpen class="size-4 text-muted-foreground" />
-              <span class="font-medium">{{ group.displayName }}</span>
-              <Badge variant="secondary" class="ml-auto">
-                {{ $t("marketplace.connectionPage.dialogs.productsCount", { count: group.products.length }) }}
-              </Badge>
-            </div>
-
-            <Separator class="mb-3" />
-
-            <SettingsFormField
-              :label="$t('marketplace.connectionPage.dialogs.localCategoryColon')"
+            <FieldSet
+              v-for="group in productsByExternalCategory"
+              :key="group.externalCategoryId || '__none__'"
+              class="gap-3"
             >
+              <FieldLegend variant="label" class="mb-0">
+                {{ group.displayName }}
+              </FieldLegend>
+              <FieldDescription>
+                {{
+                  $t("marketplace.connectionPage.dialogs.productsCount", {
+                    count: group.products.length,
+                  })
+                }}
+              </FieldDescription>
+
               <RadioGroup
                 :model-value="
-                  categoryAssignments[group.externalCategoryId || '__none__']
-                    ?.mode || 'none'
+                  categoryAssignments[importAssignmentKey(group)]?.mode ||
+                  'none'
                 "
+                class="gap-3"
                 @update:model-value="
-                  setAssignmentMode(
-                    group.externalCategoryId || '__none__',
-                    $event,
-                  )
+                  setAssignmentMode(importAssignmentKey(group), $event)
                 "
-                class="space-y-3"
               >
-                <div class="flex items-center gap-3">
+                <Field orientation="horizontal">
                   <RadioGroupItem
+                    :id="`import-existing-${group.externalCategoryId || 'none'}`"
                     value="existing"
-                    :id="`existing-${group.externalCategoryId}`"
-                    class="mt-0.5 shrink-0"
                   />
-                  <Label
-                    :for="`existing-${group.externalCategoryId}`"
-                    class="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Link2 class="size-4 text-muted-foreground shrink-0" />
-                    <span>{{ $t("marketplace.connectionPage.dialogs.selectExistingColon") }}</span>
-                  </Label>
-                  <Select
-                    :model-value="
-                      categoryAssignments[
-                        group.externalCategoryId || '__none__'
-                      ]?.localCategoryId?.toString() || ''
-                    "
-                    @update:model-value="
-                      setAssignmentCategory(
-                        group.externalCategoryId || '__none__',
-                        parseInt($event),
-                      )
-                    "
-                    :disabled="
-                      categoryAssignments[
-                        group.externalCategoryId || '__none__'
-                      ]?.mode !== 'existing'
-                    "
-                  >
-                    <SelectTrigger class="w-[180px]">
-                      <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.choosePlaceholder')" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        v-for="cat in localCategories"
-                        :key="cat.id"
-                        :value="cat.id.toString()"
-                      >
-                        {{ cat.name }}
-                        <span
-                          v-if="
-                            getExistingMappingForCategory(
-                              group.externalCategoryId,
-                            )?.localCategoryId === cat.id
-                          "
-                          class="text-success ml-1"
-                        >
-                          ({{ $t("marketplace.connectionPage.dialogs.mappingParenthetical") }})
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div class="flex items-start gap-3">
-                  <RadioGroupItem
-                    value="new"
-                    :id="`new-${group.externalCategoryId || '__none__'}`"
-                    class="mt-0.5 shrink-0"
-                  />
-                  <Label
-                    :for="`new-${group.externalCategoryId || '__none__'}`"
-                    class="flex items-start gap-2 cursor-pointer"
-                  >
-                    <Sparkles class="size-4 text-warning mt-0.5 shrink-0" />
-                    <span v-if="group.externalCategoryId"
-                      >{{
-                        $t("marketplace.connectionPage.import.createNewFromAdapter", {
-                          name: group.displayName,
-                        })
-                      }}</span
+                  <FieldContent>
+                    <FieldLabel
+                      :for="`import-existing-${group.externalCategoryId || 'none'}`"
+                      class="cursor-pointer text-sm font-medium"
                     >
-                    <span v-else>{{ $t("marketplace.connectionPage.import.createNewCategory") }}</span>
-                  </Label>
-                  <Input
-                    v-if="
-                      !group.externalCategoryId &&
-                      categoryAssignments[
-                        group.externalCategoryId || '__none__'
-                      ]?.mode === 'new'
-                    "
-                    v-model="
-                      categoryAssignments[
-                        group.externalCategoryId || '__none__'
-                      ].newCategoryName
-                    "
-                    :placeholder="$t('marketplace.connectionPage.import.categoryNamePlaceholder')"
-                    class="w-[180px]"
-                  />
-                </div>
+                      {{
+                        $t(
+                          "marketplace.connectionPage.dialogs.useExistingCategory",
+                        )
+                      }}
+                    </FieldLabel>
+                    <SearchableSelect
+                      v-if="
+                        categoryAssignments[importAssignmentKey(group)]
+                          ?.mode === 'existing'
+                      "
+                      :model-value="importLocalCategoryValue(group)"
+                      :options="importLocalCategoryOptions(group)"
+                      :placeholder="
+                        $t(
+                          'marketplace.connectionPage.dialogs.choosePlaceholder',
+                        )
+                      "
+                      @update:model-value="onImportLocalCategory(group, $event)"
+                    />
+                  </FieldContent>
+                </Field>
 
-                <div class="flex items-center gap-3">
+                <Field orientation="horizontal">
                   <RadioGroupItem
-                    value="none"
-                    :id="`none-${group.externalCategoryId || '__none__'}`"
-                    class="shrink-0"
+                    :id="`import-new-${group.externalCategoryId || 'none'}`"
+                    value="new"
                   />
-                  <Label
-                    :for="`none-${group.externalCategoryId || '__none__'}`"
-                    class="flex items-center gap-2 cursor-pointer"
+                  <FieldContent>
+                    <FieldLabel
+                      :for="`import-new-${group.externalCategoryId || 'none'}`"
+                      class="cursor-pointer text-sm font-medium"
+                    >
+                      <template v-if="group.externalCategoryId">
+                        {{
+                          $t(
+                            "marketplace.connectionPage.import.createNewFromAdapter",
+                            { name: group.displayName },
+                          )
+                        }}
+                      </template>
+                      <template v-else>
+                        {{
+                          $t(
+                            "marketplace.connectionPage.import.createNewCategory",
+                          )
+                        }}
+                      </template>
+                    </FieldLabel>
+                    <SettingsFormField
+                      v-if="
+                        !group.externalCategoryId &&
+                        categoryAssignments[importAssignmentKey(group)]
+                          ?.mode === 'new'
+                      "
+                      :label="
+                        $t(
+                          'marketplace.connectionPage.import.categoryNameLabel',
+                        )
+                      "
+                      :label-for="`import-new-cat-${group.externalCategoryId || 'none'}`"
+                    >
+                      <Input
+                        :id="`import-new-cat-${group.externalCategoryId || 'none'}`"
+                        :model-value="
+                          categoryAssignments[importAssignmentKey(group)]
+                            ?.newCategoryName || ''
+                        "
+                        :placeholder="
+                          $t(
+                            'marketplace.connectionPage.import.categoryNamePlaceholder',
+                          )
+                        "
+                        :maxlength="FIELD_LIMITS.categoryName"
+                        @update:model-value="
+                          setAssignmentNewName(
+                            importAssignmentKey(group),
+                            $event,
+                          )
+                        "
+                      />
+                    </SettingsFormField>
+                  </FieldContent>
+                </Field>
+
+                <Field orientation="horizontal">
+                  <RadioGroupItem
+                    :id="`import-none-${group.externalCategoryId || 'none'}`"
+                    value="none"
+                  />
+                  <FieldLabel
+                    :for="`import-none-${group.externalCategoryId || 'none'}`"
+                    class="cursor-pointer text-sm font-medium"
                   >
-                    <Ban class="size-4 text-muted-foreground shrink-0" />
-                    <span>{{ $t("marketplace.connectionPage.import.noCategory") }}</span>
-                  </Label>
-                </div>
+                    {{ $t("marketplace.connectionPage.import.noCategory") }}
+                  </FieldLabel>
+                </Field>
               </RadioGroup>
-            </SettingsFormField>
-          </div>
+            </FieldSet>
+          </FieldGroup>
         </div>
 
-        <DialogFooter variant="bar" class="sm:justify-between">
+        <DialogFooter variant="bar">
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
           <Button
-            @click="handleImportWithCategories"
             :disabled="!canConfirmImportWithCategories"
+            @click="handleImportWithCategories"
           >
             <Spinner v-if="isImportingWithCategories" class="mr-2" />
-            <Download v-else class="size-4 mr-2" />
-            {{ $t("marketplace.connectionPage.import.importCount", { count: selectedUnlinkedItems.length }) }}
+            <Download v-else class="mr-2 size-4" />
+            {{
+              $t("marketplace.connectionPage.import.importCount", {
+                count: selectedUnlinkedItems.length,
+              })
+            }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -4578,9 +5415,15 @@ export default {
     <AlertDialog v-model:open="showDuplicateMappingDialog">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{{ $t("marketplace.connectionPage.dialogs.duplicateMappingTitle") }}</AlertDialogTitle>
+          <AlertDialogTitle>{{
+            $t("marketplace.connectionPage.dialogs.duplicateMappingTitle")
+          }}</AlertDialogTitle>
           <AlertDialogDescription>
-            {{ $t("marketplace.connectionPage.dialogs.duplicateMappingDescription") }}
+            {{
+              $t(
+                "marketplace.connectionPage.dialogs.duplicateMappingDescription",
+              )
+            }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -4596,15 +5439,20 @@ export default {
     <Dialog v-model:open="showRenameMappingDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.renameMappingTitle") }}</DialogTitle>
-          <DialogDescription
-            >{{ $t("marketplace.connectionPage.dialogs.renameMappingDescription") }}</DialogDescription
-          >
+          <DialogTitle>{{
+            $t("marketplace.connectionPage.dialogs.renameMappingTitle")
+          }}</DialogTitle>
+          <DialogDescription>{{
+            $t("marketplace.connectionPage.dialogs.renameMappingDescription")
+          }}</DialogDescription>
         </DialogHeader>
         <div class="py-4">
           <Input
             v-model="renameMappingValue"
-            :placeholder="$t('marketplace.connectionPage.dialogs.mappingNamePlaceholder')"
+            :placeholder="
+              $t('marketplace.connectionPage.dialogs.mappingNamePlaceholder')
+            "
+            :maxlength="FIELD_LIMITS.mappingName"
             @keyup.enter="handleRenameMapping"
           />
         </div>
@@ -4627,18 +5475,23 @@ export default {
           <DialogTitle>
             {{
               $t("marketplace.connectionPage.dialogs.deleteMappingTitle", {
-                name: deleteMappingTarget?.name || deleteMappingTarget?.localCategoryName,
+                name:
+                  deleteMappingTarget?.name ||
+                  deleteMappingTarget?.localCategoryName,
               })
             }}
           </DialogTitle>
           <DialogDescription>
             {{
-              $t("marketplace.connectionPage.dialogs.deleteMappingLinkedProducts", {
-                count:
-                  deleteMappingImpact?.linkedProductsCount ||
-                  deleteMappingTarget?.linkedProductsCount ||
-                  0,
-              })
+              $t(
+                "marketplace.connectionPage.dialogs.deleteMappingLinkedProducts",
+                {
+                  count:
+                    deleteMappingImpact?.linkedProductsCount ||
+                    deleteMappingTarget?.linkedProductsCount ||
+                    0,
+                },
+              )
             }}
           </DialogDescription>
         </DialogHeader>
@@ -4646,7 +5499,9 @@ export default {
         <div
           class="space-y-2 py-2"
           role="radiogroup"
-          :aria-label="$t('marketplace.connectionPage.dialogs.whatToDoWithProductsAria')"
+          :aria-label="
+            $t('marketplace.connectionPage.dialogs.whatToDoWithProductsAria')
+          "
         >
           <!-- Safe path: only rendered when an alternative mapping exists -->
           <Button
@@ -4674,10 +5529,16 @@ export default {
               />
               <div class="min-w-0 flex-1 space-y-1.5">
                 <div class="text-sm font-medium">
-                  {{ $t("marketplace.connectionPage.dialogs.moveProductsToAnotherMapping") }}
+                  {{
+                    $t(
+                      "marketplace.connectionPage.dialogs.moveProductsToAnotherMapping",
+                    )
+                  }}
                 </div>
                 <p class="text-xs text-muted-foreground">
-                  {{ $t("marketplace.connectionPage.dialogs.moveProductsHint") }}
+                  {{
+                    $t("marketplace.connectionPage.dialogs.moveProductsHint")
+                  }}
                 </p>
                 <Select
                   v-if="deleteMappingMode === 'reassign'"
@@ -4687,7 +5548,13 @@ export default {
                   "
                 >
                   <SelectTrigger class="h-9 w-full" @click.stop>
-                    <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.mappingToTransferPlaceholder')" />
+                    <SelectValue
+                      :placeholder="
+                        $t(
+                          'marketplace.connectionPage.dialogs.mappingToTransferPlaceholder',
+                        )
+                      "
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
@@ -4695,13 +5562,15 @@ export default {
                       :key="mapping.id"
                       :value="mapping.id.toString()"
                     >
-                      {{ mapping.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: mapping.id }) }}
-                      <span class="text-muted-foreground ml-1">
-                        ({{
-                          mapping.externalCategoryName ||
-                          mapping.externalCategoryId
-                        }})
-                      </span>
+                      {{
+                        mappingDisplayName(
+                          mapping,
+                          $t(
+                            "marketplace.connectionPage.dialogs.mappingFallback",
+                            { id: mapping.id },
+                          ),
+                        )
+                      }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -4732,15 +5601,27 @@ export default {
                 ]"
               />
               <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="text-sm font-medium">{{ $t("marketplace.connectionPage.dialogs.deleteWithoutMoving") }}</div>
+                <div class="text-sm font-medium">
+                  {{
+                    $t("marketplace.connectionPage.dialogs.deleteWithoutMoving")
+                  }}
+                </div>
                 <p class="text-xs text-muted-foreground">
-                  {{ $t("marketplace.connectionPage.dialogs.deleteWithoutMovingHint") }}
+                  {{
+                    $t(
+                      "marketplace.connectionPage.dialogs.deleteWithoutMovingHint",
+                    )
+                  }}
                 </p>
                 <p
                   v-if="deleteMappingReplacementOptions.length === 0"
                   class="text-xs text-muted-foreground"
                 >
-                  {{ $t("marketplace.connectionPage.dialogs.noReplacementMappingHint") }}
+                  {{
+                    $t(
+                      "marketplace.connectionPage.dialogs.noReplacementMappingHint",
+                    )
+                  }}
                 </p>
               </div>
             </div>
@@ -4757,7 +5638,12 @@ export default {
                 class="flex items-baseline justify-between gap-2 px-3 py-1.5 text-xs"
               >
                 <span class="truncate">
-                  {{ product.name || $t("marketplace.connectionPage.dialogs.productFallback", { id: product.id }) }}
+                  {{
+                    product.name ||
+                    $t("marketplace.connectionPage.dialogs.productFallback", {
+                      id: product.id,
+                    })
+                  }}
                 </span>
                 <span class="shrink-0 font-mono text-muted-foreground">
                   {{ product.sku || `ID ${product.id}` }}
@@ -4809,10 +5695,12 @@ export default {
     <Dialog v-model:open="showMappingSettingsDialog">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.mappingSettingsTitle") }}</DialogTitle>
-          <DialogDescription
-            >{{ $t("marketplace.connectionPage.dialogs.mappingSettingsDescription") }}</DialogDescription
-          >
+          <DialogTitle>{{
+            $t("marketplace.connectionPage.dialogs.mappingSettingsTitle")
+          }}</DialogTitle>
+          <DialogDescription>{{
+            $t("marketplace.connectionPage.dialogs.mappingSettingsDescription")
+          }}</DialogDescription>
         </DialogHeader>
         <div class="py-4">
           <FieldGroup class="gap-4">
@@ -4823,7 +5711,12 @@ export default {
               <Input
                 id="mapping-settings-name"
                 v-model="mappingSettingsName"
-                :placeholder="$t('marketplace.connectionPage.mappings.mappingNamePlaceholder')"
+                :placeholder="
+                  $t(
+                    'marketplace.connectionPage.mappings.mappingNamePlaceholder',
+                  )
+                "
+                :maxlength="FIELD_LIMITS.mappingName"
               />
             </SettingsFormField>
           </FieldGroup>
@@ -4850,9 +5743,17 @@ export default {
     >
       <DialogContent size="2xl">
         <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.connectionPage.dialogs.selectMappingForProductsTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            $t(
+              "marketplace.connectionPage.dialogs.selectMappingForProductsTitle",
+            )
+          }}</DialogTitle>
           <DialogDescription>
-            {{ $t("marketplace.connectionPage.dialogs.selectMappingForProductsDescription") }}
+            {{
+              $t(
+                "marketplace.connectionPage.dialogs.selectMappingForProductsDescription",
+              )
+            }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4 max-h-96 overflow-y-auto">
@@ -4882,7 +5783,13 @@ export default {
                 @update:model-value="(val) => applyMappingToGroup(group, val)"
               >
                 <SelectTrigger class="h-8 flex-1">
-                  <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.chooseMappingPlaceholder')" />
+                  <SelectValue
+                    :placeholder="
+                      $t(
+                        'marketplace.connectionPage.dialogs.chooseMappingPlaceholder',
+                      )
+                    "
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
@@ -4890,10 +5797,15 @@ export default {
                     :key="m.id"
                     :value="m.id.toString()"
                   >
-                    {{ m.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: m.id }) }}
-                    <span class="text-muted-foreground ml-1">
-                      ({{ m.externalCategoryName || m.externalCategoryId }})
-                    </span>
+                    {{
+                      mappingDisplayName(
+                        m,
+                        $t(
+                          "marketplace.connectionPage.dialogs.mappingFallback",
+                          { id: m.id },
+                        ),
+                      )
+                    }}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -4920,7 +5832,13 @@ export default {
               "
             >
               <SelectTrigger class="w-full">
-                <SelectValue :placeholder="$t('marketplace.connectionPage.dialogs.chooseMappingPlaceholder')" />
+                <SelectValue
+                  :placeholder="
+                    $t(
+                      'marketplace.connectionPage.dialogs.chooseMappingPlaceholder',
+                    )
+                  "
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -4928,13 +5846,14 @@ export default {
                   :key="mapping.id"
                   :value="mapping.id.toString()"
                 >
-                  {{ mapping.name || $t("marketplace.connectionPage.dialogs.mappingFallback", { id: mapping.id }) }}
-                  <span class="text-muted-foreground ml-1">
-                    ({{
-                      mapping.externalCategoryName ||
-                      mapping.externalCategoryId
-                    }})
-                  </span>
+                  {{
+                    mappingDisplayName(
+                      mapping,
+                      $t("marketplace.connectionPage.dialogs.mappingFallback", {
+                        id: mapping.id,
+                      }),
+                    )
+                  }}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -4942,9 +5861,9 @@ export default {
         </div>
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline" @click="cancelMappingSelection"
-              >{{ $t("common.cancel") }}</Button
-            >
+            <Button variant="outline" @click="cancelMappingSelection">{{
+              $t("common.cancel")
+            }}</Button>
           </DialogClose>
           <Button
             @click="confirmMappingSelections"

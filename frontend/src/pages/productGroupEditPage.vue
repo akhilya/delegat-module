@@ -8,6 +8,7 @@ import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 import {
   Dialog,
@@ -38,6 +39,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Table,
   TableHead,
   TableHeader,
   TableRow,
@@ -104,6 +106,7 @@ export default {
     CardDescription,
     CardHeader,
     CardTitle,
+    Table,
     TableHeader,
     TableHead,
     TableRow,
@@ -153,6 +156,7 @@ export default {
       isSearchingProducts: false,
       selectedProductsToAdd: [],
       PAGE_PRODUCT_GROUPS,
+      FIELD_LIMITS,
     };
   },
   computed: {
@@ -353,8 +357,30 @@ export default {
     },
 
     async handleSaveGroup() {
-      if (!this.group.name.trim()) {
+      const nameIssue = fieldLimitIssue(
+        this.group.name,
+        FIELD_LIMITS.groupName,
+      );
+      if (nameIssue === "empty") {
         displaySonnerError(this.$t("pages.productGroupEditPage.toast.nameRequired"));
+        return;
+      }
+      if (nameIssue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.groupName }),
+        );
+        return;
+      }
+      if (
+        fieldLimitIssue(
+          this.group.description,
+          FIELD_LIMITS.groupDescription,
+          { required: false },
+        ) === "tooLong"
+      ) {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.groupDescription }),
+        );
         return;
       }
 
@@ -629,6 +655,7 @@ export default {
               id="group-name"
               v-model="group.name"
               :placeholder="$t('pages.productGroupEditPage.fields.name.placeholder')"
+              :maxlength="FIELD_LIMITS.groupName"
             />
           </SettingsFormField>
           <SettingsFormField :label="$t('common.description')" label-for="group-description">
@@ -637,6 +664,7 @@ export default {
               v-model="group.description"
               :placeholder="$t('pages.productGroupEditPage.fields.description.placeholder')"
               class="min-h-24 resize-none"
+              :maxlength="FIELD_LIMITS.groupDescription"
             />
           </SettingsFormField>
         </FieldGroup>
@@ -686,7 +714,7 @@ export default {
                 class="overflow-hidden rounded-lg border"
               >
                 <div class="max-h-[min(42rem,70vh)] overflow-y-auto thin-scrollbar">
-                <table class="w-full caption-bottom text-sm">
+                <Table :contain="false" class="w-full">
                   <TableHeader class="sticky top-0 z-10 bg-card [&_tr]:border-b">
                     <TableRow class="hover:bg-transparent">
                       <TableHead class="w-9 px-3" />
@@ -694,7 +722,7 @@ export default {
                       <TableHead class="w-36 px-3">{{ $t("pages.productGroupEditPage.table.sku") }}</TableHead>
                       <TableHead class="w-14 px-2" />
                       <TableHead class="px-3">{{ $t("common.name") }}</TableHead>
-                      <TableHead class="hidden md:table-cell px-3">{{ $t("pages.productGroupEditPage.table.category") }}</TableHead>
+                      <TableHead class="hidden px-3 md:table-cell">{{ $t("pages.productGroupEditPage.table.category") }}</TableHead>
                       <TableHead class="w-12 px-2" />
                     </TableRow>
                   </TableHeader>
@@ -716,8 +744,8 @@ export default {
                         <TableCell class="w-9 px-2 text-center text-xs text-muted-foreground tabular-nums">
                           {{ index + 1 }}
                         </TableCell>
-                        <TableCell class="w-36 px-3 font-mono text-xs text-muted-foreground">
-                          {{ member.product.sku || "-" }}
+                        <TableCell class="text-muted-foreground w-36 max-w-0 px-3 font-mono text-xs">
+                          <span class="block truncate">{{ member.product.sku || "-" }}</span>
                         </TableCell>
                         <TableCell class="w-14 px-2">
                           <ProductImageCell
@@ -726,16 +754,16 @@ export default {
                             image-class="size-10 shrink-0 rounded-md"
                           />
                         </TableCell>
-                        <TableCell class="min-w-0 px-3">
+                        <TableCell class="max-w-0 px-3">
                           <router-link
                             :to="`/products/${member.product.id}/edit`"
-                            class="font-medium truncate block hover:underline"
+                            class="block truncate font-medium hover:underline"
                           >
                             {{ member.product.name }}
                           </router-link>
                         </TableCell>
-                        <TableCell class="hidden md:table-cell px-3 text-muted-foreground">
-                          {{ member.product.category?.name || "-" }}
+                        <TableCell class="text-muted-foreground hidden max-w-0 px-3 md:table-cell">
+                          <span class="block truncate">{{ member.product.category?.name || "-" }}</span>
                         </TableCell>
                         <TableCell class="w-12 px-2">
                           <div class="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -774,7 +802,7 @@ export default {
                       </TableRow>
                     </template>
                   </draggable>
-                </table>
+                </Table>
                 </div>
               </div>
             </CardContent>

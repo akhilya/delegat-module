@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
 import { Spinner } from "@/components/ui/spinner";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -277,7 +278,7 @@ const canSubmit = computed(() => {
   // SKU conflict requires user to provide a new sku that differs from the original
   if (preview.value.skuConflict) {
     const trimmed = newSku.value?.trim() || "";
-    if (trimmed.length === 0) return false;
+    if (!isNonEmptyWithinLimit(trimmed, FIELD_LIMITS.productSku)) return false;
     if (trimmed === props.productSku) return false; // still the conflicting one
   }
 
@@ -286,7 +287,7 @@ const canSubmit = computed(() => {
 
   // Group=use needs a groupId, group=create needs a name
   if (groupAction.value === "use" && !groupUseId.value) return false;
-  if (groupAction.value === "create" && (!groupNewName.value || !groupNewName.value.trim())) return false;
+  if (groupAction.value === "create" && !isNonEmptyWithinLimit(groupNewName.value, FIELD_LIMITS.groupName)) return false;
 
   // For move only: breaking marketplace links must be explicitly acknowledged.
   // Clone never breaks anything (original keeps its links), so no checkbox required.
@@ -472,6 +473,7 @@ function close() {
                 id="new-sku"
                 v-model="newSku"
                 :placeholder="t('products.productTransferDialog.newSkuPlaceholder')"
+                :maxlength="FIELD_LIMITS.productSku"
               />
             </SettingsFormField>
           </div>
@@ -695,6 +697,7 @@ function close() {
                 id="group-new-name"
                 v-model="groupNewName"
                 :placeholder="t('products.productTransferDialog.newGroupNamePlaceholder')"
+                :maxlength="FIELD_LIMITS.groupName"
               />
             </SettingsFormField>
           </FieldGroup>

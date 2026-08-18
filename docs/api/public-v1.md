@@ -139,8 +139,8 @@ Respects product quotas (`409` when exceeded).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List with attributes + product counts |
-| GET | `/{categoryId}` | Detail |
+| GET | `/` | List with attributes + product counts. Attribute objects include `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, and `allowCustomValues` (typed values outside the option list; copied on category import). |
+| GET | `/{categoryId}` | Detail (same attribute fields as list, including `groupIcon`) |
 | POST | `/` | Create `{ name, description? }` |
 | PATCH | `/{categoryId}` | Update |
 | DELETE | `/{categoryId}` | Delete (fails if products remain → `409`) |
@@ -189,7 +189,7 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 | Method | Path | Body | Notes |
 |--------|------|------|--------|
 | POST | `/export-products` | `{ productIds?: number[] }` | Empty/`omit` = all store products |
-| POST | `/import-products` | `{ products: [{ externalId, externalCategoryId?, productName?, targetCategoryId?, forceImportWithoutMapping? }], forceImportWithoutMapping? }` | Needs category mappings unless forced |
+| POST | `/import-products` | `{ products: [{ externalId, externalCategoryId?, productName?, targetCategoryId?, forceImportWithoutMapping? }], forceImportWithoutMapping? }` | Needs category mappings unless forced. Selling price comes from the card, or from the prices API when the card omits it. Queues at most the remaining `MAX_PRODUCTS` slots (`409 product_limit_reached` when the store is already at the cap) |
 | POST | `/export-prices` | `{ linkIds?: number[] }` | |
 | POST | `/import-prices` | `{ linkIds?: number[] }` | |
 | POST | `/export-stocks` | `{ linkIds?: number[] }` | |

@@ -35,7 +35,14 @@ import {
 } from "lucide-vue-next";
 import ShareLinkDialog from "@/components/products/ShareLinkDialog.vue";
 import { http } from "@/main";
+import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Popover,
   PopoverContent,
@@ -203,9 +210,12 @@ const isLoadingFiles = ref(false);
 const isLoadingMoreFiles = ref(false);
 const hasMoreFiles = ref(false);
 const loadMoreSentinel = ref(null);
+const fileListScrollEl = ref(null);
+const canScrollY = ref(false);
 const FILES_PAGE_SIZE = 50;
 let nextFilesStartIndex = 0;
 let loadMoreObserver = null;
+let fileListResizeObserver = null;
 // Values must match C# FileTagColor enum NAMES (JsonStringEnumConverter)
 const TAG_COLORS = [
   { value: "Red", get label() { return t("products.productFileManager.tagColorRed"); }, bg: "bg-red-500", text: "text-white" },
@@ -314,7 +324,7 @@ async function toggleFileTag(fileId, tagId) {
 }
 
 async function createAndAssignTag(fileId) {
-  if (!newTagName.value.trim()) return;
+  if (!isNonEmptyWithinLimit(newTagName.value, FIELD_LIMITS.tagName)) return;
   try {
     const res = await http.post("/tags", { name: newTagName.value.trim(), color: newTagColor.value }, { cache: false });
     const newTag = { id: res.data.Id ?? res.data.id, name: res.data.name, color: res.data.color };
@@ -659,6 +669,15 @@ function setupLoadMoreObserver() {
     { root, rootMargin: "120px", threshold: 0 },
   );
   loadMoreObserver.observe(loadMoreSentinel.value);
+}
+
+function checkFileListScroll() {
+  const el = fileListScrollEl.value;
+  if (!el) {
+    canScrollY.value = false;
+    return;
+  }
+  canScrollY.value = el.scrollHeight > el.clientHeight + 8;
 }
 
 function navigateToFolder(folderId) {
@@ -1128,6 +1147,10 @@ async function commitInlineCreate() {
     inlineNewFolder.value = false;
     return;
   }
+  if (!isNonEmptyWithinLimit(name, FIELD_LIMITS.folderName)) {
+    displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.folderName }));
+    return;
+  }
   isCreatingFolder.value = true;
   try {
     const response = await http.post(foldersUrl(), { name, parentFolderId: currentFolderId.value }, { cache: false });
@@ -1167,6 +1190,10 @@ async function commitInlineRename() {
   const newName = target.name.trim();
   inlineRenameTarget.value = null;
   if (!newName || newName === target.originalName) return;
+  if (!isNonEmptyWithinLimit(newName, FIELD_LIMITS.folderName)) {
+    displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.folderName }));
+    return;
+  }
 
   if (target.type === 'folder') {
     try {
@@ -1562,6 +1589,7 @@ onMounted(async () => {
   await loadFiles({ reset: true });
   await nextTick();
   setupLoadMoreObserver();
+  checkFileListScroll();
 });
 
 onUnmounted(() => {
@@ -1570,6 +1598,8 @@ onUnmounted(() => {
     loadMoreObserver.disconnect();
     loadMoreObserver = null;
   }
+  fileListScrollEl.value?.removeEventListener("scroll", checkFileListScroll);
+  fileListResizeObserver?.disconnect();
 });
 
 watch(currentFolderId, () => {
@@ -1580,6 +1610,32 @@ watch(currentFolderId, () => {
 watch(loadMoreSentinel, () => {
   nextTick(() => setupLoadMoreObserver());
 });
+
+watch(fileListScrollEl, (el, oldEl) => {
+  if (oldEl) oldEl.removeEventListener("scroll", checkFileListScroll);
+  fileListResizeObserver?.disconnect();
+  if (el) {
+    el.addEventListener("scroll", checkFileListScroll);
+    fileListResizeObserver = new ResizeObserver(checkFileListScroll);
+    fileListResizeObserver.observe(el);
+    checkFileListScroll();
+  } else {
+    canScrollY.value = false;
+  }
+}, { flush: "post" });
+
+watch(
+  [
+    () => localFiles.value.length,
+    () => folders.value.length,
+    () => pendingUploads.value.length,
+    hasMoreFiles,
+    isLoadingMoreFiles,
+    inlineNewFolder,
+    currentFolderId,
+  ],
+  () => nextTick(checkFileListScroll),
+);
 
 watch(() => props.productId, () => {
   const wasRoot = currentFolderId.value == null;
@@ -1679,6 +1735,7 @@ const selectedFileCount = computed(
 
     <!-- File list -->
     <div
+      ref="fileListScrollEl"
       class="relative flex min-h-0 flex-1 flex-col overflow-auto"
       @contextmenu="onContextMenu($event, 'area', null)"
       @click.self="clearSelection"
@@ -1716,10 +1773,27 @@ const selectedFileCount = computed(
         </template>
       </EmptyState>
 
-      <table v-if="!isLoadingFiles || currentFiles.length > 0 || currentFolderId != null || currentSubfolders.length > 0 || inlineNewFolder || currentPendingUploads.length > 0" class="w-full text-sm">
-        <tbody>
+      <Table
+        v-if="!isLoadingFiles || currentFiles.length > 0 || currentFolderId != null || currentSubfolders.length > 0 || inlineNewFolder || currentPendingUploads.length > 0"
+        :contain="false"
+        class="w-full table-fixed"
+      >
+        <colgroup>
+          <col class="w-10" />
+          <col />
+          <col class="hidden w-24 sm:table-column" />
+          <col class="w-32" />
+          <col class="w-36" />
+          <col class="w-20" />
+          <col class="w-16" />
+        </colgroup>
+        <TableBody
+          :class="canScrollY
+            ? '[&_tr:last-child]:border-0'
+            : '[&_tr:last-child]:!border-b'"
+        >
           <!-- Go up row (..) -->
-          <tr
+          <TableRow
             v-if="currentFolderId != null"
             class="border-b hover:bg-muted/50 cursor-pointer h-11 text-muted-foreground"
             @click="navigateToFolder(parentFolderId)"
@@ -1728,40 +1802,40 @@ const selectedFileCount = computed(
             @drop="onDrop($event, parentFolderId)"
             :class="{ 'bg-accent ring-2 ring-primary/30': dragItems.length > 0 && dropTargetId === parentFolderId }"
           >
-            <td class="pl-4 pr-3 w-8">
+            <TableCell class="pl-4 pr-3 w-10">
               <CornerLeftUp class="size-4" />
-            </td>
-            <td>..</td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td class="pr-3 w-10"></td>
-          </tr>
+            </TableCell>
+            <TableCell class="min-w-0">..</TableCell>
+            <TableCell />
+            <TableCell />
+            <TableCell />
+            <TableCell />
+            <TableCell class="pr-3 w-10"></TableCell>
+          </TableRow>
 
           <!-- Inline new folder row -->
-          <tr v-if="inlineNewFolder" class="border-b bg-muted/30 h-11">
-            <td class="pl-4 pr-3 w-8">
+          <TableRow v-if="inlineNewFolder" class="border-b bg-muted/30 h-11">
+            <TableCell class="pl-4 pr-3 w-10">
               <Spinner v-if="isCreatingFolder" class="text-muted-foreground" />
               <Folder v-else class="size-4 text-muted-foreground" />
-            </td>
-            <td colspan="5">
+            </TableCell>
+            <TableCell class="min-w-0" colspan="5">
               <input
                 ref="inlineNewFolderInput"
                 v-model="inlineNewFolderName"
-                maxlength="255"
+                :maxlength="FIELD_LIMITS.folderName"
                 class="w-full bg-transparent outline-none border border-primary/40 rounded px-1.5 py-0.5 text-sm select-text"
                 @keydown.enter="commitInlineCreate"
                 @keydown.escape="cancelInlineCreate"
                 @blur="commitInlineCreate"
                 :disabled="isCreatingFolder"
               />
-            </td>
-            <td class="pr-3 w-10"></td>
-          </tr>
+            </TableCell>
+            <TableCell class="pr-3 w-10"></TableCell>
+          </TableRow>
 
           <!-- Folders -->
-          <tr
+          <TableRow
             v-for="folder in currentSubfolders"
             :key="'f-' + folder.id"
             :draggable="!(inlineRenameTarget && inlineRenameTarget.type === 'folder' && inlineRenameTarget.id === folder.id)"
@@ -1782,16 +1856,16 @@ const selectedFileCount = computed(
               dropTargetId === folder.id ? 'bg-accent ring-2 ring-primary/30' : ''
             ]"
           >
-            <td class="pl-4 pr-3 w-8">
+            <TableCell class="pl-4 pr-3 w-10">
               <Spinner v-if="isDownloadingArchive && downloadingFolderId === folder.id" class="text-muted-foreground" />
               <Folder v-else class="size-4 text-muted-foreground" />
-            </td>
-            <td>
+            </TableCell>
+            <TableCell class="min-w-0">
               <input
                 v-if="inlineRenameTarget && inlineRenameTarget.type === 'folder' && inlineRenameTarget.id === folder.id"
                 ref="inlineRenameInput"
                 v-model="inlineRenameTarget.name"
-                maxlength="255"
+                :maxlength="FIELD_LIMITS.folderName"
                 class="w-full bg-transparent outline-none border border-primary/40 rounded px-1.5 py-0.5 text-sm select-text"
                 @keydown.enter="commitInlineRename"
                 @keydown.escape="cancelInlineRename"
@@ -1801,19 +1875,19 @@ const selectedFileCount = computed(
                 @mousedown.stop
                 @dragstart.stop.prevent
               />
-              <span v-else class="block truncate max-w-[200px] sm:max-w-xs lg:max-w-md" :title="folder.name">{{ folder.name }}</span>
-            </td>
-            <td class="text-muted-foreground hidden sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</td>
-            <td></td>
-            <td></td>
-            <td class="text-muted-foreground">
+              <span v-else class="block truncate" :title="folder.name">{{ folder.name }}</span>
+            </TableCell>
+            <TableCell class="hidden w-24 max-w-24 truncate text-muted-foreground sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</TableCell>
+            <TableCell />
+            <TableCell />
+            <TableCell class="text-muted-foreground">
               {{ folder.fileCount }} {{ folder.fileCount === 1 ? t("products.productFileManager.fileCountOne") : t("products.productFileManager.fileCountMany") }}
-            </td>
-            <td class="pr-3 w-10"></td>
-          </tr>
+            </TableCell>
+            <TableCell class="pr-3 w-10"></TableCell>
+          </TableRow>
 
           <!-- Files -->
-          <tr
+          <TableRow
             v-for="file in currentFiles"
             :key="'file-' + file.id"
             :draggable="!(inlineRenameTarget && inlineRenameTarget.type === 'file' && inlineRenameTarget.id === file.id)"
@@ -1829,15 +1903,15 @@ const selectedFileCount = computed(
               isSelected('file', file.id) ? 'bg-accent' : 'hover:bg-muted/50',
             ]"
           >
-            <td class="pl-4 pr-3 w-8">
+            <TableCell class="pl-4 pr-3 w-10">
               <FileIcon class="size-4 text-muted-foreground" />
-            </td>
-            <td>
+            </TableCell>
+            <TableCell class="min-w-0">
               <input
                 v-if="inlineRenameTarget && inlineRenameTarget.type === 'file' && inlineRenameTarget.id === file.id"
                 ref="inlineRenameInput"
                 v-model="inlineRenameTarget.name"
-                maxlength="255"
+                :maxlength="FIELD_LIMITS.folderName"
                 class="w-full bg-transparent outline-none border border-primary/40 rounded px-1.5 py-0.5 text-sm select-text"
                 @keydown.enter="commitInlineRename"
                 @keydown.escape="cancelInlineRename"
@@ -1847,12 +1921,16 @@ const selectedFileCount = computed(
                 @mousedown.stop
                 @dragstart.stop.prevent
               />
-              <span v-else class="block truncate max-w-[200px] sm:max-w-xs lg:max-w-md" :title="extractFileName(file)">{{ extractFileName(file) }}</span>
-            </td>
-            <td class="hidden sm:table-cell">
-              <Badge variant="secondary" class="font-normal">{{ file.contentType }}</Badge>
-            </td>
-            <td class="px-4" @click.stop>
+              <span v-else class="block truncate" :title="extractFileName(file)">{{ extractFileName(file) }}</span>
+            </TableCell>
+            <TableCell class="hidden w-24 max-w-24 sm:table-cell">
+              <Badge
+                variant="secondary"
+                class="max-w-full truncate font-normal"
+                :title="file.contentType"
+              >{{ file.contentType }}</Badge>
+            </TableCell>
+            <TableCell class="px-4" @click.stop>
               <Popover>
                 <PopoverTrigger as-child>
                   <Button
@@ -1895,7 +1973,7 @@ const selectedFileCount = computed(
                         <template v-if="renamingTagId === tag.id">
                           <input
                             v-model="renamingTagName"
-                            maxlength="50"
+                            :maxlength="FIELD_LIMITS.tagName"
                             class="flex-1 text-sm bg-transparent outline-none border rounded px-1 py-0.5"
                             @keydown.enter="commitRenameTag"
                             @keydown.escape="renamingTagId = null"
@@ -1944,7 +2022,7 @@ const selectedFileCount = computed(
                       <Input
                         v-model="newTagName"
                         :placeholder="t('products.productFileManager.newTagPlaceholder')"
-                        maxlength="50"
+                        :maxlength="FIELD_LIMITS.tagName"
                         class="h-8 text-sm"
                         @keydown.enter="createAndAssignTag(file.id)"
                       />
@@ -1955,12 +2033,12 @@ const selectedFileCount = computed(
                   </div>
                 </PopoverContent>
               </Popover>
-            </td>
-            <td class="text-muted-foreground whitespace-nowrap">
+            </TableCell>
+            <TableCell class="w-36 text-muted-foreground whitespace-nowrap">
               {{ file.uploadDateTime ? formatStoreDateTime(file.uploadDateTime) : "" }}
-            </td>
-            <td class="text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</td>
-            <td class="pr-3">
+            </TableCell>
+            <TableCell class="w-20 text-muted-foreground whitespace-nowrap">{{ formatBytes(file.length) }}</TableCell>
+            <TableCell class="pr-3">
               <div class="flex items-center gap-0.5">
                 <Button
                   v-if="file.isPublic && file.publicUrl"
@@ -1985,23 +2063,23 @@ const selectedFileCount = computed(
                   <ArrowDownToLine class="size-3.5" />
                 </Button>
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
 
           <!-- Uploading files -->
-          <tr
+          <TableRow
             v-for="entry in currentPendingUploads"
             :key="'upload-' + entry.id"
             class="border-b h-11"
             :class="entry.status === 'done' ? 'bg-success/5' : 'animate-pulse bg-muted/40'"
           >
-            <td class="pl-4 pr-3 w-8">
+            <TableCell class="pl-4 pr-3 w-10">
               <Spinner v-if="entry.status === 'uploading'" class="text-muted-foreground" />
               <Check v-else-if="entry.status === 'done'" class="size-4 text-success" />
               <FileIcon v-else class="size-4 text-muted-foreground" />
-            </td>
-            <td class="text-muted-foreground relative">
-              <span>{{ entry.name }}</span>
+            </TableCell>
+            <TableCell class="relative min-w-0 text-muted-foreground">
+              <span class="block truncate" :title="entry.name">{{ entry.name }}</span>
               <div
                 v-if="entry.status !== 'done'"
                 class="absolute bottom-0 left-0 right-0 h-0.5"
@@ -2011,14 +2089,14 @@ const selectedFileCount = computed(
                   :style="{ width: entry.percent + '%' }"
                 />
               </div>
-            </td>
-            <td class="text-muted-foreground text-xs tabular-nums">
+            </TableCell>
+            <TableCell class="hidden w-24 max-w-24 truncate text-xs tabular-nums text-muted-foreground sm:table-cell">
               {{ entry.percent }}%
-            </td>
-            <td></td>
-            <td></td>
-            <td class="text-muted-foreground">{{ formatBytes(entry.size) }}</td>
-            <td class="pr-3">
+            </TableCell>
+            <TableCell />
+            <TableCell />
+            <TableCell class="text-muted-foreground">{{ formatBytes(entry.size) }}</TableCell>
+            <TableCell class="pr-3">
               <Button
                 v-if="entry.status !== 'done'"
                 variant="ghost"
@@ -2028,10 +2106,10 @@ const selectedFileCount = computed(
               >
                 <X class="size-3.5" />
               </Button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
       <div
         v-if="hasMoreFiles || isLoadingMoreFiles"
@@ -2223,7 +2301,7 @@ const selectedFileCount = computed(
         </AlertDialogHeader>
         <div
           v-if="deleteFolderTarget && (deleteFolderTarget.fileCount > 0 || deleteFolderTarget.subfolderCount > 0)"
-          class="flex items-center gap-2 py-2"
+          class="flex w-full items-start gap-3 text-left"
         >
           <Checkbox
             :model-value="deleteFolderRecursive"
