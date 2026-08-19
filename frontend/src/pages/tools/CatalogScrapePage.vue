@@ -370,7 +370,7 @@ export default {
 
         <div
           v-else-if="results.length > 0"
-          class="mt-8 overflow-hidden rounded-xl ring-1 ring-border/70"
+          class="mt-8 overflow-hidden rounded-xl border border-border/70 bg-card"
         >
           <Table>
             <TableHeader>

@@ -37,7 +37,7 @@ defineEmits(["load-more", "download", "delete", "clear-selection"]);
     :empty-title="emptyTitle"
     :empty-description="emptyDescription"
     :class="[
-      fill ? '!min-h-0 mb-0 flex min-h-0 flex-1 flex-col overflow-hidden' : '',
+      fill ? '!min-h-0 mb-0 flex min-h-0 flex-1 flex-col p-px' : '',
       $props.class,
     ]"
   >

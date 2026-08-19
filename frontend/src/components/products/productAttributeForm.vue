@@ -10,13 +10,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { InsetGroupLabel } from "@/components/ui/inset-group";
 import { Rows3, Columns3 } from "lucide-vue-next";
 import {
   ATTRIBUTE_GROUP_OPTIONS,
@@ -101,11 +95,7 @@ export default {
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+    InsetGroupLabel,
     Rows3,
     Columns3,
     AttributeFieldControl,
@@ -278,14 +268,25 @@ export default {
 
 <template>
   <div class="contents">
-    <CardHeader v-if="$slots.title || $slots.description || showLayoutToggle">
-      <CardTitle v-if="$slots.title" class="text-base">
-        <slot name="title" />
-      </CardTitle>
-      <CardDescription v-if="$slots.description">
-        <slot name="description" />
-      </CardDescription>
-      <CardAction v-if="showLayoutToggle">
+    <div
+      v-if="$slots.title || $slots.description || showLayoutToggle"
+      class="mb-4 flex items-start justify-between gap-3"
+    >
+      <div v-if="$slots.title || $slots.description" class="min-w-0">
+        <InsetGroupLabel
+          v-if="$slots.title"
+          :class="$slots.description ? 'mb-1' : 'mb-2'"
+        >
+          <slot name="title" />
+        </InsetGroupLabel>
+        <p
+          v-if="$slots.description"
+          class="mb-2 px-1 text-xs text-muted-foreground"
+        >
+          <slot name="description" />
+        </p>
+      </div>
+      <div v-if="showLayoutToggle" class="shrink-0">
         <Tabs
           :model-value="layout"
           class="gap-0"
@@ -303,17 +304,14 @@ export default {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-      </CardAction>
-    </CardHeader>
+      </div>
+    </div>
 
-    <CardContent class="pt-0">
+    <div>
       <div class="min-w-0 space-y-8">
-        <div
-          v-if="showCompareLayout"
-          class="relative max-h-[min(70vh,52rem)] min-w-0 overflow-auto overscroll-contain"
-        >
+        <div v-if="showCompareLayout" class="relative min-w-0">
           <div
-            class="sticky top-0 z-10 border-b border-border/70 bg-card pb-3 pt-0.5"
+            class="sticky top-14 z-10 border-b border-border/70 bg-background pb-3 pt-0.5"
             :style="{ minWidth: compareGridStyle.minWidth }"
           >
             <div class="grid gap-x-5" :style="compareGridStyle">
@@ -455,6 +453,6 @@ export default {
           :description="$t('products.productAttributeForm.emptyDescription')"
         />
       </div>
-    </CardContent>
+    </div>
   </div>
 </template>

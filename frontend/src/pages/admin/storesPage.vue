@@ -14,29 +14,23 @@ import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { loadMe, invalidateMeCache } from "@/main";
 import { hasPermission, PERMS } from "@/lib/permissions";
-import { FIELD_LIMITS, fieldLimitIssue, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
+import {
+  FIELD_LIMITS,
+  fieldLimitIssue,
+  isNonEmptyWithinLimit,
+} from "@/lib/fieldLimits";
 import {
   Check,
   Plus,
   Store,
   Users,
-  Pencil,
   Save,
   Trash2,
-  Globe2,
   Coins,
   Search,
-  Palette,
 } from "lucide-vue-next";
 import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { formatDateTime } from "@/utils/dateTime";
@@ -46,18 +40,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogHeaderClose,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export default {
   components: {
@@ -74,34 +60,20 @@ export default {
     Plus,
     Store,
     Users,
-    Pencil,
     Save,
     Trash2,
-    Globe2,
     Coins,
     Search,
-    Palette,
     BrandingForm,
     Dialog,
     DialogContent,
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
     DialogClose,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    DialogHeaderClose,
     Switch,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
     Tabs,
     TabsContent,
     TabsList,
@@ -418,6 +390,8 @@ export default {
       this.brandingFormDirty = false;
       this.brandingFormSaving = false;
       this.memberQuery = "";
+      this.showDeleteDialog = false;
+      this.deleteConfirmName = "";
       this.editForm = {
         name: "",
         memberIds: [],
@@ -425,6 +399,32 @@ export default {
         extendedPriceParameters: false,
       };
       this.storeCurrencies = [];
+    },
+
+    onEditDialogOpenChange(open) {
+      if (!open && this.showDeleteDialog) {
+        this.isEditDialogOpen = true;
+        return;
+      }
+      if (!open) this.closeEditDialog();
+      else this.isEditDialogOpen = true;
+    },
+
+    isCurrentStore(store) {
+      return (
+        this.me?.selectedStoreId != null &&
+        store?.id != null &&
+        this.me.selectedStoreId === store.id
+      );
+    },
+
+    storeCaption(store) {
+      const members = this.$t("pages.storesPage.membersCount", {
+        count: store.membersCount || 0,
+      });
+      return this.isCurrentStore(store)
+        ? `${members} · ${this.$t("pages.storesPage.current")}`
+        : members;
     },
 
     toggleMember(userId, enabled) {
@@ -588,126 +588,15 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div class="flex w-full max-w-xl flex-col pb-10">
     <div
-      v-if="canCreateStores"
+      v-if="canCreateStores && !isLoading && stores.length > 0"
       class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2"
     >
-      <Dialog v-model:open="showCreateDialog">
-        <DialogTrigger as-child>
-          <Button>
-            <Plus class="size-4 mr-2" />
-            {{ $t("pages.storesPage.createStore") }}
-          </Button>
-        </DialogTrigger>
-        <DialogContent
-          size="lg"
-          class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
-        >
-          <DialogHeader variant="bar">
-            <DialogTitle>{{
-              $t("pages.storesPage.newStoreDialogTitle")
-            }}</DialogTitle>
-            <DialogDescription>
-              {{ $t("pages.storesPage.newStoreDialogDescription") }}
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            id="create-store-form"
-            class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
-            @submit.prevent="handleCreateStore"
-          >
-            <FieldGroup class="gap-5">
-              <SettingsFormField
-                :label="$t('pages.storesPage.storeNameLabel')"
-                label-for="new-store-name"
-                :error="newStoreNameError"
-                required
-              >
-                <Input
-                  id="new-store-name"
-                  v-model="newStoreName"
-                  :placeholder="$t('pages.storesPage.storeNamePlaceholder')"
-                  autocomplete="organization"
-                  :maxlength="FIELD_LIMITS.storeName"
-                  :disabled="isCreating"
-                />
-              </SettingsFormField>
-
-              <template v-if="showCreateCatalogs">
-                <SettingsFormField
-                  v-if="createCurrencyOptions.length"
-                  :label="$t('pages.storesPage.baseCurrencyLabel')"
-                >
-                  <SearchableSelect
-                    v-model="newStoreBaseCurrency"
-                    :options="createCurrencyOptions"
-                    :placeholder="$t('pages.storesPage.baseCurrencyPlaceholder')"
-                    :disabled="isCreating"
-                  />
-                </SettingsFormField>
-
-                <SettingsFormField
-                  v-if="timezoneOptions.length"
-                  :label="$t('pages.storesPage.timezoneLabel')"
-                >
-                  <SearchableSelect
-                    v-model="newStoreTimezone"
-                    :options="timezoneOptions"
-                    :placeholder="$t('pages.storesPage.timezonePlaceholder')"
-                    :disabled="isCreating"
-                  />
-                </SettingsFormField>
-              </template>
-              <p
-                v-else
-                class="text-xs text-muted-foreground"
-              >
-                {{ $t("pages.storesPage.catalogEmptyHint") }}
-              </p>
-            </FieldGroup>
-
-            <InsetGroup class="mt-5">
-              <InsetGroupItem
-                :disabled="isCreating"
-                :aria-pressed="addAllUsers"
-                @click="addAllUsers = !addAllUsers"
-              >
-                <template #leading>
-                  <Users class="size-4" />
-                </template>
-                <p>{{ $t("pages.storesPage.addAllUsersLabel") }}</p>
-                <p class="mt-0.5 text-xs font-normal text-muted-foreground">
-                  {{ $t("pages.storesPage.addAllUsersHint") }}
-                </p>
-                <template #trailing>
-                  <Switch
-                    :model-value="addAllUsers"
-                    :disabled="isCreating"
-                    tabindex="-1"
-                    class="pointer-events-none"
-                  />
-                </template>
-              </InsetGroupItem>
-            </InsetGroup>
-          </form>
-          <DialogFooter variant="bar">
-            <DialogClose as-child>
-              <Button type="button" variant="outline">{{
-                $t("common.cancel")
-              }}</Button>
-            </DialogClose>
-            <Button
-              type="submit"
-              form="create-store-form"
-              :disabled="isCreating || !canSubmitNewStore"
-            >
-              <Spinner v-if="isCreating" class="mr-2" />
-              {{ $t("pages.storesPage.createStore") }}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Button @click="showCreateDialog = true">
+        <Plus class="size-4 mr-2" />
+        {{ $t("pages.storesPage.createStore") }}
+      </Button>
     </div>
 
     <PageSection
@@ -724,63 +613,149 @@ export default {
         </Button>
       </template>
 
-      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-16">ID</TableHead>
-                <TableHead>{{ $t("pages.storesPage.columnStore") }}</TableHead>
-                <TableHead class="w-40">{{
-                  $t("pages.storesPage.columnMembers")
-                }}</TableHead>
-                <TableHead class="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="store in stores" :key="store.id">
-                <TableCell class="tabular-nums text-muted-foreground">{{
-                  store.id
-                }}</TableCell>
-                <TableCell class="max-w-0">
-                  <div class="truncate font-medium" :title="store.name">{{ store.name }}</div>
-                </TableCell>
-                <TableCell>
-                  <span
-                    class="inline-flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground"
-                  >
-                    <Users class="size-4" />
-                    {{ store.membersCount || 0 }}
-                  </span>
-                </TableCell>
-                <TableCell class="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    @click="openEditDialog(store)"
-                  >
-                    <Pencil class="size-4" />
-                    <span class="sr-only">{{
-                      $t("pages.storesPage.editStoreSr")
-                    }}</span>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      <InsetGroup>
+        <InsetGroupItem
+          v-for="store in stores"
+          :key="store.id"
+          show-chevron
+          :disabled="isSaving && editingStore?.id === store.id"
+          @click="openEditDialog(store)"
+        >
+          <template #leading>
+            <Store class="size-4" />
+          </template>
+          <p class="truncate">{{ store.name }}</p>
+          <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+            {{ storeCaption(store) }}
+          </p>
+        </InsetGroupItem>
+      </InsetGroup>
     </PageSection>
 
-    <Dialog v-model:open="isEditDialogOpen">
+    <Dialog v-if="canCreateStores" v-model:open="showCreateDialog">
+      <DialogContent
+        size="lg"
+        :show-close="false"
+        class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader variant="bar">
+          <div class="flex min-h-8 items-center gap-2">
+            <DialogTitle class="min-w-0 flex-1 truncate">
+              {{ $t("pages.storesPage.newStoreDialogTitle") }}
+            </DialogTitle>
+            <DialogHeaderClose />
+          </div>
+          <DialogDescription>
+            {{ $t("pages.storesPage.newStoreDialogDescription") }}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          id="create-store-form"
+          class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+          @submit.prevent="handleCreateStore"
+        >
+          <FieldGroup class="gap-5">
+            <SettingsFormField
+              :label="$t('pages.storesPage.storeNameLabel')"
+              label-for="new-store-name"
+              :error="newStoreNameError"
+              required
+            >
+              <Input
+                id="new-store-name"
+                v-model="newStoreName"
+                :placeholder="$t('pages.storesPage.storeNamePlaceholder')"
+                autocomplete="organization"
+                :maxlength="FIELD_LIMITS.storeName"
+                :disabled="isCreating"
+              />
+            </SettingsFormField>
+
+            <template v-if="showCreateCatalogs">
+              <SettingsFormField
+                v-if="createCurrencyOptions.length"
+                :label="$t('pages.storesPage.baseCurrencyLabel')"
+              >
+                <SearchableSelect
+                  v-model="newStoreBaseCurrency"
+                  :options="createCurrencyOptions"
+                  :placeholder="$t('pages.storesPage.baseCurrencyPlaceholder')"
+                  :disabled="isCreating"
+                />
+              </SettingsFormField>
+
+              <SettingsFormField
+                v-if="timezoneOptions.length"
+                :label="$t('pages.storesPage.timezoneLabel')"
+              >
+                <SearchableSelect
+                  v-model="newStoreTimezone"
+                  :options="timezoneOptions"
+                  :placeholder="$t('pages.storesPage.timezonePlaceholder')"
+                  :disabled="isCreating"
+                />
+              </SettingsFormField>
+            </template>
+            <p v-else class="text-xs text-muted-foreground">
+              {{ $t("pages.storesPage.catalogEmptyHint") }}
+            </p>
+          </FieldGroup>
+
+          <InsetGroup class="mt-5">
+            <InsetGroupItem
+              :disabled="isCreating"
+              :aria-pressed="addAllUsers"
+              @click="addAllUsers = !addAllUsers"
+            >
+              <template #leading>
+                <Users class="size-4" />
+              </template>
+              <p>{{ $t("pages.storesPage.addAllUsersLabel") }}</p>
+              <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                {{ $t("pages.storesPage.addAllUsersHint") }}
+              </p>
+              <template #trailing>
+                <Switch
+                  :model-value="addAllUsers"
+                  :disabled="isCreating"
+                  tabindex="-1"
+                  class="pointer-events-none"
+                />
+              </template>
+            </InsetGroupItem>
+          </InsetGroup>
+        </form>
+        <DialogFooter variant="bar">
+          <DialogClose as-child>
+            <Button type="button" variant="outline">{{
+              $t("common.cancel")
+            }}</Button>
+          </DialogClose>
+          <Button
+            type="submit"
+            form="create-store-form"
+            :disabled="isCreating || !canSubmitNewStore"
+          >
+            <Spinner v-if="isCreating" class="mr-2" />
+            {{ $t("pages.storesPage.createStore") }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="isEditDialogOpen" @update:open="onEditDialogOpenChange">
       <DialogContent
         size="3xl"
+        :show-close="false"
         class="flex h-[min(40rem,88vh)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader variant="bar">
-          <DialogTitle class="truncate">
-            {{ editingStore?.name || $t("pages.storesPage.editDialogTitle") }}
-          </DialogTitle>
+          <div class="flex min-h-8 items-center gap-2">
+            <DialogTitle class="min-w-0 flex-1 truncate">
+              {{ editingStore?.name || $t("pages.storesPage.editDialogTitle") }}
+            </DialogTitle>
+            <DialogHeaderClose />
+          </div>
           <DialogDescription>
             {{ $t("pages.storesPage.editDialogDescription") }}
           </DialogDescription>
@@ -798,344 +773,338 @@ export default {
             <TabsList
               class="grid w-full grid-cols-2 sm:inline-flex sm:w-auto sm:grid-cols-none"
             >
-              <TabsTrigger value="general" class="gap-1.5">
-                <Globe2 class="size-3.5" />
+              <TabsTrigger value="general">
                 {{ $t("pages.storesPage.tabGeneral") }}
               </TabsTrigger>
-              <TabsTrigger value="branding" class="gap-1.5">
-                <Palette class="size-3.5" />
+              <TabsTrigger value="branding">
                 {{ $t("pages.storesPage.tabBranding") }}
               </TabsTrigger>
-              <TabsTrigger value="currencies" class="gap-1.5">
-                <Coins class="size-3.5" />
+              <TabsTrigger value="currencies">
                 {{ $t("pages.storesPage.tabCurrencies") }}
               </TabsTrigger>
-              <TabsTrigger value="members" class="gap-1.5">
-                <Users class="size-3.5" />
+              <TabsTrigger value="members">
                 {{ $t("pages.storesPage.tabMembers") }}
               </TabsTrigger>
             </TabsList>
           </div>
 
           <div class="relative min-h-0 flex-1">
-              <TabsContent
-                value="general"
-                class="mt-0 absolute inset-0 space-y-6 overflow-y-auto px-6 py-5 outline-none"
-              >
-                <section>
-                  <InsetGroupLabel>{{ $t("pages.storesPage.identityTitle") }}</InsetGroupLabel>
-                  <p class="mb-2 px-1 text-xs text-muted-foreground">
-                    {{ $t("pages.storesPage.identityHint") }}
-                  </p>
-                  <FieldGroup class="gap-3">
-                    <SettingsFormField
-                      :label="$t('common.name')"
-                      label-for="store-name"
-                    >
-                      <Input
-                        id="store-name"
-                        v-model="editForm.name"
-                        :maxlength="FIELD_LIMITS.storeName"
-                        :disabled="isSaving"
-                      />
-                    </SettingsFormField>
-                  </FieldGroup>
-                </section>
-
-                <section>
-                  <InsetGroupLabel>{{ $t("pages.storesPage.regionalSettingsTitle") }}</InsetGroupLabel>
-                  <p class="mb-2 px-1 text-xs text-muted-foreground">
-                    {{ $t("pages.storesPage.regionalHint") }}
-                  </p>
-                  <FieldGroup class="gap-3">
-                    <SettingsFormField
-                      :label="$t('pages.storesPage.timezoneLabel')"
-                    >
-                      <Select
-                        v-model="editForm.timezone"
-                        :disabled="isSaving || !canChangeTimezone"
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            :placeholder="$t('pages.storesPage.timezoneLabel')"
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem
-                            v-for="tz in timezoneSelectOptions"
-                            :key="tz.value"
-                            :value="tz.value"
-                          >
-                            {{ tz.label }}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <template v-if="!canChangeTimezone" #description>
-                        {{ $t("pages.storesPage.catalogEmptyHint") }}
-                      </template>
-                    </SettingsFormField>
-                  </FieldGroup>
-                </section>
-
-                <section>
-                  <InsetGroupLabel>{{ $t("pages.storesPage.pricesTitle") }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      :as="isSaving ? 'div' : 'button'"
-                      :disabled="isSaving"
-                      :aria-pressed="editForm.extendedPriceParameters"
-                      @click="editForm.extendedPriceParameters = !editForm.extendedPriceParameters"
-                    >
-                      <template #leading>
-                        <Coins class="size-4" />
-                      </template>
-                      <p>{{ $t("pages.storesPage.extendedPriceParamsLabel") }}</p>
-                      <p class="mt-0.5 text-xs font-normal text-muted-foreground">
-                        {{ $t("pages.storesPage.extendedPriceParamsHint") }}
-                      </p>
-                      <template #trailing>
-                        <Switch
-                          :model-value="editForm.extendedPriceParameters"
-                          :disabled="isSaving"
-                          tabindex="-1"
-                          class="pointer-events-none"
-                        />
-                      </template>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-
-                <section v-if="canDeleteStore">
-                  <InsetGroupLabel class="text-destructive">
-                    {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
-                  </InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      :disabled="isLastStore || isSaving"
-                      @click="openDeleteDialog"
-                    >
-                      <template #leading>
-                        <Trash2 class="size-4 text-destructive" />
-                      </template>
-                      <p class="text-destructive">
-                        {{ $t("pages.storeDetailPage.deleteStoreButton") }}
-                      </p>
-                      <p class="mt-0.5 text-xs font-normal text-muted-foreground">
-                        {{
-                          isLastStore
-                            ? $t("pages.storeDetailPage.deleteLastStoreError")
-                            : $t("pages.storeDetailPage.dangerZoneDescription")
-                        }}
-                      </p>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-              </TabsContent>
-
-              <TabsContent
-                value="branding"
-                class="mt-0 absolute inset-0 overflow-y-auto px-6 py-5 outline-none"
-              >
-                <BrandingForm
-                  v-if="editTab === 'branding' && editingStore"
-                  ref="brandingForm"
-                  :store-id="editingStore.id"
-                  :apply-live="brandingApplyLive"
-                  compact
-                  @update:dirty="(v) => (brandingFormDirty = v)"
-                  @update:saving="(v) => (brandingFormSaving = v)"
-                />
-              </TabsContent>
-
-              <TabsContent
-                value="currencies"
-                class="mt-0 absolute inset-0 space-y-5 overflow-y-auto px-6 py-5 outline-none"
-              >
-                <InsetGroupLabel>{{ $t("pages.storesPage.currenciesTitle") }}</InsetGroupLabel>
+            <TabsContent
+              value="general"
+              class="mt-0 absolute inset-0 space-y-6 overflow-y-auto px-6 py-5 outline-none"
+            >
+              <section>
+                <InsetGroupLabel>{{
+                  $t("pages.storesPage.identityTitle")
+                }}</InsetGroupLabel>
                 <p class="mb-2 px-1 text-xs text-muted-foreground">
-                  {{
-                    $t("pages.storesPage.currenciesHint", {
-                      base:
-                        storeBaseCurrency ||
-                        $t("pages.storesPage.baseCurrencyFallback"),
-                    })
-                  }}
+                  {{ $t("pages.storesPage.identityHint") }}
                 </p>
-                <p
-                  v-if="!(addableCurrencies || []).length"
-                  class="mb-2 px-1 text-xs text-muted-foreground"
-                >
-                  {{ $t("pages.storesPage.catalogEmptyHint") }}
-                </p>
+                <FieldGroup class="gap-3">
+                  <SettingsFormField
+                    :label="$t('common.name')"
+                    label-for="store-name"
+                  >
+                    <Input
+                      id="store-name"
+                      v-model="editForm.name"
+                      :maxlength="FIELD_LIMITS.storeName"
+                      :disabled="isSaving"
+                    />
+                  </SettingsFormField>
+                </FieldGroup>
+              </section>
 
+              <section>
+                <InsetGroupLabel>{{
+                  $t("pages.storesPage.regionalSettingsTitle")
+                }}</InsetGroupLabel>
+                <p class="mb-2 px-1 text-xs text-muted-foreground">
+                  {{ $t("pages.storesPage.regionalHint") }}
+                </p>
+                <FieldGroup class="gap-3">
+                  <SettingsFormField
+                    :label="$t('pages.storesPage.timezoneLabel')"
+                  >
+                    <SearchableSelect
+                      v-model="editForm.timezone"
+                      :options="timezoneSelectOptions"
+                      :placeholder="$t('pages.storesPage.timezonePlaceholder')"
+                      :disabled="isSaving || !canChangeTimezone"
+                    />
+                    <template v-if="!canChangeTimezone" #description>
+                      {{ $t("pages.storesPage.catalogEmptyHint") }}
+                    </template>
+                  </SettingsFormField>
+                </FieldGroup>
+              </section>
+
+              <section>
+                <InsetGroupLabel>{{
+                  $t("pages.storesPage.pricesTitle")
+                }}</InsetGroupLabel>
                 <InsetGroup>
-                  <InsetGroupItem as="div">
-                    <p class="font-medium tabular-nums">{{ storeBaseCurrency || "-" }}</p>
-                    <p class="mt-0.5 text-xs font-normal text-muted-foreground">
-                      {{ $t("pages.storesPage.baseTag") }}
-                    </p>
-                    <template #trailing>
-                      <span class="text-xs tabular-nums text-muted-foreground">1.000000</span>
-                    </template>
-                  </InsetGroupItem>
                   <InsetGroupItem
-                    v-for="cur in extraCurrencies"
-                    :key="cur.code"
-                    as="div"
-                  >
-                    <p class="font-medium">{{ cur.code }}</p>
-                    <p class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground">
-                      {{ formatCurrencyDate(cur.updatedAt) }}
-                    </p>
-                    <template #trailing>
-                      <div class="flex items-center gap-1.5">
-                        <Input
-                          type="number"
-                          step="0.000001"
-                          min="0"
-                          class="h-8 w-[7.5rem]"
-                          :model-value="cur.rateToBase"
-                          :disabled="isSaving"
-                          :aria-label="
-                            $t('pages.storesPage.columnRate', {
-                              base:
-                                storeBaseCurrency ||
-                                $t('pages.storesPage.baseFallback'),
-                            })
-                          "
-                          @change="updateCurrencyRate(cur.code, $event.target.value)"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          :disabled="isSaving"
-                          @click="removeCurrency(cur.code)"
-                        >
-                          <Trash2 class="size-4" />
-                          <span class="sr-only">{{ $t("common.delete") }}</span>
-                        </Button>
-                      </div>
-                    </template>
-                  </InsetGroupItem>
-                  <InsetGroupItem
-                    v-if="extraCurrencies.length === 0"
-                    as="div"
-                    class="hover:bg-transparent"
-                  >
-                    <p class="text-muted-foreground font-normal">
-                      {{ $t("pages.storesPage.noExtraCurrencies") }}
-                    </p>
-                  </InsetGroupItem>
-                </InsetGroup>
-
-                <div v-if="availableCurrencyOptions.length" class="pt-2">
-                  <InsetGroupLabel>{{ $t("pages.storesPage.addCurrencyTitle") }}</InsetGroupLabel>
-                  <FieldGroup
-                    class="gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
-                  >
-                    <SettingsFormField
-                      :label="$t('pages.storesPage.columnCurrency')"
-                    >
-                      <SearchableSelect
-                        v-model="newCurrencyCode"
-                        :options="availableCurrencySelectOptions"
-                        :placeholder="
-                          $t('pages.storesPage.addCurrencyPlaceholder')
-                        "
-                        :disabled="isSaving"
-                      />
-                    </SettingsFormField>
-                    <SettingsFormField
-                      :label="
-                        $t('pages.storesPage.rateToPlaceholder', {
-                          base:
-                            storeBaseCurrency ||
-                            $t('pages.storesPage.baseFallback'),
-                        })
-                      "
-                    >
-                      <Input
-                        v-model="newCurrencyRate"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        class="w-full"
-                        :disabled="isSaving"
-                      />
-                    </SettingsFormField>
-                    <Button
-                      type="button"
-                      class="w-full sm:w-auto"
-                      :disabled="isSaving"
-                      @click="addCurrency"
-                    >
-                      <Plus class="mr-1.5 size-4" />
-                      {{ $t("common.add") }}
-                    </Button>
-                  </FieldGroup>
-                </div>
-              </TabsContent>
-
-              <TabsContent
-                value="members"
-                class="mt-0 absolute inset-0 flex min-h-0 flex-col space-y-4 overflow-hidden px-6 py-5 outline-none"
-              >
-                <InsetGroupLabel>{{ $t("pages.storesPage.membersTitle") }}</InsetGroupLabel>
-                <p class="mb-2 px-1 text-xs text-muted-foreground">
-                  {{ $t("pages.storesPage.membersHint") }}
-                  ·
-                  {{
-                    $t("pages.storesPage.membersSelected", {
-                      count: selectedMembersCount,
-                    })
-                  }}
-                </p>
-
-                <div class="relative shrink-0">
-                  <Search
-                    class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  />
-                  <Input
-                    v-model="memberQuery"
-                    class="pl-9"
-                    :placeholder="
-                      $t('pages.storesPage.memberSearchPlaceholder')
+                    :as="isSaving ? 'div' : 'button'"
+                    :disabled="isSaving"
+                    :aria-pressed="editForm.extendedPriceParameters"
+                    @click="
+                      editForm.extendedPriceParameters =
+                        !editForm.extendedPriceParameters
                     "
-                    :disabled="isSaving"
-                  />
-                </div>
-
-                <InsetGroup class="min-h-0 flex-1 overflow-y-auto">
-                  <InsetGroupItem
-                    v-if="filteredUsers.length === 0"
-                    as="div"
-                    class="hover:bg-transparent"
                   >
-                    <p class="font-normal text-muted-foreground">
-                      {{ $t("pages.storesPage.membersEmptySearch") }}
-                    </p>
-                  </InsetGroupItem>
-                  <InsetGroupItem
-                    v-for="user in filteredUsers"
-                    :key="user.id"
-                    :disabled="isSaving"
-                    :aria-pressed="editForm.memberIds.includes(user.id)"
-                    @click="toggleMember(user.id, !editForm.memberIds.includes(user.id))"
-                  >
-                    <p>{{ user.userName }}</p>
-                    <p class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground">
-                      ID {{ user.id }}
+                    <template #leading>
+                      <Coins class="size-4" />
+                    </template>
+                    <p>{{ $t("pages.storesPage.extendedPriceParamsLabel") }}</p>
+                    <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                      {{ $t("pages.storesPage.extendedPriceParamsHint") }}
                     </p>
                     <template #trailing>
-                      <Check
-                        v-if="editForm.memberIds.includes(user.id)"
-                        class="size-4 text-primary"
+                      <Switch
+                        :model-value="editForm.extendedPriceParameters"
+                        :disabled="isSaving"
+                        tabindex="-1"
+                        class="pointer-events-none"
                       />
                     </template>
                   </InsetGroupItem>
                 </InsetGroup>
-              </TabsContent>
+              </section>
+
+              <section v-if="canDeleteStore">
+                <InsetGroupLabel class="text-destructive">
+                  {{ $t("pages.storeDetailPage.dangerZoneTitle") }}
+                </InsetGroupLabel>
+                <InsetGroup>
+                  <InsetGroupItem
+                    :disabled="isLastStore || isSaving"
+                    @click="openDeleteDialog"
+                  >
+                    <template #leading>
+                      <Trash2 class="size-4 text-destructive" />
+                    </template>
+                    <p class="text-destructive">
+                      {{ $t("pages.storeDetailPage.deleteStoreButton") }}
+                    </p>
+                    <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                      {{
+                        isLastStore
+                          ? $t("pages.storeDetailPage.deleteLastStoreError")
+                          : $t("pages.storeDetailPage.dangerZoneDescription")
+                      }}
+                    </p>
+                  </InsetGroupItem>
+                </InsetGroup>
+              </section>
+            </TabsContent>
+
+            <TabsContent
+              value="branding"
+              class="mt-0 absolute inset-0 overflow-y-auto px-6 py-5 outline-none"
+            >
+              <BrandingForm
+                v-if="editTab === 'branding' && editingStore"
+                ref="brandingForm"
+                :store-id="editingStore.id"
+                :apply-live="brandingApplyLive"
+                compact
+                @update:dirty="(v) => (brandingFormDirty = v)"
+                @update:saving="(v) => (brandingFormSaving = v)"
+              />
+            </TabsContent>
+
+            <TabsContent
+              value="currencies"
+              class="mt-0 absolute inset-0 space-y-5 overflow-y-auto px-6 py-5 outline-none"
+            >
+              <InsetGroupLabel>{{
+                $t("pages.storesPage.currenciesTitle")
+              }}</InsetGroupLabel>
+              <p class="mb-2 px-1 text-xs text-muted-foreground">
+                {{
+                  $t("pages.storesPage.currenciesHint", {
+                    base:
+                      storeBaseCurrency ||
+                      $t("pages.storesPage.baseCurrencyFallback"),
+                  })
+                }}
+              </p>
+              <p
+                v-if="!(addableCurrencies || []).length"
+                class="mb-2 px-1 text-xs text-muted-foreground"
+              >
+                {{ $t("pages.storesPage.catalogEmptyHint") }}
+              </p>
+
+              <InsetGroup>
+                <InsetGroupItem as="div">
+                  <p class="font-medium tabular-nums">
+                    {{ storeBaseCurrency || "-" }}
+                  </p>
+                  <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                    {{ $t("pages.storesPage.baseTag") }}
+                  </p>
+                  <template #trailing>
+                    <span class="text-xs tabular-nums text-muted-foreground"
+                      >1.000000</span
+                    >
+                  </template>
+                </InsetGroupItem>
+                <InsetGroupItem
+                  v-for="cur in extraCurrencies"
+                  :key="cur.code"
+                  as="div"
+                >
+                  <p class="font-medium">{{ cur.code }}</p>
+                  <p
+                    class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground"
+                  >
+                    {{ formatCurrencyDate(cur.updatedAt) }}
+                  </p>
+                  <template #trailing>
+                    <div class="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        step="0.000001"
+                        min="0"
+                        class="h-8 w-[7.5rem]"
+                        :model-value="cur.rateToBase"
+                        :disabled="isSaving"
+                        :aria-label="
+                          $t('pages.storesPage.columnRate', {
+                            base:
+                              storeBaseCurrency ||
+                              $t('pages.storesPage.baseFallback'),
+                          })
+                        "
+                        @change="
+                          updateCurrencyRate(cur.code, $event.target.value)
+                        "
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        :disabled="isSaving"
+                        @click="removeCurrency(cur.code)"
+                      >
+                        <Trash2 class="size-4" />
+                        <span class="sr-only">{{ $t("common.delete") }}</span>
+                      </Button>
+                    </div>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+
+              <div v-if="availableCurrencyOptions.length" class="pt-2">
+                <InsetGroupLabel>{{
+                  $t("pages.storesPage.addCurrencyTitle")
+                }}</InsetGroupLabel>
+                <FieldGroup
+                  class="gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
+                >
+                  <SettingsFormField
+                    :label="$t('pages.storesPage.columnCurrency')"
+                  >
+                    <SearchableSelect
+                      v-model="newCurrencyCode"
+                      :options="availableCurrencySelectOptions"
+                      :placeholder="
+                        $t('pages.storesPage.addCurrencyPlaceholder')
+                      "
+                      :disabled="isSaving"
+                    />
+                  </SettingsFormField>
+                  <SettingsFormField
+                    :label="
+                      $t('pages.storesPage.rateToPlaceholder', {
+                        base:
+                          storeBaseCurrency ||
+                          $t('pages.storesPage.baseFallback'),
+                      })
+                    "
+                  >
+                    <Input
+                      v-model="newCurrencyRate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="w-full"
+                      :disabled="isSaving"
+                    />
+                  </SettingsFormField>
+                  <Button
+                    type="button"
+                    class="w-full sm:w-auto"
+                    :disabled="isSaving"
+                    @click="addCurrency"
+                  >
+                    <Plus class="mr-1.5 size-4" />
+                    {{ $t("common.add") }}
+                  </Button>
+                </FieldGroup>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value="members"
+              class="mt-0 absolute inset-0 flex min-h-0 flex-col space-y-4 overflow-hidden px-6 py-5 outline-none"
+            >
+              <InsetGroupLabel>{{
+                $t("pages.storesPage.membersTitle")
+              }}</InsetGroupLabel>
+              <p class="mb-2 px-1 text-xs text-muted-foreground">
+                {{ $t("pages.storesPage.membersHint") }}
+                ·
+                {{
+                  $t("pages.storesPage.membersSelected", {
+                    count: selectedMembersCount,
+                  })
+                }}
+              </p>
+
+              <div class="relative shrink-0">
+                <Search
+                  class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  v-model="memberQuery"
+                  class="pl-9"
+                  :placeholder="$t('pages.storesPage.memberSearchPlaceholder')"
+                  :disabled="isSaving"
+                />
+              </div>
+
+              <InsetGroup scrollable class="flex-1">
+                <InsetGroupItem
+                  v-if="filteredUsers.length === 0"
+                  as="div"
+                  class="hover:bg-transparent"
+                >
+                  <p class="font-normal text-muted-foreground">
+                    {{ $t("pages.storesPage.membersEmptySearch") }}
+                  </p>
+                </InsetGroupItem>
+                <InsetGroupItem
+                  v-for="user in filteredUsers"
+                  :key="user.id"
+                  :disabled="isSaving"
+                  :aria-pressed="editForm.memberIds.includes(user.id)"
+                  @click="
+                    toggleMember(user.id, !editForm.memberIds.includes(user.id))
+                  "
+                >
+                  <p>{{ user.userName }}</p>
+                  <template #trailing>
+                    <Check
+                      v-if="editForm.memberIds.includes(user.id)"
+                      class="size-4 text-primary"
+                    />
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+            </TabsContent>
           </div>
         </Tabs>
 

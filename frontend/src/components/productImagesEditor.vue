@@ -1,27 +1,31 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 // ProductImagesEditor - Drag-and-drop editor for reordering product card images and managing unused images.
 import draggableComponent from "vuedraggable";
 import ImageFile from "./imageFile.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
-import {
-  Image,
-  ImageOff,
-} from "lucide-vue-next";
+import { Image, GripVertical } from "lucide-vue-next";
 import { useStore } from "vuex";
 import { useDebounceFn } from "@vueuse/core";
 import { displaySonnerError } from "@/store/sonnerHelper";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InsetGroupLabel } from "@/components/ui/inset-group";
+
+const TILE_CLASS =
+  "size-28 shrink-0 !rounded-xl ring-1 ring-inset ring-border/70 sm:size-32";
 
 export default {
   components: {
     Spinner,
+    Button,
     draggableComponent,
     ImageFile,
-    Badge,
     Image,
-    ImageOff
+    GripVertical,
+    EmptyState,
+    InsetGroupLabel,
   },
-  emits: ['update:images', 'preview'],
+  emits: ["update:images", "preview"],
   props: {
     files: {
       type: Array,
@@ -38,11 +42,15 @@ export default {
   },
   watch: {
     files: {
-      handler() { this.rebuildImageLists(); },
+      handler() {
+        this.rebuildImageLists();
+      },
       immediate: true,
     },
     images: {
-      handler() { this.rebuildImageLists(); },
+      handler() {
+        this.rebuildImageLists();
+      },
     },
   },
   data() {
@@ -50,6 +58,7 @@ export default {
       usedImages: [],
       unusedImages: [],
       isSaving: false,
+      TILE_CLASS,
     };
   },
   setup() {
@@ -72,7 +81,7 @@ export default {
   },
   methods: {
     thumbnailUrl(file) {
-      return `/api/files/${file.id}/thumbnail?w=512`;
+      return `/api/files/${file.id}/thumbnail?w=256`;
     },
     rebuildImageLists() {
       const imageFiles = [];
@@ -96,97 +105,153 @@ export default {
     },
     onDragChange() {
       this.debouncedSave(this);
-      this.$emit('update:images', this.usedImages.map((f, idx) => ({
-        id: f.id,
-        fileId: f.id,
-        index: idx,
-      })));
+      this.$emit(
+        "update:images",
+        this.usedImages.map((f, idx) => ({
+          id: f.id,
+          fileId: f.id,
+          index: idx,
+        })),
+      );
     },
   },
 };
 </script>
 
 <template>
-  <div class="grow flex flex-col min-h-0">
-    <!-- Attached images section -->
-    <div class="flex-1 min-h-0 flex flex-col">
-      <div class="flex items-center gap-2 px-4 h-11 border-b shrink-0">
-        <p class="text-sm font-medium flex items-center gap-2">
-          <Image class="size-4" />
-          {{ $t('components.productImagesEditor.productImagesTitle') }}
-        </p>
-        <Spinner v-if="isSaving" class="text-muted-foreground" />
-        <span v-if="!isSaving" class="text-xs text-muted-foreground">- {{ $t('components.productImagesEditor.dragToReorderHint') }}</span>
+  <div class="flex flex-col gap-8">
+    <section>
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <InsetGroupLabel class="mb-1">
+            {{ $t("components.productImagesEditor.productImagesTitle") }}
+          </InsetGroupLabel>
+          <p class="px-1 text-xs text-muted-foreground">
+            {{ $t("components.productImagesEditor.dragToReorderHint") }}
+          </p>
+        </div>
+        <Spinner
+          v-if="isSaving"
+          size="sm"
+          class="mt-0.5 shrink-0 text-muted-foreground"
+        />
       </div>
-      <draggableComponent
-        :list="usedImages"
-        group="images"
-        @change="onDragChange"
-        itemKey="id"
-        :animation="200"
-        ghostClass="drag-ghost"
-        chosenClass="drag-chosen"
-        dragClass="drag-active"
-        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 p-4"
-      >
-        <template #item="{ element, index }">
-          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)">
-            <Badge class="text-sm absolute left-2 top-2">
-              {{ index + 1 }}
-            </Badge>
-          </ImageFile>
-        </template>
-      </draggableComponent>
-    </div>
+      <div class="min-h-28 rounded-xl p-2.5 ring-1 ring-dashed ring-border/70">
+        <draggableComponent
+          :list="usedImages"
+          group="images"
+          item-key="id"
+          handle=".drag-handle"
+          :animation="200"
+          ghost-class="drag-ghost"
+          chosen-class="drag-chosen"
+          drag-class="drag-active"
+          class="flex flex-wrap gap-2.5"
+          @change="onDragChange"
+        >
+          <template #item="{ element, index }">
+            <ImageFile
+              :file="element"
+              :thumbnail-url="thumbnailUrl(element)"
+              :class="TILE_CLASS"
+              @click="$emit('preview', element.id)"
+            >
+              <span
+                class="absolute left-1.5 top-1.5 z-10 rounded-md bg-background/90 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-foreground ring-1 ring-border/70"
+              >
+                {{
+                  index === 0
+                    ? $t("products.productGallerySidebar.mainBadge")
+                    : index + 1
+                }}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                class="drag-handle absolute right-1.5 top-1.5 z-10 size-7 cursor-grab bg-background/90 active:cursor-grabbing"
+                :aria-label="
+                  $t('components.productImagesEditor.dragHandleAria')
+                "
+                @click.stop
+              >
+                <GripVertical class="size-4" />
+              </Button>
+            </ImageFile>
+          </template>
+          <template #footer>
+            <div
+              v-if="usedImages.length === 0"
+              class="flex min-h-24 w-full items-center justify-center"
+            >
+              <EmptyState
+                :framed="false"
+                size="sm"
+                class="flex-none p-4"
+                :title="$t('components.productImagesEditor.usedEmptyTitle')"
+                :description="
+                  $t('components.productImagesEditor.usedEmptyDescription')
+                "
+              >
+                <template #icon>
+                  <Image />
+                </template>
+              </EmptyState>
+            </div>
+          </template>
+        </draggableComponent>
+      </div>
+    </section>
 
-    <!-- Other images section -->
-    <div class="flex-1 min-h-0 flex flex-col">
-      <div class="flex items-center px-4 h-11 border-t border-b shrink-0">
-        <p class="text-sm font-medium flex items-center gap-2">
-          <ImageOff class="size-4" />
-          {{ $t('components.productImagesEditor.otherImagesTitle') }}
+    <section>
+      <div class="mb-3">
+        <InsetGroupLabel class="mb-1">
+          {{ $t("components.productImagesEditor.otherImagesTitle") }}
+        </InsetGroupLabel>
+        <p class="px-1 text-xs text-muted-foreground">
+          {{
+            unusedImages.length
+              ? $t("components.productImagesEditor.otherImagesHint")
+              : $t("components.productImagesEditor.otherEmptyDescription")
+          }}
         </p>
       </div>
-      <draggableComponent
-        :list="unusedImages"
-        group="images"
-        @change="onDragChange"
-        itemKey="id"
-        :animation="200"
-        ghostClass="drag-ghost"
-        chosenClass="drag-chosen"
-        dragClass="drag-active"
-        class="flex flex-wrap flex-1 min-h-0 overflow-y-auto gap-4 p-4"
-      >
-        <template #item="{ element, index }">
-          <ImageFile :file="element" :thumbnailUrl="thumbnailUrl(element)" class="size-48 cursor-grab active:cursor-grabbing" @click="$emit('preview', element.id)" />
-        </template>
-      </draggableComponent>
-    </div>
+      <div class="min-h-28 rounded-xl p-2.5 ring-1 ring-dashed ring-border/70">
+        <draggableComponent
+          :list="unusedImages"
+          group="images"
+          item-key="id"
+          handle=".drag-handle"
+          :animation="200"
+          ghost-class="drag-ghost"
+          chosen-class="drag-chosen"
+          drag-class="drag-active"
+          class="flex min-h-24 flex-wrap gap-2.5"
+          @change="onDragChange"
+        >
+          <template #item="{ element }">
+            <ImageFile
+              :file="element"
+              :thumbnail-url="thumbnailUrl(element)"
+              :class="TILE_CLASS"
+              @click="$emit('preview', element.id)"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                class="drag-handle absolute right-1.5 top-1.5 z-10 size-7 cursor-grab bg-background/90 active:cursor-grabbing"
+                :aria-label="
+                  $t('components.productImagesEditor.dragHandleAria')
+                "
+                @click.stop
+              >
+                <GripVertical class="size-4" />
+              </Button>
+            </ImageFile>
+          </template>
+        </draggableComponent>
+      </div>
+    </section>
   </div>
 </template>
-
-<style>
-/* Ghost: the placeholder left behind in the list */
-.drag-ghost {
-  opacity: 0.3;
-  border: 2px dashed hsl(var(--primary));
-  border-radius: 0.5rem;
-}
-
-/* Chosen: the element being picked up (before moving) */
-.drag-chosen {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  border-radius: 0.5rem;
-}
-
-/* Active: the clone that follows the cursor */
-.drag-active {
-  opacity: 1 !important;
-  transform: scale(1.05) rotate(2deg);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-  border-radius: 0.5rem;
-  cursor: grabbing !important;
-  z-index: var(--z-overlay, 50);
-}
-</style>

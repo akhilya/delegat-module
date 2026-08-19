@@ -1,11 +1,8 @@
 <script setup>
 import { reactiveOmit } from "@vueuse/core";
-import {
-  DialogContent,
-  DialogPortal,
-  useForwardPropsEmits,
-} from "reka-ui";
+import { DialogContent, DialogPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { isConfirmOverlayActive } from "@/composables/useConfirm";
 import DialogOverlay from "./DialogOverlay.vue";
 import DialogCloseButton from "./DialogCloseButton.vue";
 
@@ -19,6 +16,8 @@ const props = defineProps({
   // Any max-w passed via `class` still wins (it merges after the size class).
   size: { type: String, default: "lg" },
   class: { type: null, required: false },
+  /** False when the header already has an in-flow close (bar dialogs). */
+  showClose: { type: Boolean, default: true },
 });
 const emits = defineEmits([
   "escapeKeyDown",
@@ -29,7 +28,7 @@ const emits = defineEmits([
   "closeAutoFocus",
 ]);
 
-const delegatedProps = reactiveOmit(props, "class", "size");
+const delegatedProps = reactiveOmit(props, "class", "size", "showClose");
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
 
@@ -57,16 +56,25 @@ function isPortaledOverlayTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(
     target.closest("[data-slot='popover-content']") ||
-      target.closest("[data-slot='select-content']") ||
-      target.closest("[data-slot='dropdown-menu-content']") ||
-      target.closest("[data-slot='combobox-list']") ||
-      target.closest("[data-slot='alert-dialog-content']") ||
-      target.closest("[data-slot='alert-dialog-overlay']") ||
-      target.closest("[data-reka-popper-content-wrapper]"),
+    target.closest("[data-slot='select-content']") ||
+    target.closest("[data-slot='dropdown-menu-content']") ||
+    target.closest("[data-slot='combobox-list']") ||
+    target.closest("[data-slot='alert-dialog-content']") ||
+    target.closest("[data-slot='alert-dialog-overlay']") ||
+    target.closest("[data-slot='dialog-content']") ||
+    target.closest("[data-reka-popper-content-wrapper]"),
   );
 }
 
+function onEscapeKeyDown(event) {
+  if (isConfirmOverlayActive()) event.preventDefault();
+}
+
 function onPointerDownOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
   const originalEvent = event.detail?.originalEvent;
   const target = originalEvent?.target ?? event.target;
   if (isPortaledOverlayTarget(target)) {
@@ -85,6 +93,10 @@ function onPointerDownOutside(event) {
 }
 
 function onFocusOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
   const target = event.detail?.originalEvent?.target ?? event.target;
   if (isPortaledOverlayTarget(target)) {
     event.preventDefault();
@@ -92,6 +104,10 @@ function onFocusOutside(event) {
 }
 
 function onInteractOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
   const target = event.detail?.originalEvent?.target ?? event.target;
   if (isPortaledOverlayTarget(target)) {
     event.preventDefault();
@@ -109,18 +125,19 @@ function onInteractOutside(event) {
         v-bind="forwarded"
         :class="
           cn(
-            'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-[var(--z-modal)] my-auto grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200',
+            'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-[var(--z-modal)] my-auto grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)]',
             sizeClasses[props.size] ?? sizeClasses.lg,
             props.class,
           )
         "
+        @escape-key-down="onEscapeKeyDown"
         @pointer-down-outside="onPointerDownOutside"
         @focus-outside="onFocusOutside"
         @interact-outside="onInteractOutside"
       >
         <slot />
 
-        <DialogCloseButton />
+        <DialogCloseButton v-if="showClose" />
       </DialogContent>
     </DialogOverlay>
   </DialogPortal>

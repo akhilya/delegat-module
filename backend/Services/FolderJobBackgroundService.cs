@@ -68,7 +68,6 @@ public sealed class FolderJobBackgroundService : BackgroundService
         if (job == null)
             return;
 
-        // Skip paused operations (leave Pending until resumed)
         if (job.status == FolderJobStatus.Pending)
         {
             var opStatus = await context.operations.AsNoTracking()
@@ -76,14 +75,13 @@ public sealed class FolderJobBackgroundService : BackgroundService
                 .Select(o => o.status)
                 .FirstOrDefaultAsync(ct);
 
-            if (opStatus is "paused" or "cancelled")
+            if (OperationLifecycle.IsStopRequested(opStatus))
             {
-                if (opStatus == "cancelled")
-                {
-                    job.status = FolderJobStatus.Cancelled;
-                    job.completedAt = DateTime.UtcNow;
-                    await context.SaveChangesAsync(ct);
-                }
+                job.status = FolderJobStatus.Cancelled;
+                job.completedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync(ct);
+                var logger = scope.ServiceProvider.GetRequiredService<IOperationLogger>();
+                await logger.FinishAsync(job.operationId, job.storeId, "cancelled", "Stopped");
                 return;
             }
         }

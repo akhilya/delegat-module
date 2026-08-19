@@ -37,10 +37,10 @@ function toggleOps() {
 <template>
   <Teleport v-if="!isNavbar" to="body">
     <Transition
-      enter-active-class="transition-all duration-200 ease-out"
+      enter-active-class="transition-[opacity,transform] duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)]"
       enter-from-class="opacity-0 translate-y-2"
       enter-to-class="opacity-100 translate-y-0"
-      leave-active-class="transition-all duration-150 ease-in"
+      leave-active-class="transition-[opacity,transform] duration-[var(--duration-overlay-out)] ease-[var(--ease-out-quart)]"
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 translate-y-2"
     >

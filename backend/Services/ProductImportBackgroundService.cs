@@ -143,25 +143,18 @@ public class ProductImportBackgroundService : BackgroundService
             if (ct.IsCancellationRequested)
                 break;
 
-            // Check if operation was paused or cancelled
-            if (pending.batchId != null)
+            if (pending.batchId != null
+                && await OperationLifecycle.IsStopRequestedAsync(context, pending.batchId, ct))
             {
-                var opStatus = await context.operations.AsNoTracking()
-                    .Where(o => o.operationId == pending.batchId)
-                    .Select(o => o.status)
-                    .FirstOrDefaultAsync(ct);
-
-                if (opStatus is "paused" or "cancelled")
-                {
-                    _logger.LogInformation("Operation {BatchId} is in status {Status}, cancelling queue rows", pending.batchId, opStatus);
-                    await context.pendingProductImports
-                        .Where(p => p.batchId == pending.batchId &&
-                            (p.status == ProductImportStatus.Pending
-                             || p.status == ProductImportStatus.InProgress
-                             || p.status == ProductImportStatus.Failed))
-                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
-                    break;
-                }
+                _logger.LogInformation("Operation {BatchId} was stopped, cancelling queue rows", pending.batchId);
+                await context.pendingProductImports
+                    .Where(p => p.batchId == pending.batchId &&
+                        (p.status == ProductImportStatus.Pending
+                         || p.status == ProductImportStatus.InProgress
+                         || p.status == ProductImportStatus.Failed))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
+                await _operationLogger.FinishAsync(pending.batchId, pending.storeId, "cancelled", "Stopped");
+                break;
             }
 
             try
@@ -177,8 +170,9 @@ public class ProductImportBackgroundService : BackgroundService
                     pending.Id, pending.externalProductId);
             }
 
-            // Delay between products to avoid overloading the marketplace API
-            if (!ct.IsCancellationRequested)
+            if (!ct.IsCancellationRequested
+                && (pending.batchId == null
+                    || !await OperationLifecycle.IsStopRequestedAsync(context, pending.batchId, ct)))
                 await Task.Delay(DELAY_BETWEEN_PRODUCTS_MS, ct);
         }
     }

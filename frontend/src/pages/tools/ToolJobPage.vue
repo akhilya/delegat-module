@@ -284,7 +284,7 @@ export default {
 
       <div
         v-if="table"
-        class="mt-8 overflow-hidden rounded-xl ring-1 ring-border/70"
+        class="mt-8 overflow-hidden rounded-xl border border-border/70 bg-card"
       >
         <Table>
           <TableHeader>

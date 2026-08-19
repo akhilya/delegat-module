@@ -1,13 +1,9 @@
 <script setup>
-import { X } from "lucide-vue-next";
 import { reactiveOmit } from "@vueuse/core";
-import {
-  DialogClose,
-  DialogContent,
-  DialogPortal,
-  useForwardPropsEmits,
-} from "reka-ui";
+import { DialogContent, DialogPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { isConfirmOverlayActive } from "@/composables/useConfirm";
+import DialogCloseButton from "@/components/ui/dialog/DialogCloseButton.vue";
 import SheetOverlay from "./SheetOverlay.vue";
 
 defineOptions({
@@ -21,6 +17,8 @@ const props = defineProps({
   disableOutsidePointerEvents: { type: Boolean, required: false },
   asChild: { type: Boolean, required: false },
   as: { type: null, required: false },
+  /** False when the header already has an in-flow close (bar sheets). */
+  showClose: { type: Boolean, default: true },
 });
 const emits = defineEmits([
   "escapeKeyDown",
@@ -31,9 +29,70 @@ const emits = defineEmits([
   "closeAutoFocus",
 ]);
 
-const delegatedProps = reactiveOmit(props, "class", "side");
+const delegatedProps = reactiveOmit(props, "class", "side", "showClose");
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
+
+function isPortaledOverlayTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest("[data-slot='popover-content']") ||
+    target.closest("[data-slot='select-content']") ||
+    target.closest("[data-slot='dropdown-menu-content']") ||
+    target.closest("[data-slot='combobox-list']") ||
+    target.closest("[data-slot='alert-dialog-content']") ||
+    target.closest("[data-slot='alert-dialog-overlay']") ||
+    target.closest("[data-slot='dialog-content']") ||
+    target.closest("[data-reka-popper-content-wrapper]"),
+  );
+}
+
+function onEscapeKeyDown(event) {
+  if (isConfirmOverlayActive()) event.preventDefault();
+}
+
+function onPointerDownOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
+  const originalEvent = event.detail?.originalEvent;
+  const target = originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+    return;
+  }
+  if (originalEvent && target instanceof HTMLElement) {
+    if (
+      originalEvent.offsetX > target.clientWidth ||
+      originalEvent.offsetY > target.clientHeight
+    ) {
+      event.preventDefault();
+    }
+  }
+}
+
+function onFocusOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
+  const target = event.detail?.originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+  }
+}
+
+function onInteractOutside(event) {
+  if (isConfirmOverlayActive()) {
+    event.preventDefault();
+    return;
+  }
+  const target = event.detail?.originalEvent?.target ?? event.target;
+  if (isPortaledOverlayTarget(target)) {
+    event.preventDefault();
+  }
+}
 </script>
 
 <template>
@@ -43,7 +102,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       data-slot="sheet-content"
       :class="
         cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[var(--z-modal)] flex flex-col gap-4 shadow-none ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
           side === 'right' &&
             'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
           side === 'left' &&
@@ -56,15 +115,17 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
         )
       "
       v-bind="{ ...$attrs, ...forwarded }"
+      @escape-key-down="onEscapeKeyDown"
+      @pointer-down-outside="onPointerDownOutside"
+      @focus-outside="onFocusOutside"
+      @interact-outside="onInteractOutside"
     >
       <slot />
 
-      <DialogClose
-        class="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
-      >
-        <X class="size-4" />
-        <span class="sr-only">Close</span>
-      </DialogClose>
+      <DialogCloseButton
+        v-if="showClose"
+        class="top-4 right-6 size-8 rounded-md"
+      />
     </DialogContent>
   </DialogPortal>
 </template>

@@ -1,4 +1,5 @@
 using Delegat.Models;
+using Delegat.Services;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
@@ -122,13 +123,53 @@ public class ProductGroupDomainTests
     }
 
     [Fact]
-    public async Task ProductMembershipConflict_IsDetected()
+    public async Task AddOrMove_MovesProductFromOtherGroup()
     {
         var (db, data) = Create();
         var store = data.AddStore();
         var product = data.AddProduct(store.Id);
-        data.AddGroup(store.Id, "Existing", product);
+        var source = data.AddGroup(store.Id, "Existing", product);
+        var target = data.AddGroup(store.Id, "Target");
         await data.SaveAsync();
-        Assert.True(await db.productGroupMembers.AnyAsync(m => m.productId == product.Id));
+
+        var added = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            db, store.Id, target.Id, new[] { product.Id });
+
+        Assert.Equal(1, added);
+        Assert.False(await db.productGroupMembers.AnyAsync(m => m.groupId == source.Id));
+        Assert.Equal(product.Id, (await db.productGroupMembers.SingleAsync(m => m.groupId == target.Id)).productId);
+    }
+
+    [Fact]
+    public async Task AddOrMove_SkipsProductsAlreadyInTheGroup()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var product = data.AddProduct(store.Id);
+        var group = data.AddGroup(store.Id, "Target", product);
+        await data.SaveAsync();
+
+        var added = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            db, store.Id, group.Id, new[] { product.Id });
+
+        Assert.Equal(0, added);
+        Assert.Equal(1, await db.productGroupMembers.CountAsync(m => m.groupId == group.Id));
+    }
+
+    [Fact]
+    public async Task AddOrMove_IgnoresProductsFromAnotherStore()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var other = data.AddStore();
+        var foreign = data.AddProduct(other.Id);
+        var group = data.AddGroup(store.Id, "Target");
+        await data.SaveAsync();
+
+        var added = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            db, store.Id, group.Id, new[] { foreign.Id });
+
+        Assert.Equal(0, added);
+        Assert.Empty(await db.productGroupMembers.ToListAsync());
     }
 }

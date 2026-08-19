@@ -2,6 +2,7 @@
 import { reactiveOmit } from "@vueuse/core";
 import { ComboboxContent, ComboboxPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { MENU_ANIMATION, MENU_SURFACE } from "@/lib/menuSurface";
 
 const props = defineProps({
   forceMount: { type: Boolean, required: false },
@@ -45,7 +46,9 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       v-bind="forwarded"
       :class="
         cn(
-          'z-[var(--z-popover)] w-[200px] rounded-md border bg-popover text-popover-foreground origin-(--reka-combobox-content-transform-origin) overflow-hidden shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+          'z-[var(--z-popover)] w-[200px] origin-(--reka-combobox-content-transform-origin) overflow-hidden p-1 outline-none',
+          MENU_SURFACE,
+          MENU_ANIMATION,
           props.class,
         )
       "

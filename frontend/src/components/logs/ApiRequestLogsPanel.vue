@@ -19,8 +19,7 @@ import {
   LogFilterSelect,
   LogHttpMethodFilter,
   LogHttpStatusFilter,
-  LogExchangeDetail,
-  LogCodeBlock,
+  ApiRequestLogSheet,
   LogSelectCheckbox,
   LogSortHeader,
   LOG_FILTER_ALL,
@@ -62,8 +61,7 @@ export default {
     LogFilterSelect,
     LogHttpMethodFilter,
     LogHttpStatusFilter,
-    LogExchangeDetail,
-    LogCodeBlock,
+    ApiRequestLogSheet,
     LogSelectCheckbox,
     LogSortHeader,
     ScrollText,
@@ -313,7 +311,7 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+  <div class="flex min-h-0 flex-1 flex-col gap-3">
     <LogToolbar class="shrink-0">
       <LogFilterSelect
         :model-value="filters.apiKeyId"
@@ -470,7 +468,7 @@ export default {
       </Table>
     </LogListPanel>
 
-    <LogExchangeDetail
+    <ApiRequestLogSheet
       v-model:open="detailOpen"
       :loading="isDetailLoading"
       :detail="detail"
@@ -481,23 +479,6 @@ export default {
           : $t('pages.apiPage.logs.request')
       "
       :description="detail?.path || '…'"
-      body-download-base-url="/api-keys/logs"
-      json-bodies
-    >
-      <template #overview-extra="{ detail: d }">
-        <div v-if="d.userAgent" class="space-y-1">
-          <div class="text-xs text-muted-foreground">{{ $t("pages.apiPage.logs.userAgent") }}</div>
-          <p class="break-all text-xs">{{ d.userAgent }}</p>
-        </div>
-      </template>
-
-      <template #request-extra="{ detail: d }">
-        <LogCodeBlock
-          v-if="d.queryString"
-          label="Query"
-          :text="d.queryString"
-        />
-      </template>
-    </LogExchangeDetail>
+    />
   </div>
 </template>

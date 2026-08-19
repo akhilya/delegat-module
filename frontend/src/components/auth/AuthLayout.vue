@@ -89,7 +89,7 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
-  animation: auth-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: auth-enter var(--duration-drawer) var(--ease-out-quart) both;
 }
 
 .auth-heading {

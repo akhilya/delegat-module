@@ -1,14 +1,16 @@
 <script setup>
 /**
- * Right-side sheet to view/edit a store-wide note from the Notes page list.
- * Autosaves text/importance like the product Notes tab; bar chrome per DESIGN/MEMORY.
+ * Bar sheet to view/edit a product note (store Notes list or product Notes tab).
+ * Autosaves text/importance; bar chrome per DESIGN/MEMORY.
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { ExternalLink, Trash2 } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
+import { FieldGroup } from "@/components/ui/field";
+import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import {
   Select,
   SelectContent,
@@ -22,34 +24,27 @@ import {
   SheetDescription,
   SheetFooter,
   SheetHeader,
+  SheetHeaderClose,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { FieldGroup } from "@/components/ui/field";
-import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 import { t } from "@/i18n";
+import { notePreviewTitle } from "@/lib/notesUi";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
   note: { type: Object, default: null },
+  /** Store Notes list shows product name + a footer link. Product tab hides both. */
+  showProductLink: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(["update:open", "updated", "deleted"]);
 
 const store = useStore();
-const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+const { formatDateTime: formatStoreDateTime, loadMemberships } =
+  useStoreDateTime();
 loadMemberships();
 
 const draftText = ref("");
@@ -67,35 +62,40 @@ const importanceOptions = computed(() => [
   { value: "Emergency", label: t("components.note.importanceEmergency") },
 ]);
 
-const title = computed(
-  () =>
-    props.note?.productName?.trim() ||
+const title = computed(() => {
+  if (props.showProductLink) {
+    return (
+      props.note?.productName?.trim() || t("pages.notesPage.sheetTitleFallback")
+    );
+  }
+  return notePreviewTitle(
+    { text: draftText.value },
     t("pages.notesPage.sheetTitleFallback"),
-);
+  );
+});
 
 const metaLine = computed(() => {
   if (!props.note) return "";
   const parts = [];
-  if (props.note.productSku) parts.push(props.note.productSku);
-  parts.push(
-    props.note.authorUserName || t("pages.notesPage.authorUnknown"),
-  );
+  if (props.showProductLink && props.note.productSku) {
+    parts.push(props.note.productSku);
+  }
+  if (props.showProductLink || props.note.authorUserName) {
+    parts.push(props.note.authorUserName || t("pages.notesPage.authorUnknown"));
+  }
   const created = formatStoreDateTime(props.note.createdAt);
-  if (created) {
-    parts.push(
-      t("pages.notesPage.sheetCreated", { date: created }),
-    );
+  if (created && created !== "-") {
+    parts.push(t("pages.notesPage.sheetCreated", { date: created }));
   }
   const updated = formatStoreDateTime(props.note.updatedAt);
   if (
     updated &&
+    updated !== "-" &&
     props.note.updatedAt &&
     props.note.createdAt &&
     props.note.updatedAt !== props.note.createdAt
   ) {
-    parts.push(
-      t("pages.notesPage.sheetUpdated", { date: updated }),
-    );
+    parts.push(t("pages.notesPage.sheetUpdated", { date: updated }));
   }
   return parts.join(" · ");
 });
@@ -122,7 +122,10 @@ function syncFromNote(note) {
 watch(
   () => [props.open, props.note?.id],
   () => {
-    if (props.open && props.note) syncFromNote(props.note);
+    if (props.open && props.note) {
+      syncFromNote(props.note);
+      nextTick(() => document.getElementById("note-sheet-text")?.focus());
+    }
     if (!props.open && saveTimer.value) {
       clearTimeout(saveTimer.value);
       saveTimer.value = null;
@@ -177,8 +180,15 @@ async function save() {
   }
 }
 
-async function deleteNote() {
+async function onDelete() {
   if (!props.note?.id || !props.note?.productId) return;
+  const ok = await confirm({
+    title: t("components.note.deleteConfirmTitle"),
+    description: t("components.note.deleteConfirmDescription"),
+    confirmLabel: t("common.delete"),
+  });
+  if (!ok) return;
+
   isDeleting.value = true;
   try {
     await store.dispatch("deleteNote", {
@@ -199,6 +209,10 @@ async function deleteNote() {
 }
 
 function onOpenChange(value) {
+  if (!value && isConfirmOverlayActive()) {
+    emit("update:open", true);
+    return;
+  }
   if (!value && saveTimer.value) {
     clearTimeout(saveTimer.value);
     saveTimer.value = null;
@@ -212,22 +226,39 @@ function onOpenChange(value) {
   <Sheet :open="open" @update:open="onOpenChange">
     <SheetContent
       side="right"
+      :show-close="false"
       class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
     >
-      <SheetHeader class="shrink-0 border-b border-border px-6 py-4 pr-12 text-left">
-        <SheetTitle class="truncate">
-          {{ title }}
-        </SheetTitle>
-        <SheetDescription v-if="metaLine" class="text-balance">
+      <SheetHeader variant="bar">
+        <div class="flex min-h-8 items-center gap-2">
+          <SheetTitle class="min-w-0 flex-1 truncate">
+            {{ title }}
+          </SheetTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            :disabled="isDeleting || !note"
+            :title="t('pages.notesPage.deleteNote')"
+            :aria-label="t('pages.notesPage.deleteNote')"
+            @click="onDelete"
+          >
+            <Spinner v-if="isDeleting" size="sm" />
+            <Trash2 v-else class="size-4" />
+          </Button>
+          <SheetHeaderClose />
+        </div>
+        <SheetDescription v-if="metaLine">
           {{ metaLine }}
         </SheetDescription>
       </SheetHeader>
 
       <div
         v-if="note"
-        class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-4"
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5"
       >
-        <FieldGroup class="flex min-h-0 flex-1 flex-col gap-4">
+        <FieldGroup class="flex min-h-0 flex-1 flex-col gap-5">
           <SettingsFormField
             :label="t('pages.notesPage.columnImportance')"
             label-for="note-sheet-importance"
@@ -257,70 +288,28 @@ function onOpenChange(value) {
               id="note-sheet-text"
               v-model="draftText"
               :maxlength="10000"
-              class="min-h-48 flex-1 resize-y"
+              class="min-h-48 flex-1 resize-none [field-sizing:fixed]"
               :placeholder="t('components.note.textPlaceholder')"
             />
           </SettingsFormField>
         </FieldGroup>
 
-        <div
+        <p
           v-if="isSaving"
-          class="flex items-center gap-2 text-xs text-muted-foreground"
+          class="mt-3 flex items-center gap-2 px-1 text-xs text-muted-foreground"
         >
           <Spinner size="xs" class="text-muted-foreground" />
           {{ t("pages.notesPage.sheetSaving") }}
-        </div>
+        </p>
       </div>
 
-      <SheetFooter
-        class="mt-0 shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-4 sm:space-x-0"
-      >
-        <Button
-          v-if="productTo"
-          as-child
-          variant="outline"
-          size="sm"
-        >
+      <SheetFooter v-if="showProductLink && productTo" variant="bar">
+        <Button as-child variant="outline">
           <RouterLink :to="productTo">
             <ExternalLink class="size-4" />
             {{ t("pages.notesPage.openProduct") }}
           </RouterLink>
         </Button>
-        <span v-else />
-
-        <AlertDialog>
-          <AlertDialogTrigger as-child>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              :disabled="isDeleting"
-            >
-              <Trash2 class="size-4" />
-              {{ t("pages.notesPage.deleteNote") }}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {{ t("components.note.deleteConfirmTitle") }}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {{ t("components.note.deleteConfirmDescription") }}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                :disabled="isDeleting"
-                @click="deleteNote"
-              >
-                {{ t("common.delete") }}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </SheetFooter>
     </SheetContent>
   </Sheet>

@@ -91,7 +91,7 @@ public class ProductBulkUpdateBackgroundService : BackgroundService
             .Select(o => o.status)
             .FirstOrDefaultAsync(stoppingToken);
 
-        if (operationStatus == "cancelled")
+        if (OperationLifecycle.IsStopRequested(operationStatus))
         {
             item.status = ProductBulkUpdateStatus.Cancelled;
             item.finishedAt = DateTime.UtcNow;
@@ -104,28 +104,7 @@ public class ProductBulkUpdateBackgroundService : BackgroundService
         await context.SaveChangesAsync(stoppingToken);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        var stopWatcher = Task.Run(async () =>
-        {
-            try
-            {
-                while (!cts.IsCancellationRequested)
-                {
-                    await Task.Delay(2000, cts.Token);
-                    using var checkScope = _scopeFactory.CreateScope();
-                    var checkDb = checkScope.ServiceProvider.GetRequiredService<DataContext>();
-                    var status = await checkDb.operations.AsNoTracking()
-                        .Where(o => o.operationId == item.batchId)
-                        .Select(o => o.status)
-                        .FirstOrDefaultAsync(cts.Token);
-                    if (status == "cancelled" || status == "paused")
-                    {
-                        cts.Cancel();
-                        return;
-                    }
-                }
-            }
-            catch (OperationCanceledException) { /* normal */ }
-        }, cts.Token);
+        var stopWatcher = OperationStopWatcher.WatchAsync(_scopeFactory, item.batchId, cts);
 
         try
         {

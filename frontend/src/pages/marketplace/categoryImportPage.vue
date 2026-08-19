@@ -5,20 +5,19 @@ import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import ExternalCategoryBrowser from "@/components/marketplace/ExternalCategoryBrowser.vue";
-import { FieldSet, FieldLegend, FieldDescription } from "@/components/ui/field";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
-  Sparkles,
-  Link2,
   Download,
   FolderTree,
 } from "lucide-vue-next";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
@@ -32,19 +31,13 @@ export default {
     SettingsFormField,
     SettingsFormSection,
     ExternalCategoryBrowser,
-    FieldSet,
-    FieldLegend,
-    FieldDescription,
+    InsetGroup,
+    InsetGroupItem,
     Button,
     Input,
-    Badge,
     Checkbox,
-    Sparkles,
-    Link2,
     Download,
     FolderTree,
-    RadioGroup,
-    RadioGroupItem,
     EmptyState,
     SearchableSelect
   },
@@ -342,49 +335,21 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs" content-class="pb-4">
+  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
     <PageSection
       :loading="isLoading"
-      class="!mb-0 flex flex-1 flex-col"
+      class="!mb-0 flex min-h-0 flex-1 flex-col"
     >
-      <div v-if="connection" class="flex flex-1 flex-col gap-4">
-        <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="min-w-0 space-y-1.5">
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-lg font-semibold">{{ $t("marketplace.categoryImportPage.importCategory") }}</h1>
-              <Badge variant="outline">{{ connection.name }}</Badge>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              {{ $t("marketplace.categoryImportPage.pageDescription", { adapterLabel }) }}
-            </p>
-          </div>
-          <Button
-            class="shrink-0"
-            :disabled="importButtonDisabled || !hasImportConfig"
-            @click="handleImportCategory"
-          >
-            <Spinner v-if="isImporting" class="mr-2" />
-            <Download v-else class="size-4 mr-2" />
-            {{ $t("marketplace.categoryImportPage.import") }}
-            <template v-if="importSelectedFieldKeys.length > 0">
-              · {{ $t("marketplace.categoryImportPage.attrsAbbrCount", { count: importSelectedFieldKeys.length }) }}
-            </template>
-          </Button>
-        </div>
-
+      <div v-if="connection" class="flex min-h-0 flex-1 flex-col">
         <div
-          class="grid h-[max(22rem,calc(100svh-var(--app-navbar-height)-12rem))] min-h-[22rem] gap-5 overflow-hidden xl:grid-cols-2"
+          class="grid min-h-0 flex-1 gap-5 overflow-hidden xl:grid-cols-2"
         >
-          <div class="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
-            <FieldSet class="m-0 shrink-0 gap-1 border-0 p-0">
-              <FieldLegend variant="label" class="mb-0">
-                {{ $t("marketplace.categoryImportPage.adapterCategory") }}
-              </FieldLegend>
-              <FieldDescription>
-                {{ $t("marketplace.categoryImportPage.adapterCategoryDescription") }}
-              </FieldDescription>
-            </FieldSet>
-
+          <SettingsFormSection
+            class="!mt-0 !max-w-none flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+            content-class="min-h-0 flex-1"
+            :title="$t('marketplace.categoryImportPage.adapterCategory')"
+            :description="$t('marketplace.categoryImportPage.adapterCategoryDescription')"
+          >
             <ExternalCategoryBrowser
               v-model:search="externalCategorySearch"
               class="min-h-0 flex-1"
@@ -420,12 +385,12 @@ export default {
                 </Button>
               </template>
             </ExternalCategoryBrowser>
-          </div>
+          </SettingsFormSection>
 
           <div class="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
             <div
               v-if="!importCategoryId"
-              class="flex min-h-0 w-full flex-1 flex-col rounded-lg border border-dashed"
+              class="flex min-h-0 w-full flex-1 flex-col"
             >
               <EmptyState
                 class="w-full flex-1 py-12"
@@ -441,7 +406,7 @@ export default {
 
             <div
               v-else-if="isLoadingFields"
-              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border text-muted-foreground"
+              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground"
             >
               <Spinner size="2xl" />
               <span class="text-sm">{{ $t("marketplace.categoryImportPage.loadingCategoryFields") }}</span>
@@ -449,61 +414,57 @@ export default {
 
             <template v-else-if="hasImportConfig">
               <SettingsFormSection
-                class="!max-w-none shrink-0"
+                class="!mt-0 !max-w-none shrink-0"
                 :title="$t('marketplace.categoryImportPage.whereToImportTitle')"
                 :description="$t('marketplace.categoryImportPage.whereToImportDescription')"
               >
-                <RadioGroup v-model="importMode" class="gap-4">
-                  <div class="space-y-3">
-                    <div class="flex items-center gap-3">
-                      <RadioGroupItem value="new" id="import-mode-new" />
-                      <label
-                        for="import-mode-new"
-                        class="flex cursor-pointer items-center gap-2 text-sm font-medium"
-                      >
-                        <Sparkles class="size-4 text-warning" />
-                        {{ $t("marketplace.categoryImportPage.createNewCategory") }}
-                      </label>
-                    </div>
-                    <div v-if="importMode === 'new'" class="pl-7">
-                      <SettingsFormField :label="$t('marketplace.categoryImportPage.categoryNameLabel')">
-                        <Input
-                          v-model="importCategoryName"
-                          :placeholder="$t('marketplace.categoryImportPage.categoryNamePlaceholder')"
-                        />
-                      </SettingsFormField>
-                    </div>
-                  </div>
-
-                  <div class="space-y-3">
-                    <div class="flex items-center gap-3">
-                      <RadioGroupItem value="existing" id="import-mode-existing" />
-                      <label
-                        for="import-mode-existing"
-                        class="flex cursor-pointer items-center gap-2 text-sm font-medium"
-                      >
-                        <Link2 class="size-4 text-muted-foreground" />
-                        {{ $t("marketplace.categoryImportPage.intoExistingCategory") }}
-                      </label>
-                    </div>
-                    <div v-if="importMode === 'existing'" class="pl-7">
-                      <SettingsFormField :label="$t('marketplace.categoryImportPage.localCategoryLabel')">
-                        <SearchableSelect
-                          :model-value="importTargetCategoryId"
-                          :options="localCategoryOptions"
-                          :placeholder="$t('marketplace.categoryImportPage.selectCategoryPlaceholder')"
-                          :search-placeholder="$t('marketplace.categoryImportPage.searchCategoryPlaceholder')"
-                          :empty-text="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
-                          @update:model-value="importTargetCategoryId = $event"
-                        />
-                      </SettingsFormField>
-                    </div>
-                  </div>
-                </RadioGroup>
+                <InsetGroup
+                  role="radiogroup"
+                  :aria-label="$t('marketplace.categoryImportPage.whereToImportTitle')"
+                >
+                  <InsetGroupItem
+                    role="radio"
+                    :aria-checked="importMode === 'new'"
+                    :selected="importMode === 'new'"
+                    @click="importMode = 'new'"
+                  >
+                    <p>{{ $t("marketplace.categoryImportPage.createNewCategory") }}</p>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    role="radio"
+                    :aria-checked="importMode === 'existing'"
+                    :selected="importMode === 'existing'"
+                    @click="importMode = 'existing'"
+                  >
+                    <p>{{ $t("marketplace.categoryImportPage.intoExistingCategory") }}</p>
+                  </InsetGroupItem>
+                </InsetGroup>
+                <SettingsFormField
+                  v-if="importMode === 'new'"
+                  :label="$t('marketplace.categoryImportPage.categoryNameLabel')"
+                >
+                  <Input
+                    v-model="importCategoryName"
+                    :placeholder="$t('marketplace.categoryImportPage.categoryNamePlaceholder')"
+                  />
+                </SettingsFormField>
+                <SettingsFormField
+                  v-else
+                  :label="$t('marketplace.categoryImportPage.localCategoryLabel')"
+                >
+                  <SearchableSelect
+                    :model-value="importTargetCategoryId"
+                    :options="localCategoryOptions"
+                    :placeholder="$t('marketplace.categoryImportPage.selectCategoryPlaceholder')"
+                    :search-placeholder="$t('marketplace.categoryImportPage.searchCategoryPlaceholder')"
+                    :empty-text="$t('marketplace.categoryImportPage.categoriesNotFoundTitle')"
+                    @update:model-value="importTargetCategoryId = $event"
+                  />
+                </SettingsFormField>
 
                 <p
                   v-if="importBaseFields.length > 0"
-                  class="rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
+                  class="px-1 text-xs text-muted-foreground"
                 >
                   <span class="font-medium text-foreground">
                     {{ $t("marketplace.categoryImportPage.baseFieldsCount", { count: importBaseFields.length }) }}
@@ -512,21 +473,18 @@ export default {
                 </p>
               </SettingsFormSection>
 
-              <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-                <div class="flex shrink-0 items-start justify-between gap-3">
-                  <FieldSet class="m-0 min-w-0 gap-1 border-0 p-0">
-                    <FieldLegend variant="label" class="mb-0">
-                      {{
-                        $t("marketplace.categoryImportPage.attributesForImportTitle", {
-                          selected: importSelectedFieldKeys.length,
-                          total: importAttributeFields.length,
-                        })
-                      }}
-                    </FieldLegend>
-                    <FieldDescription>
-                      {{ $t("marketplace.categoryImportPage.attributesForImportDescription") }}
-                    </FieldDescription>
-                  </FieldSet>
+              <SettingsFormSection
+                class="!mt-0 !max-w-none flex min-h-0 flex-1 flex-col overflow-hidden"
+                content-class="min-h-0 flex-1"
+                :title="
+                  $t('marketplace.categoryImportPage.attributesForImportTitle', {
+                    selected: importSelectedFieldKeys.length,
+                    total: importAttributeFields.length,
+                  })
+                "
+                :description="$t('marketplace.categoryImportPage.attributesForImportDescription')"
+              >
+                <template #actions>
                   <Button
                     v-if="importAttributeFields.length > 0"
                     variant="ghost"
@@ -540,66 +498,70 @@ export default {
                         : $t("marketplace.categoryImportPage.selectAll")
                     }}
                   </Button>
-                </div>
+                </template>
 
                 <div
                   v-if="importAttributeFields.length === 0"
-                  class="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed px-4 text-center text-sm text-muted-foreground"
+                  class="flex min-h-0 flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground"
                 >
                   {{ $t("marketplace.categoryImportPage.noAdditionalAttributes") }}
                 </div>
 
-                <div
-                  v-else
-                  class="min-h-0 flex-1 overflow-y-auto rounded-lg border p-1.5"
-                >
-                  <button
-                    v-for="field in importAttributeFields"
-                    :key="field.key"
-                    type="button"
-                    class="flex w-full items-start gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
-                    @click="toggleFieldSelection(field.key)"
-                  >
-                    <Checkbox
-                      class="mt-0.5"
-                      :model-value="importSelectedFieldKeys.includes(field.key)"
-                      @update:model-value="toggleFieldSelection(field.key)"
-                      @click.stop
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="truncate text-sm font-medium">{{ field.name }}</div>
-                      <div
+                <InsetGroup v-else scrollable class="flex-1">
+                  <InsetGroupItem
+                      v-for="field in importAttributeFields"
+                      :key="field.key"
+                      as="div"
+                      class="cursor-pointer"
+                      @click="toggleFieldSelection(field.key)"
+                    >
+                      <template #leading>
+                        <Checkbox
+                          :model-value="importSelectedFieldKeys.includes(field.key)"
+                          @update:model-value="toggleFieldSelection(field.key)"
+                          @click.stop
+                        />
+                      </template>
+                      <p class="truncate">{{ field.name }}</p>
+                      <p
                         v-if="field.description"
-                        class="truncate text-xs text-muted-foreground"
+                        class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
                       >
                         {{ field.description }}
-                      </div>
-                    </div>
-                    <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                      <Badge variant="outline" class="text-xs font-normal">
-                        {{ field.type }}
-                      </Badge>
-                      <Badge
-                        v-if="field.isRequired"
-                        variant="destructive"
-                        class="text-xs font-normal"
-                      >
-                        {{ $t("marketplace.categoryImportPage.requiredAbbr") }}
-                      </Badge>
-                      <span
-                        v-if="field.optionsCount > 0"
-                        class="text-xs tabular-nums text-muted-foreground"
-                      >
-                        {{
-                          $t("marketplace.categoryImportPage.optionsAbbrCount", {
-                            count: field.optionsCount,
-                          })
-                        }}
-                      </span>
-                    </div>
-                  </button>
-                </div>
-              </div>
+                      </p>
+                      <template #trailing>
+                        <span class="text-muted-foreground text-xs font-normal">
+                          {{ field.type }}
+                          <template v-if="field.isRequired">
+                            · {{ $t("marketplace.categoryImportPage.requiredAbbr") }}
+                          </template>
+                          <template v-if="field.optionsCount > 0">
+                            ·
+                            {{
+                              $t("marketplace.categoryImportPage.optionsAbbrCount", {
+                                count: field.optionsCount,
+                              })
+                            }}
+                          </template>
+                        </span>
+                      </template>
+                    </InsetGroupItem>
+                </InsetGroup>
+                <template #footer>
+                  <Button
+                    class="shrink-0"
+                    :disabled="importButtonDisabled"
+                    @click="handleImportCategory"
+                  >
+                    <Spinner v-if="isImporting" class="mr-2" />
+                    <Download v-else class="size-4 mr-2" />
+                    {{ $t("marketplace.categoryImportPage.import") }}
+                    <template v-if="importSelectedFieldKeys.length > 0">
+                      · {{ $t("marketplace.categoryImportPage.attrsAbbrCount", { count: importSelectedFieldKeys.length }) }}
+                    </template>
+                  </Button>
+                </template>
+              </SettingsFormSection>
             </template>
           </div>
         </div>

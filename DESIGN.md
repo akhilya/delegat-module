@@ -143,7 +143,7 @@ A near-achromatic neutral palette with ink primary. Chroma appears only for dest
 - **Confirm Green** (`oklch(0.62924 0.13932 161.221)`): Success / healthy sync.
 
 ### Named Rules
-**The Semantic-Only Rule.** Hue is reserved for status and irreversible actions. Never paint marketing gradients, brand purple, or decorative accent washes across operational chrome.
+**The Semantic-Only Rule.** Hue is reserved for status and irreversible actions. Never paint marketing gradients, brand purple, or decorative accent washes across operational chrome. The Control Plane button sheen is a short **white** overlay, not a hue wash.
 
 **The One Voice Rule.** Filled primary occupies ≤10% of a given screen. If every control shouts primary, none of them do.
 
@@ -170,16 +170,27 @@ Dark theme swaps the same roles via `.dark` in `frontend/src/style.css` (ink↔p
 
 ## 4. Elevation
 
-Flat by default. Depth is tonal (sidebar vs paper, muted fills) and 1px borders — not stacked soft shadows. Outline buttons may use `shadow-xs`; dialogs/sheets rely on overlay scrim + surface tokens, not dramatic drop shadows. The scrim fades; the panel fades and zooms.
+Surfaces stay flat: depth is tonal (sidebar vs paper, muted fills) and 1px borders — not stacked card shadows. Buttons are the exception (same as Control Plane): a short white top sheen and a 1px drop shadow. Dialogs/sheets rely on overlay scrim + surface tokens, not dramatic drop shadows. The scrim fades; the panel fades and zooms.
 
 ### Shadow Vocabulary
-- **Hairline lift** (`shadow-xs` on outline controls): Barely-there separation for stroked buttons.
+- **Button lift** (`0 1px 2px oklch(0 0 0 / 0.1)` on `[data-slot="button"]`): Hairline drop shadow. Ghost uses `0 1px 1px / 0.05`. Link has none. Grouped segments (`ButtonGroup`) share one plane — no per-segment shadow.
+- **Button sheen:** `linear-gradient(180deg, white 8%, transparent ~40%)` on default, outline, secondary, destructive. Not a page-wash and not hue. Ghost / link have no sheen.
 - **No ambient card stack:** Cards are bordered/tonal, not floated marketing tiles.
 
 ### Named Rules
-**The Flat-By-Default Rule.** Surfaces rest flat. Shadows appear only as light state affordances (outline button, focused ring), never as decorative hierarchy.
+**The Flat-By-Default Rule.** Surfaces rest flat. The only standing shadow is the Control Plane button lift (plus the focused ring). Do not float cards.
 
 **The Portal Stack Rule.** Overlays follow the z-index scale in `style.css` (`--z-sticky` … `--z-alert`). Popovers must sit above dialogs; toasts above popovers; blocking alerts at the ceiling.
+
+### Motion
+One language for the whole instance. Motion shows state (open, press, toggle), not page-load theater.
+
+- **Curve:** `--ease-out-quart` (`cubic-bezier(0.25, 1, 0.5, 1)`). No bounce, no elastic.
+- **Press:** `--duration-press` 120ms. `Button` scales to 0.98 on `:active` (not `link`).
+- **UI chrome:** `--duration-ui` 150ms. Menus, tooltips, tab content fade, switch thumb, inset row hover, chevrons.
+- **Overlays:** `--duration-overlay` 200ms in, `--duration-overlay-out` 150ms out. Dialog, confirm, scrim: fade + zoom.
+- **Drawers:** `--duration-drawer` 280ms in, `--duration-drawer-out` 210ms out. Sheets slide from the edge (was 500ms; too slow for catalog work).
+- **Do not** stagger catalog pages, tables, or route changes. Honor `prefers-reduced-motion` (already global in `style.css`).
 
 ## 5. Components
 
@@ -187,11 +198,15 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 
 ### Buttons
 - **Shape:** Larger radius (`rounded-md` / `rounded-lg`, tied to `--radius` **1rem**)
-- **Primary:** Ink fill + primary-foreground; hover at 90% primary
-- **Secondary / Outline / Ghost / Link / Destructive:** Standard CVA variants in `button/index.js`
+- **Primary:** Ink fill + primary-foreground; hover at 90% primary; short white top sheen + hairline drop shadow (Control Plane, in `style.css`)
+- **Secondary / Outline:** Same sheen (slightly stronger white) + the same drop shadow
+- **Ghost:** Lighter drop shadow, no sheen. **Link:** flat (no sheen, no shadow)
+- **Destructive:** Same sheen as primary
 - **Sizes:** default `h-9`, sm `h-8`, lg `h-10`, compact `xs` / icon sizes
-- **Focus:** `focus-visible:ring-ring/50` + ring-3; invalid uses destructive ring
+- **Focus:** `focus-visible` keeps the 3px ring **and** the drop shadow (composite `box-shadow` in `style.css`)
 - **Touch:** On coarse pointers, `[data-slot="button"]` min-height 2.75rem
+- **Press:** `:active` scale 0.98 at `--duration-press` (not on `link`)
+- **Do not** restyle sheen/shadow at call sites; change `style.css`
 
 ### Cards / Containers
 - **Corner Style:** Radius from card primitive (aligned to `--radius`)
@@ -210,13 +225,23 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - Do not invent per-form-dialog title sizes or ad-hoc `px-6 py-5` / `pt-6 pb-4` header chrome
 - Icons stay in buttons, menus, empty states, and inline status — not the modal chrome header
 
+### Menus / popovers
+Floating lists (dropdown, context menu, select, searchable select, combobox, popover, tooltip) share one Apple menu material:
+
+- **Surface:** `cn-menu-translucent` — paper mixed with blur (`blur(20px) saturate(180%)`), `rounded-lg`, hairline `ring-foreground/5` (not a hard `border`), `shadow-lg`. Solid fill when `prefers-reduced-transparency`
+- **Rows:** `rounded-md`, `px-3 py-2`, tonal `muted/80` highlight — same family as inset grouped rows, denser
+- **Choice:** radio and checkbox rows in menus, plus select / searchable-select / combobox options, show a trailing check (`Check`) — not a leading radio disc. Leading icons stay on the left of the label
+- **Labels:** `text-xs` muted captions. Separators: `bg-border/50`
+- **Do not** restyle each call site; change the primitives in `frontend/src/components/ui/{dropdown-menu,context-menu,select,popover,combobox,tooltip}` and `lib/menuSurface.js`
+- Nested submenus portal to the document (same as the parent panel). Do not render them inside the frosted parent — `overflow` + `backdrop-filter` clip the nested panel (user menu language, adapter connection submenus)
+
 ### Inputs / Fields
 - **Style:** Border `{colors.input}`, height `h-9`, `rounded-md`, text `{colors.foreground}`
 - **Focus:** Ring token; match `color-scheme` to light/dark
 - **Error:** `aria-invalid` → destructive border/ring
 - **Password:** Eye toggle in muted → foreground on hover
 - **Checkbox:** only shadcn `Checkbox` with `rounded-xs` (not `rounded-sm` / native inputs — at `--radius` 1rem those look nearly round on a 16px box)
-- **Forms:** every labeled stack = `FieldGroup` + `Field` (prefer `SettingsFormField`); validated fields wrap with vee-validate `FormField`. No raw `Label`+`Input` / `FormItem` alone without Field. `SettingsFormSection` already supplies FieldSet + FieldGroup.
+- **Forms:** every labeled stack = `FieldGroup` + `Field` (prefer `SettingsFormField`); validated fields wrap with vee-validate `FormField`. No raw `Label`+`Input` / `FormItem` alone without Field. `SettingsFormSection` already supplies FieldSet + FieldGroup. Same-rank section titles (two columns, picker + form) use `SettingsFormSection` / `InsetGroupLabel` — muted `text-xs` with `px-1`, not a `text-sm` heading and not a browser `<legend>` next to that caption. `FieldLegend` must match `InsetGroupLabel`. Stacked field labels are the same `text-xs` caption (not a heading under the section title). Inline / horizontal field labels stay `text-sm`.
 
 ### Navigation
 - **Sidebar:** `{colors.sidebar}` mist surface. Nav groups are inset grouped lists (paper fill, one shared hairline ring, equal-height rows). The current page is a primary (ink) pill with semibold label — hover on other rows stays tonal. Quiet borders; no second nested outline.
@@ -229,7 +254,7 @@ iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive
 - **Shell:** `rounded-xl bg-card p-1` and one hairline ring (`ring-sidebar-border` on mist/sidebar; `ring-border/70` on paper pages). Space **between** groups, not between rows inside a group.
 - **Rows:** equal padding, inner `rounded-lg`, hover tonal. A hairline gap (`gap-0.5`) inside the group keeps those inner corners visible so adjacent rows do not fuse. Do not give each row its own card, border, or nested outline. Leading icon sits in the row (no bordered tile). Navigation rows use a trailing chevron; the whole row is the control.
 - **Current / selected:** primary ink fill + semibold only for a **single** current item (sidebar page, tools picker). Multi-select (roles, permission grants, store members) stays quiet paper + a trailing check — do not paint every chosen row primary.
-- **Use:** tools catalog, connection pickers, settings-style choice lists, Administration and Settings pages (user, stores, users, API, plugins, logs, AI), quiet summaries. Match/review tables stay `Table` inside the same rounded ring (no `p-1`).
+- **Use:** tools catalog, connection pickers, settings-style choice lists, Administration and Settings pages (user, stores, users, API, plugins, logs, AI), quiet summaries. Match/review tables stay `Table` inside the same rounded ring (no `p-1`). **Barcodes** stay that table. **Store notes** and the product **Notes** tab use the same inset grouped list (row opens a bar sheet). Importance is a quiet trailing status word — semantic color only for High / Critical / Emergency. Product **Sizes** is one inset group per size (label-left fields, Add size as the last group) and grows with the page. Product **Adapters** connection cards: left-click (and right-click) on the card body opens the actions menu at the cursor; mapping / marketplace / sizes rows keep their own actions.
 - **Do not** present a catalog of tools or settings as a grid of identical icon + title + CTA cards.
 
 **The Inset Grouped List Rule.** Settings, tools, and pickers use inset grouped lists: mist or paper page, one paper group, one shared hairline ring, equal-height rows. Not a grid of separate cards and not a nested outline on children.

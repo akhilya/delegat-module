@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
-import Label from "@/components/ui/label/Label.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { FieldGroup } from "@/components/ui/field";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 import {
@@ -39,21 +41,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -62,13 +49,11 @@ import {
   Trash2,
   GripVertical,
   Settings2,
-  Pencil,
   Download,
   Upload,
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
-import AttributeGroupIcon from "@/components/products/AttributeGroupIcon.vue";
 import AttributeGroupIconPicker from "@/components/products/AttributeGroupIconPicker.vue";
 import { suggestedGroupIcon } from "@/lib/attributeGroupIcon";
 import { PAGE_CATEGORIES, setPageTitle } from "@/router";
@@ -108,10 +93,10 @@ export default {
     Input,
     Textarea,
     Switch,
-    Label,
-    Badge,
     SettingsFormField,
-    FieldGroup,
+    SettingsFormSection,
+    InsetGroup,
+    InsetGroupItem,
     Select,
     SelectContent,
     SelectItem,
@@ -133,29 +118,16 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-    Table,
-    TableHead,
-    TableHeader,
-    TableRow,
-    TableCell,
     Save,
     Plus,
     Trash2,
     GripVertical,
     Settings2,
-    Pencil,
     Download,
     Upload,
     draggable,
     SearchableSelect,
     EmptyState,
-    AttributeGroupIcon,
     AttributeGroupIconPicker,
   },
   data() {
@@ -273,18 +245,6 @@ export default {
     defaultValueSelectOptions() {
       if (!this.defaultValueOptionsReady) return [];
       return this.defaultValueOptions;
-    },
-    attributesCountLabel() {
-      const n = this.attributes.length;
-      const mod10 = n % 10;
-      const mod100 = n % 100;
-      if (mod100 >= 11 && mod100 <= 14)
-        return this.$t("pages.categoryEditPage.attributesCount.many");
-      if (mod10 === 1)
-        return this.$t("pages.categoryEditPage.attributesCount.one");
-      if (mod10 >= 2 && mod10 <= 4)
-        return this.$t("pages.categoryEditPage.attributesCount.few");
-      return this.$t("pages.categoryEditPage.attributesCount.many");
     },
   },
   methods: {
@@ -757,6 +717,23 @@ export default {
         : this.$t("pages.categoryEditPage.attributeTypes.unknown");
     },
 
+    attributeRowSubtitle(attribute) {
+      const parts = [
+        attribute.key,
+        this.getAttributeTypeLabel(attribute.type),
+        attribute.group,
+      ].filter(Boolean);
+      const optionsCount = attribute.options
+        ? this.getOptionsCount(attribute.options)
+        : 0;
+      if (optionsCount > 0) {
+        parts.push(
+          `${optionsCount} ${this.$t("pages.categoryEditPage.optionsWord")}`,
+        );
+      }
+      return parts.join(" · ");
+    },
+
     getOptionsRaw() {
       if (this.attributeOptionsJson) return this.attributeOptionsJson;
       if (this.attributeForm.options?.trim()) return this.attributeForm.options;
@@ -1034,32 +1011,8 @@ export default {
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
     <PageSection :loading="isLoading" class="!min-h-0">
-      <div v-if="category" class="space-y-3">
-        <div class="flex items-start justify-between gap-4">
-          <div class="min-w-0 flex-1 space-y-1">
-            <h1 class="text-lg font-semibold">
-              {{
-                category.name ||
-                $t("pages.categoryEditPage.editingCategoryFallback")
-              }}
-            </h1>
-            <p class="text-sm text-muted-foreground">
-              {{ $t("pages.categoryEditPage.subtitle") }}
-            </p>
-          </div>
-          <Button
-            class="shrink-0"
-            @click="handleSaveCategory"
-            :disabled="isSaving"
-          >
-            <Spinner v-if="isSaving" class="mr-2" />
-            <Save v-else class="size-4 mr-2" />
-            {{ $t("common.save") }}
-          </Button>
-        </div>
-
-        <!-- Block 1: Settings -->
-        <FieldGroup class="max-w-2xl gap-4">
+      <div v-if="category" class="max-w-2xl space-y-1">
+        <SettingsFormSection>
           <SettingsFormField
             :label="$t('common.name')"
             label-for="category-name"
@@ -1084,239 +1037,149 @@ export default {
             />
           </SettingsFormField>
           <SettingsFormField
-            :label="$t('pages.categoryEditPage.sizeGridLabel')"
+            :label="$t('pages.categoryEditPage.hasSizesLabel')"
+            :description="$t('pages.categoryEditPage.hasSizesDescription')"
+            label-for="category-has-sizes"
+            inline
           >
-            <div class="flex items-center gap-2 h-9">
-              <Switch
-                id="category-has-sizes"
-                :model-value="category.hasSizes"
-                @update:model-value="category.hasSizes = $event"
-              />
-              <Label
-                for="category-has-sizes"
-                class="font-normal text-muted-foreground"
-              >
-                {{ $t("pages.categoryEditPage.hasSizesLabel") }}
-              </Label>
-            </div>
+            <Switch
+              id="category-has-sizes"
+              :model-value="category.hasSizes"
+              @update:model-value="category.hasSizes = $event"
+            />
           </SettingsFormField>
-        </FieldGroup>
-
-        <!-- Block 2: Attributes -->
-        <Card class="overflow-hidden border-0 shadow-none !gap-3 !py-0">
-          <CardHeader class="!px-0">
-            <CardTitle class="text-base">
-              {{ $t("pages.categoryEditPage.attributesCardTitle") }}
-            </CardTitle>
-            <CardDescription>
-              {{ attributes.length }} {{ attributesCountLabel }}.
-              {{ $t("pages.categoryEditPage.attributesOrderHint") }}
-            </CardDescription>
-            <CardAction>
-              <Button
-                variant="outline"
-                size="sm"
-                @click="openAddAttributeDialog"
-              >
-                <Plus class="size-4 mr-2" />
-                {{ $t("common.add") }}
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent class="!px-0 pb-6 pt-0">
-            <EmptyState
-              v-if="attributes.length === 0"
-              :title="$t('pages.categoryEditPage.noAttributesTitle')"
-              :description="
-                $t('pages.categoryEditPage.noAttributesDescription')
-              "
-              class="py-10"
+          <template #footer>
+            <Button
+              @click="handleSaveCategory"
+              :disabled="isSaving"
             >
-              <template #icon>
-                <Settings2 />
-              </template>
-              <Button variant="outline" @click="openAddAttributeDialog">
-                <Plus class="size-4 mr-2" />
-                {{ $t("pages.categoryEditPage.addAttribute") }}
-              </Button>
-            </EmptyState>
+              <Spinner v-if="isSaving" class="mr-2" />
+              <Save v-else class="size-4 mr-2" />
+              {{ $t("common.save") }}
+            </Button>
+          </template>
+        </SettingsFormSection>
 
-            <div v-else class="overflow-hidden rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow class="hover:bg-transparent">
-                    <TableHead class="w-9 px-3" />
-                    <TableHead class="px-3">{{ $t("common.name") }}</TableHead>
-                    <TableHead class="hidden w-40 px-3 sm:table-cell">{{
-                      $t("pages.categoryEditPage.keyLabel")
-                    }}</TableHead>
-                    <TableHead class="hidden w-36 px-3 md:table-cell">{{
-                      $t("pages.categoryEditPage.groupLabel")
-                    }}</TableHead>
-                    <TableHead class="w-32 px-3">{{
-                      $t("pages.categoryEditPage.typeHeader")
-                    }}</TableHead>
-                    <TableHead
-                      class="hidden w-28 px-3 text-right lg:table-cell"
-                      >{{
-                        $t("pages.categoryEditPage.optionsHeader")
-                      }}</TableHead
-                    >
-                    <TableHead class="hidden px-3 xl:table-cell">{{
-                      $t("common.description")
-                    }}</TableHead>
-                    <TableHead class="w-24 px-2" />
-                  </TableRow>
-                </TableHeader>
-                <draggable
-                  v-model="attributes"
-                  tag="tbody"
-                  item-key="id"
-                  handle=".drag-handle"
-                  ghost-class="opacity-50"
-                  @end="handleReorder"
-                >
-                  <template #item="{ element: attribute }">
-                    <TableRow class="group">
-                      <TableCell class="w-9 px-3">
-                        <GripVertical
-                          class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
-                        />
-                      </TableCell>
-                      <TableCell class="max-w-0 px-3 font-medium">
-                        <div class="flex min-w-0 items-center gap-0.5">
-                          <span class="truncate">{{ attribute.name }}</span>
-                          <span
-                            v-if="attribute.isRequired"
-                            class="shrink-0 text-destructive"
-                            :title="
-                              $t('pages.categoryEditPage.requiredFieldTitle')
-                            "
-                            >*</span
-                          >
-                          <span
-                            v-if="attribute.isUnique"
-                            class="shrink-0 ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-                            :title="
-                              $t('pages.categoryEditPage.uniqueFieldTitle')
-                            "
-                            >{{
-                              $t("pages.categoryEditPage.uniqueBadge")
-                            }}</span
-                          >
-                        </div>
-                        <span
-                          class="text-xs text-muted-foreground font-mono truncate block sm:hidden"
-                        >
-                          {{ attribute.key }}
-                        </span>
-                      </TableCell>
-                      <TableCell
-                        class="text-muted-foreground hidden max-w-0 px-3 font-mono text-xs sm:table-cell"
+        <SettingsFormSection
+          :title="$t('pages.categoryEditPage.attributesCardTitle')"
+          :description="$t('pages.categoryEditPage.attributesOrderHint')"
+        >
+          <template #actions>
+            <Button
+              variant="outline"
+              size="sm"
+              @click="openAddAttributeDialog"
+            >
+              <Plus class="size-4 mr-2" />
+              {{ $t("common.add") }}
+            </Button>
+          </template>
+          <EmptyState
+            v-if="attributes.length === 0"
+            :title="$t('pages.categoryEditPage.noAttributesTitle')"
+            :description="$t('pages.categoryEditPage.noAttributesDescription')"
+            class="py-10"
+          >
+            <template #icon>
+              <Settings2 />
+            </template>
+            <Button variant="outline" @click="openAddAttributeDialog">
+              <Plus class="size-4 mr-2" />
+              {{ $t("pages.categoryEditPage.addAttribute") }}
+            </Button>
+          </EmptyState>
+          <InsetGroup v-else>
+            <draggable
+              v-model="attributes"
+              item-key="id"
+              handle=".drag-handle"
+              ghost-class="opacity-50"
+              class="flex flex-col gap-0.5"
+              tag="div"
+              @end="handleReorder"
+            >
+              <template #item="{ element: attribute }">
+                <div>
+                  <InsetGroupItem
+                    as="div"
+                    @click="openEditAttributeDialog(attribute)"
+                  >
+                    <template #leading>
+                      <span
+                        class="drag-handle pointer-events-auto flex size-8 cursor-grab items-center justify-center active:cursor-grabbing"
+                        @click.stop
                       >
-                        <span class="block truncate">{{ attribute.key }}</span>
-                      </TableCell>
-                      <TableCell class="hidden md:table-cell px-3">
-                        <Badge
-                          v-if="attribute.group"
-                          variant="secondary"
-                          class="inline-flex max-w-full items-center gap-1 font-normal text-xs"
-                        >
-                          <AttributeGroupIcon
-                            class="size-3.5"
-                            :group-name="attribute.group"
-                            :group-icon="attribute.groupIcon"
-                          />
-                          <span class="truncate">{{ attribute.group }}</span>
-                        </Badge>
-                        <span v-else class="text-muted-foreground">{{
-                          $t("common.emDash")
-                        }}</span>
-                      </TableCell>
-                      <TableCell class="px-3 text-muted-foreground">
-                        {{ getAttributeTypeLabel(attribute.type) }}
-                      </TableCell>
-                      <TableCell
-                        class="hidden lg:table-cell px-3 text-right tabular-nums text-muted-foreground"
-                      >
-                        {{
-                          attribute.options
-                            ? getOptionsCount(attribute.options)
-                            : $t("common.emDash")
-                        }}
-                      </TableCell>
-                      <TableCell
-                        class="text-muted-foreground hidden max-w-0 px-3 xl:table-cell"
-                      >
-                        <span class="block truncate">{{
-                          attribute.description || $t("common.emDash")
-                        }}</span>
-                      </TableCell>
-                      <TableCell class="px-2">
-                        <div
-                          class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
+                        <GripVertical class="size-4 text-muted-foreground/70" />
+                      </span>
+                    </template>
+                    <p class="truncate">
+                      {{ attribute.name }}
+                      <span
+                        v-if="attribute.isRequired"
+                        class="text-destructive"
+                        :title="$t('pages.categoryEditPage.requiredFieldTitle')"
+                      >*</span>
+                      <span
+                        v-if="attribute.isUnique"
+                        class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                        :title="$t('pages.categoryEditPage.uniqueFieldTitle')"
+                      >{{ $t("pages.categoryEditPage.uniqueBadge") }}</span>
+                    </p>
+                    <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+                      {{ attributeRowSubtitle(attribute) }}
+                    </p>
+                    <template #trailing>
+                      <AlertDialog>
+                        <AlertDialogTrigger as-child>
                           <Button
                             variant="ghost"
                             size="icon"
-                            class="size-8"
-                            @click="openEditAttributeDialog(attribute)"
+                            class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            :aria-label="$t('common.delete')"
+                            @click.stop
                           >
-                            <Pencil class="size-4" />
+                            <Trash2 class="size-4" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger as-child>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 class="size-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>{{
-                                  $t(
-                                    "pages.categoryEditPage.deleteAttributeTitle",
-                                  )
-                                }}</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {{
-                                    $t(
-                                      "pages.categoryEditPage.deleteAttributeDescription",
-                                      { name: attribute.name },
-                                    )
-                                  }}
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>{{
-                                  $t("common.cancel")
-                                }}</AlertDialogCancel>
-                                <AlertDialogAction
-                                  variant="destructive"
-                                  @click="handleDeleteAttribute(attribute.id)"
-                                  :disabled="isDeletingAttribute"
-                                >
-                                  <Spinner
-                                    v-if="isDeletingAttribute"
-                                    class="mr-2"
-                                  />
-                                  {{ $t("common.delete") }}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  </template>
-                </draggable>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{{
+                              $t("pages.categoryEditPage.deleteAttributeTitle")
+                            }}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {{
+                                $t(
+                                  "pages.categoryEditPage.deleteAttributeDescription",
+                                  { name: attribute.name },
+                                )
+                              }}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{{
+                              $t("common.cancel")
+                            }}</AlertDialogCancel>
+                            <AlertDialogAction
+                              variant="destructive"
+                              :disabled="isDeletingAttribute"
+                              @click="handleDeleteAttribute(attribute.id)"
+                            >
+                              <Spinner
+                                v-if="isDeletingAttribute"
+                                class="mr-2"
+                              />
+                              {{ $t("common.delete") }}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </template>
+                  </InsetGroupItem>
+                </div>
+              </template>
+            </draggable>
+          </InsetGroup>
+        </SettingsFormSection>
       </div>
     </PageSection>
 
@@ -1340,11 +1203,10 @@ export default {
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
-          <FieldGroup class="gap-6">
-            <section class="space-y-4">
-              <h3 class="text-sm font-medium">
-                {{ $t("pages.categoryEditPage.basicSection") }}
-              </h3>
+          <SettingsFormSection
+            class="!max-w-none"
+            :title="$t('pages.categoryEditPage.basicSection')"
+          >
               <div class="grid gap-4 sm:grid-cols-2">
                 <SettingsFormField
                   :label="$t('common.name')"
@@ -1395,14 +1257,14 @@ export default {
                   </SelectContent>
                 </Select>
               </SettingsFormField>
-            </section>
+          </SettingsFormSection>
 
-            <section v-if="showOptionsField" class="space-y-3">
-              <div class="flex items-center justify-between gap-3">
-                <h3 class="text-sm font-medium">
-                  {{ $t("pages.categoryEditPage.optionsSection") }}
-                </h3>
-                <div class="flex items-center gap-2">
+          <SettingsFormSection
+            v-if="showOptionsField"
+            class="!max-w-none"
+            :title="$t('pages.categoryEditPage.optionsSection')"
+          >
+            <template #actions>
                   <Button
                     type="button"
                     variant="ghost"
@@ -1422,8 +1284,7 @@ export default {
                     <Upload class="size-3.5 mr-1.5" />
                     {{ $t("pages.categoryEditPage.import") }}
                   </Button>
-                </div>
-              </div>
+            </template>
               <input
                 ref="optionsFileInput"
                 type="file"
@@ -1432,34 +1293,31 @@ export default {
                 @change="handleOptionsImport"
               />
 
-              <div
-                v-if="hasLargeOptions"
-                class="flex items-center justify-between gap-4 rounded-lg border px-4 py-3"
-              >
-                <div class="min-w-0">
-                  <p class="text-sm">
-                    <span class="font-medium tabular-nums">
+              <InsetGroup v-if="hasLargeOptions">
+                <InsetGroupItem as="div">
+                  <p>
+                    <span class="tabular-nums font-medium">
                       {{ editingOptionsCount.toLocaleString() }}
                     </span>
                     <span class="text-muted-foreground">
-                      {{ $t("pages.categoryEditPage.optionsWord") }}</span
-                    >
+                      {{ $t("pages.categoryEditPage.optionsWord") }}</span>
                   </p>
-                  <p class="text-xs text-muted-foreground mt-0.5">
+                  <p class="text-muted-foreground mt-0.5 text-xs font-normal">
                     {{ $t("pages.categoryEditPage.largeOptionsHint") }}
                   </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="shrink-0"
-                  @click="clearAttributeOptions"
-                >
-                  <Trash2 class="size-3.5 mr-1.5" />
-                  {{ $t("pages.categoryEditPage.clearOptions") }}
-                </Button>
-              </div>
+                  <template #trailing>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      @click="clearAttributeOptions"
+                    >
+                      <Trash2 class="size-3.5 mr-1.5" />
+                      {{ $t("pages.categoryEditPage.clearOptions") }}
+                    </Button>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
               <Textarea
                 v-else
                 v-model="attributeForm.options"
@@ -1474,22 +1332,17 @@ export default {
               </p>
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.allowCustomValuesLabel')"
+                label-for="attr-allow-custom"
+                inline
+                :description="$t('pages.categoryEditPage.allowCustomValuesHint')"
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-allow-custom"
-                    :model-value="attributeForm.allowCustomValues"
-                    @update:model-value="
-                      attributeForm.allowCustomValues = $event
-                    "
-                  />
-                  <Label
-                    for="attr-allow-custom"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.allowCustomValuesHint") }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-allow-custom"
+                  :model-value="attributeForm.allowCustomValues"
+                  @update:model-value="
+                    attributeForm.allowCustomValues = $event
+                  "
+                />
               </SettingsFormField>
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.maxValuesLabel')"
@@ -1509,13 +1362,12 @@ export default {
                   {{ $t("pages.categoryEditPage.maxValuesHint") }}
                 </template>
               </SettingsFormField>
-            </section>
+          </SettingsFormSection>
 
-            <section class="space-y-4">
-              <h3 class="text-sm font-medium">
-                {{ $t("pages.categoryEditPage.additionalSection") }}
-              </h3>
-
+          <SettingsFormSection
+            class="!max-w-none"
+            :title="$t('pages.categoryEditPage.additionalSection')"
+          >
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.defaultValueLabel')"
                 label-for="attr-default"
@@ -1600,22 +1452,17 @@ export default {
 
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.descriptionInTooltipLabel')"
+                label-for="attr-description-tooltip"
+                inline
+                :description="$t('pages.categoryEditPage.descriptionInTooltipHint')"
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-description-tooltip"
-                    :model-value="attributeForm.descriptionInTooltip"
-                    @update:model-value="
-                      attributeForm.descriptionInTooltip = $event
-                    "
-                  />
-                  <Label
-                    for="attr-description-tooltip"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.descriptionInTooltipHint") }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-description-tooltip"
+                  :model-value="attributeForm.descriptionInTooltip"
+                  @update:model-value="
+                    attributeForm.descriptionInTooltip = $event
+                  "
+                />
               </SettingsFormField>
 
               <SettingsFormField
@@ -1677,20 +1524,15 @@ export default {
               <SettingsFormField
                 v-if="isTextAttributeType"
                 :label="$t('pages.categoryEditPage.multilineLabel')"
+                label-for="attr-multiline"
+                inline
+                :description="$t('pages.categoryEditPage.multilineHint')"
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-multiline"
-                    :model-value="attributeForm.isMultiline"
-                    @update:model-value="attributeForm.isMultiline = $event"
-                  />
-                  <Label
-                    for="attr-multiline"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.multilineHint") }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-multiline"
+                  :model-value="attributeForm.isMultiline"
+                  @update:model-value="attributeForm.isMultiline = $event"
+                />
               </SettingsFormField>
 
               <SettingsFormField
@@ -1764,69 +1606,51 @@ export default {
 
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.showOnProductPageLabel')"
+                label-for="attr-visible"
+                inline
+                :description="
+                  attributeForm.isRequired
+                    ? $t('pages.categoryEditPage.showOnProductPageRequiredHint')
+                    : $t('pages.categoryEditPage.showOnProductPageHint')
+                "
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-visible"
-                    :model-value="
-                      attributeForm.isRequired ||
-                      attributeForm.showOnProductPage
-                    "
-                    :disabled="attributeForm.isRequired"
-                    @update:model-value="setShowOnProductPage"
-                  />
-                  <Label
-                    for="attr-visible"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{
-                      attributeForm.isRequired
-                        ? $t(
-                            "pages.categoryEditPage.showOnProductPageRequiredHint",
-                          )
-                        : $t("pages.categoryEditPage.showOnProductPageHint")
-                    }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-visible"
+                  :model-value="
+                    attributeForm.isRequired ||
+                    attributeForm.showOnProductPage
+                  "
+                  :disabled="attributeForm.isRequired"
+                  @update:model-value="setShowOnProductPage"
+                />
               </SettingsFormField>
 
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.requiredFieldTitle')"
+                label-for="attr-required"
+                inline
+                :description="$t('pages.categoryEditPage.requiredFieldHint')"
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-required"
-                    :model-value="attributeForm.isRequired"
-                    @update:model-value="setAttributeRequired"
-                  />
-                  <Label
-                    for="attr-required"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.requiredFieldHint") }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-required"
+                  :model-value="attributeForm.isRequired"
+                  @update:model-value="setAttributeRequired"
+                />
               </SettingsFormField>
 
               <SettingsFormField
                 :label="$t('pages.categoryEditPage.uniqueFieldTitle')"
+                label-for="attr-unique"
+                inline
+                :description="$t('pages.categoryEditPage.uniqueFieldHint')"
               >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="attr-unique"
-                    :model-value="attributeForm.isUnique"
-                    @update:model-value="attributeForm.isUnique = $event"
-                  />
-                  <Label
-                    for="attr-unique"
-                    class="font-normal text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.uniqueFieldHint") }}
-                  </Label>
-                </div>
+                <Switch
+                  id="attr-unique"
+                  :model-value="attributeForm.isUnique"
+                  @update:model-value="attributeForm.isUnique = $event"
+                />
               </SettingsFormField>
-            </section>
-          </FieldGroup>
+          </SettingsFormSection>
         </div>
 
         <DialogFooter variant="bar">

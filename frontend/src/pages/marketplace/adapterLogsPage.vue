@@ -19,9 +19,7 @@ import {
   LogFilterSelect,
   LogHttpMethodFilter,
   LogHttpStatusFilter,
-  LogExchangeDetail,
-  LogCodeBlock,
-  LogMetaGrid,
+  AdapterLogDetailSheet,
   LogSelectCheckbox,
   LogSortHeader,
   LOG_FILTER_ALL,
@@ -61,9 +59,7 @@ export default {
     LogFilterSelect,
     LogHttpMethodFilter,
     LogHttpStatusFilter,
-    LogExchangeDetail,
-    LogCodeBlock,
-    LogMetaGrid,
+    AdapterLogDetailSheet,
     LogSelectCheckbox,
     LogSortHeader,
     ScrollText,
@@ -502,7 +498,7 @@ export default {
       </Table>
     </LogListPanel>
 
-    <LogExchangeDetail
+    <AdapterLogDetailSheet
       v-model:open="detailOpen"
       :loading="isDetailLoading"
       :detail="detail"
@@ -513,26 +509,6 @@ export default {
           : $t('marketplace.adapterLogsPage.request')
       "
       :description="detail?.path || '…'"
-      show-headers
-      json-bodies
-      body-download-base-url="/adapter-http-logs"
-    >
-      <template #meta>
-        <LogMetaGrid :items="detailMeta">
-          <template #item-3="{ item }">
-            <span class="truncate">{{ item.value }}</span>
-          </template>
-        </LogMetaGrid>
-      </template>
-
-      <template #overview-extra="{ detail: d }">
-        <LogCodeBlock label="URL" :text="d.url" max-height-class="max-h-28" />
-        <div class="space-y-1 text-xs text-muted-foreground">
-          <div>storeId: {{ d.storeId }}</div>
-          <div>connectionId: {{ d.connectionId }}</div>
-          <div v-if="d.operationId">operationId: {{ d.operationId }}</div>
-        </div>
-      </template>
-    </LogExchangeDetail>
+    />
   </div>
 </template>

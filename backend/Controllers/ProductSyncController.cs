@@ -1893,6 +1893,10 @@ public class ProductSyncController : ControllerBase
                     linkStatus = link?.status.ToString(),
                     externalProductId = link?.externalProductId,
                     externalSku = link?.externalSku,
+                    lastSyncAt = link?.lastSyncAt,
+                    lastErrorMessage = link?.lastErrorMessage,
+                    externalPrice = link?.externalPrice,
+                    externalStock = link?.externalStock,
                     // Capabilities
                     canExport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct) ?? false,
                     canImport = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct) ?? false,

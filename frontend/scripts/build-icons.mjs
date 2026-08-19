@@ -111,7 +111,7 @@ const MAP = {
   Pencil: "Edit01Icon",
   Play: "PlayIcon",
   Plug: "Plug01Icon",
-  Plus: "Add01Icon",
+  Plus: "PlusSignIcon",
   Puzzle: "PuzzleIcon",
   RefreshCw: "RefreshIcon",
   Ruler: "RulerIcon",

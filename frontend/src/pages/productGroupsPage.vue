@@ -1,8 +1,8 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -25,20 +25,16 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import CreateProductGroupDialog from "@/components/products/CreateProductGroupDialog.vue";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 
 export default {
   components: {
     AppPageChrome,
     PageSection,
+    Spinner,
     Button,
-    Badge,
     Plus,
     Layers,
     Trash2,
@@ -52,12 +48,8 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    InsetGroup,
+    InsetGroupItem,
     ConfirmDialog,
     CreateProductGroupDialog,
   },
@@ -202,30 +194,11 @@ export default {
       this.$router.push(`/product-groups/${groupId}/edit`);
     },
 
-    getSyncStatusVariant(status) {
-      switch (status) {
-        case "Synced":
-          return "default";
-        case "Pending":
-          return "secondary";
-        case "Error":
-          return "destructive";
-        default:
-          return "outline";
-      }
-    },
-
-    getSyncStatusLabel(status) {
-      switch (status) {
-        case "Synced":
-          return this.$t("pages.productGroupsPage.syncStatus.synced");
-        case "Pending":
-          return this.$t("pages.productGroupsPage.syncStatus.pending");
-        case "Error":
-          return this.$t("pages.productGroupsPage.syncStatus.error");
-        default:
-          return status;
-      }
+    groupMarketplaceNames(group) {
+      return (group.marketplaceLinks || [])
+        .map((link) => link.connectionName)
+        .filter(Boolean)
+        .join(" · ");
     },
   },
   mounted() {
@@ -236,127 +209,107 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <div class="flex min-h-0 flex-1 flex-col">
-    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
-      <Button @click="showCreateDialog = true">
-        <Plus class="size-4 mr-2" />
-        {{ $t("pages.productGroupsPage.createGroup") }}
-      </Button>
-      <CreateProductGroupDialog
-        v-model:open="showCreateDialog"
-        @created="onGroupCreated"
-      />
-    </div>
-
-    <PageSection
-      :loading="isLoading"
-      :empty="groups.length === 0"
-      :empty-icon="Layers"
-      :empty-title="$t('pages.productGroupsPage.emptyTitle')"
-      :empty-description="$t('pages.productGroupsPage.emptyDescription')"
-    >
-      <template #empty-action>
+    <div class="flex w-full max-w-xl flex-col">
+      <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
         <Button @click="showCreateDialog = true">
           <Plus class="size-4 mr-2" />
           {{ $t("pages.productGroupsPage.createGroup") }}
         </Button>
-      </template>
+        <CreateProductGroupDialog
+          v-model:open="showCreateDialog"
+          @created="onGroupCreated"
+        />
+      </div>
 
-      <div class="overflow-hidden rounded-lg border">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="hover:bg-transparent">
-                <TableHead class="w-10">
-                  <Checkbox
-                    :model-value="allPageSelected"
-                    :indeterminate="somePageSelected"
-                    :aria-label="$t('pages.productGroupsPage.selectAll')"
-                    @update:model-value="(v) => toggleAllPage(v === true)"
-                  />
-                </TableHead>
-                <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="hidden md:table-cell w-[30%]">{{ $t("common.description") }}</TableHead>
-                <TableHead class="w-28 text-right">{{ $t("pages.productGroupsPage.productsHeader") }}</TableHead>
-                <TableHead class="hidden sm:table-cell w-48">{{ $t("pages.productGroupsPage.marketplacesHeader") }}</TableHead>
-                <TableHead class="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="group in groups"
-                :key="group.id"
-                class="group cursor-pointer"
-                :class="isSelected(group) ? 'bg-muted/30' : ''"
-                @click="openGroup(group.id)"
-              >
-                <TableCell @click.stop>
+      <PageSection
+        :loading="isLoading"
+        :empty="groups.length === 0"
+        :empty-icon="Layers"
+        :empty-title="$t('pages.productGroupsPage.emptyTitle')"
+        :empty-description="$t('pages.productGroupsPage.emptyDescription')"
+      >
+        <template #empty-action>
+          <Button @click="showCreateDialog = true">
+            <Plus class="size-4 mr-2" />
+            {{ $t("pages.productGroupsPage.createGroup") }}
+          </Button>
+        </template>
+
+        <div class="flex flex-col gap-3">
+          <InsetGroup>
+            <InsetGroupItem as="div">
+              <template #leading>
+                <Checkbox
+                  :model-value="allPageSelected"
+                  :indeterminate="somePageSelected"
+                  :aria-label="$t('pages.productGroupsPage.selectAll')"
+                  @update:model-value="(v) => toggleAllPage(v === true)"
+                />
+              </template>
+              <p class="text-muted-foreground text-sm font-normal">
+                {{ $t("pages.productGroupsPage.selectAll") }}
+              </p>
+            </InsetGroupItem>
+            <InsetGroupItem
+              v-for="group in groups"
+              :key="group.id"
+              show-chevron
+              @click="openGroup(group.id)"
+            >
+              <template #leading>
+                <span @click.stop>
                   <Checkbox
                     :model-value="isSelected(group)"
                     :aria-label="group.name"
                     @update:model-value="(v) => toggleRow(group, v === true)"
                   />
-                </TableCell>
-                <TableCell class="max-w-0 font-medium">
-                  <span class="block truncate">{{ group.name }}</span>
-                  <span
-                    v-if="group.description"
-                    class="text-muted-foreground block truncate text-xs md:hidden"
-                  >
-                    {{ group.description }}
-                  </span>
-                </TableCell>
-                <TableCell class="text-muted-foreground hidden max-w-0 md:table-cell">
-                  <span class="block truncate">{{ group.description || $t("common.emDash") }}</span>
-                </TableCell>
-                <TableCell class="text-muted-foreground text-right tabular-nums">
-                  {{ group.membersCount || 0 }}
-                </TableCell>
-                <TableCell class="hidden whitespace-normal sm:table-cell">
-                  <div
-                    v-if="group.marketplaceLinks && group.marketplaceLinks.length > 0"
-                    class="flex flex-wrap gap-1"
-                  >
-                    <Badge
-                      v-for="link in group.marketplaceLinks"
-                      :key="link.connectionId"
-                      :variant="getSyncStatusVariant(link.status)"
-                      class="max-w-full truncate text-[11px] font-normal"
+                </span>
+              </template>
+              <p class="truncate">{{ group.name }}</p>
+              <p
+                v-if="group.description"
+                class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+              >
+                {{ group.description }}
+              </p>
+              <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+                {{
+                  $t("pages.productGroupsPage.rowMeta", {
+                    count: group.membersCount || 0,
+                  })
+                }}
+                <template v-if="groupMarketplaceNames(group)">
+                  · {{ groupMarketplaceNames(group) }}
+                </template>
+              </p>
+              <template #trailing>
+                <ConfirmDialog
+                  :title="$t('pages.productGroupsPage.deleteTitle')"
+                  :description="$t('pages.productGroupsPage.deleteDescription', { name: group.name })"
+                  :confirm-label="$t('common.delete')"
+                  :loading="isDeleting"
+                  @confirm="handleDeleteGroup(group.id)"
+                >
+                  <template #trigger>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      :aria-label="$t('common.delete')"
+                      @click.stop
                     >
-                      {{ link.connectionName }}
-                    </Badge>
-                  </div>
-                  <span v-else class="text-muted-foreground">{{ $t("common.emDash") }}</span>
-                </TableCell>
-                <TableCell class="px-2">
-                  <ConfirmDialog
-                    :title="$t('pages.productGroupsPage.deleteTitle')"
-                    :description="$t('pages.productGroupsPage.deleteDescription', { name: group.name })"
-                    :confirm-label="$t('common.delete')"
-                    :loading="isDeleting"
-                    @confirm="handleDeleteGroup(group.id)"
-                  >
-                    <template #trigger>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="text-destructive hover:bg-destructive/10 hover:text-destructive size-8 opacity-0 transition-opacity group-hover:opacity-100"
-                        @click.stop
-                      >
-                        <Trash2 class="size-4" />
-                      </Button>
-                    </template>
-                  </ConfirmDialog>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-        <div
-          v-if="hasSelection"
-          class="bg-background flex items-center justify-between border-t px-3 py-2"
-        >
-          <div class="flex items-center gap-2">
+                      <Trash2 class="size-4" />
+                    </Button>
+                  </template>
+                </ConfirmDialog>
+              </template>
+            </InsetGroupItem>
+          </InsetGroup>
+
+          <div
+            v-if="hasSelection"
+            class="flex flex-wrap items-center gap-2 px-1"
+          >
             <span class="text-sm font-medium">
               {{ $t("pages.productGroupsPage.selectedCount", { count: selectedCount }) }}
             </span>
@@ -374,30 +327,29 @@ export default {
             </Button>
           </div>
         </div>
-      </div>
-    </PageSection>
+      </PageSection>
 
-    <AlertDialog v-model:open="isBulkDeleteDialogOpen">
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ $t("pages.productGroupsPage.bulkDeleteTitle") }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ $t("pages.productGroupsPage.bulkDeleteDescription", { count: selectedCount }) }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel :disabled="isDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            :disabled="isDeleting"
-            @click.prevent="handleBulkDelete"
-          >
-            <Spinner v-if="isDeleting" class="mr-2" />
-            {{ $t("common.delete") }}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog v-model:open="isBulkDeleteDialogOpen">
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{{ $t("pages.productGroupsPage.bulkDeleteTitle") }}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {{ $t("pages.productGroupsPage.bulkDeleteDescription", { count: selectedCount }) }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel :disabled="isDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              :disabled="isDeleting"
+              @click.prevent="handleBulkDelete"
+            >
+              <Spinner v-if="isDeleting" class="mr-2" />
+              {{ $t("common.delete") }}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   </AppPageChrome>
 </template>

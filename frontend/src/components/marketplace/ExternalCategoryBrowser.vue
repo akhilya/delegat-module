@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
+import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
@@ -33,6 +37,8 @@ export default {
     Button,
     Input,
     EmptyState,
+    InsetGroup,
+    InsetGroupItem,
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -172,9 +178,7 @@ export default {
       </BreadcrumbList>
     </Breadcrumb>
 
-    <div
-      class="flex min-h-[12rem] flex-1 flex-col overflow-hidden rounded-lg border"
-    >
+    <InsetGroup scrollable class="min-h-[12rem] flex-1">
       <div
         v-if="loading"
         class="flex flex-1 items-center justify-center py-10"
@@ -197,32 +201,23 @@ export default {
           <slot name="empty-action" />
         </EmptyState>
       </div>
-      <div v-else class="min-h-0 flex-1 overflow-y-auto p-1.5">
-        <button
+      <div v-else>
+        <InsetGroupItem
           v-for="cat in categories"
           :key="cat.id"
-          type="button"
-          class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
-          :class="{
-            'bg-accent': !cat.hasChildren && selectedId === cat.id,
-          }"
+          :selected="!cat.hasChildren && selectedId === cat.id"
+          :show-chevron="!!cat.hasChildren"
           @click="onRowClick(cat)"
         >
-          <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium">{{ cat.name }}</div>
-            <div
-              v-if="cat.fullPath"
-              class="truncate text-xs text-muted-foreground"
-            >
-              {{ cat.fullPath }}
-            </div>
-          </div>
-          <ChevronRight
-            v-if="cat.hasChildren"
-            class="ml-2 size-4 shrink-0 text-muted-foreground"
-          />
-        </button>
+          <p class="truncate">{{ cat.name }}</p>
+          <p
+            v-if="cat.fullPath"
+            class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+          >
+            {{ cat.fullPath }}
+          </p>
+        </InsetGroupItem>
       </div>
-    </div>
+    </InsetGroup>
   </div>
 </template>

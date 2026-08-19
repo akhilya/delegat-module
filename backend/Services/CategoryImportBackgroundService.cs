@@ -62,11 +62,10 @@ public sealed class CategoryImportBackgroundService : BackgroundService
 
         var staleBefore = DateTime.UtcNow - InProgressTimeout;
         var job = await context.pendingCategoryImports
-            .Where(j => (j.status == CategoryImportStatus.Pending
+            .Where(j => j.status == CategoryImportStatus.Pending
                          || (j.status == CategoryImportStatus.Failed && j.retryCount < PendingCategoryImport.MAX_RETRIES)
                          || (j.status == CategoryImportStatus.InProgress
                              && (j.lastAttemptAt ?? j.createdAt) < staleBefore))
-                        && !context.operations.Any(o => o.operationId == j.operationId && o.status == "paused"))
             .OrderBy(j => j.createdAt)
             .FirstOrDefaultAsync(ct);
 
@@ -78,11 +77,15 @@ public sealed class CategoryImportBackgroundService : BackgroundService
             .Select(o => o.status)
             .FirstOrDefaultAsync(ct);
 
-        if (opStatus is "cancelled")
+        if (OperationLifecycle.IsStopRequested(opStatus))
         {
             job.status = CategoryImportStatus.Cancelled;
             job.completedAt = DateTime.UtcNow;
             await context.SaveChangesAsync(ct);
+            if (opStatus == OperationLifecycle.Paused)
+            {
+                await _operationLogger.FinishAsync(job.operationId, job.storeId, "cancelled", "Stopped");
+            }
             return;
         }
 
@@ -111,14 +114,41 @@ public sealed class CategoryImportBackgroundService : BackgroundService
                 selectedKeys = JsonSerializer.Deserialize<List<string>>(job.selectedFieldKeysJson);
             }
 
-            var result = await importService.ImportExternalCategoryAsync(
-                connection,
-                job.externalCategoryId,
-                job.localCategoryName,
-                job.externalCategoryName,
-                job.localCategoryId,
-                selectedKeys,
-                ct);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var watcher = OperationStopWatcher.WatchAsync(_scopeFactory, job.operationId, linked);
+            CategoryImportResult result;
+            try
+            {
+                result = await importService.ImportExternalCategoryAsync(
+                    connection,
+                    job.externalCategoryId,
+                    job.localCategoryName,
+                    job.externalCategoryName,
+                    job.localCategoryId,
+                    selectedKeys,
+                    linked.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                job.status = CategoryImportStatus.Cancelled;
+                job.completedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync(CancellationToken.None);
+                await _operationLogger.FinishAsync(job.operationId, job.storeId, "cancelled", "Stopped");
+                return;
+            }
+            finally
+            {
+                await linked.CancelAsync();
+                try { await watcher; } catch { /* ignored */ }
+            }
+
+            if (await OperationLifecycle.IsStopRequestedAsync(context, job.operationId, ct))
+            {
+                job.status = CategoryImportStatus.Cancelled;
+                job.completedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync(ct);
+                return;
+            }
 
             if (!result.IsSuccess)
             {
@@ -137,6 +167,10 @@ public sealed class CategoryImportBackgroundService : BackgroundService
                 $"Category imported: {result.Message} (attributes: {result.AttributesCreated})");
 
             await MaybeFinishStandaloneAsync(context, job, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

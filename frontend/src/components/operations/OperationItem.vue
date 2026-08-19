@@ -12,36 +12,30 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   RefreshCw,
-  X,
-  Clock,
-  Pause,
-  Play,
-  Square,
   Ban,
   ImageDown,
   ArrowRightLeft,
   Trash2,
   Sparkles,
   Pencil,
-  User,
   Cable,
   Wand2,
   Search,
   Copy,
   Check,
-  Loader2,
   FolderTree,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import Progress from "@/components/ui/progress/Progress.vue";
 import {
   AlertDialog,
@@ -62,12 +56,13 @@ import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { artifactDownloadUrl, triggerBrowserDownload } from "@/lib/artifactDownload";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { canStopOperation } from "@/lib/operationsControl";
 
 const props = defineProps({
   operation: { type: Object, required: true },
 });
 
-const emit = defineEmits(["retry", "remove", "pause", "resume", "stop"]);
+const emit = defineEmits(["retry", "remove", "stop"]);
 
 const { formatTime, loadMemberships } = useStoreDateTime();
 loadMemberships();
@@ -154,12 +149,8 @@ const typeIcon = computed(() => {
   }
 });
 
-const statusIcon = computed(() => {
+const finishedStatusIcon = computed(() => {
   switch (props.operation.status) {
-    case "running":
-      return Loader2;
-    case "paused":
-      return Pause;
     case "completed":
       return CheckCircle;
     case "failed":
@@ -169,7 +160,7 @@ const statusIcon = computed(() => {
     case "cancelled":
       return Ban;
     default:
-      return Loader2;
+      return null;
   }
 });
 
@@ -192,22 +183,6 @@ const statusClass = computed(() => {
   }
 });
 
-const statusBadgeClass = computed(() => {
-  switch (props.operation.status) {
-    case "running":
-      return "bg-primary/10 text-primary border-transparent text-[10px] px-1.5 py-0";
-    case "paused":
-    case "partial":
-      return "bg-warning/10 text-warning border-transparent text-[10px] px-1.5 py-0";
-    case "completed":
-      return "bg-success/10 text-success border-transparent text-[10px] px-1.5 py-0";
-    case "failed":
-      return "bg-error/10 text-error border-transparent text-[10px] px-1.5 py-0";
-    default:
-      return "bg-muted text-muted-foreground border-transparent text-[10px] px-1.5 py-0";
-  }
-});
-
 const progressPercent = computed(() => {
   const p = props.operation.progress;
   if (!p || p.total === 0) return 0;
@@ -219,36 +194,22 @@ const isFinished = computed(() =>
 );
 
 const isRunning = computed(() => props.operation.status === "running");
-const isPaused = computed(() => props.operation.status === "paused");
-const NON_CANCELLABLE_TYPES = new Set([
-  "single-export",
-  "single-import",
-  "price-export",
-  "price-import",
-  "stock-export",
-  "stock-import",
-  "excel-import",
-  "catalog-match",
-  "catalog-scrape",
-  "tool",
-]);
 
-const supportsPause = computed(() =>
-  ![
-    "file-upload",
-    "file-delete",
-    "folder-archive",
-    "folder-delete",
-    "product-transfer",
-    ...NON_CANCELLABLE_TYPES,
-  ].includes(props.operation.type),
+const canStop = computed(() =>
+  canStopOperation(props.operation.type, props.operation.status),
 );
-const canStop = computed(
-  () =>
-    (isRunning.value || isPaused.value) &&
-    !NON_CANCELLABLE_TYPES.has(props.operation.type),
+
+const showProgress = computed(() =>
+  !isFinished.value
+  && props.operation.progress
+  && props.operation.progress.total > 0,
 );
-const canExpand = computed(() => true);
+
+const canRetry = computed(() =>
+  isFinished.value
+  && props.operation.canRetry
+  && (props.operation.progress?.failed ?? 0) > 0,
+);
 
 function formatDuration(ms) {
   if (ms < 1000) return t("operations.durationMs", { ms });
@@ -273,6 +234,18 @@ const statusLabel = computed(() => {
   const status = props.operation.status;
   if (!["running", "paused", "completed", "failed", "partial", "cancelled"].includes(status)) return "";
   return t(`operations.status.${status}`);
+});
+
+const subtitleRest = computed(() => {
+  const parts = [];
+  if (props.operation.authorUserName) parts.push(props.operation.authorUserName);
+  if (props.operation.connectionName) parts.push(props.operation.connectionName);
+  parts.push(elapsed.value);
+  const p = props.operation.progress;
+  if (p && p.total > 0) {
+    parts.push(`${(p.completed || 0) + (p.failed || 0)}/${p.total}`);
+  }
+  return parts;
 });
 
 const canDownloadArtifact = computed(() =>
@@ -434,216 +407,147 @@ function downloadArtifact() {
     artifactDownloadUrl(http.defaults.baseURL, props.operation.id),
   );
 }
+
+function onStop() {
+  emit("stop", props.operation.id);
+}
 </script>
 
 <template>
-  <Collapsible v-model:open="expanded" :disabled="!canExpand">
-    <div class="overflow-hidden rounded-lg border bg-card">
-      <CollapsibleTrigger as-child :disabled="!canExpand">
-        <button
-          type="button"
-          class="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        >
-          <div class="flex items-start gap-2.5">
-            <component
-              :is="typeIcon"
-              class="size-4 text-muted-foreground shrink-0 mt-0.5"
-            />
-            <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium truncate flex-1">
-                  {{ operation.title }}
-                </span>
-                <Badge :class="statusBadgeClass" class="shrink-0">
-                  {{ statusLabel }}
-                </Badge>
-                <component
-                  :is="statusIcon"
-                  class="size-3.5 shrink-0"
-                  :class="[
-                    statusClass,
-                    operation.status === 'running' ? 'animate-spin' : '',
-                  ]"
-                />
-                <component
-                  :is="expanded ? ChevronUp : ChevronDown"
-                  class="size-3.5 text-muted-foreground shrink-0"
-                />
-              </div>
-
-              <!-- Always-visible identity / timing meta (independent of logs) -->
-              <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-muted-foreground">
-                <span
-                  v-if="operation.authorUserName"
-                  class="inline-flex items-center gap-1 min-w-0 max-w-full"
-                >
-                  <User class="size-3 shrink-0 opacity-70" />
-                  <span class="truncate">{{ operation.authorUserName }}</span>
-                </span>
-                <span
-                  v-if="operation.connectionName"
-                  class="inline-flex items-center gap-1 min-w-0 max-w-[40%]"
-                >
-                  <Cable class="size-3 shrink-0 opacity-70" />
-                  <span class="truncate">{{ operation.connectionName }}</span>
-                </span>
-                <span class="inline-flex items-center gap-1 tabular-nums shrink-0">
-                  <Clock class="size-3 shrink-0 opacity-70" />
-                  {{ elapsed }}
-                </span>
-                <span class="tabular-nums shrink-0 opacity-80">
-                  {{ formatTime(operation.startedAt) }}
-                  <template v-if="operation.finishedAt">
-                    → {{ formatTime(operation.finishedAt) }}
-                  </template>
-                </span>
-              </div>
-
-              <p
-                v-if="isFinished && operation.summary"
-                class="text-[11px] text-muted-foreground/90 line-clamp-2 leading-snug"
-              >
-                {{ operation.summary }}
-              </p>
-            </div>
+  <InsetGroup>
+    <Collapsible v-model:open="expanded" class="w-full">
+      <CollapsibleTrigger as-child>
+        <InsetGroupItem>
+          <template #leading>
+            <component :is="typeIcon" class="size-4 text-muted-foreground" />
+          </template>
+          <p class="truncate">{{ operation.title }}</p>
+          <p
+            v-if="subtitleRest.length"
+            class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+          >
+            <template v-for="(part, idx) in subtitleRest" :key="idx">
+              <span v-if="idx > 0" class="text-muted-foreground/50"> · </span>
+              <span class="tabular-nums">{{ part }}</span>
+            </template>
+          </p>
+          <p
+            v-if="isFinished && operation.summary"
+            class="mt-0.5 line-clamp-2 text-xs font-normal leading-snug text-muted-foreground"
+          >
+            {{ operation.summary }}
+          </p>
+          <div
+            v-if="showProgress"
+            class="mt-1.5 flex items-center gap-2"
+          >
+            <Progress :model-value="progressPercent" class="h-1 flex-1" />
+            <span class="shrink-0 text-xs tabular-nums text-muted-foreground">
+              {{ Math.round(progressPercent) }}%
+            </span>
           </div>
-        </button>
+          <template #trailing>
+            <div class="flex items-center gap-1" @click.stop>
+              <Button
+                v-if="canStop"
+                variant="ghost"
+                size="sm"
+                class="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                @click="onStop"
+              >
+                {{ t("operations.stop") }}
+              </Button>
+              <Spinner
+                v-if="isRunning"
+                size="xs"
+                class="text-primary"
+                :label="statusLabel"
+                :title="statusLabel"
+              />
+              <component
+                :is="finishedStatusIcon"
+                v-else-if="finishedStatusIcon"
+                class="size-4"
+                :class="statusClass"
+                :title="statusLabel"
+                :aria-label="statusLabel"
+              />
+            </div>
+          </template>
+        </InsetGroupItem>
       </CollapsibleTrigger>
 
-      <div
-        v-if="!isFinished && operation.progress && operation.progress.total > 0"
-        class="px-3 pb-2"
-      >
-        <div class="flex items-center gap-2">
-          <Progress :model-value="progressPercent" class="h-1 flex-1" />
-          <span class="text-[10px] text-muted-foreground tabular-nums shrink-0">
-            {{ Math.round(progressPercent) }}%
-          </span>
-        </div>
-      </div>
-
       <CollapsibleContent>
-        <div class="px-3 pb-3 space-y-2.5 border-t border-border/60 pt-2.5">
+        <div class="border-t border-border/60 px-1 pb-1 pt-1.5">
           <div
-            v-if="!isFinished && operation.progress"
-            class="grid grid-cols-4 gap-1.5 text-center text-[11px]"
+            v-if="loadingLogs"
+            class="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground"
           >
-            <div class="bg-muted/50 rounded-md px-1.5 py-1.5">
-              <div class="font-medium tabular-nums">{{ operation.progress.total }}</div>
-              <div class="text-muted-foreground">{{ t("operations.total") }}</div>
-            </div>
-            <div class="bg-warning/10 rounded-md px-1.5 py-1.5">
-              <div class="font-medium text-warning-foreground tabular-nums">
-                {{ operation.progress.pending }}
-              </div>
-              <div class="text-muted-foreground">{{ t("operations.pending") }}</div>
-            </div>
-            <div class="bg-success/10 rounded-md px-1.5 py-1.5">
-              <div class="font-medium text-success-foreground tabular-nums">
-                {{ operation.progress.completed }}
-              </div>
-              <div class="text-muted-foreground">{{ t("operations.completed") }}</div>
-            </div>
-            <div class="bg-error/10 rounded-md px-1.5 py-1.5">
-              <div class="font-medium text-error-foreground tabular-nums">
-                {{ operation.progress.failed }}
-              </div>
-              <div class="text-muted-foreground">{{ t("operations.errors") }}</div>
-            </div>
-          </div>
-
-          <div v-if="loadingLogs" class="flex items-center gap-2 text-xs text-muted-foreground py-2">
             <Spinner size="xs" />
             {{ t("operations.loadingLogs") }}
           </div>
           <OperationLogTimeline v-else-if="hasLogs" :logs="operation.logs" />
           <div
             v-else-if="showEmptyLogs"
-            class="rounded-md border border-dashed bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground"
+            class="px-2 py-1 text-xs text-muted-foreground"
           >
-            <p class="font-medium text-foreground/80">{{ emptyLogsTitle }}</p>
+            <p class="font-medium text-foreground">{{ emptyLogsTitle }}</p>
             <p class="mt-0.5 leading-snug">{{ emptyLogsDescription }}</p>
           </div>
 
-          <div class="flex flex-wrap items-center gap-1.5 pt-1">
+          <div class="mt-1 flex flex-col">
             <Button
-              v-if="isRunning && supportsPause"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click.stop="emit('pause', operation.id)"
-            >
-              <Pause class="size-3 mr-1" />
-              {{ t("operations.pause") }}
-            </Button>
-            <Button
-              v-if="isPaused && supportsPause"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click.stop="emit('resume', operation.id)"
-            >
-              <Play class="size-3 mr-1" />
-              {{ t("operations.resume") }}
-            </Button>
-            <Button
-              v-if="canStop"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs text-error hover:text-error"
-              @click.stop="emit('stop', operation.id)"
-            >
-              <Square class="size-3 mr-1" />
-              {{ t("operations.stop") }}
-            </Button>
-            <Button
-              v-if="isFinished && operation.canRetry && operation.progress?.failed > 0"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click.stop="emit('retry', operation.id)"
-            >
-              <RefreshCw class="size-3 mr-1" />
-              {{ t("operations.retry", { count: operation.progress.failed }) }}
-            </Button>
-            <Button
-              v-if="canDownloadArtifact"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click.stop="downloadArtifact"
-            >
-              <Download class="size-3 mr-1" />
-              {{ t("operations.downloadArtifact") }}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
+              variant="ghost"
+              size="xs"
+              class="h-7 w-full justify-start text-muted-foreground"
               :disabled="copyingLogs"
-              @click.stop="copyLogs"
+              @click="copyLogs"
             >
-              <Check v-if="logsCopied" class="size-3 mr-1 text-success" />
-              <Copy v-else class="size-3 mr-1" />
+              <Check v-if="logsCopied" class="size-3.5 text-success" />
+              <Copy v-else class="size-3.5" />
               {{ logsCopied ? t("operations.logsCopiedShort") : t("operations.copyLogs") }}
             </Button>
             <Button
               v-if="showExplainAi"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
+              variant="ghost"
+              size="xs"
+              class="h-7 w-full justify-start text-muted-foreground"
               :disabled="explainingWithAi || store.state.aiChat.isLoading"
-              @click.stop="explainWithAi"
+              @click="explainWithAi"
             >
-              <Spinner v-if="explainingWithAi" size="xs" class="mr-1" />
-              <Sparkles v-else class="size-3 mr-1" />
+              <Spinner v-if="explainingWithAi" size="xs" />
+              <Sparkles v-else class="size-3.5" />
               {{ t("operations.explainWithAi") }}
             </Button>
-            <div class="flex-1" />
+            <Button
+              v-if="canRetry"
+              variant="ghost"
+              size="xs"
+              class="h-7 w-full justify-start text-muted-foreground"
+              @click="emit('retry', operation.id)"
+            >
+              <RefreshCw class="size-3.5" />
+              {{ t("operations.retry", { count: operation.progress.failed }) }}
+            </Button>
+            <Button
+              v-if="canDownloadArtifact"
+              variant="ghost"
+              size="xs"
+              class="h-7 w-full justify-start text-muted-foreground"
+              @click="downloadArtifact"
+            >
+              <Download class="size-3.5" />
+              {{ t("operations.downloadArtifact") }}
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-7 w-7" @click.stop>
-                  <X class="size-3.5" />
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  class="h-7 w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 class="size-3.5" />
+                  {{ t("operations.deleteConfirm") }}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -664,6 +568,6 @@ function downloadArtifact() {
           </div>
         </div>
       </CollapsibleContent>
-    </div>
-  </Collapsible>
+    </Collapsible>
+  </InsetGroup>
 </template>

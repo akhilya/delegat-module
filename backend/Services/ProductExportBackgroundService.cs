@@ -106,26 +106,20 @@ public class ProductExportBackgroundService : BackgroundService
             var connectionId = group.Key;
             var groupItems = group.ToList();
 
-            // Check if any operation in this group is paused or cancelled
             var batchId = groupItems.FirstOrDefault(i => i.batchId != null)?.batchId;
-            if (batchId != null)
+            if (batchId != null
+                && await OperationLifecycle.IsStopRequestedAsync(context, batchId, ct))
             {
-                var opStatus = await context.operations.AsNoTracking()
-                    .Where(o => o.operationId == batchId)
-                    .Select(o => o.status)
-                    .FirstOrDefaultAsync(ct);
-
-                if (opStatus is "paused" or "cancelled")
-                {
-                    _logger.LogInformation("Operation {BatchId} is in status {Status}, cancelling queue rows", batchId, opStatus);
-                    await context.pendingProductExports
-                        .Where(p => p.batchId == batchId &&
-                            (p.status == ProductExportStatus.Pending
-                             || p.status == ProductExportStatus.InProgress
-                             || p.status == ProductExportStatus.Failed))
-                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
-                    continue;
-                }
+                _logger.LogInformation("Operation {BatchId} was stopped, cancelling queue rows", batchId);
+                await context.pendingProductExports
+                    .Where(p => p.batchId == batchId &&
+                        (p.status == ProductExportStatus.Pending
+                         || p.status == ProductExportStatus.InProgress
+                         || p.status == ProductExportStatus.Failed))
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
+                var storeId = groupItems.First().storeId;
+                await _operationLogger.FinishAsync(batchId, storeId, "cancelled", "Stopped");
+                continue;
             }
 
             // Check if adapter supports bulk export
@@ -148,6 +142,17 @@ public class ProductExportBackgroundService : BackgroundService
                 {
                     if (ct.IsCancellationRequested)
                         break;
+                    if (pending.batchId != null
+                        && await OperationLifecycle.IsStopRequestedAsync(context, pending.batchId, ct))
+                    {
+                        await context.pendingProductExports
+                            .Where(p => p.batchId == pending.batchId &&
+                                (p.status == ProductExportStatus.Pending
+                                 || p.status == ProductExportStatus.InProgress
+                                 || p.status == ProductExportStatus.Failed))
+                            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
+                        break;
+                    }
 
                     bool isPermanent;
                     try
@@ -213,9 +218,13 @@ public class ProductExportBackgroundService : BackgroundService
             await _operationLogger.ProgressAsync(firstItem.batchId, firstItem.storeId, total, completed, failed);
         }
 
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var watcher = firstItem.batchId != null
+            ? OperationStopWatcher.WatchAsync(_scopeFactory, firstItem.batchId, linked)
+            : Task.CompletedTask;
         try
         {
-            var result = await productSyncService.ExportProductsBulkAsync(productIds, connectionId, ct);
+            var result = await productSyncService.ExportProductsBulkAsync(productIds, connectionId, linked.Token);
 
             foreach (var itemResult in result.Items
                 .GroupBy(r => r.ProductId)
@@ -260,6 +269,11 @@ public class ProductExportBackgroundService : BackgroundService
                 }
             }
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            foreach (var pending in pendingItems.Where(p => p.status == ProductExportStatus.InProgress))
+                pending.status = ProductExportStatus.Cancelled;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Bulk export failed for connectionId={ConnectionId}", connectionId);
@@ -275,6 +289,11 @@ public class ProductExportBackgroundService : BackgroundService
 
             if (isPermanent)
                 await CancelRemainingExportsAsync(context, pendingItems.First(), ct);
+        }
+        finally
+        {
+            await linked.CancelAsync();
+            try { await watcher; } catch { /* ignored */ }
         }
 
         await context.SaveChangesAsync(ct);

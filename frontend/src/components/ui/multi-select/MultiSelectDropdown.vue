@@ -10,6 +10,7 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { MENU_ITEM } from "@/lib/menuSurface";
 import { t } from "@/i18n";
 
 const PILL_CLASS = "h-5 max-w-none px-1.5 font-medium";
@@ -328,7 +329,8 @@ const clearAll = () => {
           <button
             v-if="canAddCustom"
             type="button"
-            class="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+            class="w-full text-left"
+            :class="MENU_ITEM"
             @click="addCustom"
           >
             <Plus class="size-4 shrink-0" />
@@ -341,7 +343,7 @@ const clearAll = () => {
             :key="`custom-${option}`"
             role="option"
             :aria-selected="true"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+            :class="MENU_ITEM"
             @click="toggleOption(option)"
           >
             <Checkbox
@@ -358,10 +360,10 @@ const clearAll = () => {
             :aria-selected="isSelected(option)"
             :aria-disabled="atLimit && !isSelected(option) || undefined"
             :class="[
-              'flex items-center gap-2 px-2 py-1.5 rounded-sm transition-colors',
+              MENU_ITEM,
               atLimit && !isSelected(option)
-                ? 'opacity-50 cursor-not-allowed'
-                : 'cursor-pointer hover:bg-accent hover:text-accent-foreground',
+                ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                : '',
             ]"
             @click="toggleOption(option)"
           >

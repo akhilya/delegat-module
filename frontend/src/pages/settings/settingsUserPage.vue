@@ -18,6 +18,7 @@ import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import { newPasswordFieldsIssue } from "@/lib/authValidation";
 import { Activity, Save } from "lucide-vue-next";
 
 import { t } from "@/i18n";
@@ -31,6 +32,22 @@ const isChangingPassword = ref(false);
 const userNameDraft = ref("");
 const currentPassword = ref("");
 const newPassword = ref("");
+const confirmPassword = ref("");
+
+const passwordFieldIssue = computed(() => {
+  if (!newPassword.value && !confirmPassword.value) return null;
+  return newPasswordFieldsIssue(newPassword.value, confirmPassword.value, t);
+});
+
+const canSubmitPassword = computed(
+  () =>
+    Boolean(
+      currentPassword.value &&
+        newPassword.value &&
+        confirmPassword.value &&
+        !passwordFieldIssue.value,
+    ),
+);
 
 const hasProfileChanges = computed(() =>
   userNameDraft.value.trim() !== (me.value?.userName || ""),
@@ -89,6 +106,17 @@ async function saveProfile() {
 }
 
 async function changePassword() {
+  const issue = newPasswordFieldsIssue(
+    newPassword.value,
+    confirmPassword.value,
+    t,
+  );
+  if (issue) {
+    if (issue.password) displaySonnerError(issue.password);
+    else if (issue.confirm) displaySonnerError(issue.confirm);
+    return;
+  }
+
   isChangingPassword.value = true;
   try {
     const response = await http.patch("/users/me", {
@@ -99,6 +127,7 @@ async function changePassword() {
     me.value = { ...me.value, ...updated };
     currentPassword.value = "";
     newPassword.value = "";
+    confirmPassword.value = "";
     displaySonnerSuccess(t("pages.settingsUserPage.passwordUpdated"));
   } catch (error) {
     displaySonnerError(error);
@@ -180,14 +209,33 @@ onMounted(fetchMe);
               <PasswordInput
                 id="current-password"
                 v-model="currentPassword"
+                autocomplete="current-password"
                 :disabled="isChangingPassword"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
-            <SettingsFormField :label="$t('pages.settingsUserPage.newPasswordLabel')" label-for="new-password">
+            <SettingsFormField
+              :label="$t('pages.settingsUserPage.newPasswordLabel')"
+              label-for="new-password"
+              :error="passwordFieldIssue?.password"
+            >
               <PasswordInput
                 id="new-password"
                 v-model="newPassword"
+                autocomplete="new-password"
+                :disabled="isChangingPassword"
+                :maxlength="FIELD_LIMITS.password"
+              />
+            </SettingsFormField>
+            <SettingsFormField
+              :label="$t('auth.confirmPassword')"
+              label-for="confirm-password"
+              :error="passwordFieldIssue?.confirm"
+            >
+              <PasswordInput
+                id="confirm-password"
+                v-model="confirmPassword"
+                autocomplete="new-password"
                 :disabled="isChangingPassword"
                 :maxlength="FIELD_LIMITS.password"
               />
@@ -197,7 +245,7 @@ onMounted(fetchMe);
             <Button
               type="submit"
               size="sm"
-              :disabled="isChangingPassword || !currentPassword || !newPassword"
+              :disabled="isChangingPassword || !canSubmitPassword"
             >
               <Spinner v-if="isChangingPassword" class="mr-2" />
               {{ $t("pages.settingsUserPage.changePasswordButton") }}

@@ -58,4 +58,17 @@ describe("catalogConnectMatchQueue", () => {
       [2],
     );
   });
+
+  it("skips inactive connections", () => {
+    assert.deepEqual(
+      catalogConnectMatchQueue(
+        [
+          { ...ozon, isActive: false },
+          wb,
+        ],
+        { localProductCount: 0 },
+      ),
+      [2],
+    );
+  });
 });

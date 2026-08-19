@@ -5,15 +5,16 @@ import {
   SheetContent,
   SheetDescription,
   SheetHeader,
+  SheetHeaderClose,
   SheetTitle,
 } from "@/components/ui/sheet";
-
 
 defineProps({
   open: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
   title: { type: String, default: "" },
   description: { type: String, default: "" },
+  ariaLabel: { type: String, default: "" },
 });
 
 defineEmits(["update:open"]);
@@ -23,32 +24,40 @@ defineEmits(["update:open"]);
   <Sheet :open="open" @update:open="$emit('update:open', $event)">
     <SheetContent
       side="right"
-      class="flex w-full flex-col gap-0 overflow-hidden sm:max-w-xl"
+      :show-close="false"
+      class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      :aria-label="ariaLabel || title || undefined"
     >
-      <SheetHeader class="shrink-0 pr-10 text-left">
-        <SheetTitle>
-          <slot name="title">{{ title }}</slot>
-        </SheetTitle>
+      <SheetHeader variant="bar">
+        <div class="flex min-h-8 items-center gap-2">
+          <SheetTitle class="min-w-0 flex-1 truncate">
+            <slot name="title">{{ title }}</slot>
+          </SheetTitle>
+          <div
+            v-if="$slots.actions"
+            class="flex shrink-0 items-center gap-1"
+          >
+            <slot name="actions" />
+          </div>
+          <SheetHeaderClose />
+        </div>
         <SheetDescription
           v-if="description || $slots.description"
           class="break-all"
         >
           <slot name="description">{{ description }}</slot>
         </SheetDescription>
-        <div v-if="$slots.actions" class="flex flex-wrap gap-2 pt-2">
-          <slot name="actions" />
-        </div>
       </SheetHeader>
 
       <div
         v-if="loading"
-        class="flex flex-1 items-center justify-center px-4 py-12 text-muted-foreground"
+        class="flex flex-1 items-center justify-center px-6 py-12 text-muted-foreground"
       >
         <Spinner size="lg" />
       </div>
       <div
         v-else
-        class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <slot />
       </div>

@@ -25,7 +25,7 @@ const menuSide = computed(() => {
 <template>
   <SidebarFooter class="border-t border-sidebar-border p-2">
     <div
-      class="overflow-hidden rounded-xl bg-card p-1 ring-1 ring-sidebar-border group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:ring-0"
+      class="overflow-hidden rounded-xl bg-card p-1 ring-1 ring-inset ring-sidebar-border group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:ring-0"
     >
       <SidebarMenu>
         <SidebarMenuItem>

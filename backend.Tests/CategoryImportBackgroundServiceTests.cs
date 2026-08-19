@@ -40,6 +40,22 @@ public class CategoryImportBackgroundServiceTests
         Assert.Equal("running", (await db.operations.SingleAsync()).status);
     }
 
+    [Fact]
+    public async Task Worker_CancelsLeftoverPausedOperation()
+    {
+        var (worker, db, logger) = CreateWorker("category-import");
+        var op = await db.operations.SingleAsync();
+        op.status = "paused";
+        await db.SaveChangesAsync();
+
+        await worker.ProcessOnceAsync(CancellationToken.None);
+
+        var job = await db.pendingCategoryImports.SingleAsync();
+        Assert.Equal(CategoryImportStatus.Cancelled, job.status);
+        Assert.Equal("cancelled", logger.LastFinishStatus);
+        Assert.False(await db.categoryMappings.AnyAsync());
+    }
+
     private static (
         CategoryImportBackgroundService worker,
         DataContext db,

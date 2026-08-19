@@ -84,7 +84,7 @@ export default {
           {{ item.label }}
 
           <ComboboxItemIndicator>
-            <Check :class="cn('ml-auto h-4 w-4')" />
+            <Check :class="cn('h-4 w-4 text-foreground')" />
           </ComboboxItemIndicator>
         </ComboboxItem>
       </ComboboxGroup>

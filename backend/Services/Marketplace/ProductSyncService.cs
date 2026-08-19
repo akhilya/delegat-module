@@ -205,19 +205,9 @@ public class ProductSyncService
                 .ToListAsync(ct);
             if (variants.Count > 0)
             {
-                exportData["_variants"] = variants.Select(v =>
-                {
-                    var link = v.marketplaceLinks.FirstOrDefault();
-                    return new Dictionary<string, object?>
-                    {
-                        ["variantId"] = link?.externalVariantId,
-                        ["techSize"] = v.size,
-                        ["marketplaceSize"] = link?.marketplaceSize,
-                        ["barcode"] = v.barcode,
-                        ["price"] = v.price,
-                        ["quantity"] = v.quantity
-                    };
-                }).ToList();
+                exportData["_variants"] = variants
+                    .Select(v => ProductVariantExport.ToPayload(v, v.marketplaceLinks.FirstOrDefault()))
+                    .ToList();
             }
 
             // Validate required fields before sending (schema = graph adapter fields)
@@ -466,6 +456,7 @@ public class ProductSyncService
                 });
             }
 
+            await ApplyExportedVariantIdsAsync(productId, connectionId, result.Details, ct);
             await _context.SaveChangesAsync(ct);
 
             // Endpoint grouping: join/create the marketplace group for the evaluated value
@@ -722,19 +713,9 @@ public class ProductSyncService
                 // Inject variants if present
                 if (variantsByProductId.TryGetValue(productId, out var prodVariants) && prodVariants.Count > 0)
                 {
-                    exportData["_variants"] = prodVariants.Select(v =>
-                    {
-                        var link = v.marketplaceLinks.FirstOrDefault();
-                        return new Dictionary<string, object?>
-                        {
-                            ["variantId"] = link?.externalVariantId,
-                            ["techSize"] = v.size,
-                            ["marketplaceSize"] = link?.marketplaceSize,
-                            ["barcode"] = v.barcode,
-                            ["price"] = v.price,
-                            ["quantity"] = v.quantity
-                        };
-                    }).ToList();
+                    exportData["_variants"] = prodVariants
+                        .Select(v => ProductVariantExport.ToPayload(v, v.marketplaceLinks.FirstOrDefault()))
+                        .ToList();
                 }
 
                 // Validate required fields (schema = graph adapter fields)
@@ -942,6 +923,8 @@ public class ProductSyncService
                             ExternalProductId: exportItemResult.ExternalProductId,
                             IsNewProduct: isNew,
                             Details: exportItemResult.Details));
+                        await ApplyExportedVariantIdsAsync(
+                            pid, connectionId, exportItemResult.Details, ct);
                     }
                 }
             }
@@ -2574,6 +2557,54 @@ public class ProductSyncService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// After a successful export, store marketplace variant ids returned in adapter details.
+    /// </summary>
+    private async Task ApplyExportedVariantIdsAsync(
+        int productId,
+        int connectionId,
+        Dictionary<string, object>? details,
+        CancellationToken ct)
+    {
+        var exported = ProductVariantExport.ReadExportedVariantIds(details);
+        if (exported.Count == 0)
+            return;
+
+        var localIds = exported.Keys.ToList();
+        var allowed = await _context.productVariants
+            .Where(v => v.productId == productId && localIds.Contains(v.Id))
+            .Select(v => v.Id)
+            .ToListAsync(ct);
+        if (allowed.Count == 0)
+            return;
+
+        var allowedSet = allowed.ToHashSet();
+        var existing = await _context.productVariantLinks
+            .Where(l => l.connectionId == connectionId && allowedSet.Contains(l.variantId))
+            .ToListAsync(ct);
+        var byVariant = existing.ToDictionary(l => l.variantId);
+
+        foreach (var (localId, externalId) in exported)
+        {
+            if (!allowedSet.Contains(localId))
+                continue;
+
+            if (byVariant.TryGetValue(localId, out var link))
+            {
+                link.externalVariantId = externalId;
+                continue;
+            }
+
+            _context.productVariantLinks.Add(new ProductVariantLink
+            {
+                variantId = localId,
+                connectionId = connectionId,
+                externalVariantId = externalId,
+                createdAt = DateTime.UtcNow
+            });
+        }
     }
 
     /// <summary>

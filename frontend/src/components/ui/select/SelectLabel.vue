@@ -1,6 +1,7 @@
 <script setup>
 import { SelectLabel } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { MENU_LABEL } from "@/lib/menuSurface";
 
 const props = defineProps({
   for: { type: String, required: false },
@@ -13,7 +14,7 @@ const props = defineProps({
 <template>
   <SelectLabel
     data-slot="select-label"
-    :class="cn('px-2 py-1.5 text-sm font-medium', props.class)"
+    :class="cn(MENU_LABEL, props.class)"
   >
     <slot />
   </SelectLabel>

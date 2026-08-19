@@ -36,6 +36,12 @@ import {
 import ShareLinkDialog from "@/components/products/ShareLinkDialog.vue";
 import { http } from "@/main";
 import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
+import {
+  MENU_ITEM,
+  MENU_LABEL,
+  MENU_SEPARATOR,
+  MENU_SURFACE,
+} from "@/lib/menuSurface";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import {
   Table,
@@ -1776,13 +1782,13 @@ const selectedFileCount = computed(
       <Table
         v-if="!isLoadingFiles || currentFiles.length > 0 || currentFolderId != null || currentSubfolders.length > 0 || inlineNewFolder || currentPendingUploads.length > 0"
         :contain="false"
-        class="w-full table-fixed"
+        class="w-full"
       >
         <colgroup>
           <col class="w-10" />
+          <col class="w-full" />
+          <col class="hidden w-48 sm:table-column" />
           <col />
-          <col class="hidden w-24 sm:table-column" />
-          <col class="w-32" />
           <col class="w-36" />
           <col class="w-20" />
           <col class="w-16" />
@@ -1877,7 +1883,7 @@ const selectedFileCount = computed(
               />
               <span v-else class="block truncate" :title="folder.name">{{ folder.name }}</span>
             </TableCell>
-            <TableCell class="hidden w-24 max-w-24 truncate text-muted-foreground sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</TableCell>
+            <TableCell class="hidden text-muted-foreground sm:table-cell">{{ t("products.productFileManager.folderTypeLabel") }}</TableCell>
             <TableCell />
             <TableCell />
             <TableCell class="text-muted-foreground">
@@ -1923,10 +1929,10 @@ const selectedFileCount = computed(
               />
               <span v-else class="block truncate" :title="extractFileName(file)">{{ extractFileName(file) }}</span>
             </TableCell>
-            <TableCell class="hidden w-24 max-w-24 sm:table-cell">
+            <TableCell class="hidden sm:table-cell">
               <Badge
                 variant="secondary"
-                class="max-w-full truncate font-normal"
+                class="font-normal"
                 :title="file.contentType"
               >{{ file.contentType }}</Badge>
             </TableCell>
@@ -1939,7 +1945,7 @@ const selectedFileCount = computed(
                     :size="file.tags?.length ? undefined : 'icon'"
                     :class="
                       file.tags?.length
-                        ? 'h-auto flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50'
+                        ? 'h-auto max-w-none flex flex-nowrap items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50'
                         : 'size-7 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                     "
                     :title="t('products.productFileManager.tagLabel')"
@@ -1959,7 +1965,7 @@ const selectedFileCount = computed(
                   <!-- Existing tags list -->
                   <div class="p-1 max-h-48 overflow-y-auto">
                     <div v-for="tag in storeTags" :key="tag.id">
-                      <div class="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm text-sm hover:bg-accent transition-colors">
+                      <div :class="MENU_ITEM">
                         <!-- Color dot - click to edit color -->
                         <Button
                           type="button"
@@ -2090,7 +2096,7 @@ const selectedFileCount = computed(
                 />
               </div>
             </TableCell>
-            <TableCell class="hidden w-24 max-w-24 truncate text-xs tabular-nums text-muted-foreground sm:table-cell">
+            <TableCell class="hidden text-xs tabular-nums text-muted-foreground sm:table-cell">
               {{ entry.percent }}%
             </TableCell>
             <TableCell />
@@ -2125,7 +2131,8 @@ const selectedFileCount = computed(
       <div v-if="contextMenu.show" class="fixed inset-0 z-50" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu">
         <div
           ref="contextMenuEl"
-          class="fixed z-50 w-56 min-w-[10rem] max-w-[14rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+          class="fixed z-[var(--z-popover)] w-56 min-w-[10rem] max-w-[14rem] p-1 animate-in fade-in-0 zoom-in-95"
+          :class="MENU_SURFACE"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         >
           <!-- Folder -->
@@ -2135,25 +2142,27 @@ const selectedFileCount = computed(
                 {{ contextMenu.item?.name }}
               </p>
             </div>
-            <div class="bg-border -mx-1 my-1 h-px" />
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div :class="MENU_SEPARATOR" />
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionOpen") }}
             </p>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="navigateToFolder(contextMenu.item.id); closeContextMenu()"
             >
               <FolderOpen class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.openAction") }}
             </Button>
-            <div class="bg-border -mx-1 my-1 h-px" />
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div :class="MENU_SEPARATOR" />
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionManage") }}
             </p>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="downloadFolderArchive(contextMenu.item.id); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
@@ -2161,7 +2170,8 @@ const selectedFileCount = computed(
             </Button>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="openShareDialog('folder', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
@@ -2169,20 +2179,22 @@ const selectedFileCount = computed(
             </Button>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="startInlineRename('folder', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.renameAction") }}
               <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
-            <div class="bg-border -mx-1 my-1 h-px" />
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div :class="MENU_SEPARATOR" />
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionDanger") }}
             </p>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
+              class="h-auto w-full justify-start font-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
+              :class="MENU_ITEM"
               @click="openDeleteFolderDialog(contextMenu.item); closeContextMenu()"
             >
               <Trash2 class="size-4" />
@@ -2198,12 +2210,13 @@ const selectedFileCount = computed(
                 {{ contextMenu.item?.displayName || contextMenu.item?.fileName || contextMenu.item?.name }}
               </p>
             </div>
-            <div class="bg-border -mx-1 my-1 h-px" />
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div :class="MENU_SEPARATOR" />
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionManage") }}
             </p>
             <a
-              class="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none hover:bg-accent hover:text-accent-foreground"
+              class="w-full"
+              :class="MENU_ITEM"
               :href="contextMenu.item.fullPath"
               target="_blank"
               @click="closeContextMenu()"
@@ -2213,7 +2226,8 @@ const selectedFileCount = computed(
             </a>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="openShareDialog('file', contextMenu.item); closeContextMenu()"
             >
               <Share2 class="size-4 text-muted-foreground" />
@@ -2222,7 +2236,8 @@ const selectedFileCount = computed(
             <Button
               v-if="contextMenu.item?.isPublic && contextMenu.item?.publicUrl"
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
+              class="h-auto w-full justify-start font-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
+              :class="MENU_ITEM"
               @click="
                 shareTarget = { type: 'file', item: contextMenu.item };
                 revokePublicAccess();
@@ -2234,20 +2249,22 @@ const selectedFileCount = computed(
             </Button>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="startInlineRename('file', contextMenu.item); closeContextMenu()"
             >
               <Pencil class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.renameAction") }}
               <MenuKbd class="ml-auto" :keys="['F2']" />
             </Button>
-            <div class="bg-border -mx-1 my-1 h-px" />
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div :class="MENU_SEPARATOR" />
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionDanger") }}
             </p>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none text-destructive hover:bg-destructive/10 hover:text-destructive"
+              class="h-auto w-full justify-start font-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
+              :class="MENU_ITEM"
               @click.stop="deleteSingleFile(contextMenu.item.id); closeContextMenu()"
             >
               <Trash2 class="size-4" />
@@ -2258,12 +2275,13 @@ const selectedFileCount = computed(
 
           <!-- Empty area -->
           <template v-else>
-            <p class="px-2 py-1 text-xs font-medium text-muted-foreground">
+            <p :class="MENU_LABEL">
               {{ t("products.productFileManager.menuSectionCreate") }}
             </p>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="startInlineCreate(); closeContextMenu()"
             >
               <Plus class="size-4 text-muted-foreground" />
@@ -2271,16 +2289,18 @@ const selectedFileCount = computed(
             </Button>
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="openFileDialog(); closeContextMenu()"
             >
               <Upload class="size-4 text-muted-foreground" />
               {{ t("products.productFileManager.uploadFilesAction") }}
             </Button>
-            <div class="bg-border -mx-1 my-1 h-px" />
+            <div :class="MENU_SEPARATOR" />
             <Button
               variant="ghost"
-              class="relative flex w-full h-auto cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-normal justify-start select-none"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="downloadFolderArchive(currentFolderId); closeContextMenu()"
             >
               <ArrowDownToLine class="size-4 text-muted-foreground" />
@@ -2367,7 +2387,8 @@ const selectedFileCount = computed(
               :key="tag.id"
               type="button"
               variant="ghost"
-              class="flex h-auto items-center gap-2 w-full justify-start font-normal px-2 py-1.5 rounded-sm text-sm"
+              class="h-auto w-full justify-start font-normal"
+              :class="MENU_ITEM"
               @click="bulkToggleTag(tag.id)"
             >
               <span :class="['size-5 rounded-full shrink-0', tagBgClass(tag.color)]" />

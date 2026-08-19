@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  newPasswordFieldsIssue,
   passwordSchema,
   translateApiFieldErrors,
   usernameSchema,
@@ -39,6 +40,40 @@ describe("passwordSchema", () => {
     const schema = passwordSchema(t);
     assert.equal(schema.safeParse("password").success, true);
     assert.equal(schema.safeParse("short").success, false);
+  });
+});
+
+describe("newPasswordFieldsIssue", () => {
+  it("accepts matching passwords that pass policy", () => {
+    assert.equal(
+      newPasswordFieldsIssue("password1", "password1", t),
+      null,
+    );
+  });
+
+  it("reports mismatch on confirm", () => {
+    const issue = newPasswordFieldsIssue("password1", "password2", t);
+    assert.equal(issue?.confirm, "auth.passwordsMismatch");
+    assert.equal(issue?.password, undefined);
+  });
+
+  it("reports policy on the password field", () => {
+    const issue = newPasswordFieldsIssue("password", "password", t);
+    assert.equal(issue?.password, "auth.passwordNeedsDigit");
+  });
+
+  it("allows both empty when optional", () => {
+    assert.equal(
+      newPasswordFieldsIssue("", "", t, { optional: true }),
+      null,
+    );
+  });
+
+  it("still requires confirm when optional password is filled", () => {
+    const issue = newPasswordFieldsIssue("password1", "", t, {
+      optional: true,
+    });
+    assert.equal(issue?.confirm, "auth.passwordsMismatch");
   });
 });
 

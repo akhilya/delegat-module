@@ -160,6 +160,14 @@ public sealed class CatalogScrapeService
             for (var i = 0; i < ids.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                if (await OperationLifecycle.IsStopRequestedAsync(_context, operationId, ct))
+                {
+                    skipped += ids.Count - i;
+                    await _operationLogger.FinishAsync(
+                        operationId, connection.storeId, "cancelled",
+                        $"Stopped. Imported {imported}, skipped {skipped}, failed {failed}");
+                    break;
+                }
                 var publicId = ids[i];
                 try
                 {
@@ -235,7 +243,8 @@ public sealed class CatalogScrapeService
                         await _operationLogger.LogAsync(
                             operationId, connection.storeId, "info",
                             $"Waiting for category {external.CategoryName ?? extCat}...");
-                        targetCategoryId = await WaitForLocalCategoryAsync(connection.Id, extCat, ct);
+                        targetCategoryId = await WaitForLocalCategoryAsync(
+                            connection.Id, extCat, operationId, ct);
                     }
                 }
 
@@ -274,6 +283,19 @@ public sealed class CatalogScrapeService
                 connection.storeId,
                 status,
                 $"Imported {imported}, skipped {skipped}, failed {failed}, category jobs {categoryJobs}");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            await _operationLogger.FinishAsync(operationId, connection.storeId, "cancelled", "Stopped");
+            return new CatalogScrapeApplyResult
+            {
+                OperationId = operationId,
+                Imported = imported,
+                Failed = failed,
+                Skipped = skipped,
+                CategoryJobs = categoryJobs,
+                QuotaStopped = quotaStopped,
+            };
         }
         catch (Exception ex)
         {
@@ -315,7 +337,7 @@ public sealed class CatalogScrapeService
             .FirstOrDefaultAsync(ct);
 
     private async Task<int?> WaitForLocalCategoryAsync(
-        int connectionId, string externalCategoryId, CancellationToken ct)
+        int connectionId, string externalCategoryId, string operationId, CancellationToken ct)
     {
         if (CategoryWaitTimeout <= TimeSpan.Zero)
             return await LookupLocalCategoryIdAsync(connectionId, externalCategoryId, ct);
@@ -324,6 +346,8 @@ public sealed class CatalogScrapeService
         while (true)
         {
             ct.ThrowIfCancellationRequested();
+            if (await OperationLifecycle.IsStopRequestedAsync(_context, operationId, ct))
+                throw new OperationCanceledException("Catalog scrape stopped");
             var localId = await LookupLocalCategoryIdAsync(connectionId, externalCategoryId, ct);
             if (localId != null)
                 return localId;

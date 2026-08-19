@@ -120,6 +120,8 @@ public class OperationLogger : IOperationLogger
             var op = await db.operations.FirstOrDefaultAsync(o => o.operationId == operationId);
             if (op != null)
             {
+                if (OperationLifecycle.IsTerminal(op.status))
+                    return;
                 op.totalItems = total;
                 op.completedItems = completed;
                 op.failedItems = failed;
@@ -154,6 +156,8 @@ public class OperationLogger : IOperationLogger
             var op = await db.operations.FirstOrDefaultAsync(o => o.operationId == operationId);
             if (op != null)
             {
+                if (!OperationLifecycle.ShouldApplyFinish(op.status, status))
+                    return;
                 op.status = status;
                 op.summary = summary;
                 op.finishedAt = timestamp;

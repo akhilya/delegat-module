@@ -3,11 +3,17 @@
  * (or when the store already has products). Never includes the import source.
  * When local products exist, skip connections that already link every product
  * (typical after importing that marketplace as the source of truth).
+ * Inactive connections cannot import or link.
  *
- * @param {Array<{ id: number|string, productLinksCount?: number }>} connections
+ * @param {Array<{ id: number|string, productLinksCount?: number, isActive?: boolean, IsActive?: boolean }>} connections
  * @param {{ sourceId?: number|string|null, localProductCount?: number }} [options]
  * @returns {Array<number|string>}
  */
+export function isCatalogConnectConnectionActive(connection) {
+  if (!connection) return false;
+  return (connection.isActive ?? connection.IsActive) !== false;
+}
+
 export function catalogConnectMatchQueue(
   connections,
   { sourceId = null, localProductCount = 0 } = {},
@@ -18,6 +24,7 @@ export function catalogConnectMatchQueue(
   const count = Number(localProductCount) || 0;
   return connections
     .filter((connection) => {
+      if (!isCatalogConnectConnectionActive(connection)) return false;
       const id = Number(connection.id);
       if (source != null && Number.isFinite(source) && id === source) {
         return false;

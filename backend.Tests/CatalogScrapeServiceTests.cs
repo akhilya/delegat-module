@@ -77,6 +77,32 @@ public class CatalogScrapeServiceTests
     }
 
     [Fact]
+    public async Task Apply_StoppedOperation_DoesNotImportCards()
+    {
+        var (svc, db, connection, user, adapter) = Create();
+        adapter.Add(new ExternalProduct("nm-1", "ART-NEW", "Public tee"));
+        db.operations.Add(new Operation
+        {
+            operationId = "scrape-stop",
+            storeId = connection.storeId,
+            authorUserId = user.Id,
+            type = "catalog-scrape",
+            title = "Copy public catalog cards",
+            status = "cancelled",
+            createdAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await svc.ApplyAsync(
+            connection, ["nm-1"], user.Id, CancellationToken.None, "scrape-stop");
+
+        Assert.Equal(0, result.Imported);
+        Assert.Equal(1, result.Skipped);
+        Assert.Equal(0, adapter.GetPublicCalls);
+        Assert.Empty(db.products.Where(p => p.name == "Public tee"));
+    }
+
+    [Fact]
     public async Task Apply_WhenMappingExists_AssignsCategoryAndAttributes()
     {
         var (svc, db, connection, user, adapter) = Create();

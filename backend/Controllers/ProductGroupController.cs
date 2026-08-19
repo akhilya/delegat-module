@@ -6,6 +6,7 @@ using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
+using Delegat.Services;
 using Delegat.Services.Marketplace;
 
 namespace Delegat.Controllers;
@@ -16,6 +17,7 @@ public class ProductGroupController : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly DataContext _db;
     private readonly GroupSyncService _groupSyncService;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ProductGroupController> _logger;
@@ -23,12 +25,14 @@ public class ProductGroupController : ControllerBase
     public ProductGroupController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
+        DataContext db,
         GroupSyncService groupSyncService,
         IServiceProvider serviceProvider,
         ILogger<ProductGroupController> logger)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _db = db;
         _groupSyncService = groupSyncService;
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -123,45 +127,15 @@ public class ProductGroupController : ControllerBase
             storeId = selectedStoreId.Value
         });
 
-        // Check if products are already in other groups
-        if (input.productIds != null && input.productIds.Count > 0)
-        {
-            var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
-            var productsInOtherGroups = await memberRepo.FindAllAsync(
-                m => input.productIds.Contains(m.productId),
-                query => query.Include(m => m.group).Include(m => m.product));
-
-            if (productsInOtherGroups.Any())
-            {
-                var conflictMessages = productsInOtherGroups
-                    .Select(m => $"Product \"{m.product.name}\" is already in group \"{m.group.name}\"")
-                    .ToList();
-                throw ApiException.BadRequest(string.Join("; ", conflictMessages));
-            }
-        }
-
         await groupRepo.AddAsync(group);
 
-        // Add products if specified
         if (input.productIds != null && input.productIds.Count > 0)
         {
-            var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
-            var sortOrder = 0;
-
-            foreach (var productId in input.productIds)
-            {
-                var member = new ProductGroupMember();
-                member.AddFill(new ProductGroupMember.AddForm
-                {
-                    groupId = group.Id,
-                    productId = productId,
-                    sortOrder = sortOrder++
-                });
-                await memberRepo.AddAsync(member);
-            }
+            await ProductGroupMembership.AddOrMoveToGroupAsync(
+                _db, selectedStoreId.Value, group.Id, input.productIds);
         }
 
-        return Ok(new { id = group.Id });
+        return Ok(new { id = group.Id, name = group.name, description = group.description });
     }
 
     /// <summary>
@@ -257,45 +231,13 @@ public class ProductGroupController : ControllerBase
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
         var group = await groupRepo.FindAsync(
-            g => g.Id == groupId && g.storeId == selectedStoreId.Value,
-            query => query.Include(g => g.members));
+            g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
             throw ApiException.NotFound("Group not found", code: "group_not_found");
 
-        var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
-        var existingProductIds = group.members.Select(m => m.productId).ToHashSet();
-        var maxSortOrder = group.members.Any() ? group.members.Max(m => m.sortOrder) : -1;
-
-        // Check if any products are already in other groups
-        var productsInOtherGroups = await memberRepo.FindAllAsync(
-            m => request.productIds.Contains(m.productId) && m.groupId != groupId,
-            query => query.Include(m => m.group).Include(m => m.product));
-
-        if (productsInOtherGroups.Any())
-        {
-            var conflictMessages = productsInOtherGroups
-                .Select(m => $"Product \"{m.product.name}\" is already in group \"{m.group.name}\"")
-                .ToList();
-            throw ApiException.BadRequest(string.Join("; ", conflictMessages));
-        }
-
-        var addedCount = 0;
-        foreach (var productId in request.productIds)
-        {
-            if (existingProductIds.Contains(productId))
-                continue;
-
-            var member = new ProductGroupMember();
-            member.AddFill(new ProductGroupMember.AddForm
-            {
-                groupId = groupId,
-                productId = productId,
-                sortOrder = ++maxSortOrder
-            });
-            await memberRepo.AddAsync(member);
-            addedCount++;
-        }
+        var addedCount = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            _db, selectedStoreId.Value, groupId, request.productIds);
 
         return Ok(new { addedCount });
     }

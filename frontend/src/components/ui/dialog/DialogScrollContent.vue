@@ -34,12 +34,12 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 <template>
   <DialogPortal>
     <DialogOverlay
-      class="fixed inset-0 z-[var(--z-overlay)] grid place-items-center overflow-y-auto bg-black/50 backdrop-blur-xs data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+      class="fixed inset-0 z-[var(--z-overlay)] grid place-items-center overflow-y-auto bg-black/50 backdrop-blur-xs data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-[var(--duration-overlay-out)] data-[state=open]:duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)]"
     >
       <DialogContent
         :class="
           cn(
-            'relative z-[var(--z-modal)] grid w-full max-w-lg my-8 gap-4 border border-border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg md:w-full',
+            'relative z-[var(--z-modal)] grid w-full max-w-lg my-8 gap-4 border border-border bg-background p-6 shadow-lg duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg md:w-full',
             props.class,
           )
         "

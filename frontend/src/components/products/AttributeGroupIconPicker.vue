@@ -6,6 +6,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Plus } from "lucide-vue-next";
+import { InsetGroupLabel } from "@/components/ui/inset-group";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import AttributeGroupIcon from "@/components/products/AttributeGroupIcon.vue";
 import { ADAPTER_ICON_URLS } from "@/lib/adapterIconAssets";
@@ -31,6 +32,7 @@ export default {
     Plus,
     AdapterIcon,
     AttributeGroupIcon,
+    InsetGroupLabel,
   },
   props: {
     modelValue: { type: String, default: "" },
@@ -76,9 +78,7 @@ export default {
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" class="w-64 p-3">
-      <p class="text-xs font-medium text-muted-foreground mb-2">
-        {{ $t("pages.categoryEditPage.groupIconMarketplace") }}
-      </p>
+      <InsetGroupLabel>{{ $t("pages.categoryEditPage.groupIconMarketplace") }}</InsetGroupLabel>
       <div class="grid grid-cols-6 gap-1 mb-3">
         <Button
           v-for="key in adapterKeys"
@@ -93,9 +93,7 @@ export default {
           <AdapterIcon :adapter-key="key" />
         </Button>
       </div>
-      <p class="text-xs font-medium text-muted-foreground mb-2">
-        {{ $t("pages.categoryEditPage.groupIconSymbols") }}
-      </p>
+      <InsetGroupLabel>{{ $t("pages.categoryEditPage.groupIconSymbols") }}</InsetGroupLabel>
       <div class="grid grid-cols-6 gap-1">
         <Button
           v-for="name in lucideNames"

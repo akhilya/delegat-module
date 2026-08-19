@@ -104,7 +104,7 @@ public class ProductTransferBackgroundService : BackgroundService
             .Select(o => o.status)
             .FirstOrDefaultAsync(stoppingToken);
 
-        if (operationStatus == "cancelled")
+        if (OperationLifecycle.IsStopRequested(operationStatus))
         {
             item.status = ProductTransferStatus.Cancelled;
             item.finishedAt = DateTime.UtcNow;
@@ -116,32 +116,8 @@ public class ProductTransferBackgroundService : BackgroundService
         item.startedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(stoppingToken);
 
-        // CTS that trips when either the host shuts down OR the user clicks "Stop"
-        // on the operation in the side panel. We poll the operation status every
-        // ~2 seconds in a side task and call cts.Cancel() if it flipped.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        var stopWatcher = Task.Run(async () =>
-        {
-            try
-            {
-                while (!cts.IsCancellationRequested)
-                {
-                    await Task.Delay(2000, cts.Token);
-                    using var checkScope = _scopeFactory.CreateScope();
-                    var checkDb = checkScope.ServiceProvider.GetRequiredService<DataContext>();
-                    var status = await checkDb.operations.AsNoTracking()
-                        .Where(o => o.operationId == item.batchId)
-                        .Select(o => o.status)
-                        .FirstOrDefaultAsync(cts.Token);
-                    if (status == "cancelled" || status == "paused")
-                    {
-                        cts.Cancel();
-                        return;
-                    }
-                }
-            }
-            catch (OperationCanceledException) { /* normal shutdown */ }
-        }, cts.Token);
+        var stopWatcher = OperationStopWatcher.WatchAsync(_scopeFactory, item.batchId, cts);
 
         var request = new TransferRequest
         {

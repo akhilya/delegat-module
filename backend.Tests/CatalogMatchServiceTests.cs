@@ -1,3 +1,4 @@
+using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK.RateLimit;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
@@ -12,6 +13,42 @@ namespace Delegat.Tests;
 [Collection("EnvVars")]
 public class CatalogMatchServiceTests
 {
+    [Fact]
+    public async Task Preview_InactiveConnection_Throws()
+    {
+        var (svc, connection, _) = await SeedAsync();
+        connection.isActive = false;
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.PreviewAsync(connection, 1, 50, "all", CancellationToken.None));
+
+        Assert.Equal("connection_inactive", ex.Code);
+    }
+
+    [Fact]
+    public async Task QueueUnlinkedImport_InactiveConnection_Throws()
+    {
+        var (svc, connection, _) = await SeedAsync();
+        connection.isActive = false;
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.QueueUnlinkedImportAsync(connection, userId: 1, CancellationToken.None));
+
+        Assert.Equal("connection_inactive", ex.Code);
+    }
+
+    [Fact]
+    public async Task Apply_InactiveConnection_Throws()
+    {
+        var (svc, connection, _) = await SeedAsync();
+        connection.isActive = false;
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.ApplyAsync(connection, [], importUnmatched: false, userId: 1, CancellationToken.None));
+
+        Assert.Equal("connection_inactive", ex.Code);
+    }
+
     [Fact]
     public async Task Preview_FromLocal_DoesNotRequireImportAllProducts()
     {

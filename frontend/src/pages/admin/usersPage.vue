@@ -1,15 +1,12 @@
 <script>
-
 import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
-
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
 import {
   InsetGroup,
   InsetGroupItem,
@@ -22,16 +19,9 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogHeaderClose,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -39,28 +29,27 @@ import {
   Check,
   Copy,
   KeyRound,
-  Pencil,
   Plus,
   RefreshCw,
   Save,
   Trash2,
+  User,
   UserCheck,
   UserCog,
   UserPlus,
+  X,
 } from "lucide-vue-next";
 import { hasPermission, PERMS } from "@/lib/permissions";
-import {
-  isOwnerRoleLocked,
-  isUserAccessRowLocked,
-} from "@/lib/userAccessEdit";
+import { isOwnerRoleLocked, isUserAccessRowLocked } from "@/lib/userAccessEdit";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import { newPasswordFieldsIssue } from "@/lib/authValidation";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import { confirm, confirmState } from "@/composables/useConfirm";
-import { EmptyState } from "@/components/ui/empty-state";
+import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 
 export default {
   setup() {
-    const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+    const { formatDateTime: formatStoreDateTime, loadMemberships } =
+      useStoreDateTime();
     loadMemberships();
     return { formatStoreDateTime };
   },
@@ -73,7 +62,6 @@ export default {
     FieldGroup,
     SettingsFormField,
     Switch,
-    Badge,
     InsetGroup,
     InsetGroupItem,
     InsetGroupLabel,
@@ -83,26 +71,20 @@ export default {
     DialogDescription,
     DialogFooter,
     DialogHeader,
+    DialogHeaderClose,
     DialogTitle,
-    EmptyState,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-    AlertTriangle,
     Check,
     Copy,
     KeyRound,
-    Pencil,
     Plus,
     RefreshCw,
     Save,
     Trash2,
+    User,
     UserCheck,
     UserCog,
     UserPlus,
+    X,
   },
   data() {
     return {
@@ -114,6 +96,7 @@ export default {
       editForm: {
         userName: "",
         password: "",
+        confirmPassword: "",
         isAdmin: false,
         isActive: true,
         roles: [],
@@ -136,17 +119,27 @@ export default {
     };
   },
   computed: {
-    activeUsersCount() {
-      return this.users.filter((user) => user.isActive).length;
-    },
     editingSelf() {
-      return Boolean(this.editingUser && this.me && this.editingUser.id === this.me.id);
+      return Boolean(
+        this.editingUser && this.me && this.editingUser.id === this.me.id,
+      );
     },
     canToggleOwner() {
       return Boolean(this.me?.isAdmin);
     },
     isSavingEdit() {
-      return Boolean(this.editingUser && this.savingUserId === this.editingUser.id);
+      return Boolean(
+        this.editingUser && this.savingUserId === this.editingUser.id,
+      );
+    },
+    editPasswordIssue() {
+      const password = this.editForm.password.trim();
+      const confirm = this.editForm.confirmPassword.trim();
+      if (!password && !confirm) return null;
+      return newPasswordFieldsIssue(password, confirm, this.$t, {
+        optional: true,
+        requirePolicy: true,
+      });
     },
     ownerToggleLocked() {
       return !this.canToggleOwner || this.editingSelf;
@@ -160,6 +153,15 @@ export default {
         editingSelf: this.editingSelf,
         saving: this.isSavingEdit,
       });
+    },
+    activeTokens() {
+      return this.tokens.filter((token) => !token.used);
+    },
+    usedTokens() {
+      return this.tokens.filter((token) => token.used);
+    },
+    emptyListIcon() {
+      return this.loadError ? AlertTriangle : UserPlus;
     },
   },
   methods: {
@@ -179,8 +181,19 @@ export default {
     roleLabel(user) {
       if (user.isAdmin) return this.$t("pages.usersPage.roleOwner");
       const roles = user.roles || [];
-      if (roles.length) return roles.map((r) => this.localizedRoleName(r)).join(", ");
+      if (roles.length)
+        return roles.map((r) => this.localizedRoleName(r)).join(", ");
       return this.$t("nav.user");
+    },
+
+    userCaption(user) {
+      const status = user.isActive
+        ? this.$t("pages.usersPage.statusActive")
+        : this.$t("pages.usersPage.statusDisabled");
+      const base = `${this.roleLabel(user)} · ${status}`;
+      return this.isSelf(user)
+        ? `${base} · ${this.$t("pages.usersPage.you")}`
+        : base;
     },
 
     localizedRoleName(roleName) {
@@ -200,7 +213,14 @@ export default {
     },
 
     isPermissionChecked(perm) {
-      return this.isPermissionFromRole(perm) || this.editForm.permissionGrants.includes(perm);
+      return (
+        this.isPermissionFromRole(perm) ||
+        this.editForm.permissionGrants.includes(perm)
+      );
+    },
+
+    isSelf(user) {
+      return Boolean(this.me && user?.id === this.me.id);
     },
 
     toggleRole(roleName, enabled) {
@@ -265,9 +285,6 @@ export default {
         onSuccess: (response) => {
           const list = response.data.value ?? response.data ?? [];
           this.users = Array.isArray(list) ? list : [];
-          if (this.users.length === 0) {
-            this.loadError = true;
-          }
         },
         onError: (error) => {
           this.users = [];
@@ -312,6 +329,7 @@ export default {
       this.editForm = {
         userName: user.userName || "",
         password: "",
+        confirmPassword: "",
         isAdmin: user.isAdmin,
         isActive: user.isActive,
         roles: [...(user.roles || [])],
@@ -327,8 +345,12 @@ export default {
           onSuccess: (response) => {
             const access = response.data.value ?? response.data;
             this.editForm.roles = [...(access.roles || [])];
-            this.editForm.permissionGrants = [...(access.permissionGrants || [])];
-            this.permissionsFromRoles = [...(access.permissionsFromRoles || [])];
+            this.editForm.permissionGrants = [
+              ...(access.permissionGrants || []),
+            ];
+            this.permissionsFromRoles = [
+              ...(access.permissionsFromRoles || []),
+            ];
           },
           onError: displaySonnerError,
         });
@@ -347,14 +369,14 @@ export default {
     },
 
     closeInviteDialog() {
+      if (isConfirmOverlayActive()) return;
       this.isInviteDialogOpen = false;
       this.lastCreatedToken = null;
       this.copiedToken = null;
     },
 
     onInviteDialogOpenChange(open) {
-      // Nested confirm (AlertDialog) must not dismiss the invite Dialog.
-      if (!open && confirmState.open) {
+      if (!open && isConfirmOverlayActive()) {
         this.isInviteDialogOpen = true;
         return;
       }
@@ -363,7 +385,8 @@ export default {
     },
 
     async fetchTokens() {
-      this.tokensLoading = true;
+      const silent = this.tokens.length > 0 || Boolean(this.lastCreatedToken);
+      if (!silent) this.tokensLoading = true;
       await this.getAllTokens({
         onSuccess: (response) => {
           this.tokens = response.data.value ?? response.data ?? [];
@@ -431,15 +454,32 @@ export default {
     },
 
     formatTokenDate(dateString) {
-      if (!dateString) return "-";
+      if (!dateString) return "";
       const formatted = this.formatStoreDateTime(dateString);
-      return formatted === "-" ? "-" : formatted;
+      return formatted === "-" ? "" : formatted;
     },
 
     tokenHint(token) {
       const value = token?.token || "";
-      if (value.length < 12) return value || "-";
+      if (value.length < 12) return value || "—";
       return `${value.slice(0, 8)}…${value.slice(-4)}`;
+    },
+
+    tokenCaption(token) {
+      if (token.used) {
+        const who = token.usedByUserName || this.$t("common.emDash");
+        const when = this.formatTokenDate(token.usedAt);
+        return when
+          ? this.$t("pages.usersPage.invite.usedCaption", {
+              name: who,
+              date: when,
+            })
+          : this.$t("pages.usersPage.invite.usedBy", { name: who });
+      }
+      const when = this.formatTokenDate(token.createdAt);
+      return when
+        ? this.$t("pages.usersPage.invite.createdCaption", { date: when })
+        : this.$t("pages.usersPage.invite.statusActive");
     },
 
     async saveIdentityChanges() {
@@ -447,11 +487,9 @@ export default {
 
       const userName = this.editForm.userName.trim();
       const password = this.editForm.password.trim();
+      const confirmPassword = this.editForm.confirmPassword.trim();
 
-      const nameIssue = fieldLimitIssue(
-        userName,
-        FIELD_LIMITS.userNameStored,
-      );
+      const nameIssue = fieldLimitIssue(userName, FIELD_LIMITS.userNameStored);
       if (nameIssue === "empty") {
         displaySonnerError(this.$t("pages.usersPage.userNameEmptyError"));
         return;
@@ -462,10 +500,23 @@ export default {
         );
         return;
       }
+      if (password || confirmPassword) {
+        const issue = newPasswordFieldsIssue(
+          password,
+          confirmPassword,
+          this.$t,
+          { optional: true, requirePolicy: true },
+        );
+        if (issue) {
+          displaySonnerError(issue.password || issue.confirm);
+          return;
+        }
+      }
       if (
         password &&
-        fieldLimitIssue(password, FIELD_LIMITS.password, { required: false }) ===
-          "tooLong"
+        fieldLimitIssue(password, FIELD_LIMITS.password, {
+          required: false,
+        }) === "tooLong"
       ) {
         displaySonnerError(
           this.$t("common.tooLong", { max: FIELD_LIMITS.password }),
@@ -503,7 +554,9 @@ export default {
           try {
             const { invalidateMeCache } = await import("@/main");
             invalidateMeCache();
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           await this.fetchUsers();
           this.closeEditDialog();
           displaySonnerSuccess(this.$t("pages.usersPage.userUpdated"));
@@ -524,8 +577,11 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
+  <div class="flex w-full max-w-xl flex-col pb-10">
+    <div
+      v-if="!isLoading && users.length > 0"
+      class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2"
+    >
       <Button @click="openInviteDialog">
         <UserPlus class="size-4 mr-2" />
         {{ $t("pages.usersPage.invite.button") }}
@@ -534,207 +590,217 @@ export default {
 
     <PageSection
       :loading="isLoading"
-      :empty="loadError"
-      :empty-icon="AlertTriangle"
-      :empty-title="$t('pages.usersPage.loadErrorTitle')"
-      :empty-description="$t('pages.usersPage.loadErrorDescription')"
+      :empty="loadError || users.length === 0"
+      :empty-icon="emptyListIcon"
+      :empty-title="
+        loadError
+          ? $t('pages.usersPage.loadErrorTitle')
+          : $t('pages.usersPage.emptyTitle')
+      "
+      :empty-description="
+        loadError
+          ? $t('pages.usersPage.loadErrorDescription')
+          : $t('pages.usersPage.emptyDescription')
+      "
     >
       <template #empty-action>
-        <Button variant="outline" @click="fetchUsers">
+        <Button v-if="loadError" variant="outline" @click="fetchUsers">
           <RefreshCw class="mr-2 size-4" />
           {{ $t("common.retry") }}
         </Button>
+        <Button v-else @click="openInviteDialog">
+          <UserPlus class="mr-2 size-4" />
+          {{ $t("pages.usersPage.invite.button") }}
+        </Button>
       </template>
 
-      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-16">ID</TableHead>
-                <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="w-48">{{ $t("pages.usersPage.columnRole") }}</TableHead>
-                <TableHead class="w-32">{{ $t("common.status") }}</TableHead>
-                <TableHead class="w-32" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="user in users"
-                :key="user.id"
-                :class="!user.isActive ? 'bg-muted/30 text-muted-foreground' : ''"
-              >
-                <TableCell class="text-muted-foreground tabular-nums">
-                  {{ user.id }}
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <div class="truncate font-medium" :title="user.userName">{{ user.userName }}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge :variant="user.isAdmin ? 'default' : 'secondary'">
-                    {{ roleLabel(user) }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge :variant="user.isActive ? 'secondary' : 'outline'">
-                    {{ user.isActive ? $t("pages.usersPage.statusActive") : $t("pages.usersPage.statusDisabled") }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div class="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      :disabled="savingUserId === user.id"
-                      @click="openEditDialog(user)"
-                    >
-                      <Pencil class="size-4" />
-                      <span class="sr-only">{{ $t("pages.usersPage.editUser") }}</span>
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      <InsetGroup>
+        <InsetGroupItem
+          v-for="user in users"
+          :key="user.id"
+          show-chevron
+          :disabled="savingUserId === user.id"
+          :class="!user.isActive ? 'text-muted-foreground' : ''"
+          @click="openEditDialog(user)"
+        >
+          <template #leading>
+            <UserCog v-if="user.isAdmin" class="size-4" />
+            <User v-else class="size-4" />
+          </template>
+          <p class="truncate">{{ user.userName }}</p>
+          <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+            {{ userCaption(user) }}
+          </p>
+        </InsetGroupItem>
+      </InsetGroup>
     </PageSection>
 
-    <Dialog
-      :open="isInviteDialogOpen"
-      @update:open="onInviteDialogOpenChange"
-    >
-      <DialogContent size="3xl" class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+    <Dialog :open="isInviteDialogOpen" @update:open="onInviteDialogOpenChange">
+      <DialogContent
+        size="lg"
+        :show-close="false"
+        class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+      >
         <DialogHeader variant="bar">
-          <DialogTitle>{{ $t("pages.usersPage.invite.title") }}</DialogTitle>
+          <div class="flex min-h-8 items-center gap-2">
+            <DialogTitle class="min-w-0 flex-1 truncate">
+              {{ $t("pages.usersPage.invite.title") }}
+            </DialogTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="size-8 shrink-0 text-muted-foreground"
+              :aria-label="$t('common.close')"
+              @click="closeInviteDialog"
+            >
+              <X class="size-4" />
+            </Button>
+          </div>
           <DialogDescription>
             {{ $t("pages.usersPage.invite.description") }}
           </DialogDescription>
         </DialogHeader>
 
-        <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="text-sm text-muted-foreground sm:max-w-xl">
-              {{ $t("pages.usersPage.invite.hint") }}
-            </p>
-            <Button class="shrink-0" :disabled="isCreatingToken" @click="handleCreateToken">
-              <Spinner v-if="isCreatingToken" class="mr-2" />
-              <Plus v-else class="mr-2 size-4" />
+        <div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+          <InsetGroup>
+            <InsetGroupItem
+              :disabled="isCreatingToken"
+              @click="handleCreateToken"
+            >
+              <template #leading>
+                <Spinner v-if="isCreatingToken" />
+                <Plus v-else class="size-4" />
+              </template>
               {{ $t("pages.usersPage.invite.createToken") }}
-            </Button>
-          </div>
+            </InsetGroupItem>
+          </InsetGroup>
+
+          <section v-if="lastCreatedToken">
+            <InsetGroupLabel>{{
+              $t("pages.usersPage.invite.newTokenCreated")
+            }}</InsetGroupLabel>
+            <InsetGroup>
+              <InsetGroupItem as="div">
+                <template #leading>
+                  <KeyRound class="size-4" />
+                </template>
+                <code class="block break-all font-mono text-xs">
+                  {{ lastCreatedToken }}
+                </code>
+                <template #trailing>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click.stop="copyToken(lastCreatedToken)"
+                  >
+                    <Check
+                      v-if="copiedToken === lastCreatedToken"
+                      class="mr-1.5 size-3.5"
+                    />
+                    <Copy v-else class="mr-1.5 size-3.5" />
+                    {{ $t("common.copy") }}
+                  </Button>
+                </template>
+              </InsetGroupItem>
+            </InsetGroup>
+          </section>
 
           <div
-            v-if="lastCreatedToken"
-            class="flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3"
-          >
-            <div class="text-sm font-medium">
-              {{ $t("pages.usersPage.invite.newTokenCreated") }}
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <code class="min-w-0 flex-1 break-all font-mono text-xs">
-                {{ lastCreatedToken }}
-              </code>
-              <Button variant="outline" size="sm" @click="copyToken(lastCreatedToken)">
-                <Check v-if="copiedToken === lastCreatedToken" class="mr-1.5 size-3.5" />
-                <Copy v-else class="mr-1.5 size-3.5" />
-                {{ $t("common.copy") }}
-              </Button>
-            </div>
-          </div>
-
-          <EmptyState
             v-if="tokensLoading"
-            loading
-            size="sm"
-          />
-
-          <EmptyState
-            v-else-if="tokens.length === 0"
-            size="sm"
-            :title="$t('pages.usersPage.invite.emptyTitle')"
-            :description="$t('pages.usersPage.invite.emptyDescription')"
+            class="flex min-h-32 items-center justify-center"
           >
-            <template #icon>
-              <KeyRound />
-            </template>
-            <Button class="mt-2" :disabled="isCreatingToken" @click="handleCreateToken">
-              <Spinner v-if="isCreatingToken" class="mr-2" />
-              <Plus v-else class="mr-2 size-4" />
-              {{ $t("pages.usersPage.invite.createToken") }}
-            </Button>
-          </EmptyState>
-
-          <div v-else class="overflow-hidden rounded-xl border border-border/70 bg-card">
-            <div class="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="min-w-0">{{ $t("pages.usersPage.invite.columnToken") }}</TableHead>
-                    <TableHead class="w-32">{{ $t("pages.usersPage.invite.columnStatus") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnCreated") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnUsed") }}</TableHead>
-                    <TableHead class="w-40">{{ $t("pages.usersPage.invite.columnUsedBy") }}</TableHead>
-                    <TableHead class="w-24 text-right" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="token in tokens" :key="token.id">
-                    <TableCell class="max-w-0">
-                      <code class="block truncate font-mono text-xs text-muted-foreground" :title="tokenHint(token)">{{ tokenHint(token) }}</code>
-                    </TableCell>
-                    <TableCell>
-                      <Badge v-if="token.used" variant="secondary">
-                        <UserCheck class="mr-1 size-3" />
-                        {{ $t("pages.usersPage.invite.statusUsed") }}
-                      </Badge>
-                      <Badge v-else variant="default">
-                        {{ $t("pages.usersPage.invite.statusActive") }}
-                      </Badge>
-                    </TableCell>
-                    <TableCell class="text-sm text-muted-foreground">
-                      {{ formatTokenDate(token.createdAt) }}
-                    </TableCell>
-                    <TableCell class="text-sm text-muted-foreground">
-                      {{ formatTokenDate(token.usedAt) }}
-                    </TableCell>
-                    <TableCell class="max-w-0">
-                      <span class="block truncate">{{ token.usedByUserName || "-" }}</span>
-                    </TableCell>
-                    <TableCell class="text-right">
-                      <div v-if="!token.used" class="inline-flex items-center justify-end gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8"
-                          :title="$t('common.copy')"
-                          @click="copyToken(token.token)"
-                        >
-                          <Check v-if="copiedToken === token.token" class="size-4" />
-                          <Copy v-else class="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          :disabled="revokingTokenId === token.id"
-                          :title="$t('pages.usersPage.invite.revokeAction')"
-                          @click="handleRevokeToken(token)"
-                        >
-                          <Spinner v-if="revokingTokenId === token.id" />
-                          <Trash2 v-else class="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
+            <Spinner size="lg" class="text-muted-foreground" />
           </div>
+
+          <template v-else-if="tokens.length > 0">
+            <section v-if="activeTokens.length">
+              <InsetGroupLabel>{{
+                $t("pages.usersPage.invite.tokensActiveLabel")
+              }}</InsetGroupLabel>
+              <InsetGroup>
+                <InsetGroupItem
+                  v-for="token in activeTokens"
+                  :key="token.id"
+                  as="div"
+                >
+                  <template #leading>
+                    <KeyRound class="size-4" />
+                  </template>
+                  <p class="truncate font-mono text-xs" :title="token.token">
+                    {{ tokenHint(token) }}
+                  </p>
+                  <p
+                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+                  >
+                    {{ tokenCaption(token) }}
+                  </p>
+                  <template #trailing>
+                    <div class="flex items-center gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        class="size-8"
+                        :title="$t('common.copy')"
+                        :aria-label="$t('common.copy')"
+                        @click.stop="copyToken(token.token)"
+                      >
+                        <Check
+                          v-if="copiedToken === token.token"
+                          class="size-4"
+                        />
+                        <Copy v-else class="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        :disabled="revokingTokenId === token.id"
+                        :title="$t('pages.usersPage.invite.revokeAction')"
+                        :aria-label="$t('pages.usersPage.invite.revokeAction')"
+                        @click.stop="handleRevokeToken(token)"
+                      >
+                        <Spinner v-if="revokingTokenId === token.id" />
+                        <Trash2 v-else class="size-4" />
+                      </Button>
+                    </div>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+            </section>
+
+            <section v-if="usedTokens.length">
+              <InsetGroupLabel>{{
+                $t("pages.usersPage.invite.tokensUsedLabel")
+              }}</InsetGroupLabel>
+              <InsetGroup>
+                <InsetGroupItem
+                  v-for="token in usedTokens"
+                  :key="token.id"
+                  as="div"
+                >
+                  <template #leading>
+                    <KeyRound class="size-4 text-muted-foreground" />
+                  </template>
+                  <p class="truncate font-mono text-xs text-muted-foreground">
+                    {{ tokenHint(token) }}
+                  </p>
+                  <p
+                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+                  >
+                    {{ tokenCaption(token) }}
+                  </p>
+                </InsetGroupItem>
+              </InsetGroup>
+            </section>
+          </template>
         </div>
 
         <DialogFooter variant="bar">
-          <Button variant="outline" @click="closeInviteDialog">
+          <Button type="button" variant="outline" @click="closeInviteDialog">
             {{ $t("common.close") }}
           </Button>
         </DialogFooter>
@@ -744,10 +810,16 @@ export default {
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent
         size="lg"
+        :show-close="false"
         class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader variant="bar">
-          <DialogTitle>{{ $t("pages.usersPage.editUser") }}</DialogTitle>
+          <div class="flex min-h-8 items-center gap-2">
+            <DialogTitle class="min-w-0 flex-1 truncate">
+              {{ $t("pages.usersPage.editUser") }}
+            </DialogTitle>
+            <DialogHeaderClose />
+          </div>
           <DialogDescription>
             {{ $t("pages.usersPage.editUserDescription") }}
           </DialogDescription>
@@ -776,10 +848,26 @@ export default {
               <SettingsFormField
                 :label="$t('pages.usersPage.newPasswordLabel')"
                 label-for="admin-user-password"
+                :error="editPasswordIssue?.password"
               >
                 <PasswordInput
                   id="admin-user-password"
                   v-model="editForm.password"
+                  :disabled="isSavingEdit"
+                  autocomplete="new-password"
+                  :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
+                  :maxlength="FIELD_LIMITS.password"
+                />
+              </SettingsFormField>
+
+              <SettingsFormField
+                :label="$t('auth.confirmPassword')"
+                label-for="admin-user-password-confirm"
+                :error="editPasswordIssue?.confirm"
+              >
+                <PasswordInput
+                  id="admin-user-password-confirm"
+                  v-model="editForm.confirmPassword"
                   :disabled="isSavingEdit"
                   autocomplete="new-password"
                   :placeholder="$t('pages.usersPage.newPasswordPlaceholder')"
@@ -840,7 +928,9 @@ export default {
             </InsetGroup>
 
             <section v-if="canManageRoles">
-              <InsetGroupLabel>{{ $t("pages.usersPage.rolesTitle") }}</InsetGroupLabel>
+              <InsetGroupLabel>{{
+                $t("pages.usersPage.rolesTitle")
+              }}</InsetGroupLabel>
               <p
                 v-if="editingSelf"
                 class="mb-2 px-1 text-xs text-muted-foreground"
@@ -854,7 +944,9 @@ export default {
                   :as="isRoleRowDisabled(role.name) ? 'div' : 'button'"
                   :disabled="isRoleRowDisabled(role.name)"
                   :aria-pressed="editForm.roles.includes(role.name)"
-                  @click="toggleRole(role.name, !editForm.roles.includes(role.name))"
+                  @click="
+                    toggleRole(role.name, !editForm.roles.includes(role.name))
+                  "
                 >
                   {{ localizedRoleName(role.name) }}
                   <template #trailing>
@@ -868,7 +960,9 @@ export default {
             </section>
 
             <section v-if="canManageRoles">
-              <InsetGroupLabel>{{ $t("pages.usersPage.permissionsTitle") }}</InsetGroupLabel>
+              <InsetGroupLabel>{{
+                $t("pages.usersPage.permissionsTitle")
+              }}</InsetGroupLabel>
               <InsetGroup>
                 <InsetGroupItem
                   v-for="perm in permissionCatalog"
@@ -880,7 +974,9 @@ export default {
                   "
                   :disabled="accessEditLocked || isPermissionFromRole(perm)"
                   :aria-pressed="isPermissionChecked(perm)"
-                  @click="togglePermissionGrant(perm, !isPermissionChecked(perm))"
+                  @click="
+                    togglePermissionGrant(perm, !isPermissionChecked(perm))
+                  "
                 >
                   <p>{{ localizedPermissionLabel(perm) }}</p>
                   <p
@@ -911,13 +1007,11 @@ export default {
 
         <DialogFooter variant="bar">
           <DialogClose as-child>
-            <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
+            <Button type="button" variant="outline">{{
+              $t("common.cancel")
+            }}</Button>
           </DialogClose>
-          <Button
-            type="submit"
-            form="edit-user-form"
-            :disabled="isSavingEdit"
-          >
+          <Button type="submit" form="edit-user-form" :disabled="isSavingEdit || Boolean(editPasswordIssue)">
             <Spinner v-if="isSavingEdit" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
             {{ $t("common.save") }}

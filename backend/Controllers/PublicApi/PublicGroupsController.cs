@@ -6,6 +6,7 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 
 namespace Delegat.Controllers.PublicApi;
 
@@ -141,29 +142,15 @@ public class PublicGroupsController : ControllerBase
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
         var group = await _db.productGroups
-            .Include(g => g.members)
+            .AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == groupId && g.storeId == storeId, ct);
         if (group == null)
             throw ApiException.NotFound("Group not found", code: "group_not_found");
 
-        var productIds = body.productIds?.Distinct().ToList() ?? new List<int>();
-        var validIds = await _db.products
-            .Where(p => p.storeId == storeId && productIds.Contains(p.Id))
-            .Select(p => p.Id)
-            .ToListAsync(ct);
+        var added = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            _db, storeId, groupId, body.productIds, ct);
 
-        var existing = group.members.Select(m => m.productId).ToHashSet();
-        foreach (var pid in validIds.Where(id => !existing.Contains(id)))
-        {
-            _db.productGroupMembers.Add(new ProductGroupMember
-            {
-                groupId = groupId,
-                productId = pid
-            });
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true, added = validIds.Count(id => !existing.Contains(id)) });
+        return Ok(new { success = true, added });
     }
 
     [HttpDelete("{groupId:int}/products/{productId:int}")]

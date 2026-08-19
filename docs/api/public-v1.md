@@ -139,7 +139,7 @@ Respects product quotas (`409` when exceeded).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List with attributes + product counts. Attribute objects include `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, and `allowCustomValues` (typed values outside the option list; copied on category import). |
+| GET | `/` | List with attributes + product counts. Attribute objects include `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, and `allowCustomValues` (typed values outside the option list; copied on category import). Category objects include `hasSizes` (local Sizes tab; not a mapping-graph field). |
 | GET | `/{categoryId}` | Detail (same attribute fields as list, including `groupIcon`) |
 | POST | `/` | Create `{ name, description? }` |
 | PATCH | `/{categoryId}` | Update |
@@ -154,7 +154,7 @@ Respects product quotas (`409` when exceeded).
 | POST | `/` | Create |
 | PATCH | `/{groupId}` | Update |
 | DELETE | `/{groupId}` | Delete |
-| POST | `/{groupId}/products` | Body `{ productIds: number[] }` |
+| POST | `/{groupId}/products` | Body `{ productIds: number[] }`. A product can be in only one group; if it already belongs to another group, it is moved. |
 | DELETE | `/{groupId}/products/{productId}` | Remove member |
 
 ### Store attributes (`/stores/{storeId}/store-attributes`)

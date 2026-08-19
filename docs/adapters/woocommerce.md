@@ -46,6 +46,8 @@ Headers: `X-Delegat-Api-Key` and `Authorization: Bearer <key>`.
 - Export prices / stocks
 - Archive image import (`images.import_archive`)
 
+Variable products come from the host `_variants` bag (Sizes tab), not from mapping-graph fields. Each local size is keyed by Delegat variant id (`_delegat_variant_id`).
+
 No import from Woo, no orders.
 
 ## Bridge endpoints

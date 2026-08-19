@@ -5,12 +5,10 @@ import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import Separator from "@/components/ui/separator/Separator.vue";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import Switch from "@/components/ui/switch/Switch.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import { BookOpen, ExternalLink } from "lucide-vue-next";
@@ -27,11 +25,9 @@ export default {
     SettingsFormField,
     FieldGroup,
     Separator,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Switch,
     AdapterIcon,
     BookOpen,
@@ -161,47 +157,32 @@ export default {
           ? $t('pages.setup.marketplaceLabel')
           : $t('marketplace.marketplacePage.adapterLabel')
       "
-      :label-for="`${idPrefix}-adapter`"
     >
-      <Select
-        :model-value="adapterKey || undefined"
-        :disabled="disabled"
-        @update:model-value="onAdapterSelect"
+      <InsetGroup
+        role="radiogroup"
+        :aria-label="$t('marketplace.marketplacePage.adapterLabel')"
       >
-        <SelectTrigger :id="`${idPrefix}-adapter`" class="w-full min-w-0">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <AdapterIcon
-              v-if="adapterKey"
-              :adapter-key="adapterKey"
-              class="size-4 shrink-0"
-            />
-            <SelectValue
-              :placeholder="
-                $t('marketplace.marketplacePage.selectAdapterPlaceholder')
-              "
-            />
-          </div>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="adapter in adapters"
-            :key="adapter.key"
-            :value="adapter.key"
-            :text-value="adapter.displayName"
+        <InsetGroupItem
+          v-for="adapter in adapters"
+          :key="adapter.key"
+          role="radio"
+          :aria-checked="adapterKey === adapter.key"
+          :selected="adapterKey === adapter.key"
+          :disabled="disabled"
+          @click="onAdapterSelect(adapter.key)"
+        >
+          <template #leading>
+            <AdapterIcon :adapter-key="adapter.key" class="size-4" />
+          </template>
+          <p class="truncate">{{ adapter.displayName }}</p>
+          <p
+            v-if="adapter.version && !quiet"
+            class="text-muted-foreground mt-0.5 font-mono text-xs font-normal tabular-nums"
           >
-            <span class="flex min-w-0 items-center gap-2">
-              <AdapterIcon :adapter-key="adapter.key" class="size-4 shrink-0" />
-              <span class="truncate">{{ adapter.displayName }}</span>
-              <span
-                v-if="adapter.version && !quiet"
-                class="font-mono text-xs tabular-nums text-muted-foreground"
-              >
-                v{{ adapter.version }}
-              </span>
-            </span>
-          </SelectItem>
-        </SelectContent>
-      </Select>
+            v{{ adapter.version }}
+          </p>
+        </InsetGroupItem>
+      </InsetGroup>
       <template v-if="!quiet" #description>
         {{ $t("marketplace.marketplacePage.adapterPickHint") }}
       </template>
@@ -210,10 +191,10 @@ export default {
     <template v-if="adapterKey && credentialFields.length > 0">
       <Separator v-if="!quiet" />
       <div v-if="!quiet" class="space-y-1">
-        <h3 class="text-sm font-medium tracking-tight">
+        <InsetGroupLabel class="mb-0">
           {{ $t("marketplace.marketplacePage.credentialsSectionTitle") }}
-        </h3>
-        <p class="text-xs text-muted-foreground">
+        </InsetGroupLabel>
+        <p class="px-1 text-xs text-muted-foreground">
           {{
             $t("marketplace.marketplacePage.credentialsSectionHint", {
               adapter: selectedAdapterMeta?.displayName || adapterKey,
@@ -226,7 +207,7 @@ export default {
         :href="credentialsDocsUrl"
         target="_blank"
         rel="noopener noreferrer"
-        class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        class="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-primary hover:underline"
       >
         <BookOpen class="size-3.5 shrink-0" />
         {{

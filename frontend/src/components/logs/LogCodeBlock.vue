@@ -130,8 +130,8 @@ async function download() {
 </script>
 
 <template>
-  <div :class="cn('space-y-1.5', $props.class)">
-    <div class="flex items-center justify-between gap-2">
+  <div :class="cn('space-y-2', $props.class)">
+    <div class="flex items-center justify-between gap-2 px-1">
       <span
         :class="
           cn(
@@ -174,31 +174,36 @@ async function download() {
         </Button>
       </div>
     </div>
-    <pre
-      v-if="json && html"
+    <div
       :class="
         cn(
-          'log-json overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all',
-          maxHeightClass,
-          tone === 'destructive'
-            ? 'border-destructive/30 bg-destructive/5'
-            : 'bg-muted/40',
+          'rounded-xl bg-card p-1 ring-1',
+          tone === 'destructive' ? 'ring-destructive/30' : 'ring-border/70',
         )
       "
-      v-html="html"
-    />
-    <pre
-      v-else
-      :class="
-        cn(
-          'overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all',
-          maxHeightClass,
-          tone === 'destructive'
-            ? 'border-destructive/30 bg-destructive/5'
-            : 'bg-muted/40',
-        )
-      "
-    >{{ displayText || "-" }}</pre>
+    >
+      <pre
+        v-if="json && html"
+        :class="
+          cn(
+            'log-json overflow-auto rounded-lg p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all',
+            maxHeightClass,
+            tone === 'destructive' ? 'bg-destructive/5' : 'bg-muted/40',
+          )
+        "
+        v-html="html"
+      />
+      <pre
+        v-else
+        :class="
+          cn(
+            'overflow-auto rounded-lg p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all',
+            maxHeightClass,
+            tone === 'destructive' ? 'bg-destructive/5' : 'bg-muted/40',
+          )
+        "
+      >{{ displayText || "-" }}</pre>
+    </div>
   </div>
 </template>
 

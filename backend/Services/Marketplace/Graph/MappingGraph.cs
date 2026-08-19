@@ -202,7 +202,7 @@ public class GraphEvaluationContext
     public required Func<string?, object?> ResolveProductFilesByExtension { get; init; }
     public required Func<int, List<SourceOption>?> ResolveCategoryAttributeOptions { get; init; }
     public required Func<int, List<SourceOption>?> ResolveStoreAttributeOptions { get; init; }
-    /// <summary>(value, type) → coerced value. Reuses MappingService.CoerceToFieldType.</summary>
+    /// <summary>(value, type) → coerced value. Reuses <see cref="MappingFieldCoercion.Coerce"/>.</summary>
     public required Func<object?, string?, object?> Coerce { get; init; }
     /// <summary>Context for modifier nodes (template {{attr:N}} resolution). SourceAttributeOptions
     /// is overridden per-node from the branch's originating attribute.</summary>

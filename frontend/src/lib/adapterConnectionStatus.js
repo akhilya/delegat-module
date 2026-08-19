@@ -106,7 +106,7 @@ export function getConnectionStatusInfo(conn, icons = {}) {
       variant: "destructive",
       icon: icons.AlertTriangle || null,
       label: t("productMarketplaceIntegrations.noMapping"),
-      color: "text-error",
+      color: "text-destructive",
     };
   }
   switch (conn.linkStatus) {
@@ -129,7 +129,7 @@ export function getConnectionStatusInfo(conn, icons = {}) {
         variant: "destructive",
         icon: icons.XCircle || null,
         label: t("productMarketplaceIntegrations.statusError"),
-        color: "text-error",
+        color: "text-destructive",
       };
     case "Modified":
       return {
@@ -143,7 +143,7 @@ export function getConnectionStatusInfo(conn, icons = {}) {
         variant: "destructive",
         icon: icons.Unlink || null,
         label: t("productMarketplaceIntegrations.statusBroken"),
-        color: "text-error",
+        color: "text-destructive",
       };
     default:
       return {

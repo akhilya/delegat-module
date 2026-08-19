@@ -2,6 +2,7 @@
 import { reactiveOmit } from "@vueuse/core";
 import { PopoverContent, PopoverPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { MENU_ANIMATION, MENU_SURFACE } from "@/lib/menuSurface";
 
 defineOptions({
   inheritAttrs: false,
@@ -50,7 +51,9 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       v-bind="{ ...forwarded, ...$attrs }"
       :class="
         cn(
-          'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-[var(--z-popover)] w-auto min-w-0 max-w-[calc(100vw-1rem)] rounded-md border p-4 shadow-md origin-(--reka-popover-content-transform-origin) outline-hidden',
+          'z-[var(--z-popover)] w-auto min-w-0 max-w-[calc(100vw-1rem)] origin-(--reka-popover-content-transform-origin) p-4 outline-hidden',
+          MENU_SURFACE,
+          MENU_ANIMATION,
           props.class,
         )
       "

@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   InsetGroup,
   InsetGroupItem,
+  InsetGroupLabel,
 } from "@/components/ui/inset-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
@@ -32,12 +33,18 @@ import {
   adapterCanImportAll,
   adapterCanLink,
 } from "@/lib/adapterCapabilities";
-import { catalogConnectMatchQueue } from "@/lib/catalogConnectMatchQueue";
-import { PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
+import {
+  catalogConnectMatchQueue,
+  isCatalogConnectConnectionActive,
+} from "@/lib/catalogConnectMatchQueue";
+import { PAGE_MARKETPLACE, PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
+import { getDocsPageUrl } from "@/utils/docsUrl";
 import { http } from "@/main";
-import { Cable } from "lucide-vue-next";
+import { BookOpen, Cable, ExternalLink } from "lucide-vue-next";
+import { RouterLink } from "vue-router";
 import { randomUuidCompact } from "@/utils/uuid";
 
+const STEP_HOME = "home";
 const STEP_SOURCE = "source";
 const STEP_IMPORT = "import";
 const STEP_MATCH = "match";
@@ -56,6 +63,7 @@ export default {
     EmptyState,
     InsetGroup,
     InsetGroupItem,
+    InsetGroupLabel,
     Tabs,
     TabsList,
     TabsTrigger,
@@ -72,6 +80,9 @@ export default {
     TableHeader,
     TableRow,
     Cable,
+    BookOpen,
+    ExternalLink,
+    RouterLink,
   },
   data() {
     return {
@@ -82,7 +93,6 @@ export default {
       step: STEP_SOURCE,
       sourceId: null,
       matchConnectionId: null,
-      remainingMatchIds: [],
       importBatchId: null,
       importBusy: false,
       previewBusy: false,
@@ -106,11 +116,14 @@ export default {
       searchBusy: false,
       searchForExternalId: null,
       lastApply: null,
+      changingSource: false,
+      STEP_HOME,
       STEP_SOURCE,
       STEP_IMPORT,
       STEP_MATCH,
       STEP_REVIEW,
       STEP_SUMMARY,
+      PAGE_MARKETPLACE,
     };
   },
   computed: {
@@ -123,14 +136,48 @@ export default {
     hasLocalProducts() {
       return this.localProductCount > 0;
     },
+    docsHref() {
+      return getDocsPageUrl("workspace/catalog-connect", this.$i18n.locale);
+    },
+    sourceHint() {
+      if (this.changingSource || this.hasLocalProducts) {
+        return this.$t("pages.catalogConnect.changeSourceHint");
+      }
+      return this.$t("pages.catalogConnect.sourceHint");
+    },
+    importHint() {
+      if (this.changingSource || this.hasLocalProducts) {
+        return this.$t("pages.catalogConnect.changeSourceImportHint");
+      }
+      return this.$t("pages.catalogConnect.importHint");
+    },
     fromLocal() {
       return this.previewMeta.mode === "fromLocal";
     },
     importCapable() {
-      return this.connections.filter((c) => this.canImportAll(c));
+      return this.connections.filter(
+        (c) => this.isConnectionActive(c) && this.canImportAll(c),
+      );
     },
     linkCapable() {
-      return this.connections.filter((c) => this.canLink(c));
+      return this.connections.filter(
+        (c) => this.isConnectionActive(c) && this.canLink(c),
+      );
+    },
+    inactiveImportCapable() {
+      return this.connections.filter(
+        (c) => !this.isConnectionActive(c) && this.canImportAll(c),
+      );
+    },
+    inactiveLinkCapable() {
+      return this.connections.filter(
+        (c) => !this.isConnectionActive(c) && this.canLink(c),
+      );
+    },
+    remainingConnections() {
+      return this.matchQueueIds
+        .map((id) => this.connections.find((c) => Number(c.id) === Number(id)))
+        .filter(Boolean);
     },
     matchQueueIds() {
       return catalogConnectMatchQueue(this.linkCapable, {
@@ -268,6 +315,9 @@ export default {
     canLink(conn) {
       return adapterCanLink(this.adapterFor(conn));
     },
+    isConnectionActive(conn) {
+      return isCatalogConnectConnectionActive(conn);
+    },
     adapterName(conn) {
       return this.adapterFor(conn)?.displayName || conn.adapterKey;
     },
@@ -355,25 +405,48 @@ export default {
       ]);
     },
     startFlow() {
-      this.remainingMatchIds = [...this.matchQueueIds];
+      this.changingSource = false;
+      this.matchConnectionId = null;
       if (this.hasLocalProducts) {
-        this.beginNextMatch();
+        this.step = STEP_HOME;
         return;
       }
       if (this.importCapable.length === 1) {
         this.sourceId = this.importCapable[0].id;
       }
+      this.step = STEP_SOURCE;
     },
     continueFromSource() {
       if (!this.sourceId) return;
-      const source = this.sourceConnection;
-      const alreadyImported = (source?.productLinksCount || 0) > 0;
-      this.remainingMatchIds = [...this.matchQueueIds];
-      if (alreadyImported) {
-        this.beginNextMatch();
-      } else {
-        this.step = STEP_IMPORT;
+      this.step = STEP_IMPORT;
+    },
+    openChangeSource() {
+      this.changingSource = true;
+      this.sourceId =
+        this.importCapable.length === 1 ? this.importCapable[0].id : null;
+      this.step = STEP_SOURCE;
+    },
+    startMatch(connectionId) {
+      this.matchConnectionId = connectionId;
+      this.step = STEP_MATCH;
+      this.loadPreview();
+    },
+    async goHome() {
+      this.matchConnectionId = null;
+      this.changingSource = false;
+      await Promise.all([this.loadConnections(), this.loadProductCount()]);
+      if (this.hasLocalProducts) {
+        this.step = STEP_HOME;
+        return;
       }
+      this.startFlow();
+    },
+    cancelSourceImport() {
+      if (this.hasLocalProducts) {
+        this.goHome();
+        return;
+      }
+      this.step = STEP_SOURCE;
     },
     async runSourceImport() {
       if (!this.sourceId || this.importBusy) return;
@@ -393,8 +466,12 @@ export default {
             );
             await this.loadConnections();
             await this.loadProductCount();
-            this.remainingMatchIds = [...this.matchQueueIds];
-            this.beginNextMatch();
+            this.changingSource = false;
+            if (this.hasLocalProducts) {
+              this.step = STEP_HOME;
+            } else {
+              this.step = STEP_SOURCE;
+            }
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -404,21 +481,9 @@ export default {
         this.importBusy = false;
       }
     },
-    beginNextMatch() {
-      if (this.remainingMatchIds.length === 0) {
-        this.step = STEP_SUMMARY;
-        if (!this.lastApply) {
-          this.lastApply = { linked: 0, imported: 0, skipped: 0, failed: 0, mappingsCreated: 0, done: true };
-        }
-        return;
-      }
-      this.matchConnectionId = this.remainingMatchIds.shift();
-      this.step = STEP_MATCH;
-      this.loadPreview();
-    },
     async skipCurrentMatch() {
       await this.repairCurrentConnectionMappings();
-      this.beginNextMatch();
+      await this.goHome();
     },
     async loadPreview() {
       if (!this.matchConnectionId || this.previewBusy) return;
@@ -448,7 +513,7 @@ export default {
         if (all.length === 0) {
           await this.repairCurrentConnectionMappings();
           this.previewBusy = false;
-          this.beginNextMatch();
+          await this.goHome();
           return;
         }
         this.previewRows = all;
@@ -549,7 +614,7 @@ export default {
           items,
           importUnmatched: unmatchedToImport.length > 0,
           operationId,
-          onSuccess: (response) => {
+          onSuccess: async (response) => {
             const result = this.unwrapResult(response);
             this.lastApply = result;
             displaySonnerSuccess(
@@ -560,7 +625,7 @@ export default {
                 fields: result.attributesImported ?? 0,
               }),
             );
-            this.beginNextMatch();
+            await this.goHome();
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -669,10 +734,128 @@ export default {
       class="min-h-0 flex-1"
     />
 
+    <template v-else-if="step === STEP_HOME || step === STEP_SUMMARY">
+      <div class="flex w-full max-w-xl flex-col">
+        <p class="mb-6 text-sm text-muted-foreground">
+          {{ $t("pages.catalogConnect.homeHint") }}
+        </p>
+
+        <InsetGroup v-if="summaryRows.length" class="mb-8">
+          <InsetGroupItem
+            v-for="row in summaryRows"
+            :key="row.key"
+            as="div"
+          >
+            {{ row.label }}
+            <template #trailing>
+              <span class="tabular-nums text-sm">{{ row.count }}</span>
+            </template>
+          </InsetGroupItem>
+        </InsetGroup>
+
+        <EmptyState
+          v-if="connections.length === 0"
+          framed
+          :title="$t('pages.catalogConnect.noConnections')"
+        >
+          <template #icon>
+            <Cable />
+          </template>
+          <Button as-child>
+            <RouterLink :to="PAGE_MARKETPLACE">
+              {{ $t("pages.catalogConnect.openAdapters") }}
+            </RouterLink>
+          </Button>
+        </EmptyState>
+
+        <EmptyState
+          v-else-if="remainingConnections.length === 0 && inactiveLinkCapable.length > 0"
+          framed
+          :title="$t('pages.catalogConnect.inactiveTitle')"
+          :description="$t('pages.catalogConnect.inactiveDescription')"
+        >
+          <template #icon>
+            <Cable />
+          </template>
+          <Button as-child>
+            <RouterLink :to="PAGE_MARKETPLACE">
+              {{ $t("pages.catalogConnect.openAdapters") }}
+            </RouterLink>
+          </Button>
+        </EmptyState>
+
+        <EmptyState
+          v-else-if="remainingConnections.length === 0"
+          framed
+          :title="$t('pages.catalogConnect.homeAllLinked')"
+        >
+          <template #icon>
+            <Cable />
+          </template>
+        </EmptyState>
+
+        <template v-else>
+          <InsetGroupLabel>
+            {{ $t("pages.catalogConnect.remainingListLabel") }}
+          </InsetGroupLabel>
+          <InsetGroup>
+            <InsetGroupItem
+              v-for="conn in remainingConnections"
+              :key="conn.id"
+              show-chevron
+              @click="startMatch(conn.id)"
+            >
+              <template #leading>
+                <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+              </template>
+              <p class="truncate">{{ conn.name }}</p>
+              <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+                {{ adapterName(conn) }}
+                · {{ $t("pages.catalogConnect.linkedCount", { count: conn.productLinksCount || 0 }) }}
+              </p>
+            </InsetGroupItem>
+          </InsetGroup>
+        </template>
+
+        <p class="text-muted-foreground mt-3 px-1 text-xs leading-relaxed">
+          {{ $t("pages.catalogConnect.modelBody") }}
+        </p>
+
+        <div class="mt-6 flex flex-wrap items-center gap-2">
+          <Button variant="outline" @click="finish">
+            {{ $t("pages.setup.openProducts") }}
+          </Button>
+          <Button
+            v-if="importCapable.length > 0"
+            variant="ghost"
+            @click="openChangeSource"
+          >
+            {{ $t("pages.catalogConnect.changeSourceAction") }}
+          </Button>
+        </div>
+        <p
+          v-if="importCapable.length === 0 && inactiveImportCapable.length > 0"
+          class="text-muted-foreground mt-3 px-1 text-xs leading-relaxed"
+        >
+          {{ $t("pages.catalogConnect.inactiveDescription") }}
+        </p>
+        <a
+          :href="docsHref"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-6 inline-flex items-center gap-1.5 self-start px-1 text-xs font-medium text-primary hover:underline"
+        >
+          <BookOpen class="size-3.5 shrink-0" />
+          {{ $t("pages.catalogConnect.docsLink") }}
+          <ExternalLink class="size-3 shrink-0 opacity-70" />
+        </a>
+      </div>
+    </template>
+
     <template v-else-if="step === STEP_SOURCE">
       <div class="flex w-full max-w-xl flex-col">
         <p class="mb-6 text-sm text-muted-foreground">
-          {{ $t("pages.catalogConnect.sourceHint") }}
+          {{ sourceHint }}
         </p>
         <EmptyState
           v-if="connections.length === 0"
@@ -682,6 +865,26 @@ export default {
           <template #icon>
             <Cable />
           </template>
+          <Button as-child>
+            <RouterLink :to="PAGE_MARKETPLACE">
+              {{ $t("pages.catalogConnect.openAdapters") }}
+            </RouterLink>
+          </Button>
+        </EmptyState>
+        <EmptyState
+          v-else-if="importCapable.length === 0 && inactiveImportCapable.length > 0"
+          framed
+          :title="$t('pages.catalogConnect.inactiveTitle')"
+          :description="$t('pages.catalogConnect.inactiveDescription')"
+        >
+          <template #icon>
+            <Cable />
+          </template>
+          <Button as-child>
+            <RouterLink :to="PAGE_MARKETPLACE">
+              {{ $t("pages.catalogConnect.openAdapters") }}
+            </RouterLink>
+          </Button>
         </EmptyState>
         <EmptyState
           v-else-if="importCapable.length === 0"
@@ -718,17 +921,44 @@ export default {
           <p class="text-muted-foreground mt-3 px-1 text-xs leading-relaxed">
             {{ $t("pages.catalogConnect.modelBody") }}
           </p>
-          <Button class="mt-6 self-start" :disabled="!sourceId" @click="continueFromSource">
-            {{ $t("common.continue") }}
-          </Button>
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <Button :disabled="!sourceId" @click="continueFromSource">
+              {{ $t("common.continue") }}
+            </Button>
+            <Button
+              v-if="hasLocalProducts"
+              variant="ghost"
+              @click="goHome"
+            >
+              {{ $t("common.back") }}
+            </Button>
+          </div>
         </template>
+        <Button
+          v-if="hasLocalProducts && importCapable.length === 0"
+          class="mt-6 self-start"
+          variant="ghost"
+          @click="goHome"
+        >
+          {{ $t("common.back") }}
+        </Button>
+        <a
+          :href="docsHref"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-6 inline-flex items-center gap-1.5 self-start px-1 text-xs font-medium text-primary hover:underline"
+        >
+          <BookOpen class="size-3.5 shrink-0" />
+          {{ $t("pages.catalogConnect.docsLink") }}
+          <ExternalLink class="size-3 shrink-0 opacity-70" />
+        </a>
       </div>
     </template>
 
     <template v-else-if="step === STEP_IMPORT">
       <div class="flex w-full max-w-xl flex-col">
         <p class="mb-6 text-sm text-muted-foreground">
-          {{ $t("pages.catalogConnect.importHint") }}
+          {{ importHint }}
         </p>
         <InsetGroup v-if="sourceConnection">
           <InsetGroupItem as="div">
@@ -744,6 +974,14 @@ export default {
         <Button class="mt-6 self-start" :disabled="importBusy" @click="runSourceImport">
           <Spinner v-if="importBusy" />
           {{ $t("pages.catalogConnect.importAction") }}
+        </Button>
+        <Button
+          class="mt-2 self-start"
+          variant="ghost"
+          :disabled="importBusy"
+          @click="cancelSourceImport"
+        >
+          {{ $t("common.back") }}
         </Button>
       </div>
     </template>
@@ -762,6 +1000,14 @@ export default {
           @click="skipCurrentMatch"
         >
           {{ $t("pages.catalogConnect.skipConnection") }}
+        </Button>
+        <Button
+          class="mt-2 self-start"
+          variant="ghost"
+          :disabled="previewBusy"
+          @click="goHome"
+        >
+          {{ $t("common.back") }}
         </Button>
       </div>
     </template>
@@ -803,7 +1049,7 @@ export default {
           }}
         </p>
 
-        <div class="mb-4 overflow-hidden rounded-xl ring-1 ring-border/70">
+        <div class="mb-4 overflow-hidden rounded-xl border border-border/70 bg-card">
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
@@ -957,37 +1203,13 @@ export default {
           <Button variant="ghost" :disabled="applyBusy" @click="skipCurrentMatch">
             {{ $t("pages.catalogConnect.skipConnection") }}
           </Button>
+          <Button variant="ghost" :disabled="applyBusy" @click="goHome">
+            {{ $t("common.back") }}
+          </Button>
         </div>
         <p v-if="applyBusy" class="mt-3 text-sm text-muted-foreground">
           {{ applyLiveLog }}
         </p>
-      </div>
-    </template>
-
-    <template v-else>
-      <div class="flex w-full max-w-xl flex-col">
-        <p class="mb-6 text-sm text-muted-foreground">
-          {{
-            (lastApply?.mappingsCreated ?? 0) > 0
-              ? $t("pages.catalogConnect.summaryBodyMapped")
-              : $t("pages.catalogConnect.summaryBody")
-          }}
-        </p>
-        <InsetGroup v-if="summaryRows.length">
-          <InsetGroupItem
-            v-for="row in summaryRows"
-            :key="row.key"
-            as="div"
-          >
-            {{ row.label }}
-            <template #trailing>
-              <span class="tabular-nums text-sm">{{ row.count }}</span>
-            </template>
-          </InsetGroupItem>
-        </InsetGroup>
-        <Button class="mt-6 self-start" @click="finish">
-          {{ $t("pages.setup.openProducts") }}
-        </Button>
       </div>
     </template>
   </AppPageChrome>

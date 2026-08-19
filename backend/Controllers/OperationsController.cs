@@ -226,270 +226,109 @@ public class OperationsController : ControllerBase
     }
 
     [HttpPost]
-    [Route("/operations/{operationId}/pause")]
-    public async Task<IActionResult> PauseOperation(string operationId, CancellationToken ct)
-    {
-        var op = await GetOperationAsync(operationId, ct);
-        if (op == null) return NotFound();
-        if (op.status != "running") return BadRequest(new { message = "Operation is not running" });
-
-        op.status = "paused";
-        await _context.SaveChangesAsync(ct);
-
-        if (op.batchType == "import" && op.batchId != null)
-        {
-            await _context.pendingCategoryImports
-                .Where(p => p.operationId == op.batchId && p.status == CategoryImportStatus.InProgress)
-                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
-        }
-        else if (op.batchType == "category-import")
-        {
-            await _context.pendingCategoryImports
-                .Where(p => p.operationId == op.operationId && p.status == CategoryImportStatus.InProgress)
-                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
-        }
-
-        await _operationLogger.LogAsync(operationId, op.storeId, "warning", "Operation paused");
-        await _operationLogger.UpdateStatusAsync(operationId, op.storeId, "paused");
-
-        // Cascade to child operations (e.g. image download)
-        foreach (var childId in await GetChildOperationIds(operationId, op.storeId, ct))
-        {
-            var child = await _context.operations.FirstOrDefaultAsync(o => o.operationId == childId, ct);
-            if (child != null && child.status == "running")
-            {
-                child.status = "paused";
-                await _context.SaveChangesAsync(ct);
-                await _operationLogger.LogAsync(childId, op.storeId, "warning", "Paused (cascade)");
-                await _operationLogger.UpdateStatusAsync(childId, op.storeId, "paused");
-            }
-        }
-
-        return Ok(new { status = op.status });
-    }
-
-    [HttpPost]
-    [Route("/operations/{operationId}/resume")]
-    public async Task<IActionResult> ResumeOperation(string operationId, CancellationToken ct)
-    {
-        var op = await GetOperationAsync(operationId, ct);
-        if (op == null) return NotFound();
-        if (op.status != "paused") return BadRequest(new { message = "Operation is not paused" });
-
-        op.status = "running";
-        await _context.SaveChangesAsync(ct);
-
-        // Re-activate cancelled pending items back to Pending
-        if (op.batchId != null)
-        {
-            if (op.batchType == "import")
-            {
-                await _context.pendingProductImports
-                    .Where(p => p.batchId == op.batchId && p.status == ProductImportStatus.Cancelled)
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Pending), ct);
-                await _context.pendingCategoryImports
-                    .Where(p => p.operationId == op.batchId && p.status == CategoryImportStatus.Cancelled)
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
-            }
-            else if (op.batchType == "category-import")
-            {
-                await _context.pendingCategoryImports
-                    .Where(p => p.operationId == op.operationId && p.status == CategoryImportStatus.Cancelled)
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending), ct);
-            }
-            else if (op.batchType == "export")
-            {
-                await _context.pendingProductExports
-                    .Where(p => p.batchId == op.batchId && p.status == ProductExportStatus.Cancelled)
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Pending), ct);
-            }
-            else if (op.batchType == "image-download")
-            {
-                await _context.pendingImageDownloads
-                    .Where(p => p.batchId == op.batchId && p.status == ImageDownloadStatus.Cancelled)
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Pending), ct);
-            }
-        }
-
-        await _operationLogger.LogAsync(operationId, op.storeId, "info", "Operation resumed");
-        await _operationLogger.UpdateStatusAsync(operationId, op.storeId, "running");
-
-        // Cascade to child operations
-        foreach (var childId in await GetChildOperationIds(operationId, op.storeId, ct))
-        {
-            var child = await _context.operations.FirstOrDefaultAsync(o => o.operationId == childId, ct);
-            if (child != null && child.status == "paused")
-            {
-                child.status = "running";
-                await _context.SaveChangesAsync(ct);
-
-                // Re-activate cancelled items for child
-                if (child.batchType == "image-download")
-                {
-                    await _context.pendingImageDownloads
-                        .Where(p => p.batchId == child.batchId && p.status == ImageDownloadStatus.Cancelled)
-                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Pending), ct);
-                }
-
-                await _operationLogger.LogAsync(childId, op.storeId, "info", "Resumed (cascade)");
-                await _operationLogger.UpdateStatusAsync(childId, op.storeId, "running");
-            }
-        }
-
-        return Ok(new { status = op.status });
-    }
-
-    [HttpPost]
     [Route("/operations/{operationId}/stop")]
     public async Task<IActionResult> StopOperation(string operationId, CancellationToken ct)
     {
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
-        if (op.status != "running" && op.status != "paused")
+        if (!OperationLifecycle.IsActive(op.status))
             return BadRequest(new { message = "Operation has already finished" });
 
-        // Cancel remaining pending items
-        int cancelledCount = 0;
-        if (op.batchId != null)
-        {
-            // Only cancel work still in flight. Keep Failed rows so summary/retry stay accurate.
-            if (op.batchType == "import")
-            {
-                cancelledCount = await _context.pendingProductImports
-                    .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductImportStatus.Pending
-                         || p.status == ProductImportStatus.InProgress))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
-                cancelledCount += await _context.pendingCategoryImports
-                    .Where(p => p.operationId == op.batchId &&
-                        (p.status == CategoryImportStatus.Pending
-                         || p.status == CategoryImportStatus.InProgress
-                         || p.status == CategoryImportStatus.Failed))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "category-import")
-            {
-                cancelledCount = await _context.pendingCategoryImports
-                    .Where(p => p.operationId == op.operationId &&
-                        (p.status == CategoryImportStatus.Pending
-                         || p.status == CategoryImportStatus.InProgress
-                         || p.status == CategoryImportStatus.Failed))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "export")
-            {
-                cancelledCount = await _context.pendingProductExports
-                    .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductExportStatus.Pending
-                         || p.status == ProductExportStatus.InProgress))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "image-download")
-            {
-                cancelledCount = await _context.pendingImageDownloads
-                    .Where(p => p.batchId == op.batchId &&
-                        (p.status == ImageDownloadStatus.Pending
-                         || p.status == ImageDownloadStatus.InProgress))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "folder-job")
-            {
-                cancelledCount = await _context.pendingFolderJobs
-                    .Where(p => p.operationId == op.batchId &&
-                        (p.status == FolderJobStatus.Pending
-                         || p.status == FolderJobStatus.InProgress
-                         || p.status == FolderJobStatus.Failed))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "product-bulk-update")
-            {
-                cancelledCount = await _context.pendingProductBulkUpdates
-                    .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductBulkUpdateStatus.Pending
-                         || p.status == ProductBulkUpdateStatus.InProgress))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Cancelled), ct);
-            }
-            else if (op.batchType == "product-transfer")
-            {
-                cancelledCount = await _context.pendingProductTransfers
-                    .Where(p => p.batchId == op.batchId &&
-                        (p.status == ProductTransferStatus.Pending
-                         || p.status == ProductTransferStatus.InProgress))
-                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Cancelled), ct);
-            }
-        }
-
-        // Calculate final stats
-        int completed = 0, failed = 0, total = 0;
-        if (op.batchId != null)
-        {
-            if (op.batchType == "import")
-            {
-                var items = await _context.pendingProductImports.AsNoTracking()
-                    .Where(p => p.batchId == op.batchId).ToListAsync(ct);
-                total = items.Count;
-                completed = items.Count(p => p.status == ProductImportStatus.Completed);
-                failed = items.Count(p => p.status == ProductImportStatus.Failed);
-            }
-            else if (op.batchType == "export")
-            {
-                var items = await _context.pendingProductExports.AsNoTracking()
-                    .Where(p => p.batchId == op.batchId).ToListAsync(ct);
-                total = items.Count;
-                completed = items.Count(p => p.status == ProductExportStatus.Completed);
-                failed = items.Count(p => p.status == ProductExportStatus.Failed);
-            }
-            else if (op.batchType == "image-download")
-            {
-                var items = await _context.pendingImageDownloads.AsNoTracking()
-                    .Where(p => p.batchId == op.batchId).ToListAsync(ct);
-                total = items.Count;
-                completed = items.Count(p => p.status == ImageDownloadStatus.Completed);
-                failed = items.Count(p => p.status == ImageDownloadStatus.Failed);
-            }
-            else if (op.batchType == "category-import")
-            {
-                var items = await _context.pendingCategoryImports.AsNoTracking()
-                    .Where(p => p.operationId == op.operationId).ToListAsync(ct);
-                total = items.Count;
-                completed = items.Count(p => p.status == CategoryImportStatus.Completed);
-                failed = items.Count(p => p.status == CategoryImportStatus.Failed);
-            }
-        }
-
-        var summary = $"Stopped. Completed: {completed}, errors: {failed}, cancelled: {cancelledCount}";
+        var summary = op.totalItems is > 0
+            ? $"Stopped. Completed: {op.completedItems}, errors: {op.failedItems}"
+            : "Stopped";
         await _operationLogger.LogAsync(operationId, op.storeId, "warning", summary);
-        // Sync progress counters with final queue statuses (Failed rows are preserved above).
-        if (total > 0)
-            await _operationLogger.ProgressAsync(operationId, op.storeId, total, completed, failed);
         await _operationLogger.FinishAsync(operationId, op.storeId, "cancelled", summary);
 
-        // Cascade stop to child operations
+        await CancelQueuedWorkAsync(op, ct);
+
         foreach (var childId in await GetChildOperationIds(operationId, op.storeId, ct))
         {
             var child = await _context.operations.FirstOrDefaultAsync(o => o.operationId == childId, ct);
-            if (child != null && (child.status == "running" || child.status == "paused"))
-            {
-                int childCancelled = 0;
-                if (child.batchType == "image-download")
-                {
-                    childCancelled = await _context.pendingImageDownloads
-                        .Where(p => p.batchId == child.batchId &&
-                            (p.status == ImageDownloadStatus.Pending || p.status == ImageDownloadStatus.InProgress))
-                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
+            if (child == null || !OperationLifecycle.IsActive(child.status))
+                continue;
 
-                    var imgItems = await _context.pendingImageDownloads.AsNoTracking()
-                        .Where(p => p.batchId == child.batchId).ToListAsync(ct);
-                    var imgCompleted = imgItems.Count(p => p.status == ImageDownloadStatus.Completed);
-                    var imgFailed = imgItems.Count(p => p.status == ImageDownloadStatus.Failed);
-                    var childSummary = $"Stopped (cascade). Downloaded: {imgCompleted}, errors: {imgFailed}, cancelled: {childCancelled}";
-                    await _operationLogger.LogAsync(childId, op.storeId, "warning", childSummary);
-                    await _operationLogger.FinishAsync(childId, op.storeId, "cancelled", childSummary);
-                }
-            }
+            await _operationLogger.LogAsync(childId, op.storeId, "warning", "Stopped (cascade)");
+            await _operationLogger.FinishAsync(childId, op.storeId, "cancelled", "Stopped (cascade)");
+            await CancelQueuedWorkAsync(child, ct);
         }
 
         return Ok(new { status = "cancelled" });
+    }
+
+    /// <summary>
+    /// Marks remaining queue rows cancelled. In-flight marketplace HTTP may still finish that one item.
+    /// </summary>
+    private async Task CancelQueuedWorkAsync(Operation op, CancellationToken ct)
+    {
+        var batchKey = op.batchId ?? op.operationId;
+        if (string.IsNullOrEmpty(batchKey))
+            return;
+
+        if (op.batchType == "import")
+        {
+            await _context.pendingProductImports
+                .Where(p => p.batchId == batchKey &&
+                    (p.status == ProductImportStatus.Pending
+                     || p.status == ProductImportStatus.InProgress))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductImportStatus.Cancelled), ct);
+            await _context.pendingCategoryImports
+                .Where(p => p.operationId == batchKey &&
+                    (p.status == CategoryImportStatus.Pending
+                     || p.status == CategoryImportStatus.InProgress
+                     || p.status == CategoryImportStatus.Failed))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "category-import")
+        {
+            await _context.pendingCategoryImports
+                .Where(p => p.operationId == op.operationId &&
+                    (p.status == CategoryImportStatus.Pending
+                     || p.status == CategoryImportStatus.InProgress
+                     || p.status == CategoryImportStatus.Failed))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "export")
+        {
+            await _context.pendingProductExports
+                .Where(p => p.batchId == batchKey &&
+                    (p.status == ProductExportStatus.Pending
+                     || p.status == ProductExportStatus.InProgress))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductExportStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "image-download")
+        {
+            await _context.pendingImageDownloads
+                .Where(p => p.batchId == batchKey &&
+                    (p.status == ImageDownloadStatus.Pending
+                     || p.status == ImageDownloadStatus.InProgress))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "folder-job")
+        {
+            await _context.pendingFolderJobs
+                .Where(p => p.operationId == batchKey &&
+                    (p.status == FolderJobStatus.Pending
+                     || p.status == FolderJobStatus.InProgress
+                     || p.status == FolderJobStatus.Failed))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "product-bulk-update")
+        {
+            await _context.pendingProductBulkUpdates
+                .Where(p => p.batchId == batchKey &&
+                    (p.status == ProductBulkUpdateStatus.Pending
+                     || p.status == ProductBulkUpdateStatus.InProgress))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductBulkUpdateStatus.Cancelled), ct);
+        }
+        else if (op.batchType == "product-transfer")
+        {
+            await _context.pendingProductTransfers
+                .Where(p => p.batchId == batchKey &&
+                    (p.status == ProductTransferStatus.Pending
+                     || p.status == ProductTransferStatus.InProgress))
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ProductTransferStatus.Cancelled), ct);
+        }
     }
 
     /// <summary>

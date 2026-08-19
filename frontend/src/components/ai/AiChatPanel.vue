@@ -980,11 +980,11 @@ function renderMarkdown(text) {
   border-radius: 50%;
   background: currentColor;
   opacity: 0.4;
-  animation: ai-bounce 1s ease-in-out infinite;
+  animation: ai-pulse 1s var(--ease-out-quart) infinite;
 }
-@keyframes ai-bounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-4px); opacity: 1; }
+@keyframes ai-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 /* Markdown content styling */

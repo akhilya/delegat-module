@@ -1,4 +1,9 @@
 <script setup>
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
+
 defineProps({
   items: {
     type: Array,
@@ -8,18 +13,24 @@ defineProps({
 </script>
 
 <template>
-  <div class="space-y-2 text-sm">
-    <div
+  <InsetGroup>
+    <InsetGroupItem
       v-for="(item, i) in items"
       :key="i"
-      class="flex items-start justify-between gap-3"
+      as="div"
+      class="items-start"
     >
-      <span class="shrink-0 text-muted-foreground">{{ item.label }}</span>
-      <div class="min-w-0 text-right">
+      <span class="text-muted-foreground">{{ item.label }}</span>
+      <template #trailing>
         <slot :name="`item-${i}`" :item="item">
-          <span class="break-all">{{ item.value ?? "-" }}</span>
+          <span
+            class="block max-w-[16rem] text-right break-all"
+            :title="item.value == null || item.value === '' ? undefined : String(item.value)"
+          >
+            {{ item.value ?? "-" }}
+          </span>
         </slot>
-      </div>
-    </div>
-  </div>
+      </template>
+    </InsetGroupItem>
+  </InsetGroup>
 </template>

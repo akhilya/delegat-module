@@ -21,6 +21,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import AppImage from "@/components/AppImage.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import {
@@ -35,9 +39,10 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
   SheetDescription,
+  SheetHeader,
+  SheetHeaderClose,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import {
   Select,
@@ -64,6 +69,8 @@ export default {
     Plus,
     SettingsFormField,
     FieldGroup,
+    InsetGroup,
+    InsetGroupItem,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -79,6 +86,7 @@ export default {
     Sheet,
     SheetContent,
     SheetHeader,
+    SheetHeaderClose,
     SheetTitle,
     SheetDescription,
   },
@@ -1156,98 +1164,90 @@ export default {
 
     <!-- Preview summary -->
     <Sheet v-model:open="showPreviewSheet">
-      <SheetContent side="right" class="overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>{{ $t("marketplace.fieldMappingPage.previewTitle") }}</SheetTitle>
-          <SheetDescription>{{ $t("marketplace.fieldMappingPage.previewSheetDescription") }}</SheetDescription>
+      <SheetContent
+        side="right"
+        :show-close="false"
+        class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      >
+        <SheetHeader variant="bar">
+          <div class="flex min-h-8 items-center gap-2">
+            <SheetTitle class="min-w-0 flex-1 truncate">
+              {{ $t("marketplace.fieldMappingPage.previewTitle") }}
+            </SheetTitle>
+            <SheetHeaderClose />
+          </div>
+          <SheetDescription>
+            {{ $t("marketplace.fieldMappingPage.previewSheetDescription") }}
+          </SheetDescription>
         </SheetHeader>
 
-        <div class="mt-4 space-y-2">
-          <div
-            v-for="item in previewSummary"
-            :key="item.externalFieldKey"
-            class="rounded-xl border p-3 text-sm"
-            :class="{
-              'bg-destructive/10': item.error,
-              'bg-warning/10': item.isChanged && !item.error,
-            }"
-          >
-            <div v-if="item.error">
-              <div class="font-medium text-xs text-muted-foreground mb-1">
-                {{ item.fieldName }}
-              </div>
-              <div
-                class="text-destructive text-xs break-all whitespace-pre-wrap"
-              >
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <InsetGroup v-if="previewSummary.length > 0">
+            <InsetGroupItem
+              v-for="item in previewSummary"
+              :key="item.externalFieldKey"
+              as="div"
+            >
+              <p class="truncate">{{ item.fieldName }}</p>
+              <div v-if="item.error" class="mt-1 text-xs text-destructive break-all whitespace-pre-wrap">
                 {{ item.error }}
               </div>
-            </div>
-            <div v-else-if="isImageValue(item.resultValue)">
-              <Tabs default-value="visual">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="font-medium text-xs text-muted-foreground">{{
-                    item.fieldName
-                  }}</span>
+              <div v-else-if="isImageValue(item.resultValue)" class="mt-2">
+                <Tabs default-value="visual">
                   <TabsList class="h-6 p-0.5">
-                    <TabsTrigger value="visual" class="text-[11px] h-5 px-2"
-                      >{{ $t("marketplace.fieldMappingPage.visualTab") }}</TabsTrigger
-                    >
-                    <TabsTrigger value="raw" class="text-[11px] h-5 px-2"
-                      >{{ $t("marketplace.fieldMappingPage.rawDataTab") }}</TabsTrigger
-                    >
+                    <TabsTrigger value="visual" class="text-[11px] h-5 px-2">
+                      {{ $t("marketplace.fieldMappingPage.visualTab") }}
+                    </TabsTrigger>
+                    <TabsTrigger value="raw" class="text-[11px] h-5 px-2">
+                      {{ $t("marketplace.fieldMappingPage.rawDataTab") }}
+                    </TabsTrigger>
                   </TabsList>
-                </div>
-                <TabsContent value="visual" class="mt-0">
-                  <div class="flex flex-wrap gap-2">
-                    <div
-                      v-for="(url, idx) in parseImageUrls(item.resultValue)"
-                      :key="idx"
-                      class="group relative h-24 w-24 overflow-hidden rounded-xl border bg-muted"
-                    >
-                      <AppImage
-                        :src="url"
-                        :alt="String(idx + 1)"
-                        spinner-size="sm"
-                        class="absolute inset-0 size-full"
-                        img-class="size-full object-cover"
-                        loading="lazy"
-                        referrerpolicy="no-referrer"
-                      />
-                      <!-- Fallback: shows image index when img fails -->
+                  <TabsContent value="visual" class="mt-2">
+                    <div class="flex flex-wrap gap-2">
                       <div
-                        class="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground"
+                        v-for="(url, idx) in parseImageUrls(item.resultValue)"
+                        :key="idx"
+                        class="group relative h-24 w-24 overflow-hidden rounded-xl bg-muted ring-1 ring-inset ring-border/70"
                       >
-                        {{ idx + 1 }}
+                        <AppImage
+                          :src="url"
+                          :alt="String(idx + 1)"
+                          spinner-size="sm"
+                          class="absolute inset-0 size-full"
+                          img-class="size-full object-cover"
+                          loading="lazy"
+                          referrerpolicy="no-referrer"
+                        />
+                        <div
+                          class="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground"
+                        >
+                          {{ idx + 1 }}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <p class="text-[10px] text-muted-foreground mt-2">
-                    {{ $t("marketplace.fieldMappingPage.imagesCountHint", { count: parseImageUrls(item.resultValue).length }) }}
-                  </p>
-                </TabsContent>
-                <TabsContent value="raw" class="mt-0 space-y-1 text-xs">
-                  <div class="flex gap-2 min-w-0">
-                    <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
-                    <span
-                      class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
-                      >{{ item.sourceValue ?? "-" }}</span
-                    >
-                  </div>
-                  <div class="flex gap-2 min-w-0">
-                    <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
-                    <span
-                      class="font-medium font-mono break-all whitespace-pre-wrap"
-                      >{{ item.resultValue ?? "-" }}</span
-                    >
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-            <div v-else>
-              <div class="font-medium text-xs text-muted-foreground mb-1">
-                {{ item.fieldName }}
+                    <p class="text-muted-foreground mt-2 text-xs font-normal">
+                      {{ $t("marketplace.fieldMappingPage.imagesCountHint", { count: parseImageUrls(item.resultValue).length }) }}
+                    </p>
+                  </TabsContent>
+                  <TabsContent value="raw" class="mt-2 space-y-1 text-xs">
+                    <div class="flex gap-2 min-w-0">
+                      <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
+                      <span
+                        class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
+                        >{{ item.sourceValue ?? "-" }}</span
+                      >
+                    </div>
+                    <div class="flex gap-2 min-w-0">
+                      <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
+                      <span
+                        class="font-medium font-mono break-all whitespace-pre-wrap"
+                        >{{ item.resultValue ?? "-" }}</span
+                      >
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
-              <div class="space-y-1 text-xs">
+              <div v-else class="mt-1 space-y-1 text-xs">
                 <div class="flex gap-2 min-w-0">
                   <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
                   <span
@@ -1263,10 +1263,10 @@ export default {
                   >
                 </div>
               </div>
-            </div>
-          </div>
+            </InsetGroupItem>
+          </InsetGroup>
           <EmptyState
-            v-if="previewSummary.length === 0"
+            v-else
             size="sm"
             :framed="false"
             :title="$t('marketplace.fieldMappingPage.noActiveFieldsTitle')"

@@ -112,6 +112,13 @@ public class CatalogMatchService
         _productSync = productSync;
     }
 
+    internal static void EnsureConnectionActive(MarketplaceConnection connection)
+    {
+        if (connection.isActive)
+            return;
+        throw ApiException.BadRequest("Connection is inactive", code: "connection_inactive");
+    }
+
     /// <summary>
     /// fromLocal = look up each unlinked local SKU/barcode (used when that set is small).
     /// fromRemote = page the marketplace catalog (only when local lookup would be too large).
@@ -132,6 +139,7 @@ public class CatalogMatchService
         string? statusFilter,
         CancellationToken ct)
     {
+        EnsureConnectionActive(connection);
         var adapter = RequireImportAdapter(connection);
         var hasAll = adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts);
         var hasOne = adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct);
@@ -195,6 +203,7 @@ public class CatalogMatchService
         CancellationToken ct,
         string? operationId = null)
     {
+        EnsureConnectionActive(connection);
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey)
             ?? throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
@@ -242,6 +251,23 @@ public class CatalogMatchService
 
         foreach (var item in items)
         {
+            if (await OperationLifecycle.IsStopRequestedAsync(_db, operationId, ct))
+            {
+                await _operationLogger.FinishAsync(
+                    operationId,
+                    connection.storeId,
+                    "cancelled",
+                    $"Stopped. Linked {linked}, failed {failed}");
+                return new CatalogMatchApplyResult
+                {
+                    OperationId = operationId,
+                    Linked = linked,
+                    Failed = failed,
+                    Skipped = skipped,
+                    MappingsCreated = mappingsCreated,
+                };
+            }
+
             var externalId = (item.ExternalProductId ?? "").Trim();
             if (externalId.Length == 0 || externalId.Length > ProductMarketplaceLink.EXTERNAL_ID_MAX_LENGTH)
             {
@@ -337,6 +363,7 @@ public class CatalogMatchService
         int userId,
         CancellationToken ct)
     {
+        EnsureConnectionActive(connection);
         var adapter = RequireImportAllAdapter(connection);
         var linkedIds = await LinkedExternalIdsAsync(connection.Id, ct);
         var remotes = await FetchUnlinkedRemotesAsync(adapter, connection, linkedIds, ct);
@@ -374,6 +401,7 @@ public class CatalogMatchService
         int userId,
         CancellationToken ct)
     {
+        EnsureConnectionActive(connection);
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey)
             ?? throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 

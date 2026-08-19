@@ -2,7 +2,6 @@
 import { Spinner } from "@/components/ui/spinner";
 // ProductMarketplaceIntegrations - Manages marketplace connections for a product: export, import, and sync status.
 import { Button } from "@/components/ui/button";
-import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
@@ -16,30 +15,20 @@ import { randomUuidCompact } from "@/utils/uuid";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import {
   Upload,
-  Download,
   CheckCircle,
   XCircle,
   AlertTriangle,
   Link2,
   Settings,
-  ExternalLink,
-  Plus,
   RefreshCw,
   EllipsisVertical,
-  Ruler,
-  Layers,
   Unlink,
-  SearchCheck,
-  ChevronRight,
-  Package,
-  DollarSign,
-  Boxes,
+  ChevronDown,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
 import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import {
   Select,
@@ -49,12 +38,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import {
   Dialog,
   DialogClose,
@@ -65,31 +52,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import Separator from "@/components/ui/separator/Separator.vue";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -120,12 +85,12 @@ import {
   exportModeLabel,
   getConnectionStatusInfo as sharedConnectionStatusInfo,
 } from "@/lib/adapterConnectionStatus";
+import { dispatchAdapterCardContextMenu } from "@/lib/adapterCardContextMenu";
 
 export default {
   components: {
     Spinner,
     Button,
-    Badge,
     EmptyState,
     AdapterIcon,
     ProductAdapterConnectionMenu,
@@ -134,23 +99,13 @@ export default {
     ContextMenuContent,
     ContextMenuTrigger,
     Upload,
-    Download,
-    CheckCircle,
-    XCircle,
     AlertTriangle,
     Link2,
     Settings,
-    ExternalLink,
-    Plus,
     RefreshCw,
     Input,
     SettingsFormField,
     FieldGroup,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
     Dialog,
     DialogClose,
     DialogContent,
@@ -158,14 +113,6 @@ export default {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-    Separator,
-    Checkbox,
     Select,
     SelectContent,
     SelectItem,
@@ -173,30 +120,15 @@ export default {
     SelectValue,
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
-    DropdownMenuSub,
-    DropdownMenuSubTrigger,
-    DropdownMenuSubContent,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
     EllipsisVertical,
-    Ruler,
-    Layers,
-    Unlink,
-    SearchCheck,
-    ChevronRight,
-    Package,
-    DollarSign,
-    Boxes,
+    ChevronDown,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     ButtonGroup,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
     FieldChangesPreviewDialog,
     ImportImagesPreviewDialog,
   },
@@ -369,6 +301,10 @@ export default {
       "unlinkProduct",
       "verifyLink",
     ]),
+
+    onAdapterCardClick(event) {
+      dispatchAdapterCardContextMenu(event);
+    },
 
     async fetchData() {
       this.isLoading = true;
@@ -1439,6 +1375,71 @@ export default {
         });
       return this.formatStoreDate(date);
     },
+
+    headerStatus(conn) {
+      if (conn.isLinked) return this.getConnectionStatusInfo(conn);
+      if (conn.hasMapping && !conn.mappingMissing) {
+        return {
+          label: t("productMarketplaceIntegrations.ready"),
+          color: "text-success",
+        };
+      }
+      return {
+        label: t("productMarketplaceIntegrations.noMapping"),
+        color: "text-muted-foreground",
+      };
+    },
+
+    listingCaption(conn) {
+      const id = conn.externalProductId;
+      const sku = conn.externalSku;
+      if ((id == null || id === "") && (sku == null || sku === "")) {
+        return this.$t("common.emDash");
+      }
+      if (id && sku) return `${id} · ${sku}`;
+      return String(id || sku);
+    },
+
+    headerSyncCaption(conn) {
+      return t("productMarketplaceIntegrations.syncCaption", {
+        time: this.formatLastSync(conn),
+      });
+    },
+
+    formatFact(value) {
+      if (value == null || value === "") return this.$t("common.emDash");
+      return String(value);
+    },
+
+    formatExternalPrice(conn) {
+      if (conn.externalPrice == null || conn.externalPrice === "") {
+        return this.$t("common.emDash");
+      }
+      return this.formatMoney(conn.externalPrice, this.storeBaseCurrency);
+    },
+
+    formatExternalStock(conn) {
+      if (conn.externalStock == null || conn.externalStock === "") {
+        return this.$t("common.emDash");
+      }
+      return String(conn.externalStock);
+    },
+
+    formatLastSync(conn) {
+      if (!conn.lastSyncAt) {
+        return t("productMarketplaceIntegrations.neverSynced");
+      }
+      return this.formatDate(conn.lastSyncAt);
+    },
+
+    openMapping(conn) {
+      const route = this.getMappingRoute(conn);
+      if (route) this.$router.push(route);
+    },
+
+    openConfigureMapping(conn) {
+      this.$router.push(this.configureMappingTo(conn));
+    },
   },
   watch: {
     productId() {
@@ -1455,19 +1456,8 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <!-- Header -->
-    <div class="flex h-11 shrink-0 items-center border-b px-4">
-      <p class="flex items-center gap-2 text-sm font-medium">
-        <Link2 class="size-4" />
-        {{ $t("productMarketplaceIntegrations.header") }}
-      </p>
-    </div>
-
-    <div
-      v-if="isLoading"
-      class="flex min-h-0 flex-1 items-center justify-center py-12"
-    >
+  <div>
+    <div v-if="isLoading" class="flex items-center justify-center py-12">
       <Spinner size="2xl" class="text-muted-foreground" />
     </div>
 
@@ -1506,23 +1496,15 @@ export default {
     </EmptyState>
 
     <!-- Connection cards -->
-    <div v-else class="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
-      <!-- Export all banner -->
-      <div
-        v-if="connectionsWithMapping.length > 0"
-        class="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3"
-      >
-        <div class="flex items-center gap-3 min-w-0">
-          <div
-            class="size-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0"
-          >
-            <Upload class="size-4 text-primary" />
-          </div>
-          <div class="min-w-0">
-            <div class="text-sm font-medium">
-              {{ $t("productMarketplaceIntegrations.exportToAllTitle") }}
-            </div>
-            <div class="text-xs text-muted-foreground">
+    <div v-else class="space-y-8 px-1">
+      <div v-if="connectionsWithMapping.length > 0" class="space-y-2">
+        <InsetGroupLabel>{{
+          $t("productMarketplaceIntegrations.exportSection")
+        }}</InsetGroupLabel>
+        <InsetGroup>
+          <InsetGroupItem as="div" class="min-h-14 px-3.5 py-4">
+            <p>{{ $t("productMarketplaceIntegrations.exportToAllTitle") }}</p>
+            <p class="mt-0.5 text-xs font-normal text-muted-foreground">
               {{
                 connectionsWithMapping.length < 5
                   ? $t("productMarketplaceIntegrations.readyCountFew", {
@@ -1532,165 +1514,342 @@ export default {
                       count: connectionsWithMapping.length,
                     })
               }}
-            </div>
-          </div>
-        </div>
-        <ButtonGroup
-          class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none"
-        >
-          <Button
-            size="sm"
-            @click="runSelectedExportAll"
-            :disabled="isExportingAnyAll || isLoading"
-          >
-            <Spinner v-if="isExportingAnyAll" class="mr-2" />
-            <Upload v-else class="size-4 mr-2" />
-            {{ exportAllModeLabel }}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <Button
-                size="sm"
-                class="px-2"
-                :disabled="isExportingAnyAll || isLoading"
-                :aria-label="
-                  $t('productMarketplaceIntegrations.menuExportMode')
-                "
+            </p>
+            <template #trailing>
+              <ButtonGroup
+                class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none"
               >
-                <ChevronRight class="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" class="w-52">
-              <DropdownMenuRadioGroup
-                :model-value="exportAllMode"
-                @update:model-value="setExportMode('all', $event)"
-              >
-                <DropdownMenuRadioItem value="full">
-                  {{ $t("productMarketplaceIntegrations.menuExportFull") }}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem
-                  value="price"
-                  :disabled="linkedForPriceExport.length === 0"
+                <Button
+                  size="sm"
+                  @click="runSelectedExportAll"
+                  :disabled="isExportingAnyAll || isLoading"
                 >
-                  {{ $t("productMarketplaceIntegrations.menuExportPrice") }}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem
-                  value="stock"
-                  :disabled="linkedForStockExport.length === 0"
-                >
-                  {{ $t("productMarketplaceIntegrations.menuExportStock") }}
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </ButtonGroup>
+                  <Spinner v-if="isExportingAnyAll" class="mr-2" />
+                  <Upload v-else class="mr-2 size-4" />
+                  {{ exportAllModeLabel }}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <Button
+                      size="sm"
+                      class="px-2"
+                      :disabled="isExportingAnyAll || isLoading"
+                      :aria-label="
+                        $t('productMarketplaceIntegrations.menuExportMode')
+                      "
+                    >
+                      <ChevronDown class="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" class="w-52">
+                    <DropdownMenuRadioGroup
+                      :model-value="exportAllMode"
+                      @update:model-value="setExportMode('all', $event)"
+                    >
+                      <DropdownMenuRadioItem value="full">
+                        {{
+                          $t("productMarketplaceIntegrations.menuExportFull")
+                        }}
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem
+                        value="price"
+                        :disabled="linkedForPriceExport.length === 0"
+                      >
+                        {{
+                          $t("productMarketplaceIntegrations.menuExportPrice")
+                        }}
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem
+                        value="stock"
+                        :disabled="linkedForStockExport.length === 0"
+                      >
+                        {{
+                          $t("productMarketplaceIntegrations.menuExportStock")
+                        }}
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </ButtonGroup>
+            </template>
+          </InsetGroupItem>
+        </InsetGroup>
       </div>
 
-      <!-- Linked connections (already exported) -->
-      <ContextMenu v-for="conn in linkedConnections" :key="conn.connectionId">
-        <ContextMenuTrigger as-child>
-          <div class="relative border rounded-lg">
-            <div class="flex items-center gap-3 px-4 py-3">
-              <div
-                v-if="isConnectionBusy(conn)"
-                class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10"
-              >
-                <Spinner size="lg" class="text-primary" />
-              </div>
-              <a
-                v-if="getMarketplaceProductUrl(conn)"
-                :href="getMarketplaceProductUrl(conn)"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0 hover:bg-muted/80 transition-colors"
-                :title="$t('productMarketplaceIntegrations.openOnAdapter')"
-                @contextmenu.stop
-              >
-                <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-              </a>
-              <div
-                v-else
-                class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
-              >
-                <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium text-sm truncate">{{
-                    conn.adapterName
-                  }}</span>
-                  <span
-                    class="text-xs text-muted-foreground truncate hidden sm:inline"
-                    >{{ conn.connectionName }}</span
+      <div v-if="linkedConnections.length" class="space-y-2">
+        <InsetGroupLabel>{{
+          $t("productMarketplaceIntegrations.linkedSection")
+        }}</InsetGroupLabel>
+        <div class="space-y-5">
+          <ContextMenu
+            v-for="conn in linkedConnections"
+            :key="conn.connectionId"
+          >
+            <ContextMenuTrigger as-child>
+              <div class="cursor-pointer space-y-2" @click="onAdapterCardClick">
+                <InsetGroup class="relative">
+                  <div
+                    v-if="isConnectionBusy(conn)"
+                    class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60"
                   >
-                </div>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <code
-                    class="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground"
-                    >{{ conn.externalProductId }}</code
+                    <Spinner size="lg" class="text-primary" />
+                  </div>
+                  <InsetGroupItem
+                    as="div"
+                    class="min-h-14 px-3.5 py-4"
+                    @click.stop="onAdapterCardClick"
                   >
-                  <span
-                    v-if="conn.externalSku"
-                    class="text-xs text-muted-foreground"
-                  >
-                    {{
-                      $t("productMarketplaceIntegrations.skuPrefix", {
-                        sku: conn.externalSku,
-                      })
-                    }}
-                  </span>
-                  <router-link
-                    v-if="getMappingRoute(conn)"
-                    :to="getMappingRoute(conn)"
-                    class="text-xs text-primary hover:underline truncate"
-                  >
-                    {{ getSelectedMappingName(conn) }}
-                  </router-link>
-                  <span
-                    v-else-if="conn.mappingMissing"
-                    class="text-xs text-destructive"
-                  >
-                    {{ $t("productMarketplaceIntegrations.mappingDeleted") }}
-                  </span>
-                </div>
-              </div>
-              <Badge
-                :variant="getConnectionStatusInfo(conn).variant"
-                class="shrink-0"
-              >
-                <component
-                  :is="getConnectionStatusInfo(conn).icon"
-                  v-if="getConnectionStatusInfo(conn).icon"
-                  class="size-3 mr-1"
-                />
-                {{ getConnectionStatusInfo(conn).label }}
-              </Badge>
-              <TooltipProvider v-if="connections?.hasSizes">
-                <Tooltip>
-                  <TooltipTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="size-8 shrink-0"
-                      @click="toggleVariants(conn)"
+                    <template #leading>
+                      <AdapterIcon
+                        :adapter-key="conn.adapterKey"
+                        class="size-5"
+                      />
+                    </template>
+                    <p class="truncate">{{ conn.adapterName }}</p>
+                    <p
+                      class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
                     >
-                      <Ruler class="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>
-                      {{ $t("productMarketplaceIntegrations.sizesTooltip") }}
+                      {{ conn.connectionName }}
                     </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <ProductAdapterConnectionMenu
+                    <p
+                      class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+                    >
+                      {{ headerSyncCaption(conn) }}
+                    </p>
+                    <p
+                      v-if="conn.lastErrorMessage"
+                      class="mt-0.5 line-clamp-2 text-xs font-normal text-destructive"
+                    >
+                      {{ conn.lastErrorMessage }}
+                    </p>
+                    <template #trailing>
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm" :class="headerStatus(conn).color">
+                          {{ headerStatus(conn).label }}
+                        </span>
+                        <ProductAdapterConnectionMenu
+                          :connection="conn"
+                          :selected-mapping-id="
+                            mappingSelections[conn.connectionId]
+                          "
+                          :marketplace-url="getMarketplaceProductUrl(conn)"
+                          :configure-mapping-to="configureMappingTo(conn)"
+                          :category-name="connections?.categoryName"
+                          align="end"
+                          :export-busy="isSelectedExportBusy(conn)"
+                          :import-busy="importingLinkId === conn.linkId"
+                          :verify-busy="verifyingLinkId === conn.linkId"
+                          :unlink-busy="unlinkingLinkId === conn.linkId"
+                          show-relink
+                          show-recreate
+                          show-danger-section
+                          @export="runSelectedExport(conn)"
+                          @update:export-mode="setExportMode(conn, $event)"
+                          @import="handleImportFromLink(conn)"
+                          @import-images="handleImportImagesFromLink(conn)"
+                          @verify="handleVerifyLink(conn)"
+                          @unlink="handleUnlink(conn)"
+                          @update:mapping="handleMappingChange(conn, $event)"
+                          @relink="openLinkDialog(conn, true)"
+                          @recreate="openRecreateDialog(conn)"
+                        >
+                          <template #trigger>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="size-8 shrink-0"
+                              :aria-label="$t('common.actions')"
+                            >
+                              <EllipsisVertical class="size-4" />
+                            </Button>
+                          </template>
+                        </ProductAdapterConnectionMenu>
+                      </div>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    :as="getMarketplaceProductUrl(conn) ? 'a' : 'div'"
+                    :href="getMarketplaceProductUrl(conn) || undefined"
+                    :target="
+                      getMarketplaceProductUrl(conn) ? '_blank' : undefined
+                    "
+                    :rel="
+                      getMarketplaceProductUrl(conn)
+                        ? 'noopener noreferrer'
+                        : undefined
+                    "
+                    :show-chevron="!!getMarketplaceProductUrl(conn)"
+                    class="min-h-12 px-3.5 py-3.5"
+                    @contextmenu="
+                      getMarketplaceProductUrl(conn) && $event.stopPropagation()
+                    "
+                  >
+                    <p>
+                      {{
+                        $t("productMarketplaceIntegrations.rowOnMarketplace")
+                      }}
+                    </p>
+                    <p
+                      class="mt-0.5 truncate text-xs font-normal tabular-nums text-muted-foreground"
+                    >
+                      {{ listingCaption(conn) }}
+                    </p>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    v-if="getMappingRoute(conn)"
+                    show-chevron
+                    class="min-h-12 px-3.5 py-3.5"
+                    @click.stop="openMapping(conn)"
+                  >
+                    {{ $t("productMarketplaceIntegrations.rowMapping") }}
+                    <template #trailing>
+                      <span
+                        class="max-w-[min(16rem,52%)] truncate text-right font-normal text-muted-foreground"
+                      >
+                        {{ getSelectedMappingName(conn) }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    v-else
+                    as="div"
+                    class="min-h-12 px-3.5 py-3.5"
+                  >
+                    {{ $t("productMarketplaceIntegrations.rowMapping") }}
+                    <template #trailing>
+                      <span
+                        class="max-w-[min(16rem,52%)] truncate text-right font-normal"
+                        :class="
+                          conn.mappingMissing
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'
+                        "
+                      >
+                        {{
+                          conn.mappingMissing
+                            ? $t(
+                                "productMarketplaceIntegrations.mappingDeleted",
+                              )
+                            : $t("common.emDash")
+                        }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem as="div" class="min-h-12 px-3.5 py-3.5">
+                    {{ $t("productMarketplaceIntegrations.rowExternalPrice") }}
+                    <template #trailing>
+                      <span
+                        class="text-right font-normal tabular-nums text-muted-foreground"
+                      >
+                        {{ formatExternalPrice(conn) }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem as="div" class="min-h-12 px-3.5 py-3.5">
+                    {{ $t("productMarketplaceIntegrations.rowExternalStock") }}
+                    <template #trailing>
+                      <span
+                        class="text-right font-normal tabular-nums text-muted-foreground"
+                      >
+                        {{ formatExternalStock(conn) }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem as="div" class="min-h-12 px-3.5 py-3.5">
+                    {{ $t("productMarketplaceIntegrations.rowExportMode") }}
+                    <template #trailing>
+                      <span
+                        class="text-right font-normal text-muted-foreground"
+                      >
+                        {{ getExportModeLabel(conn.preferredExportMode) }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    v-if="connections?.hasSizes"
+                    class="min-h-12 px-3.5 py-3.5"
+                    show-chevron
+                    @click.stop="toggleVariants(conn)"
+                  >
+                    {{ $t("productMarketplaceIntegrations.rowSizes") }}
+                    <template #trailing>
+                      <span class="font-normal text-muted-foreground">
+                        {{
+                          variantsData[conn.connectionId]
+                            ? $t("productMarketplaceIntegrations.hideSizes")
+                            : $t("productMarketplaceIntegrations.showSizes")
+                        }}
+                      </span>
+                    </template>
+                  </InsetGroupItem>
+                </InsetGroup>
+                <InsetGroup v-if="variantsData[conn.connectionId]">
+                  <InsetGroupItem
+                    v-if="variantsData[conn.connectionId].loading"
+                    as="div"
+                    class="min-h-12 px-3.5 py-3.5"
+                  >
+                    <span class="flex items-center gap-2 text-muted-foreground">
+                      <Spinner />
+                      {{ $t("productMarketplaceIntegrations.loadingSizes") }}
+                    </span>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    v-else-if="
+                      variantsData[conn.connectionId].variants.length === 0
+                    "
+                    as="div"
+                    class="min-h-12 px-3.5 py-3.5"
+                  >
+                    <span class="text-muted-foreground">{{
+                      $t("productMarketplaceIntegrations.noSizesForConnection")
+                    }}</span>
+                  </InsetGroupItem>
+                  <template v-else>
+                    <InsetGroupItem
+                      v-for="v in variantsData[conn.connectionId].variants"
+                      :key="v.id"
+                      as="div"
+                      class="min-h-12 px-3.5 py-3.5"
+                    >
+                      <p>{{ v.size || $t("common.emDash") }}</p>
+                      <p
+                        class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+                      >
+                        {{ formatFact(v.sku) }}
+                        <span class="text-muted-foreground/50"> · </span>
+                        {{ formatFact(v.barcode) }}
+                      </p>
+                      <template #trailing>
+                        <span
+                          class="text-right font-normal tabular-nums text-muted-foreground"
+                        >
+                          {{
+                            v.price != null
+                              ? formatFact(v.price)
+                              : $t("common.emDash")
+                          }}
+                          <span class="text-muted-foreground/50"> · </span>
+                          {{
+                            v.quantity != null
+                              ? formatFact(v.quantity)
+                              : $t("common.emDash")
+                          }}
+                        </span>
+                      </template>
+                    </InsetGroupItem>
+                  </template>
+                </InsetGroup>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent class="w-56">
+              <ProductAdapterConnectionMenuItems
+                surface="context"
                 :connection="conn"
                 :selected-mapping-id="mappingSelections[conn.connectionId]"
                 :marketplace-url="getMarketplaceProductUrl(conn)"
                 :configure-mapping-to="configureMappingTo(conn)"
                 :category-name="connections?.categoryName"
-                align="end"
                 :export-busy="isSelectedExportBusy(conn)"
                 :import-busy="importingLinkId === conn.linkId"
                 :verify-busy="verifyingLinkId === conn.linkId"
@@ -1707,277 +1866,181 @@ export default {
                 @update:mapping="handleMappingChange(conn, $event)"
                 @relink="openLinkDialog(conn, true)"
                 @recreate="openRecreateDialog(conn)"
-              >
-                <template #trigger>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-8 shrink-0"
-                    :aria-label="$t('common.actions')"
-                  >
-                    <EllipsisVertical class="size-4" />
-                  </Button>
-                </template>
-              </ProductAdapterConnectionMenu>
-            </div>
-            <!-- Variants panel -->
-            <div
-              v-if="variantsData[conn.connectionId]"
-              class="border-t px-4 py-2"
-            >
-              <div
-                v-if="variantsData[conn.connectionId].loading"
-                class="flex items-center gap-2 py-2"
-              >
-                <Spinner />
-                <span class="text-xs text-muted-foreground">{{
-                  $t("productMarketplaceIntegrations.loadingSizes")
-                }}</span>
-              </div>
-              <div
-                v-else-if="
-                  variantsData[conn.connectionId].variants.length === 0
-                "
-                class="py-2"
-              >
-                <span class="text-xs text-muted-foreground">{{
-                  $t("productMarketplaceIntegrations.noSizesForConnection")
-                }}</span>
-              </div>
-              <Table v-else>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="h-8 w-20 text-xs">{{
-                      $t("productMarketplaceIntegrations.sizeHeader")
-                    }}</TableHead>
-                    <TableHead class="h-8 text-xs">SKU</TableHead>
-                    <TableHead class="h-8 text-xs">{{
-                      $t("productMarketplaceIntegrations.barcodeHeader")
-                    }}</TableHead>
-                    <TableHead class="h-8 w-24 text-right text-xs">{{
-                      $t("productMarketplaceIntegrations.priceHeader")
-                    }}</TableHead>
-                    <TableHead class="h-8 w-20 text-right text-xs">{{
-                      $t("productMarketplaceIntegrations.stockHeader")
-                    }}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="v in variantsData[conn.connectionId].variants"
-                    :key="v.id"
-                  >
-                    <TableCell class="text-xs py-1">{{
-                      v.size || "-"
-                    }}</TableCell>
-                    <TableCell class="text-xs py-1">
-                      <code class="bg-muted px-1 rounded">{{
-                        v.sku || "-"
-                      }}</code>
-                    </TableCell>
-                    <TableCell class="text-xs py-1">
-                      <code class="bg-muted px-1 rounded">{{
-                        v.barcode || "-"
-                      }}</code>
-                    </TableCell>
-                    <TableCell class="text-xs py-1">{{
-                      v.price != null ? v.price : "-"
-                    }}</TableCell>
-                    <TableCell class="text-xs py-1">{{
-                      v.quantity != null ? v.quantity : "-"
-                    }}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-56">
-          <ProductAdapterConnectionMenuItems
-            surface="context"
-            :connection="conn"
-            :selected-mapping-id="mappingSelections[conn.connectionId]"
-            :marketplace-url="getMarketplaceProductUrl(conn)"
-            :configure-mapping-to="configureMappingTo(conn)"
-            :category-name="connections?.categoryName"
-            :export-busy="isSelectedExportBusy(conn)"
-            :import-busy="importingLinkId === conn.linkId"
-            :verify-busy="verifyingLinkId === conn.linkId"
-            :unlink-busy="unlinkingLinkId === conn.linkId"
-            show-relink
-            show-recreate
-            show-danger-section
-            @export="runSelectedExport(conn)"
-            @update:export-mode="setExportMode(conn, $event)"
-            @import="handleImportFromLink(conn)"
-            @import-images="handleImportImagesFromLink(conn)"
-            @verify="handleVerifyLink(conn)"
-            @unlink="handleUnlink(conn)"
-            @update:mapping="handleMappingChange(conn, $event)"
-            @relink="openLinkDialog(conn, true)"
-            @recreate="openRecreateDialog(conn)"
-          />
-        </ContextMenuContent>
-      </ContextMenu>
-
-      <!-- Ready to export connections (has mapping, not linked) -->
-      <ContextMenu
-        v-for="conn in readyToExportConnections"
-        :key="conn.connectionId"
-      >
-        <ContextMenuTrigger as-child>
-          <div
-            class="relative flex items-center gap-3 border border-dashed rounded-lg px-4 py-3"
-          >
-            <div
-              v-if="isConnectionBusy(conn)"
-              class="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg z-10"
-            >
-              <Spinner size="lg" class="text-primary" />
-            </div>
-            <div
-              class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
-            >
-              <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-sm truncate">{{
-                  conn.adapterName
-                }}</span>
-                <span
-                  class="text-xs text-muted-foreground truncate hidden sm:inline"
-                  >{{ conn.connectionName }}</span
-                >
-              </div>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span class="text-xs text-muted-foreground">{{
-                  $t("productMarketplaceIntegrations.notExported")
-                }}</span>
-                <router-link
-                  v-if="getMappingRoute(conn)"
-                  :to="getMappingRoute(conn)"
-                  class="text-xs text-primary hover:underline truncate"
-                >
-                  · {{ getSelectedMappingName(conn) }}
-                </router-link>
-              </div>
-            </div>
-            <Badge
-              variant="outline"
-              class="text-success border-success shrink-0"
-            >
-              <CheckCircle class="size-3 mr-1" />
-              {{ $t("productMarketplaceIntegrations.ready") }}
-            </Badge>
-            <ProductAdapterConnectionMenu
-              :connection="conn"
-              :selected-mapping-id="mappingSelections[conn.connectionId]"
-              :configure-mapping-to="configureMappingTo(conn)"
-              :category-name="connections?.categoryName"
-              align="end"
-              :export-busy="exportingByConnectionId[conn.connectionId]"
-              show-link-manually
-              @export="handleExportToConnection(conn)"
-              @link-manually="openLinkDialog(conn)"
-              @update:mapping="handleMappingChange(conn, $event)"
-            >
-              <template #trigger>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8 shrink-0"
-                  :aria-label="$t('common.actions')"
-                >
-                  <EllipsisVertical class="size-4" />
-                </Button>
-              </template>
-            </ProductAdapterConnectionMenu>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-56">
-          <ProductAdapterConnectionMenuItems
-            surface="context"
-            :connection="conn"
-            :selected-mapping-id="mappingSelections[conn.connectionId]"
-            :configure-mapping-to="configureMappingTo(conn)"
-            :category-name="connections?.categoryName"
-            :export-busy="exportingByConnectionId[conn.connectionId]"
-            show-link-manually
-            @export="handleExportToConnection(conn)"
-            @link-manually="openLinkDialog(conn)"
-            @update:mapping="handleMappingChange(conn, $event)"
-          />
-        </ContextMenuContent>
-      </ContextMenu>
-
-      <!-- Connections without mapping - muted "needs setup" state, not an error -->
-      <div
-        v-for="conn in connectionsWithoutMapping"
-        :key="conn.connectionId"
-        class="flex items-center gap-3 rounded-lg px-4 py-3 border border-dashed"
-      >
-        <div
-          class="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0"
-        >
-          <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="font-medium text-sm truncate">{{
-              conn.adapterName
-            }}</span>
-            <span
-              class="text-xs text-muted-foreground truncate hidden sm:inline"
-              >{{ conn.connectionName }}</span
-            >
-          </div>
-          <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="text-xs text-muted-foreground">{{
-              $t("productMarketplaceIntegrations.mappingNotConfigured", {
-                category: connections.categoryName,
-              })
-            }}</span>
-            <router-link
-              :to="{
-                name: PAGE_MARKETPLACE_CONNECTION,
-                params: { connId: conn.connectionId },
-                query: {
-                  tab: 'mappings',
-                  createMapping: 'true',
-                  localCategoryId: connections.categoryId,
-                  localCategoryName: connections.categoryName,
-                },
-              }"
-              class="text-xs text-primary hover:underline"
-            >
-              {{ $t("productMarketplaceIntegrations.configure") }}
-            </router-link>
-          </div>
+              />
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
       </div>
 
-      <!-- Empty state when all connections have issues -->
-      <div
+      <div v-if="readyToExportConnections.length" class="space-y-2">
+        <InsetGroupLabel>{{
+          $t("productMarketplaceIntegrations.readySection")
+        }}</InsetGroupLabel>
+        <div class="space-y-5">
+          <ContextMenu
+            v-for="conn in readyToExportConnections"
+            :key="conn.connectionId"
+          >
+            <ContextMenuTrigger as-child>
+              <InsetGroup class="relative cursor-pointer" @click="onAdapterCardClick">
+                <div
+                  v-if="isConnectionBusy(conn)"
+                  class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60"
+                >
+                  <Spinner size="lg" class="text-primary" />
+                </div>
+                <InsetGroupItem
+                  as="div"
+                  class="min-h-14 px-3.5 py-4"
+                  @click.stop="onAdapterCardClick"
+                >
+                  <template #leading>
+                    <AdapterIcon
+                      :adapter-key="conn.adapterKey"
+                      class="size-5"
+                    />
+                  </template>
+                  <p class="truncate">{{ conn.adapterName }}</p>
+                  <p
+                    class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+                  >
+                    {{ conn.connectionName }}
+                  </p>
+                  <p
+                    class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+                  >
+                    {{ $t("productMarketplaceIntegrations.notExported") }}
+                  </p>
+                  <template #trailing>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm" :class="headerStatus(conn).color">
+                        {{ headerStatus(conn).label }}
+                      </span>
+                      <ProductAdapterConnectionMenu
+                        :connection="conn"
+                        :selected-mapping-id="
+                          mappingSelections[conn.connectionId]
+                        "
+                        :configure-mapping-to="configureMappingTo(conn)"
+                        :category-name="connections?.categoryName"
+                        align="end"
+                        :export-busy="
+                          exportingByConnectionId[conn.connectionId]
+                        "
+                        show-link-manually
+                        @export="handleExportToConnection(conn)"
+                        @link-manually="openLinkDialog(conn)"
+                        @update:mapping="handleMappingChange(conn, $event)"
+                      >
+                        <template #trigger>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            class="size-8 shrink-0"
+                            :aria-label="$t('common.actions')"
+                          >
+                            <EllipsisVertical class="size-4" />
+                          </Button>
+                        </template>
+                      </ProductAdapterConnectionMenu>
+                    </div>
+                  </template>
+                </InsetGroupItem>
+                <InsetGroupItem
+                  v-if="getMappingRoute(conn)"
+                  show-chevron
+                  class="min-h-12 px-3.5 py-3.5"
+                  @click.stop="openMapping(conn)"
+                >
+                  {{ $t("productMarketplaceIntegrations.rowMapping") }}
+                  <template #trailing>
+                    <span
+                      class="max-w-[min(16rem,52%)] truncate text-right font-normal text-muted-foreground"
+                    >
+                      {{ getSelectedMappingName(conn) }}
+                    </span>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+            </ContextMenuTrigger>
+            <ContextMenuContent class="w-56">
+              <ProductAdapterConnectionMenuItems
+                surface="context"
+                :connection="conn"
+                :selected-mapping-id="mappingSelections[conn.connectionId]"
+                :configure-mapping-to="configureMappingTo(conn)"
+                :category-name="connections?.categoryName"
+                :export-busy="exportingByConnectionId[conn.connectionId]"
+                show-link-manually
+                @export="handleExportToConnection(conn)"
+                @link-manually="openLinkDialog(conn)"
+                @update:mapping="handleMappingChange(conn, $event)"
+              />
+            </ContextMenuContent>
+          </ContextMenu>
+        </div>
+      </div>
+
+      <div v-if="connectionsWithoutMapping.length" class="space-y-2">
+        <InsetGroupLabel>{{
+          $t("productMarketplaceIntegrations.needsMappingSection")
+        }}</InsetGroupLabel>
+        <div class="space-y-5">
+          <InsetGroup
+            v-for="conn in connectionsWithoutMapping"
+            :key="conn.connectionId"
+          >
+            <InsetGroupItem as="div" class="min-h-14 px-3.5 py-4">
+              <template #leading>
+                <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
+              </template>
+              <p class="truncate">{{ conn.adapterName }}</p>
+              <p
+                class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+              >
+                {{ conn.connectionName }}
+              </p>
+              <template #trailing>
+                <span class="text-sm" :class="headerStatus(conn).color">
+                  {{ headerStatus(conn).label }}
+                </span>
+              </template>
+            </InsetGroupItem>
+            <InsetGroupItem
+              show-chevron
+              class="min-h-12 px-3.5 py-3.5"
+              @click="openConfigureMapping(conn)"
+            >
+              <p>{{ $t("productMarketplaceIntegrations.rowMapping") }}</p>
+              <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+                {{
+                  $t("productMarketplaceIntegrations.mappingNotConfigured", {
+                    category: connections.categoryName,
+                  })
+                }}
+              </p>
+            </InsetGroupItem>
+          </InsetGroup>
+        </div>
+      </div>
+
+      <EmptyState
         v-if="
           !linkedConnections.length &&
           !readyToExportConnections.length &&
           !connectionsWithoutMapping.length
         "
+        :framed="false"
+        size="sm"
+        :title="$t('productMarketplaceIntegrations.noAvailableAdaptersTitle')"
+        :description="
+          $t('productMarketplaceIntegrations.noAvailableAdaptersDescription')
+        "
       >
-        <EmptyState
-          :framed="false"
-          size="sm"
-          :title="$t('productMarketplaceIntegrations.noAvailableAdaptersTitle')"
-          :description="
-            $t('productMarketplaceIntegrations.noAvailableAdaptersDescription')
-          "
-        >
-          <template #icon>
-            <Link2 />
-          </template>
-        </EmptyState>
-      </div>
+        <template #icon>
+          <Link2 />
+        </template>
+      </EmptyState>
     </div>
 
     <!-- Import Preview Dialog -->

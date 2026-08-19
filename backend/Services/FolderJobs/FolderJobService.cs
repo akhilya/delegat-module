@@ -636,7 +636,7 @@ public sealed class FolderJobService
             .Where(o => o.operationId == operationId)
             .Select(o => o.status)
             .FirstOrDefaultAsync(ct);
-        return status == "cancelled";
+        return OperationLifecycle.IsStopRequested(status);
     }
 
     private async Task CollectProductDescendantsAsync(int parentId, int productId, List<int> result, CancellationToken ct)

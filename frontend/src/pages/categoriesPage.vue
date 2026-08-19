@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
@@ -26,14 +30,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export default {
   components: {
@@ -44,15 +40,11 @@ export default {
     Input,
     SettingsFormField,
     FieldGroup,
+    InsetGroup,
+    InsetGroupItem,
     Plus,
     FolderOpen,
     Trash2,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -168,132 +160,120 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <div class="flex min-h-0 flex-1 flex-col">
-    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2">
-      <Dialog v-model:open="showCreateDialog">
-        <DialogTrigger as-child>
-          <Button>
+    <div class="flex w-full max-w-xl flex-col">
+      <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
+        <Dialog v-model:open="showCreateDialog">
+          <DialogTrigger as-child>
+            <Button>
+              <Plus class="size-4 mr-2" />
+              {{ $t("pages.categoriesPage.addCategory") }}
+            </Button>
+          </DialogTrigger>
+          <DialogContent
+            size="md"
+            class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+          >
+            <DialogHeader variant="bar">
+              <DialogTitle>{{ $t("pages.categoriesPage.newCategoryTitle") }}</DialogTitle>
+              <DialogDescription>
+                {{ $t("pages.categoriesPage.newCategoryDescription") }}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              id="new-category-form"
+              class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+              @submit.prevent="handleCreateCategory"
+            >
+              <FieldGroup class="gap-5">
+                <SettingsFormField :label="$t('common.name')" label-for="new-category-name">
+                  <Input
+                    id="new-category-name"
+                    v-model="newCategoryName"
+                    :placeholder="$t('pages.categoriesPage.namePlaceholder')"
+                    :maxlength="FIELD_LIMITS.categoryName"
+                  />
+                </SettingsFormField>
+                <SettingsFormField :label="$t('common.description')" label-for="new-category-description">
+                  <Input
+                    id="new-category-description"
+                    v-model="newCategoryDescription"
+                    :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
+                    :maxlength="FIELD_LIMITS.categoryDescription"
+                  />
+                </SettingsFormField>
+              </FieldGroup>
+            </form>
+            <DialogFooter variant="bar">
+              <DialogClose as-child>
+                <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
+              </DialogClose>
+              <Button type="submit" form="new-category-form" :disabled="isCreating">
+                <Spinner v-if="isCreating" class="mr-2" />
+                {{ $t("common.create") }}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <PageSection
+        :loading="isLoading"
+        :empty="categories.length === 0"
+        :empty-icon="FolderOpen"
+        :empty-title="$t('pages.categoriesPage.emptyTitle')"
+        :empty-description="$t('pages.categoriesPage.emptyDescription')"
+      >
+        <template #empty-action>
+          <Button @click="showCreateDialog = true">
             <Plus class="size-4 mr-2" />
             {{ $t("pages.categoriesPage.addCategory") }}
           </Button>
-        </DialogTrigger>
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogTitle>{{ $t("pages.categoriesPage.newCategoryTitle") }}</DialogTitle>
-            <DialogDescription>
-              {{ $t("pages.categoriesPage.newCategoryDescription") }}
-            </DialogDescription>
-          </DialogHeader>
-          <form @submit.prevent="handleCreateCategory">
-          <FieldGroup class="gap-4 py-4">
-            <SettingsFormField :label="$t('common.name')" label-for="new-category-name">
-              <Input
-                id="new-category-name"
-                v-model="newCategoryName"
-                :placeholder="$t('pages.categoriesPage.namePlaceholder')"
-                :maxlength="FIELD_LIMITS.categoryName"
-              />
-            </SettingsFormField>
-            <SettingsFormField :label="$t('common.description')" label-for="new-category-description">
-              <Input
-                id="new-category-description"
-                v-model="newCategoryDescription"
-                :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
-                :maxlength="FIELD_LIMITS.categoryDescription"
-              />
-            </SettingsFormField>
-          </FieldGroup>
-          <DialogFooter>
-            <DialogClose as-child>
-              <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
-            </DialogClose>
-            <Button type="submit" :disabled="isCreating">
-              <Spinner v-if="isCreating" class="mr-2" />
-              {{ $t("common.create") }}
-            </Button>
-          </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </template>
 
-    <PageSection
-      :loading="isLoading"
-      :empty="categories.length === 0"
-      :empty-icon="FolderOpen"
-      :empty-title="$t('pages.categoriesPage.emptyTitle')"
-      :empty-description="$t('pages.categoriesPage.emptyDescription')"
-    >
-      <template #empty-action>
-        <Button @click="showCreateDialog = true">
-          <Plus class="size-4 mr-2" />
-          {{ $t("pages.categoriesPage.addCategory") }}
-        </Button>
-      </template>
-
-      <div class="rounded-lg border overflow-hidden">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="hover:bg-transparent">
-                <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="hidden w-[36%] md:table-cell">{{ $t("common.description") }}</TableHead>
-                <TableHead class="w-28 text-right">{{ $t("pages.categoriesPage.productsHeader") }}</TableHead>
-                <TableHead class="w-32 text-right">{{ $t("pages.categoriesPage.attributesHeader") }}</TableHead>
-                <TableHead class="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="category in categories"
-                :key="category.id"
-                class="group cursor-pointer"
-                @click="openCategory(category.id)"
+        <InsetGroup>
+          <InsetGroupItem
+            v-for="category in categories"
+            :key="category.id"
+            show-chevron
+            @click="openCategory(category.id)"
+          >
+            <p class="truncate">{{ category.name }}</p>
+            <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+              <template v-if="category.description">
+                {{ category.description }}
+                ·
+              </template>
+              {{
+                $t("pages.categoriesPage.rowMeta", {
+                  products: category.productsCount || 0,
+                  attributes: category.attributesCount || 0,
+                })
+              }}
+            </p>
+            <template #trailing>
+              <ConfirmDialog
+                :title="$t('pages.categoriesPage.deleteTitle')"
+                :description="$t('pages.categoriesPage.deleteDescription', { name: category.name })"
+                :confirm-label="$t('common.delete')"
+                :loading="isDeleting"
+                @confirm="handleDeleteCategory(category.id)"
               >
-                <TableCell class="max-w-0 font-medium">
-                  <span class="block truncate">{{ category.name }}</span>
-                  <span
-                    v-if="category.description"
-                    class="text-muted-foreground block truncate text-xs md:hidden"
+                <template #trigger>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    :aria-label="$t('common.delete')"
+                    @click.stop
                   >
-                    {{ category.description }}
-                  </span>
-                </TableCell>
-                <TableCell class="text-muted-foreground hidden max-w-0 md:table-cell">
-                  <span class="block truncate">{{ category.description || $t("common.emDash") }}</span>
-                </TableCell>
-                <TableCell class="text-right tabular-nums text-muted-foreground">
-                  {{ category.productsCount || 0 }}
-                </TableCell>
-                <TableCell class="text-right tabular-nums text-muted-foreground">
-                  {{ category.attributesCount || 0 }}
-                </TableCell>
-                <TableCell class="px-2">
-                  <ConfirmDialog
-                    :title="$t('pages.categoriesPage.deleteTitle')"
-                    :description="$t('pages.categoriesPage.deleteDescription', { name: category.name })"
-                    :confirm-label="$t('common.delete')"
-                    :loading="isDeleting"
-                    @confirm="handleDeleteCategory(category.id)"
-                  >
-                    <template #trigger>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="size-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        @click.stop
-                      >
-                        <Trash2 class="size-4" />
-                      </Button>
-                    </template>
-                  </ConfirmDialog>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </PageSection>
+                    <Trash2 class="size-4" />
+                  </Button>
+                </template>
+              </ConfirmDialog>
+            </template>
+          </InsetGroupItem>
+        </InsetGroup>
+      </PageSection>
     </div>
   </AppPageChrome>
 </template>

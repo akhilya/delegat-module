@@ -92,7 +92,7 @@ watch(
 <template>
   <SidebarGroup class="p-0">
     <div
-      class="overflow-hidden rounded-xl bg-card p-1 ring-1 ring-sidebar-border group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:ring-0"
+      class="overflow-hidden rounded-xl bg-card p-1 ring-1 ring-inset ring-sidebar-border group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:ring-0"
     >
       <SidebarMenu>
         <SidebarMenuItem v-if="singleLink">
@@ -165,7 +165,7 @@ watch(
                 </span>
                 <span>{{ label }}</span>
                 <ChevronRight
-                  class="ml-auto size-3.5 text-muted-foreground transition-transform duration-200 ease-out group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none"
+                  class="ml-auto size-3.5 text-muted-foreground transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none"
                 />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -174,6 +174,9 @@ watch(
                 <SidebarMenuSubItem v-for="item in items" :key="item.id">
                   <SidebarMenuSubButton
                     v-if="item.type === 'action'"
+                    as="button"
+                    type="button"
+                    class="w-full cursor-pointer"
                     @click="handleAction(item.action)"
                   >
                     <component :is="item.icon" />

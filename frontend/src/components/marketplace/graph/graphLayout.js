@@ -1,49 +1,54 @@
 /**
- * Lane auto-layout for the mapping graph.
+ * Mapping-graph auto-layout.
  *
- * Columns = distance to sink; rows align with adapter field indices.
- * Collision resolution runs per column (global stack), not per row bucket.
+ * Dagre (LR) places sources and modifiers. Card-field and price-field sinks
+ * are then stacked in one right-hand column (adapter on top, prices below)
+ * so a 420px-wide adapter card cannot sit on the price card. A last AABB
+ * pass pushes leftover collisions apart.
  */
 
-const COL_W = 320;
-/** Ideal vertical spacing between field-row anchors */
-const ROW_PITCH = 48;
-const SINK_HEADER = 30;
-/** Min gap between node bounding boxes in the same column */
-const LANE_GAP = 16;
+import dagre from "@dagrejs/dagre";
+
+const SINK_GAP = 48;
+const LANE_GAP = 24;
+const RANK_SEP = 88;
+const NODE_SEP = 40;
+const SINK_LEAD = 72;
 
 const SINK_TYPES = new Set(["adapterFields", "adapterPriceFields"]);
 
-/** Match AdapterFieldsNode.vue */
 const ADAPTER_HEADER = 30;
 const ADAPTER_ROW = 24;
+const ADAPTER_WIDTH = 360;
 
-/** Match ModifierNode.vue / SourceNode.vue */
 const CARD_HEADER = 26;
 const CARD_PIN_ROW = 18;
-
-function buildFieldIndex(node) {
-  const map = new Map();
-  if (node) {
-    (node.data?.fields || []).forEach((f, i) => map.set(f.fieldKey, i));
-  }
-  return map;
-}
-
-function yForRow(row) {
-  return SINK_HEADER + row * ROW_PITCH;
-}
+const CARD_WIDTH = 180;
 
 const MODIFIERS_WITH_PINS = new Set([
-  "multiply", "divide", "add", "subtract", "round", "clamp",
-  "append", "prepend", "replace", "regexReplace", "padStart", "padEnd",
+  "multiply",
+  "divide",
+  "add",
+  "subtract",
+  "round",
+  "clamp",
+  "append",
+  "prepend",
+  "replace",
+  "regexReplace",
+  "padStart",
+  "padEnd",
 ]);
 
 const MULTI_INPUT_OPS = new Set([
-  "formatString", "join", "makeArray", "arrayAppend", "arrayPrepend",
+  "formatString",
+  "join",
+  "makeArray",
+  "arrayAppend",
+  "arrayPrepend",
 ]);
 
-/** Visual height estimate - must be >= rendered card height to avoid overlap. */
+/** Visual height estimate — must be >= rendered card height to avoid overlap. */
 export function estimateNodeHeight(node) {
   if (!node) return 56;
 
@@ -80,135 +85,183 @@ export function estimateNodeHeight(node) {
   return h;
 }
 
-export function layoutGraph(nodes, edges, measuredHeights) {
-  if (!nodes || nodes.length === 0) return nodes || [];
-
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const outgoing = new Map();
-  nodes.forEach((n) => outgoing.set(n.id, []));
-  for (const e of edges || []) {
-    if (byId.has(e.source) && byId.has(e.target)) {
-      outgoing.get(e.source).push(e);
-    }
+export function estimateNodeWidth(node) {
+  if (!node) return CARD_WIDTH;
+  if (node.type === "adapterFields" || node.type === "adapterPriceFields") {
+    return ADAPTER_WIDTH;
   }
+  if (node.type === "reroute") return 16;
+  if (node.data?.collapsed) return 160;
+  return CARD_WIDTH;
+}
 
-  const cardSink = nodes.find((n) => n.type === "adapterFields");
-  const priceSink = nodes.find((n) => n.type === "adapterPriceFields");
-  const cardFieldIndex = buildFieldIndex(cardSink);
-  const priceFieldIndex = buildFieldIndex(priceSink);
-  const cardFieldCount = cardFieldIndex.size || 1;
-  const priceFieldCount = priceFieldIndex.size || 1;
-  const maxFieldRows = Math.max(cardFieldCount, priceFieldCount);
-
-  const distMemo = new Map();
-  function distToSink(id, seen = new Set()) {
-    if (distMemo.has(id)) return distMemo.get(id);
-    const node = byId.get(id);
-    if (node && SINK_TYPES.has(node.type)) {
-      distMemo.set(id, 0);
-      return 0;
-    }
-    if (seen.has(id)) return 0;
-    seen.add(id);
-    let best = -Infinity;
-    for (const e of outgoing.get(id) || []) {
-      const d = distToSink(e.target, seen);
-      if (d >= 0) best = Math.max(best, d + 1);
-    }
-    seen.delete(id);
-    const result = best === -Infinity ? 1 : best;
-    distMemo.set(id, result);
-    return result;
-  }
-  nodes.forEach((n) => distToSink(n.id));
-
-  let maxDist = 0;
-  nodes.forEach((n) => {
-    if (!SINK_TYPES.has(n.type))
-      maxDist = Math.max(maxDist, distMemo.get(n.id) || 0);
-  });
-
-  const colOf = (n) => {
-    if (n.type === "adapterFields") return maxDist;
-    if (n.type === "adapterPriceFields") return maxDist + 1;
-    return maxDist - (distMemo.get(n.id) || 0);
+function readMeasured(measured, id) {
+  const v = measured?.get?.(id);
+  if (v == null) return {};
+  if (typeof v === "number") return { height: v };
+  return {
+    width: typeof v.width === "number" ? v.width : undefined,
+    height: typeof v.height === "number" ? v.height : undefined,
   };
+}
 
-  const rowMemo = new Map();
-  function reachedFields(id, sinkType, indexMap, seen = new Set()) {
-    const memoKey = `${id}:${sinkType}`;
-    if (rowMemo.has(memoKey)) return rowMemo.get(memoKey);
-    if (seen.has(id)) return [];
-    seen.add(id);
-    let acc = [];
-    for (const e of outgoing.get(id) || []) {
-      const t = byId.get(e.target);
-      if (
-        t?.type === sinkType &&
-        String(e.targetHandle).startsWith("f:")
-      ) {
-        const idx = indexMap.get(String(e.targetHandle).slice(2));
-        if (idx != null) acc.push(idx);
-      } else {
-        acc = acc.concat(reachedFields(e.target, sinkType, indexMap, seen));
+function sizeOf(node, measured) {
+  const m = readMeasured(measured, node.id);
+  return {
+    width: m.width > 0 ? m.width : estimateNodeWidth(node),
+    height: m.height > 0 ? m.height : estimateNodeHeight(node),
+  };
+}
+
+export function boxesOverlap(a, b, gap = 0) {
+  return !(
+    a.x + a.w + gap <= b.x ||
+    b.x + b.w + gap <= a.x ||
+    a.y + a.h + gap <= b.y ||
+    b.y + b.h + gap <= a.y
+  );
+}
+
+export function sinksOverlap(nodes, gap = 8) {
+  const adapter = (nodes || []).find((n) => n.type === "adapterFields");
+  const price = (nodes || []).find((n) => n.type === "adapterPriceFields");
+  if (!adapter?.position || !price?.position) return false;
+  return boxesOverlap(
+    {
+      x: adapter.position.x,
+      y: adapter.position.y,
+      w: estimateNodeWidth(adapter),
+      h: estimateNodeHeight(adapter),
+    },
+    {
+      x: price.position.x,
+      y: price.position.y,
+      w: estimateNodeWidth(price),
+      h: estimateNodeHeight(price),
+    },
+    gap,
+  );
+}
+
+function restackSinks(nodes, pos) {
+  const adapter = nodes.find((n) => n.type === "adapterFields");
+  const price = nodes.find((n) => n.type === "adapterPriceFields");
+  if (!adapter && !price) return;
+
+  let maxRight = 0;
+  for (const n of nodes) {
+    if (SINK_TYPES.has(n.type)) continue;
+    const p = pos.get(n.id);
+    if (p) maxRight = Math.max(maxRight, p.x + p.w);
+  }
+
+  const x = maxRight + (maxRight > 0 ? SINK_LEAD : 0);
+
+  if (adapter) {
+    const p = pos.get(adapter.id);
+    if (p) {
+      p.x = x;
+      p.y = 0;
+    }
+  }
+  if (price) {
+    const a = adapter ? pos.get(adapter.id) : null;
+    const p = pos.get(price.id);
+    if (p) {
+      p.x = x;
+      p.y = a ? a.y + a.h + SINK_GAP : 0;
+    }
+  }
+}
+
+function resolveOverlaps(nodes, pos, { fixedIds, gap = LANE_GAP }) {
+  const movable = nodes.filter((n) => !fixedIds.has(n.id));
+  for (let iter = 0; iter < 48; iter++) {
+    let moved = false;
+    for (const n of movable) {
+      const a = pos.get(n.id);
+      for (const o of nodes) {
+        if (o.id === n.id) continue;
+        const b = pos.get(o.id);
+        if (!a || !b || !boxesOverlap(a, b, gap)) continue;
+        const down = b.y + b.h + gap - a.y;
+        const right = b.x + b.w + gap - a.x;
+        if (down > 0 && (right <= 0 || down <= right)) a.y += down;
+        else if (right > 0) a.x += right;
+        moved = true;
       }
     }
-    seen.delete(id);
-    rowMemo.set(memoKey, acc);
-    return acc;
+    if (!moved) break;
   }
+}
 
-  function rowOf(n) {
-    if (n.type === "adapterFields") return (cardFieldCount - 1) / 2;
-    if (n.type === "adapterPriceFields") return (priceFieldCount - 1) / 2;
+function runDagre(nodes, edges, measured) {
+  const g = new dagre.graphlib.Graph({ directed: true });
+  g.setGraph({
+    rankdir: "LR",
+    nodesep: NODE_SEP,
+    ranksep: RANK_SEP,
+    edgesep: 16,
+    marginx: 16,
+    marginy: 16,
+    acyclicer: "greedy",
+    ranker: "network-simplex",
+  });
+  g.setDefaultEdgeLabel(() => ({}));
 
-    const priceReach = reachedFields(n.id, "adapterPriceFields", priceFieldIndex);
-    if (priceReach.length) {
-      return priceReach.reduce((a, b) => a + b, 0) / priceReach.length;
-    }
-    const cardReach = reachedFields(n.id, "adapterFields", cardFieldIndex);
-    if (cardReach.length) {
-      return cardReach.reduce((a, b) => a + b, 0) / cardReach.length;
-    }
-    return maxFieldRows + 0.5;
-  }
-
-  const idealY = new Map();
   for (const n of nodes) {
-    idealY.set(n.id, yForRow(rowOf(n)));
+    const { width, height } = sizeOf(n, measured);
+    g.setNode(String(n.id), { width, height });
+  }
+  for (const e of edges || []) {
+    const s = String(e.source);
+    const t = String(e.target);
+    if (g.hasNode(s) && g.hasNode(t) && s !== t) g.setEdge(s, t);
   }
 
-  // Group by column and stack top-to-bottom, pushing down only when boxes overlap.
-  const byColumn = new Map();
-  for (const n of nodes) {
-    const c = colOf(n);
-    if (!byColumn.has(c)) byColumn.set(c, []);
-    byColumn.get(c).push(n);
-  }
+  dagre.layout(g);
 
   const pos = new Map();
-  for (const [c, colNodes] of byColumn) {
-    const sorted = [...colNodes].sort((a, b) => {
-      const dy = (idealY.get(a.id) ?? 0) - (idealY.get(b.id) ?? 0);
-      if (dy !== 0) return dy;
-      return a.id.localeCompare(b.id);
+  for (const n of nodes) {
+    const { width, height } = sizeOf(n, measured);
+    const dn = g.node(String(n.id));
+    const cx = Number.isFinite(dn?.x) ? dn.x : width / 2;
+    const cy = Number.isFinite(dn?.y) ? dn.y : height / 2;
+    pos.set(n.id, {
+      x: cx - width / 2,
+      y: cy - height / 2,
+      w: width,
+      h: height,
     });
+  }
+  return pos;
+}
 
-    let stackBottom = -Infinity;
-    for (const n of sorted) {
-      const measured = measuredHeights?.get?.(n.id);
-      const h =
-        typeof measured === "number" && measured > 0
-          ? measured
-          : estimateNodeHeight(n);
-      let y = idealY.get(n.id) ?? SINK_HEADER;
-      if (stackBottom !== -Infinity && y < stackBottom + LANE_GAP) {
-        y = stackBottom + LANE_GAP;
-      }
-      pos.set(n.id, { x: c * COL_W, y });
-      stackBottom = y + h;
+export function layoutGraph(nodes, edges, measured) {
+  if (!nodes || nodes.length === 0) return nodes || [];
+
+  let pos;
+  try {
+    pos = runDagre(nodes, edges, measured);
+  } catch {
+    pos = new Map();
+    for (const n of nodes) {
+      const { width, height } = sizeOf(n, measured);
+      pos.set(n.id, { x: 0, y: 0, w: width, h: height });
     }
   }
 
-  return nodes.map((n) => ({ ...n, position: pos.get(n.id) || n.position }));
+  restackSinks(nodes, pos);
+  const fixedIds = new Set(
+    nodes.filter((n) => SINK_TYPES.has(n.type)).map((n) => n.id),
+  );
+  resolveOverlaps(nodes, pos, { fixedIds });
+
+  return nodes.map((n) => {
+    const p = pos.get(n.id);
+    return {
+      ...n,
+      position: p ? { x: Math.round(p.x), y: Math.round(p.y) } : n.position,
+    };
+  });
 }

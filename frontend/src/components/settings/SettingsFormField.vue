@@ -54,7 +54,7 @@ const showDescriptionTooltip = computed(
             <FieldLabel
               :for="labelFor"
               :class="cn(
-                'text-sm font-medium leading-none cursor-pointer',
+                'cursor-pointer !text-sm font-medium leading-none',
                 hasError && 'text-destructive',
               )"
             >
@@ -95,7 +95,7 @@ const showDescriptionTooltip = computed(
           <FieldLabel
             :for="labelFor"
             :title="label"
-            :class="cn('min-w-0 max-w-full line-clamp-2 break-all text-sm font-medium', hasError && 'text-destructive')"
+            :class="cn('min-w-0 max-w-full line-clamp-2 break-all', hasError && 'text-destructive')"
           >
             {{ label }}<span v-if="required" class="text-destructive"> *</span>
           </FieldLabel>

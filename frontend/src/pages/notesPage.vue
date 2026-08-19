@@ -3,7 +3,6 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
-import Badge from "@/components/ui/badge/Badge.vue";
 import {
   Select,
   SelectContent,
@@ -12,18 +11,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { NotebookPen, Search, ChevronLeft, ChevronRight, X } from "lucide-vue-next";
+  NotebookPen,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  X,
+} from "lucide-vue-next";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import NoteDetailSheet from "@/components/notes/NoteDetailSheet.vue";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
+import {
+  noteImportanceClass,
+  noteImportanceLabel,
+  noteListCaption,
+  notePreviewTitle,
+} from "@/lib/notesUi";
 
 const PAGE_SIZE = 25;
 const AUTHOR_UNKNOWN = "__unknown__";
@@ -36,27 +42,25 @@ export default {
     PageSection,
     Button,
     Input,
-    Badge,
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    InsetGroup,
+    InsetGroupItem,
     NotebookPen,
     Search,
     ChevronLeft,
     ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     X,
     NoteDetailSheet,
   },
   setup() {
-    const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+    const { formatDateTime: formatStoreDateTime, loadMemberships } =
+      useStoreDateTime();
     loadMemberships();
     return { formatStoreDateTime };
   },
@@ -87,19 +91,46 @@ export default {
         { value: "Low", label: this.$t("components.note.importanceLow") },
         { value: "Medium", label: this.$t("components.note.importanceMedium") },
         { value: "High", label: this.$t("components.note.importanceHigh") },
-        { value: "Critical", label: this.$t("components.note.importanceCritical") },
-        { value: "Emergency", label: this.$t("components.note.importanceEmergency") },
+        {
+          value: "Critical",
+          label: this.$t("components.note.importanceCritical"),
+        },
+        {
+          value: "Emergency",
+          label: this.$t("components.note.importanceEmergency"),
+        },
       ];
     },
     sortOptions() {
       return [
-        { value: "createdAt:desc", label: this.$t("pages.notesPage.sortCreatedDesc") },
-        { value: "createdAt:asc", label: this.$t("pages.notesPage.sortCreatedAsc") },
-        { value: "updatedAt:desc", label: this.$t("pages.notesPage.sortUpdatedDesc") },
-        { value: "importance:desc", label: this.$t("pages.notesPage.sortImportanceDesc") },
-        { value: "importance:asc", label: this.$t("pages.notesPage.sortImportanceAsc") },
-        { value: "product:asc", label: this.$t("pages.notesPage.sortProductAsc") },
-        { value: "product:desc", label: this.$t("pages.notesPage.sortProductDesc") },
+        {
+          value: "createdAt:desc",
+          label: this.$t("pages.notesPage.sortCreatedDesc"),
+        },
+        {
+          value: "createdAt:asc",
+          label: this.$t("pages.notesPage.sortCreatedAsc"),
+        },
+        {
+          value: "updatedAt:desc",
+          label: this.$t("pages.notesPage.sortUpdatedDesc"),
+        },
+        {
+          value: "importance:desc",
+          label: this.$t("pages.notesPage.sortImportanceDesc"),
+        },
+        {
+          value: "importance:asc",
+          label: this.$t("pages.notesPage.sortImportanceAsc"),
+        },
+        {
+          value: "product:asc",
+          label: this.$t("pages.notesPage.sortProductAsc"),
+        },
+        {
+          value: "product:desc",
+          label: this.$t("pages.notesPage.sortProductDesc"),
+        },
       ];
     },
     sortSelectValue() {
@@ -108,10 +139,10 @@ export default {
     hasActiveFilters() {
       return Boolean(
         this.searchQuery.trim() ||
-          this.importanceFilter !== IMPORTANCE_ALL ||
-          this.authorFilter !== AUTHOR_ALL ||
-          this.sortBy !== "createdAt" ||
-          this.sortDesc !== true,
+        this.importanceFilter !== IMPORTANCE_ALL ||
+        this.authorFilter !== AUTHOR_ALL ||
+        this.sortBy !== "createdAt" ||
+        this.sortDesc !== true,
       );
     },
     pageFrom() {
@@ -127,6 +158,12 @@ export default {
     canNext() {
       return this.startIndex + PAGE_SIZE < this.totalCount;
     },
+    currentPage() {
+      return Math.floor(this.startIndex / PAGE_SIZE) + 1;
+    },
+    lastPage() {
+      return Math.max(1, Math.ceil(this.totalCount / PAGE_SIZE) || 1);
+    },
     emptyTitle() {
       return this.hasActiveFilters
         ? this.$t("pages.notesPage.emptyFilteredTitle")
@@ -141,22 +178,23 @@ export default {
   methods: {
     ...mapActions(["fetchNotes"]),
 
+    noteTitle(row) {
+      return notePreviewTitle(row, this.$t("common.emDash"));
+    },
+
     importanceLabel(value) {
-      const found = this.importanceOptions.find((o) => o.value === value);
-      return found?.label || value || "—";
+      return noteImportanceLabel(value, this.$t.bind(this));
     },
 
-    importanceVariant(value) {
-      if (value === "Critical" || value === "Emergency") return "destructive";
-      if (value === "High") return "outline";
-      return "secondary";
+    importanceClass(value) {
+      return noteImportanceClass(value);
     },
 
-    importanceBadgeClass(value) {
-      if (value === "High") {
-        return "border-warning/40 bg-warning-muted text-warning-foreground";
-      }
-      return "";
+    noteCaption(row) {
+      return noteListCaption(row, {
+        formatDateTime: this.formatStoreDateTime,
+        t: this.$t.bind(this),
+      });
     },
 
     applySort(value) {
@@ -200,11 +238,10 @@ export default {
       this.fetchPage();
     },
 
-    productEditTo(row) {
-      return {
-        path: `/products/${row.productId}/edit`,
-        query: { tab: "notes" },
-      };
+    goToPage(page) {
+      const next = Math.min(Math.max(1, page), this.lastPage);
+      this.startIndex = (next - 1) * PAGE_SIZE;
+      this.fetchPage();
     },
 
     openNote(row) {
@@ -258,7 +295,8 @@ export default {
               this.authorFilter !== AUTHOR_UNKNOWN
                 ? Number(this.authorFilter)
                 : undefined,
-            authorUnknown: this.authorFilter === AUTHOR_UNKNOWN ? true : undefined,
+            authorUnknown:
+              this.authorFilter === AUTHOR_UNKNOWN ? true : undefined,
             sortBy: this.sortBy,
             sortDesc: this.sortDesc,
             startIndex: this.startIndex,
@@ -287,7 +325,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
     <template #nav-center>
       <div class="relative h-9 w-full">
         <Input
@@ -299,6 +337,7 @@ export default {
         <Button
           class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
           variant="link"
+          :aria-label="$t('pages.notesPage.searchPlaceholder')"
           @click="applySearch"
         >
           <Search class="size-4" />
@@ -306,191 +345,194 @@ export default {
       </div>
     </template>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <Select
-        :model-value="importanceFilter"
-        @update:model-value="
-          (v) => {
-            importanceFilter = v;
-            onFilterChange();
-          }
-        "
-      >
-        <SelectTrigger class="h-9 w-full sm:w-44">
-          <SelectValue :placeholder="$t('pages.notesPage.importanceAll')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="IMPORTANCE_ALL">
-            {{ $t("pages.notesPage.importanceAll") }}
-          </SelectItem>
-          <SelectItem
-            v-for="opt in importanceOptions"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-
-      <Select
-        :model-value="authorFilter"
-        @update:model-value="
-          (v) => {
-            authorFilter = v;
-            onFilterChange();
-          }
-        "
-      >
-        <SelectTrigger class="h-9 w-full sm:w-44">
-          <SelectValue :placeholder="$t('pages.notesPage.authorAll')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="AUTHOR_ALL">
-            {{ $t("pages.notesPage.authorAll") }}
-          </SelectItem>
-          <SelectItem v-if="hasUnknownAuthor" :value="AUTHOR_UNKNOWN">
-            {{ $t("pages.notesPage.authorUnknown") }}
-          </SelectItem>
-          <SelectItem
-            v-for="author in authors"
-            :key="author.id"
-            :value="String(author.id)"
-          >
-            {{ author.userName || `#${author.id}` }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-
-      <Select :model-value="sortSelectValue" @update:model-value="applySort">
-        <SelectTrigger class="h-9 w-full sm:w-52">
-          <SelectValue :placeholder="$t('pages.notesPage.sortLabel')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="opt in sortOptions"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-
-      <Button
-        v-if="hasActiveFilters"
-        variant="ghost"
-        size="sm"
-        class="h-9"
-        @click="clearFilters"
-      >
-        <X class="size-4" />
-        {{ $t("pages.notesPage.clearFilters") }}
-      </Button>
-    </div>
-
-    <PageSection
-      :loading="isLoading"
-      :empty="!isLoading && items.length === 0"
-      :empty-icon="NotebookPen"
-      :empty-title="emptyTitle"
-      :empty-description="emptyDescription"
-      class="min-h-[calc(100vh-14rem)]"
-    >
-      <div class="overflow-hidden rounded-xl border bg-card">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-32">{{ $t("pages.notesPage.columnImportance") }}</TableHead>
-                <TableHead>{{ $t("pages.notesPage.columnNote") }}</TableHead>
-                <TableHead class="w-48">{{ $t("pages.notesPage.columnProduct") }}</TableHead>
-                <TableHead class="w-36">{{ $t("pages.notesPage.columnAuthor") }}</TableHead>
-                <TableHead class="w-40">{{ $t("pages.notesPage.columnCreated") }}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="row in items"
-                :key="row.id"
-                class="cursor-pointer"
-                @click="openNote(row)"
-              >
-                <TableCell>
-                  <Badge
-                    :variant="importanceVariant(row.importance)"
-                    :class="importanceBadgeClass(row.importance)"
-                  >
-                    {{ importanceLabel(row.importance) }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="max-w-0 whitespace-normal">
-                  <p class="line-clamp-2 text-sm whitespace-pre-wrap">
-                    {{ row.text || $t("common.emDash") }}
-                  </p>
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <RouterLink
-                    :to="productEditTo(row)"
-                    class="text-foreground block font-medium hover:underline"
-                    @click.stop
-                  >
-                    <span class="line-clamp-1">{{ row.productName }}</span>
-                  </RouterLink>
-                  <p
-                    v-if="row.productSku"
-                    class="text-muted-foreground mt-0.5 truncate font-mono text-xs tabular-nums"
-                  >
-                    {{ row.productSku }}
-                  </p>
-                </TableCell>
-                <TableCell class="text-muted-foreground max-w-0 text-sm">
-                  <span class="block truncate">{{ row.authorUserName || $t("pages.notesPage.authorUnknown") }}</span>
-                </TableCell>
-                <TableCell class="text-sm text-muted-foreground tabular-nums">
-                  {{ formatStoreDateTime(row.createdAt) || $t("common.emDash") }}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-
-        <div
-          v-if="totalCount > 0"
-          class="flex items-center justify-between border-t px-3 py-2"
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div class="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+        <Select
+          :model-value="importanceFilter"
+          @update:model-value="
+            (v) => {
+              importanceFilter = v;
+              onFilterChange();
+            }
+          "
         >
-          <p class="text-sm text-muted-foreground tabular-nums">
-            {{
-              $t("pages.notesPage.pageRange", {
-                from: pageFrom,
-                to: pageTo,
-                total: totalCount,
-              })
-            }}
-          </p>
-          <div class="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              class="size-8"
-              :disabled="!canPrev"
-              @click="prevPage"
+          <SelectTrigger class="h-9 w-full sm:w-44">
+            <SelectValue :placeholder="$t('pages.notesPage.importanceAll')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem :value="IMPORTANCE_ALL">
+              {{ $t("pages.notesPage.importanceAll") }}
+            </SelectItem>
+            <SelectItem
+              v-for="opt in importanceOptions"
+              :key="opt.value"
+              :value="opt.value"
             >
-              <ChevronLeft class="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              class="size-8"
-              :disabled="!canNext"
-              @click="nextPage"
+              {{ opt.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          :model-value="authorFilter"
+          @update:model-value="
+            (v) => {
+              authorFilter = v;
+              onFilterChange();
+            }
+          "
+        >
+          <SelectTrigger class="h-9 w-full sm:w-44">
+            <SelectValue :placeholder="$t('pages.notesPage.authorAll')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem :value="AUTHOR_ALL">
+              {{ $t("pages.notesPage.authorAll") }}
+            </SelectItem>
+            <SelectItem v-if="hasUnknownAuthor" :value="AUTHOR_UNKNOWN">
+              {{ $t("pages.notesPage.authorUnknown") }}
+            </SelectItem>
+            <SelectItem
+              v-for="author in authors"
+              :key="author.id"
+              :value="String(author.id)"
             >
-              <ChevronRight class="size-4" />
-            </Button>
+              {{ author.userName || `#${author.id}` }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select :model-value="sortSelectValue" @update:model-value="applySort">
+          <SelectTrigger class="h-9 w-full sm:w-52">
+            <SelectValue :placeholder="$t('pages.notesPage.sortLabel')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              v-for="opt in sortOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          v-if="hasActiveFilters"
+          variant="ghost"
+          size="sm"
+          class="h-9"
+          @click="clearFilters"
+        >
+          <X class="size-4" />
+          {{ $t("pages.notesPage.clearFilters") }}
+        </Button>
+      </div>
+
+      <PageSection
+        class="flex min-h-0 flex-1 flex-col !mb-0"
+        :loading="isLoading"
+        :empty="!isLoading && items.length === 0"
+        :empty-icon="NotebookPen"
+        :empty-title="emptyTitle"
+        :empty-description="emptyDescription"
+      >
+        <div class="flex min-h-0 flex-1 flex-col gap-3">
+          <InsetGroup scrollable>
+            <InsetGroupItem
+              v-for="row in items"
+              :key="row.id"
+              show-chevron
+              :aria-label="
+                $t('pages.notesPage.openNoteAria', {
+                  product:
+                    row.productName || $t('pages.notesPage.sheetTitleFallback'),
+                })
+              "
+              @click="openNote(row)"
+            >
+              <template #leading>
+                <NotebookPen class="size-4" />
+              </template>
+              <p class="truncate">{{ noteTitle(row) }}</p>
+              <p
+                class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+              >
+                {{ noteCaption(row) }}
+              </p>
+              <template #trailing>
+                <span
+                  class="max-w-28 truncate text-xs"
+                  :class="importanceClass(row.importance)"
+                >
+                  {{ importanceLabel(row.importance) }}
+                </span>
+              </template>
+            </InsetGroupItem>
+          </InsetGroup>
+
+          <div
+            v-if="totalCount > 0"
+            class="flex shrink-0 flex-wrap items-center justify-between gap-2 px-1 py-1"
+          >
+            <p class="text-sm text-muted-foreground tabular-nums">
+              {{
+                $t("pages.notesPage.pageRange", {
+                  from: pageFrom,
+                  to: pageTo,
+                  total: totalCount,
+                })
+              }}
+            </p>
+            <div class="flex items-center gap-1">
+              <p class="mr-2 text-sm text-muted-foreground tabular-nums">
+                {{ currentPage }} / {{ lastPage }}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 w-8 p-0"
+                :disabled="!canPrev || isLoading"
+                :aria-label="$t('pages.notesPage.firstPage')"
+                @click="goToPage(1)"
+              >
+                <ChevronsLeft class="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 w-8 p-0"
+                :disabled="!canPrev || isLoading"
+                :aria-label="$t('pages.notesPage.prevPage')"
+                @click="prevPage"
+              >
+                <ChevronLeft class="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 w-8 p-0"
+                :disabled="!canNext || isLoading"
+                :aria-label="$t('pages.notesPage.nextPage')"
+                @click="nextPage"
+              >
+                <ChevronRight class="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 w-8 p-0"
+                :disabled="!canNext || isLoading"
+                :aria-label="$t('pages.notesPage.lastPage')"
+                @click="goToPage(lastPage)"
+              >
+                <ChevronsRight class="size-4" />
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    </PageSection>
+      </PageSection>
+    </div>
 
     <NoteDetailSheet
       v-model:open="sheetOpen"

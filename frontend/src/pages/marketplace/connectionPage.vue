@@ -10,6 +10,11 @@ import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
@@ -50,10 +55,10 @@ import {
   DollarSign,
   Boxes,
   Activity,
-  Gauge,
   EllipsisVertical,
   Pencil,
   Copy,
+  Check,
   FileText,
   Settings2,
   ArrowRightLeft,
@@ -84,13 +89,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -157,6 +155,9 @@ export default {
     ButtonGroup,
     Checkbox,
     EmptyState,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Plus,
     Store,
     ChevronRight,
@@ -184,7 +185,6 @@ export default {
     DollarSign,
     Boxes,
     Activity,
-    Gauge,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -202,11 +202,6 @@ export default {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
     Select,
     SelectContent,
     SelectGroup,
@@ -234,6 +229,7 @@ export default {
     EllipsisVertical,
     Pencil,
     Copy,
+    Check,
     FileText,
     Settings2,
     ArrowRightLeft,
@@ -1609,6 +1605,20 @@ export default {
       this.$router.push(
         `/adapter/${this.connectionId}/categories/${mappingId}`,
       );
+    },
+
+    mappingRowSubtitle(mapping) {
+      const count = mapping.productsCount ?? mapping.linkedProductsCount ?? 0;
+      const remote = mappingDisplayName(mapping);
+      if (remote && remote !== mapping.localCategoryName) {
+        return this.$t("marketplace.connectionPage.mappings.rowSubtitle", {
+          remote,
+          count,
+        });
+      }
+      return this.$t("marketplace.connectionPage.mappings.rowSubtitleProducts", {
+        count,
+      });
     },
 
     selectExternalCategory(category) {
@@ -3209,7 +3219,7 @@ export default {
                   :href="credentialsDocsUrl"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  class="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-primary hover:underline"
                 >
                   <BookOpen class="size-3.5 shrink-0" />
                   {{
@@ -3359,8 +3369,11 @@ export default {
                 </Button>
 
                 <Dialog v-model:open="showCapabilitiesDialog">
-                  <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
+                  <DialogContent
+                    size="lg"
+                    class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+                  >
+                    <DialogHeader variant="bar">
                       <DialogTitle>
                         {{
                           $t(
@@ -3380,34 +3393,32 @@ export default {
                       </DialogDescription>
                     </DialogHeader>
 
-                    <div
-                      v-if="capabilities?.capabilities"
-                      class="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                    >
-                      <div
-                        v-for="(value, key) in capabilities.capabilities"
-                        :key="key"
-                        class="flex items-center gap-2"
-                      >
-                        <CheckCircle
-                          v-if="value"
-                          class="size-4 shrink-0 text-success-foreground"
-                        />
-                        <XCircle
-                          v-else
-                          class="size-4 shrink-0 text-muted-foreground"
-                        />
-                        <span class="text-sm">{{
-                          capabilityLabels[key] || key
-                        }}</span>
-                      </div>
+                    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                      <InsetGroup v-if="capabilities?.capabilities">
+                        <InsetGroupItem
+                          v-for="(value, key) in capabilities.capabilities"
+                          :key="key"
+                          as="div"
+                        >
+                          <p>{{ capabilityLabels[key] || key }}</p>
+                          <template #trailing>
+                            <Check
+                              v-if="value"
+                              class="size-4 text-muted-foreground"
+                            />
+                          </template>
+                        </InsetGroupItem>
+                      </InsetGroup>
                     </div>
                   </DialogContent>
                 </Dialog>
 
                 <Dialog v-model:open="showLimitsDialog">
-                  <DialogContent size="lg" class="max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
+                  <DialogContent
+                    size="lg"
+                    class="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0"
+                  >
+                    <DialogHeader variant="bar">
                       <DialogTitle>
                         {{ $t("marketplace.connectionPage.limits.title") }}
                       </DialogTitle>
@@ -3416,114 +3427,131 @@ export default {
                       </DialogDescription>
                     </DialogHeader>
 
-                    <div
-                      v-if="isLoadingLimits"
-                      class="flex justify-center py-10"
-                    >
-                      <Spinner size="2xl" class="text-muted-foreground" />
-                    </div>
+                    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                      <div
+                        v-if="isLoadingLimits"
+                        class="flex justify-center py-10"
+                      >
+                        <Spinner size="2xl" class="text-muted-foreground" />
+                      </div>
 
-                    <EmptyState
-                      v-else-if="limitsData && !limitsData.supported"
-                      class="flex-1 py-12"
-                      :title="
-                        $t('marketplace.connectionPage.limits.unavailableTitle')
-                      "
-                      :description="
-                        $t(
-                          'marketplace.connectionPage.limits.unavailableDescription',
-                        )
-                      "
-                    >
-                      <template #icon>
-                        <Activity />
-                      </template>
-                    </EmptyState>
+                      <EmptyState
+                        v-else-if="limitsData && !limitsData.supported"
+                        class="flex-1 py-12"
+                        :title="
+                          $t('marketplace.connectionPage.limits.unavailableTitle')
+                        "
+                        :description="
+                          $t(
+                            'marketplace.connectionPage.limits.unavailableDescription',
+                          )
+                        "
+                      >
+                        <template #icon>
+                          <Activity />
+                        </template>
+                      </EmptyState>
 
-                    <div v-else-if="limitsData?.supported" class="space-y-4">
-                      <Card>
-                        <CardHeader class="pb-2">
-                          <CardTitle
-                            class="flex items-center justify-between gap-3 text-sm font-medium"
-                          >
-                            <span class="flex items-center gap-2">
-                              <Gauge class="size-4 text-muted-foreground" />
+                      <div v-else-if="limitsData?.supported" class="space-y-6">
+                        <InsetGroup>
+                          <InsetGroupItem as="div">
+                            <p>
                               {{
                                 $t(
                                   "marketplace.connectionPage.limits.requestsPerSecond",
                                 )
                               }}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              class="font-normal tabular-nums"
+                            </p>
+                            <p
+                              class="text-muted-foreground mt-0.5 text-xs font-normal"
                             >
-                              {{ limitsData.currentWindowRequests }} /
-                              {{ limitsData.maxRequestsPerSecond }} RPS
-                            </Badge>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent class="space-y-3">
-                          <div
-                            class="flex items-center justify-between gap-2 text-xs text-muted-foreground"
-                          >
-                            <span>{{
-                              $t(
-                                "marketplace.connectionPage.limits.currentWindow",
-                              )
-                            }}</span>
-                            <span>{{
-                              getUsageLoadLabel(
-                                limitsData.currentWindowRequests,
-                                limitsData.maxRequestsPerSecond,
-                              )
-                            }}</span>
-                          </div>
-                          <Progress :model-value="rpsUsagePercent" :max="100" />
-                          <p class="text-xs text-muted-foreground">
-                            {{
-                              $t(
-                                "marketplace.connectionPage.limits.totalRequestsSinceStart",
-                              )
-                            }}
-                            {{
-                              limitsData.totalRequestsSinceStart.toLocaleString(
-                                "ru-RU",
-                              )
-                            }}
-                          </p>
-                        </CardContent>
-                      </Card>
+                              {{
+                                $t(
+                                  "marketplace.connectionPage.limits.currentWindow",
+                                )
+                              }}
+                              ·
+                              {{
+                                getUsageLoadLabel(
+                                  limitsData.currentWindowRequests,
+                                  limitsData.maxRequestsPerSecond,
+                                )
+                              }}
+                            </p>
+                            <div
+                              class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+                              aria-hidden="true"
+                            >
+                              <div
+                                class="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
+                                :style="{ width: `${rpsUsagePercent}%` }"
+                              />
+                            </div>
+                            <p
+                              class="text-muted-foreground mt-1.5 text-xs font-normal"
+                            >
+                              {{
+                                $t(
+                                  "marketplace.connectionPage.limits.totalRequestsSinceStart",
+                                )
+                              }}
+                              {{
+                                limitsData.totalRequestsSinceStart.toLocaleString(
+                                  "ru-RU",
+                                )
+                              }}
+                            </p>
+                            <template #trailing>
+                              <span
+                                class="text-muted-foreground text-xs font-normal tabular-nums"
+                              >
+                                {{ limitsData.currentWindowRequests }} /
+                                {{ limitsData.maxRequestsPerSecond }} RPS
+                              </span>
+                            </template>
+                          </InsetGroupItem>
+                        </InsetGroup>
 
-                      <p
-                        v-if="limitsData.quotasAvailable === false"
-                        class="text-xs text-muted-foreground"
-                      >
-                        {{
-                          $t(
-                            "marketplace.connectionPage.limits.quotasUnavailable",
-                          )
-                        }}
-                      </p>
-
-                      <div
-                        v-if="limitsData.quotas?.length > 0"
-                        class="grid gap-3"
-                      >
-                        <Card
-                          v-for="quota in limitsData.quotas"
-                          :key="quota.key"
+                        <p
+                          v-if="limitsData.quotasAvailable === false"
+                          class="px-1 text-xs text-muted-foreground"
                         >
-                          <CardHeader class="pb-2">
-                            <CardTitle
-                              class="flex items-center justify-between gap-3 text-sm font-medium"
+                          {{
+                            $t(
+                              "marketplace.connectionPage.limits.quotasUnavailable",
+                            )
+                          }}
+                        </p>
+
+                        <InsetGroup v-if="limitsData.quotas?.length > 0">
+                          <InsetGroupItem
+                            v-for="quota in limitsData.quotas"
+                            :key="quota.key"
+                            as="div"
+                          >
+                            <p class="truncate">{{ quota.displayName }}</p>
+                            <p
+                              v-if="quota.resetsAt"
+                              class="text-muted-foreground mt-0.5 text-xs font-normal"
                             >
-                              <span class="truncate">{{
-                                quota.displayName
-                              }}</span>
-                              <Badge
-                                variant="secondary"
-                                class="shrink-0 font-normal tabular-nums"
+                              {{ $t("marketplace.connectionPage.limits.reset") }}
+                              {{ formatQuotaResetTime(quota.resetsAt) }}
+                            </p>
+                            <div
+                              v-if="quota.limit > 0"
+                              class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+                              aria-hidden="true"
+                            >
+                              <div
+                                class="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
+                                :style="{
+                                  width: `${getUsagePercent(quota.usage, quota.limit)}%`,
+                                }"
+                              />
+                            </div>
+                            <template #trailing>
+                              <span
+                                class="text-muted-foreground shrink-0 text-xs font-normal tabular-nums"
                               >
                                 <template v-if="quota.limit < 0">
                                   {{ quota.usage.toLocaleString("ru-RU") }} ·
@@ -3537,67 +3565,19 @@ export default {
                                   {{ quota.usage.toLocaleString("ru-RU") }} /
                                   {{ quota.limit.toLocaleString("ru-RU") }}
                                 </template>
-                              </Badge>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent class="space-y-3">
-                            <div v-if="quota.limit > 0" class="space-y-2">
-                              <div
-                                class="flex items-center justify-between gap-2 text-xs text-muted-foreground"
-                              >
-                                <span>{{
-                                  $t("marketplace.connectionPage.limits.usage")
-                                }}</span>
-                                <span>{{
-                                  getUsageLoadLabel(quota.usage, quota.limit)
-                                }}</span>
-                              </div>
-                              <Progress
-                                :model-value="
-                                  getUsagePercent(quota.usage, quota.limit)
-                                "
-                                :max="100"
-                              />
-                            </div>
-                            <p
-                              v-if="quota.resetsAt"
-                              class="text-xs text-muted-foreground"
-                            >
-                              {{
-                                $t("marketplace.connectionPage.limits.reset")
-                              }}: {{ formatQuotaResetTime(quota.resetsAt) }}
-                            </p>
-                          </CardContent>
-                        </Card>
+                              </span>
+                            </template>
+                          </InsetGroupItem>
+                        </InsetGroup>
                       </div>
                     </div>
                   </DialogContent>
                 </Dialog>
               </div>
 
-              <div
-                v-if="testResult"
-                class="mt-8 p-4 rounded-lg"
-                :class="
-                  testResult.success ? 'bg-success-muted' : 'bg-error-muted'
-                "
-              >
-                <div class="flex items-center gap-2 flex-wrap">
-                  <CheckCircle
-                    v-if="testResult.success"
-                    class="size-5 text-success-foreground shrink-0"
-                  />
-                  <XCircle
-                    v-else
-                    class="size-5 text-error-foreground shrink-0"
-                  />
-                  <span
-                    :class="
-                      testResult.success
-                        ? 'text-success-foreground'
-                        : 'text-error-foreground'
-                    "
-                  >
+              <InsetGroup v-if="testResult" class="mt-8">
+                <InsetGroupItem as="div">
+                  <p>
                     {{
                       testResult.success
                         ? testResult.message ||
@@ -3609,7 +3589,7 @@ export default {
                             "marketplace.connectionPage.notifications.testError",
                           )
                     }}
-                  </span>
+                  </p>
                   <AiErrorExplainer
                     v-if="
                       aiEnabled &&
@@ -3619,6 +3599,7 @@ export default {
                           'marketplace.connectionPage.notifications.testError',
                         ))
                     "
+                    class="mt-2"
                     :error-message="
                       testResult.errorMessage ||
                       $t('marketplace.connectionPage.notifications.testError')
@@ -3626,8 +3607,14 @@ export default {
                     :context="`test_connection`"
                     :connection-id="connection?.id"
                   />
-                </div>
-              </div>
+                  <template #trailing>
+                    <Check
+                      v-if="testResult.success"
+                      class="size-4 text-muted-foreground"
+                    />
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
             </div>
           </TabsContent>
 
@@ -3639,11 +3626,10 @@ export default {
             <div
               class="flex flex-wrap items-center justify-between gap-2 shrink-0"
             >
-              <p class="text-sm font-medium flex items-center gap-2">
-                <FolderTree class="size-4" />
+              <p class="text-sm text-muted-foreground">
                 {{ $t("marketplace.connectionPage.mappings.title") }}
-                <span class="text-muted-foreground font-normal tabular-nums">
-                  ({{ categoryMappings.length }})
+                <span class="tabular-nums">
+                  · {{ categoryMappings.length }}
                 </span>
               </p>
               <div class="flex shrink-0 flex-wrap gap-2">
@@ -3737,16 +3723,14 @@ export default {
                       class="grid min-h-0 flex-1 grid-cols-2 gap-4 border-t px-6"
                     >
                       <div class="flex min-h-0 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">
+                        <InsetGroupLabel class="mb-0">
                           {{
                             $t(
                               "marketplace.connectionPage.mappings.localCategory",
                             )
                           }}
-                        </p>
-                        <div
-                          class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border"
-                        >
+                        </InsetGroupLabel>
+                        <InsetGroup scrollable class="flex-1">
                           <div
                             v-if="!localCategories.length"
                             class="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground"
@@ -3757,39 +3741,29 @@ export default {
                               )
                             }}
                           </div>
-                          <div
-                            v-else
-                            class="min-h-0 flex-1 overflow-y-auto p-1.5"
-                          >
-                            <button
+                          <template v-else>
+                            <InsetGroupItem
                               v-for="cat in localCategories"
                               :key="cat.id"
-                              type="button"
-                              class="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent"
-                              :class="{
-                                'bg-accent':
-                                  newMapping.localCategoryId === cat.id,
-                              }"
+                              :selected="newMapping.localCategoryId === cat.id"
                               @click="newMapping.localCategoryId = cat.id"
                             >
-                              <span class="truncate font-medium">{{
-                                cat.name
-                              }}</span>
-                              <Badge
-                                v-if="cat.attributesCount"
-                                variant="secondary"
-                                class="ml-2 shrink-0 font-normal tabular-nums"
-                              >
-                                {{
-                                  $t(
-                                    "marketplace.connectionPage.mappings.attributesCountAbbr",
-                                    { count: cat.attributesCount },
-                                  )
-                                }}
-                              </Badge>
-                            </button>
-                          </div>
-                        </div>
+                              <p class="truncate">{{ cat.name }}</p>
+                              <template v-if="cat.attributesCount" #trailing>
+                                <span
+                                  class="text-muted-foreground text-xs font-normal tabular-nums"
+                                >
+                                  {{
+                                    $t(
+                                      "marketplace.connectionPage.mappings.attributesCountAbbr",
+                                      { count: cat.attributesCount },
+                                    )
+                                  }}
+                                </span>
+                              </template>
+                            </InsetGroupItem>
+                          </template>
+                        </InsetGroup>
                         <p
                           v-if="selectedLocalCategory"
                           class="text-xs text-muted-foreground"
@@ -3815,14 +3789,14 @@ export default {
                       </div>
 
                       <div class="flex min-h-0 flex-1 flex-col gap-2 py-4">
-                        <p class="text-sm font-medium">
+                        <InsetGroupLabel class="mb-0">
                           {{
                             $t(
                               "marketplace.connectionPage.mappings.categoryOf",
                               { adapter: adapterDisplayName },
                             )
                           }}
-                        </p>
+                        </InsetGroupLabel>
 
                         <ExternalCategoryBrowser
                           v-model:search="externalCategorySearch"
@@ -4139,37 +4113,45 @@ export default {
                         {{ unmappedLocalCategories.length }}
                       </span>
                     </div>
-                    <div class="space-y-1 rounded-lg border p-1.5">
-                      <label
+                    <InsetGroup>
+                      <InsetGroupItem
                         v-for="cat in unmappedLocalCategories"
                         :key="cat.id"
-                        class="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-accent"
+                        as="div"
+                        class="cursor-pointer"
+                        @click="
+                          toggleBulkCreateCategory(
+                            cat.id,
+                            !bulkCreateSelectedIds[cat.id],
+                          )
+                        "
                       >
-                        <Checkbox
-                          :model-value="!!bulkCreateSelectedIds[cat.id]"
-                          :disabled="isBulkCreatingCategories"
-                          @update:model-value="
-                            (checked) =>
-                              toggleBulkCreateCategory(cat.id, checked)
-                          "
-                        />
-                        <span class="min-w-0 flex-1 truncate font-medium">{{
-                          cat.name
-                        }}</span>
-                        <Badge
-                          v-if="cat.attributesCount"
-                          variant="secondary"
-                          class="shrink-0 font-normal tabular-nums"
-                        >
-                          {{
-                            $t(
-                              "marketplace.connectionPage.mappings.attributesCountAbbr",
-                              { count: cat.attributesCount },
-                            )
-                          }}
-                        </Badge>
-                      </label>
-                    </div>
+                        <template #leading>
+                          <Checkbox
+                            :model-value="!!bulkCreateSelectedIds[cat.id]"
+                            :disabled="isBulkCreatingCategories"
+                            @update:model-value="
+                              (checked) =>
+                                toggleBulkCreateCategory(cat.id, checked)
+                            "
+                            @click.stop
+                          />
+                        </template>
+                        <p class="truncate">{{ cat.name }}</p>
+                        <template v-if="cat.attributesCount" #trailing>
+                          <span
+                            class="text-muted-foreground text-xs font-normal tabular-nums"
+                          >
+                            {{
+                              $t(
+                                "marketplace.connectionPage.mappings.attributesCountAbbr",
+                                { count: cat.attributesCount },
+                              )
+                            }}
+                          </span>
+                        </template>
+                      </InsetGroupItem>
+                    </InsetGroup>
                   </template>
 
                   <div v-if="bulkCreateProgress" class="space-y-2 pt-2">
@@ -4243,129 +4225,70 @@ export default {
 
             <div
               v-if="categoryMappings.length > 0"
-              class="overflow-hidden rounded-xl border"
+              class="max-w-2xl"
             >
-              <Table>
-                <TableHeader>
-                  <TableRow class="hover:bg-transparent">
-                    <TableHead class="px-3">{{
-                      $t("marketplace.connectionPage.mappings.localCategory")
-                    }}</TableHead>
-                    <TableHead class="hidden px-3 sm:table-cell">
-                      {{
-                        $t("marketplace.connectionPage.mappings.categoryOf", {
-                          adapter: adapterDisplayName,
-                        })
-                      }}
-                    </TableHead>
-                    <TableHead class="hidden w-40 px-3 md:table-cell">{{
-                      $t("common.name")
-                    }}</TableHead>
-                    <TableHead class="w-24 px-3 text-right">{{
-                      $t("marketplace.connectionPage.tabs.products")
-                    }}</TableHead>
-                    <TableHead class="w-12 px-2" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="mapping in categoryMappings"
-                    :key="mapping.id"
-                    class="group cursor-pointer"
-                    @click="openFieldMapping(mapping.id)"
+              <InsetGroup>
+                <InsetGroupItem
+                  v-for="mapping in categoryMappings"
+                  :key="mapping.id"
+                  show-chevron
+                  @click="openFieldMapping(mapping.id)"
+                >
+                  <p class="truncate">{{ mapping.localCategoryName }}</p>
+                  <p
+                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
                   >
-                    <TableCell class="font-medium max-w-0">
-                      <span class="truncate block">{{
-                        mapping.localCategoryName
-                      }}</span>
-                      <span
-                        class="text-xs text-muted-foreground truncate block sm:hidden"
-                      >
-                        {{
-                          mappingDisplayName(mapping) ||
-                          mapping.localCategoryName
-                        }}
-                      </span>
-                      <span
-                        v-if="mapping.name"
-                        class="text-xs text-muted-foreground truncate block md:hidden"
-                      >
-                        {{ mapping.name }}
-                      </span>
-                    </TableCell>
-                    <TableCell
-                      class="text-muted-foreground hidden max-w-0 sm:table-cell"
-                    >
-                      <span class="block truncate">{{
-                        mappingDisplayName(mapping) || mapping.localCategoryName
-                      }}</span>
-                    </TableCell>
-                    <TableCell
-                      class="text-muted-foreground hidden max-w-0 md:table-cell"
-                    >
-                      <span class="block truncate">{{
-                        mapping.name || $t("common.emDash")
-                      }}</span>
-                    </TableCell>
-                    <TableCell
-                      class="text-right tabular-nums text-muted-foreground"
-                    >
-                      {{
-                        mapping.productsCount ??
-                        mapping.linkedProductsCount ??
-                        0
-                      }}
-                    </TableCell>
-                    <TableCell class="px-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger as-child>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            class="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                            :aria-label="
-                              $t(
-                                'marketplace.connectionPage.mappings.mappingActionsAria',
-                              )
-                            "
-                            @click.stop
-                          >
-                            <EllipsisVertical class="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            @click.stop="openRenameMapping(mapping)"
-                          >
-                            <Pencil />
-                            {{
-                              $t("marketplace.connectionPage.mappings.rename")
-                            }}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            @click.stop="requestDuplicateMapping(mapping.id)"
-                          >
-                            <Copy />
-                            {{
-                              $t(
-                                "marketplace.connectionPage.mappings.duplicate",
-                              )
-                            }}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            @click.stop="handleDeleteMapping(mapping)"
-                          >
-                            <Trash2 />
-                            {{ $t("common.delete") }}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                    {{ mappingRowSubtitle(mapping) }}
+                  </p>
+                  <template #trailing>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          :aria-label="
+                            $t(
+                              'marketplace.connectionPage.mappings.mappingActionsAria',
+                            )
+                          "
+                          @click.stop
+                        >
+                          <EllipsisVertical class="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          @click.stop="openRenameMapping(mapping)"
+                        >
+                          <Pencil />
+                          {{
+                            $t("marketplace.connectionPage.mappings.rename")
+                          }}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          @click.stop="requestDuplicateMapping(mapping.id)"
+                        >
+                          <Copy />
+                          {{
+                            $t(
+                              "marketplace.connectionPage.mappings.duplicate",
+                            )
+                          }}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          @click.stop="handleDeleteMapping(mapping)"
+                        >
+                          <Trash2 />
+                          {{ $t("common.delete") }}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
             </div>
           </TabsContent>
 
@@ -4481,7 +4404,7 @@ export default {
                 <!-- Products table (border only around data, not EmptyState) -->
                 <div
                   v-else
-                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card"
                 >
                   <div class="min-h-0 flex-1 overflow-auto">
                     <Table :contain="false" class="w-full">
@@ -4958,7 +4881,7 @@ export default {
                 <!-- Local products table (border only around data, not EmptyState) -->
                 <div
                   v-else
-                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
+                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card"
                 >
                   <div class="min-h-0 flex-1 overflow-auto">
                     <Table :contain="false" class="w-full">
@@ -5036,53 +4959,84 @@ export default {
                     </Table>
                   </div>
 
-                  <!-- Pagination -->
                   <div
-                    v-if="localTotalCount > 0"
-                    class="shrink-0 flex items-center justify-between px-4 py-3"
+                    class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-background px-3 py-2"
                   >
-                    <div class="flex items-center gap-2">
-                      <p class="text-sm text-muted-foreground">
-                        {{
-                          $t(
-                            "marketplace.connectionPage.products.pageSizeLabel",
-                          )
-                        }}
-                      </p>
-                      <Select
-                        :model-value="String(localPageSize)"
-                        @update:model-value="
-                          (val) => {
-                            localPageSize = Number(val);
-                            localPage = 1;
-                            fetchLocalProducts();
-                          }
-                        "
-                      >
-                        <SelectTrigger
-                          class="h-8 w-[100px] bg-primary-foreground"
+                    <div class="flex min-w-0 flex-wrap items-center gap-4">
+                      <div class="flex items-center gap-2">
+                        <p class="text-sm text-muted-foreground">
+                          {{
+                            $t(
+                              "marketplace.connectionPage.products.pageSizeLabel",
+                            )
+                          }}
+                        </p>
+                        <Select
+                          :model-value="String(localPageSize)"
+                          @update:model-value="
+                            (val) => {
+                              localPageSize = Number(val);
+                              localPage = 1;
+                              fetchLocalProducts();
+                            }
+                          "
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem as="button" value="10">10</SelectItem>
-                            <SelectItem as="button" value="25">25</SelectItem>
-                            <SelectItem as="button" value="50">50</SelectItem>
-                            <SelectItem as="button" value="100">100</SelectItem>
-                            <SelectItem as="button" value="250">250</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                      <p class="text-sm text-muted-foreground">
-                        {{
-                          $t("marketplace.connectionPage.products.totalLabel")
-                        }}
-                        {{ localTotalCount }}
-                      </p>
+                          <SelectTrigger
+                            class="h-8 w-[100px] bg-primary-foreground"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem as="button" value="10">10</SelectItem>
+                              <SelectItem as="button" value="25">25</SelectItem>
+                              <SelectItem as="button" value="50">50</SelectItem>
+                              <SelectItem as="button" value="100">100</SelectItem>
+                              <SelectItem as="button" value="250">250</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <template
+                        v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
+                      >
+                        <div class="h-4 w-px bg-border" />
+                        <span class="text-sm font-medium">
+                          {{
+                            $t(
+                              "marketplace.connectionPage.products.selectedLabel",
+                            )
+                          }}
+                          {{ selectedLocalIds.length }}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-8"
+                          @click="clearLocalSelection"
+                        >
+                          <X class="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="h-8"
+                          @click="handleExportNewBulk"
+                          :disabled="isExportingNewBulk"
+                        >
+                          <Spinner v-if="isExportingNewBulk" class="mr-2" />
+                          <Upload v-else class="mr-1 size-4" />
+                          {{
+                            $t(
+                              "marketplace.connectionPage.products.exportToAdapterCount",
+                              { count: selectedLocalIds.length },
+                            )
+                          }}
+                        </Button>
+                      </template>
                     </div>
                     <div class="flex items-center gap-2">
-                      <p class="text-sm text-muted-foreground mr-2">
+                      <p class="mr-2 text-sm text-muted-foreground">
                         {{ localPage }} / {{ localLastPage }}
                       </p>
                       <Button
@@ -5134,43 +5088,6 @@ export default {
                         <ChevronsRight class="size-4" />
                       </Button>
                     </div>
-                  </div>
-
-                  <!-- Bulk export bar -->
-                  <div
-                    v-if="selectedLocalIds.length > 0 || isExportingNewBulk"
-                    class="bg-background flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
-                  >
-                    <span class="text-sm font-medium">
-                      {{
-                        $t("marketplace.connectionPage.products.selectedLabel")
-                      }}
-                      {{ selectedLocalIds.length }}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      class="h-8"
-                      @click="clearLocalSelection"
-                    >
-                      <X class="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      class="h-8"
-                      @click="handleExportNewBulk"
-                      :disabled="isExportingNewBulk"
-                    >
-                      <Spinner v-if="isExportingNewBulk" class="mr-2" />
-                      <Upload v-else class="mr-1 size-4" />
-                      {{
-                        $t(
-                          "marketplace.connectionPage.products.exportToAdapterCount",
-                          { count: selectedLocalIds.length },
-                        )
-                      }}
-                    </Button>
                   </div>
                 </div>
               </template>
@@ -5446,16 +5363,22 @@ export default {
             $t("marketplace.connectionPage.dialogs.renameMappingDescription")
           }}</DialogDescription>
         </DialogHeader>
-        <div class="py-4">
-          <Input
-            v-model="renameMappingValue"
-            :placeholder="
-              $t('marketplace.connectionPage.dialogs.mappingNamePlaceholder')
-            "
-            :maxlength="FIELD_LIMITS.mappingName"
-            @keyup.enter="handleRenameMapping"
-          />
-        </div>
+        <FieldGroup class="gap-4">
+          <SettingsFormField
+            :label="$t('common.name')"
+            label-for="rename-mapping-name"
+          >
+            <Input
+              id="rename-mapping-name"
+              v-model="renameMappingValue"
+              :placeholder="
+                $t('marketplace.connectionPage.dialogs.mappingNamePlaceholder')
+              "
+              :maxlength="FIELD_LIMITS.mappingName"
+              @keyup.enter="handleRenameMapping"
+            />
+          </SettingsFormField>
+        </FieldGroup>
         <DialogFooter>
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
@@ -5497,174 +5420,152 @@ export default {
         </DialogHeader>
 
         <div
-          class="space-y-2 py-2"
+          class="space-y-4 py-2"
           role="radiogroup"
           :aria-label="
             $t('marketplace.connectionPage.dialogs.whatToDoWithProductsAria')
           "
         >
-          <!-- Safe path: only rendered when an alternative mapping exists -->
-          <Button
-            v-if="deleteMappingReplacementOptions.length > 0"
-            type="button"
-            variant="outline"
-            role="radio"
-            :aria-checked="deleteMappingMode === 'reassign'"
-            :class="[
-              'w-full h-auto rounded-lg p-3 text-left font-normal justify-start whitespace-normal',
-              deleteMappingMode === 'reassign'
-                ? 'border-primary bg-primary/5'
-                : 'border-input hover:bg-accent/50',
-            ]"
-            @click="deleteMappingMode = 'reassign'"
-          >
-            <div class="flex items-start gap-3">
-              <ArrowRightLeft
-                :class="[
-                  'mt-0.5 size-4 shrink-0',
-                  deleteMappingMode === 'reassign'
-                    ? 'text-primary'
-                    : 'text-muted-foreground',
-                ]"
-              />
-              <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="text-sm font-medium">
-                  {{
-                    $t(
-                      "marketplace.connectionPage.dialogs.moveProductsToAnotherMapping",
-                    )
-                  }}
-                </div>
-                <p class="text-xs text-muted-foreground">
-                  {{
-                    $t("marketplace.connectionPage.dialogs.moveProductsHint")
-                  }}
-                </p>
-                <Select
-                  v-if="deleteMappingMode === 'reassign'"
-                  :model-value="deleteMappingReplacementId ?? undefined"
-                  @update:model-value="
-                    (value) => (deleteMappingReplacementId = value)
-                  "
-                >
-                  <SelectTrigger class="h-9 w-full" @click.stop>
-                    <SelectValue
-                      :placeholder="
-                        $t(
-                          'marketplace.connectionPage.dialogs.mappingToTransferPlaceholder',
-                        )
-                      "
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="mapping in deleteMappingReplacementOptions"
-                      :key="mapping.id"
-                      :value="mapping.id.toString()"
-                    >
-                      {{
-                        mappingDisplayName(
-                          mapping,
-                          $t(
-                            "marketplace.connectionPage.dialogs.mappingFallback",
-                            { id: mapping.id },
-                          ),
-                        )
-                      }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </Button>
+          <InsetGroup>
+            <InsetGroupItem
+              v-if="deleteMappingReplacementOptions.length > 0"
+              role="radio"
+              :aria-checked="deleteMappingMode === 'reassign'"
+              :selected="deleteMappingMode === 'reassign'"
+              @click="deleteMappingMode = 'reassign'"
+            >
+              <template #leading>
+                <ArrowRightLeft class="size-4" />
+              </template>
+              <p>
+                {{
+                  $t(
+                    "marketplace.connectionPage.dialogs.moveProductsToAnotherMapping",
+                  )
+                }}
+              </p>
+              <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+                {{
+                  $t("marketplace.connectionPage.dialogs.moveProductsHint")
+                }}
+              </p>
+            </InsetGroupItem>
+            <InsetGroupItem
+              role="radio"
+              :aria-checked="deleteMappingMode === 'force'"
+              :selected="deleteMappingMode === 'force'"
+              @click="deleteMappingMode = 'force'"
+            >
+              <template #leading>
+                <Unlink class="size-4" />
+              </template>
+              <p>
+                {{
+                  $t("marketplace.connectionPage.dialogs.deleteWithoutMoving")
+                }}
+              </p>
+              <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+                {{
+                  $t(
+                    "marketplace.connectionPage.dialogs.deleteWithoutMovingHint",
+                  )
+                }}
+              </p>
+              <p
+                v-if="deleteMappingReplacementOptions.length === 0"
+                class="text-muted-foreground mt-0.5 text-xs font-normal"
+              >
+                {{
+                  $t(
+                    "marketplace.connectionPage.dialogs.noReplacementMappingHint",
+                  )
+                }}
+              </p>
+            </InsetGroupItem>
+          </InsetGroup>
 
-          <Button
-            type="button"
-            variant="outline"
-            role="radio"
-            :aria-checked="deleteMappingMode === 'force'"
-            :class="[
-              'w-full h-auto rounded-lg p-3 text-left font-normal justify-start whitespace-normal',
-              deleteMappingMode === 'force'
-                ? 'border-destructive/60 bg-destructive/5'
-                : 'border-input hover:bg-accent/50',
-            ]"
-            @click="deleteMappingMode = 'force'"
+          <Select
+            v-if="
+              deleteMappingMode === 'reassign' &&
+              deleteMappingReplacementOptions.length > 0
+            "
+            :model-value="deleteMappingReplacementId ?? undefined"
+            @update:model-value="
+              (value) => (deleteMappingReplacementId = value)
+            "
           >
-            <div class="flex items-start gap-3">
-              <Unlink
-                :class="[
-                  'mt-0.5 size-4 shrink-0',
-                  deleteMappingMode === 'force'
-                    ? 'text-destructive'
-                    : 'text-muted-foreground',
-                ]"
+            <SelectTrigger class="h-9 w-full">
+              <SelectValue
+                :placeholder="
+                  $t(
+                    'marketplace.connectionPage.dialogs.mappingToTransferPlaceholder',
+                  )
+                "
               />
-              <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="text-sm font-medium">
-                  {{
-                    $t("marketplace.connectionPage.dialogs.deleteWithoutMoving")
-                  }}
-                </div>
-                <p class="text-xs text-muted-foreground">
-                  {{
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="mapping in deleteMappingReplacementOptions"
+                :key="mapping.id"
+                :value="mapping.id.toString()"
+              >
+                {{
+                  mappingDisplayName(
+                    mapping,
                     $t(
-                      "marketplace.connectionPage.dialogs.deleteWithoutMovingHint",
-                    )
-                  }}
-                </p>
-                <p
-                  v-if="deleteMappingReplacementOptions.length === 0"
-                  class="text-xs text-muted-foreground"
-                >
-                  {{
-                    $t(
-                      "marketplace.connectionPage.dialogs.noReplacementMappingHint",
-                    )
-                  }}
-                </p>
-              </div>
-            </div>
-          </Button>
+                      "marketplace.connectionPage.dialogs.mappingFallback",
+                      { id: mapping.id },
+                    ),
+                  )
+                }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-          <div v-if="deleteMappingImpact?.products?.length" class="pt-1">
-            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+          <div v-if="deleteMappingImpact?.products?.length">
+            <p class="mb-2 px-1 text-xs text-muted-foreground">
               {{ $t("marketplace.connectionPage.dialogs.linkedProducts") }}
-            </div>
-            <div class="max-h-28 divide-y overflow-y-auto rounded-md border">
-              <div
+            </p>
+            <InsetGroup>
+              <InsetGroupItem
                 v-for="product in deleteMappingImpact.products"
                 :key="product.id"
-                class="flex items-baseline justify-between gap-2 px-3 py-1.5 text-xs"
+                as="div"
               >
-                <span class="truncate">
+                <p class="truncate">
                   {{
                     product.name ||
                     $t("marketplace.connectionPage.dialogs.productFallback", {
                       id: product.id,
                     })
                   }}
-                </span>
-                <span class="shrink-0 font-mono text-muted-foreground">
-                  {{ product.sku || `ID ${product.id}` }}
-                </span>
-              </div>
-              <div
+                </p>
+                <template #trailing>
+                  <span
+                    class="text-muted-foreground font-mono text-xs font-normal"
+                  >
+                    {{ product.sku || `ID ${product.id}` }}
+                  </span>
+                </template>
+              </InsetGroupItem>
+              <InsetGroupItem
                 v-if="
                   (deleteMappingImpact.linkedProductsCount || 0) >
                   deleteMappingImpact.products.length
                 "
-                class="px-3 py-1.5 text-xs text-muted-foreground"
+                as="div"
               >
-                {{
-                  $t("marketplace.connectionPage.dialogs.andMoreCount", {
-                    count:
-                      deleteMappingImpact.linkedProductsCount -
-                      deleteMappingImpact.products.length,
-                  })
-                }}
-              </div>
-            </div>
+                <p class="text-muted-foreground text-xs font-normal">
+                  {{
+                    $t("marketplace.connectionPage.dialogs.andMoreCount", {
+                      count:
+                        deleteMappingImpact.linkedProductsCount -
+                        deleteMappingImpact.products.length,
+                    })
+                  }}
+                </p>
+              </InsetGroupItem>
+            </InsetGroup>
           </div>
         </div>
 
@@ -5762,9 +5663,9 @@ export default {
             v-if="mappingCategoryGroups.length > 0"
             class="space-y-2 pb-3 border-b"
           >
-            <div class="text-sm font-medium text-muted-foreground">
+            <InsetGroupLabel class="mb-0">
               {{ $t("marketplace.connectionPage.dialogs.applyToAll") }}
-            </div>
+            </InsetGroupLabel>
             <div
               v-for="group in mappingCategoryGroups"
               :key="group.categoryName"
@@ -5812,52 +5713,49 @@ export default {
             </div>
           </div>
 
-          <div
-            v-for="product in mappingSelectionProducts"
-            :key="product.productId"
-            class="border rounded-lg p-3 space-y-2"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="font-medium text-sm">{{ product.productName }}</div>
-                <div class="text-xs text-muted-foreground">
-                  {{ product.categoryName }}
-                </div>
-              </div>
-            </div>
-            <Select
-              :model-value="mappingSelections[product.productId]?.toString()"
-              @update:model-value="
-                (val) => (mappingSelections[product.productId] = parseInt(val))
-              "
+          <FieldGroup class="gap-5">
+            <SettingsFormField
+              v-for="product in mappingSelectionProducts"
+              :key="product.productId"
+              :label="product.productName"
+              :description="product.categoryName"
             >
-              <SelectTrigger class="w-full">
-                <SelectValue
-                  :placeholder="
-                    $t(
-                      'marketplace.connectionPage.dialogs.chooseMappingPlaceholder',
-                    )
-                  "
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="mapping in product.availableMappings"
-                  :key="mapping.id"
-                  :value="mapping.id.toString()"
-                >
-                  {{
-                    mappingDisplayName(
-                      mapping,
-                      $t("marketplace.connectionPage.dialogs.mappingFallback", {
-                        id: mapping.id,
-                      }),
-                    )
-                  }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <Select
+                :model-value="mappingSelections[product.productId]?.toString()"
+                @update:model-value="
+                  (val) =>
+                    (mappingSelections[product.productId] = parseInt(val))
+                "
+              >
+                <SelectTrigger class="w-full">
+                  <SelectValue
+                    :placeholder="
+                      $t(
+                        'marketplace.connectionPage.dialogs.chooseMappingPlaceholder',
+                      )
+                    "
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="mapping in product.availableMappings"
+                    :key="mapping.id"
+                    :value="mapping.id.toString()"
+                  >
+                    {{
+                      mappingDisplayName(
+                        mapping,
+                        $t(
+                          "marketplace.connectionPage.dialogs.mappingFallback",
+                          { id: mapping.id },
+                        ),
+                      )
+                    }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+          </FieldGroup>
         </div>
         <DialogFooter>
           <DialogClose as-child>

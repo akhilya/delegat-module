@@ -95,6 +95,7 @@ Each result should include `local_product_id`, `success`, and `product_id` or `e
 ## Field mapping conventions
 
 - `_categoryId` is injected by Delegat category mappings and becomes `category_ids`.
+- Product Sizes tab rows are injected as `_variants` (`id`, `techSize`, barcode, price, stock) and become `variants` on the payload. They are not mapping-graph nodes. Clothing size as an OpenCart option is still a mapped `option:` field if the category schema has one.
 - `images` should be mapped from the product field `images`; Delegat supplies public image URLs in order.
 - Keys starting with `attr:` or `attribute:` are sent to `attributes`.
 - Keys starting with `option:` are sent to `options`.

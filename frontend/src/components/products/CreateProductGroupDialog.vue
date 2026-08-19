@@ -69,10 +69,18 @@ async function handleCreate() {
     description: description.value.trim() || null,
     productIds: [],
     onSuccess: (response) => {
-      const group = response?.data?.value ?? response?.data;
+      const payload = response?.data?.value ?? response?.data ?? {};
+      const id = payload.id ?? payload.Id;
       displaySonnerSuccess(t("pages.productGroupsPage.created"));
       open.value = false;
-      emit("created", group);
+      emit("created", {
+        id,
+        name: payload.name ?? payload.Name ?? name.value.trim(),
+        description:
+          payload.description ??
+          payload.Description ??
+          (description.value.trim() || null),
+      });
     },
     onError: (error) => {
       displaySonnerError(error);

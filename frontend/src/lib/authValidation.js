@@ -34,6 +34,38 @@ export function passwordSchema(t, { requirePolicy = false } = {}) {
 }
 
 /**
+ * Validate a new password against its confirmation.
+ * @param {{ optional?: boolean, requirePolicy?: boolean }} [options]
+ *   optional — both empty is OK (admin "leave unchanged")
+ * @returns {{ password?: string, confirm?: string } | null}
+ */
+export function newPasswordFieldsIssue(
+  password,
+  confirmPassword,
+  t,
+  { optional = false, requirePolicy = true } = {},
+) {
+  const pwd = String(password ?? "");
+  const confirm = String(confirmPassword ?? "");
+
+  if (optional && !pwd && !confirm) return null;
+
+  const parsed = passwordSchema(t, { requirePolicy }).safeParse(pwd);
+  const passwordError = parsed.success
+    ? undefined
+    : parsed.error.issues[0]?.message;
+
+  const confirmError =
+    pwd !== confirm ? t("auth.passwordsMismatch") : undefined;
+
+  if (!passwordError && !confirmError) return null;
+  return {
+    ...(passwordError ? { password: passwordError } : {}),
+    ...(confirmError ? { confirm: confirmError } : {}),
+  };
+}
+
+/**
  * Map API field errors that are stable codes (e.g. username_invalid) to i18n strings.
  * Leaves unknown messages unchanged.
  */

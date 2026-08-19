@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Delegat.Models;
+using Delegat.Services;
 using Delegat.Services.Ai.Tools;
 
 namespace Delegat.Services.Ai.Tools.Handlers;
@@ -65,9 +66,8 @@ public class GroupToolHandlers : ToolHandlerBase
         await _context.SaveChangesAsync(ct);
         if (p.ProductIds?.Count > 0)
         {
-            foreach (var pid in p.ProductIds)
-                _context.productGroupMembers.Add(new ProductGroupMember { groupId = group.Id, productId = pid });
-            await _context.SaveChangesAsync(ct);
+            await ProductGroupMembership.AddOrMoveToGroupAsync(
+                _context, storeId, group.Id, p.ProductIds, ct);
         }
         return (new { id = group.Id }, $"Group \"{p.Name}\" created");
     }
@@ -111,14 +111,9 @@ public class GroupToolHandlers : ToolHandlerBase
     internal async Task<(object, string)> AddProductsToGroupAsync(string json, int storeId, int userId, CancellationToken ct)
     {
         var p = ParseInput<GroupProductsInput>(json);
-        var existing = (await _context.productGroupMembers.AsNoTracking()
-            .Where(m => m.groupId == p.GroupId && p.ProductIds.Contains(m.productId))
-            .Select(m => m.productId).ToListAsync(ct)).ToHashSet();
-        var toAdd = p.ProductIds.Where(id => !existing.Contains(id)).ToList();
-        foreach (var pid in toAdd)
-            _context.productGroupMembers.Add(new ProductGroupMember { groupId = p.GroupId, productId = pid });
-        await _context.SaveChangesAsync(ct);
-        return (new { added = toAdd.Count }, $"Added {toAdd.Count} products to the group");
+        var added = await ProductGroupMembership.AddOrMoveToGroupAsync(
+            _context, storeId, p.GroupId, p.ProductIds, ct);
+        return (new { added }, $"Added {added} products to the group");
     }
 
     internal async Task<(object, string)> RemoveProductsFromGroupAsync(string json, int storeId, int userId, CancellationToken ct)

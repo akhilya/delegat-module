@@ -13,20 +13,15 @@ import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import CreateProductGroupDialog from "@/components/products/CreateProductGroupDialog.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { FieldGroup } from "@/components/ui/field";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import { FieldError, FieldLabel } from "@/components/ui/field";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { InsetGroupLabel } from "@/components/ui/inset-group";
 import { Plus } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
 import { useRouter, useRoute } from "vue-router";
-import { ref, watch, computed, nextTick, onUnmounted } from "vue";
+import { ref, watch, computed, nextTick, onMounted, onUnmounted } from "vue";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
@@ -46,6 +41,7 @@ import { useSelectedStore } from "@/composables/useSelectedStore";
 import { formatEquivalents } from "@/lib/currency";
 import { computeDiscountPercent } from "@/lib/productPrice";
 import { FIELD_LIMITS } from "@/lib/fieldLimits";
+import { MENU_ITEM } from "@/lib/menuSurface";
 import {
   Select,
   SelectContent,
@@ -88,12 +84,10 @@ export default {
     SearchableSelect,
     CreateProductGroupDialog,
     SettingsFormField,
-    FieldGroup,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+    SettingsFormSection,
+    FieldError,
+    FieldLabel,
+    InsetGroupLabel,
     Plus,
     AiDescriptionGenerator,
     Select,
@@ -278,6 +272,7 @@ export default {
     const groupDetail = ref(null);
     const isLoadingGroupDetail = ref(!!route.query.groupId);
     const isDescriptionGenerating = ref(false);
+    const aiEnabled = ref(false);
     const descriptionGeneratingHint = computed(() =>
       form.values.product?.description?.trim()
         ? t("ai.descriptionImprovingHint")
@@ -388,6 +383,16 @@ export default {
       }
     }
 
+    onMounted(async () => {
+      try {
+        const { loadMe } = await import("@/main");
+        const me = await loadMe();
+        aiEnabled.value = me?.aiEnabled === true;
+      } catch {
+        aiEnabled.value = false;
+      }
+    });
+
     onUnmounted(() => {
       sortedImages.value.forEach(revokeImagePreview);
     });
@@ -490,10 +495,19 @@ export default {
     }
 
     function onGroupCreated(group) {
-      if (!group?.id) return;
-      const exists = productGroups.value.some((g) => g.id === group.id);
-      if (!exists) productGroups.value = [...productGroups.value, group];
-      selectedGroupId.value = group.id;
+      const id = group?.id ?? group?.Id;
+      if (!id) return;
+      const name = group?.name ?? group?.Name;
+      const next = {
+        id,
+        name: name || String(id),
+        description: group?.description ?? group?.Description ?? null,
+      };
+      const exists = productGroups.value.some((g) => g.id === id);
+      productGroups.value = exists
+        ? productGroups.value.map((g) => (g.id === id ? { ...g, ...next } : g))
+        : [...productGroups.value, next];
+      selectedGroupId.value = id;
     }
 
     async function fetchStoreAttributes() {
@@ -812,6 +826,7 @@ export default {
       isLoadingGroups,
       descriptionRef,
       isDescriptionGenerating,
+      aiEnabled,
       descriptionGeneratingHint,
       autoResizeDescription,
       groupDetail,
@@ -825,6 +840,7 @@ export default {
       currentGroupSelectValue,
       onGroupSelectChange,
       showCreateGroupDialog,
+      MENU_ITEM,
       openCreateGroupDialogFromSelect,
       onGroupCreated,
       sortedImages,
@@ -893,21 +909,15 @@ export default {
               />
 
               <div class="flex w-full min-w-0 flex-col gap-6">
-                <Card class="border-0 shadow-none">
-                  <CardHeader>
-                    <CardTitle class="text-base">{{
-                      $t("pages.productCreationPage.sections.mainData.title")
-                    }}</CardTitle>
-                    <CardDescription>
-                      {{
-                        $t(
-                          "pages.productCreationPage.sections.mainData.description",
-                        )
-                      }}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <FieldGroup class="gap-5">
+                <SettingsFormSection
+                  class="max-w-none"
+                  :title="
+                    $t('pages.productCreationPage.sections.mainData.title')
+                  "
+                  :description="
+                    $t('pages.productCreationPage.sections.mainData.description')
+                  "
+                >
                       <SettingsFormField
                         :label="
                           $t('pages.productCreationPage.fields.category.label')
@@ -959,7 +969,8 @@ export default {
                             <template #footer="{ close }">
                               <button
                                 type="button"
-                                class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                class="w-full text-left"
+                                :class="MENU_ITEM"
                                 @click="openCreateGroupDialogFromSelect(close)"
                               >
                                 <Plus class="size-4 shrink-0" />
@@ -973,33 +984,17 @@ export default {
                               </button>
                             </template>
                           </SearchableSelect>
-                          <div
-                            class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                          <router-link
+                            v-if="groupDetail"
+                            :to="`/product-groups/${groupDetail.id}/edit`"
+                            class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
                           >
-                            <router-link
-                              v-if="groupDetail"
-                              :to="`/product-groups/${groupDetail.id}/edit`"
-                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-                            >
-                              {{
-                                $t(
-                                  "pages.productCreationPage.fields.group.editLink",
-                                )
-                              }}
-                            </router-link>
-                            <button
-                              type="button"
-                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-                              :disabled="isLoadingGroups || isSubmitting"
-                              @click="showCreateGroupDialog = true"
-                            >
-                              {{
-                                $t(
-                                  "pages.productCreationPage.fields.group.createLink",
-                                )
-                              }}
-                            </button>
-                          </div>
+                            {{
+                              $t(
+                                "pages.productCreationPage.fields.group.editLink",
+                              )
+                            }}
+                          </router-link>
                         </div>
                       </SettingsFormField>
 
@@ -1084,17 +1079,15 @@ export default {
                       >
                         <FormItem class="gap-1.5">
                           <div class="flex items-center justify-between gap-2">
-                            <label
-                              for="product-description"
-                              class="text-sm font-medium leading-none"
-                              >{{
-                                $t(
-                                  "pages.productCreationPage.fields.description.label",
-                                )
-                              }}</label
-                            >
+                            <FieldLabel for="product-description">{{
+                              $t(
+                                "pages.productCreationPage.fields.description.label",
+                              )
+                            }}</FieldLabel>
                             <AiDescriptionGenerator
+                              v-if="aiEnabled"
                               :product-name="form.values.product?.name"
+                              :product-sku="form.values.product?.sku"
                               :category-name="selectedCategory?.name"
                               :existing-description="
                                 form.values.product?.description
@@ -1142,26 +1135,23 @@ export default {
                               </p>
                             </div>
                           </div>
-                          <p
-                            v-if="errorMessage"
-                            class="text-sm text-destructive"
-                          >
-                            {{ errorMessage }}
-                          </p>
+                          <FieldError v-if="errorMessage">{{
+                            errorMessage
+                          }}</FieldError>
                         </FormItem>
                       </FormField>
 
                       <template v-if="!selectedCategory?.hasSizes">
                         <div class="space-y-4 border-t pt-5">
                           <div>
-                            <h4 class="text-sm font-medium">
+                            <InsetGroupLabel>
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.stock.title",
                                 )
                               }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
+                            </InsetGroupLabel>
+                            <p class="px-1 text-xs text-muted-foreground">
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.stock.description",
@@ -1210,14 +1200,14 @@ export default {
 
                         <div class="space-y-4 border-t pt-5">
                           <div>
-                            <h4 class="text-sm font-medium">
+                            <InsetGroupLabel>
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.price.title",
                                 )
                               }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
+                            </InsetGroupLabel>
+                            <p class="px-1 text-xs text-muted-foreground">
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.price.description",
@@ -1286,14 +1276,14 @@ export default {
                           class="space-y-4 border-t pt-5"
                         >
                           <div>
-                            <h4 class="text-sm font-medium">
+                            <InsetGroupLabel>
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.extendedPrice.title",
                                 )
                               }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
+                            </InsetGroupLabel>
+                            <p class="px-1 text-xs text-muted-foreground">
                               {{
                                 $t(
                                   "pages.productCreationPage.sections.extendedPrice.description",
@@ -1496,69 +1486,56 @@ export default {
                           </div>
                         </div>
                       </template>
-                    </FieldGroup>
-                  </CardContent>
-                </Card>
+                </SettingsFormSection>
 
-                <Card
+                <ProductAttributeForm
                   v-if="
                     selectedCategory && visibleCategoryAttributes.length > 0
                   "
-                  class="border-0 shadow-none"
+                  :attributes="selectedCategory.attributes"
                 >
-                  <ProductAttributeForm
-                    :attributes="selectedCategory.attributes"
-                  >
-                    <template #title>
-                      {{
-                        $t(
-                          "pages.productCreationPage.sections.categoryAttributes.title",
-                        )
-                      }}
-                    </template>
-                    <template #description>
-                      {{
-                        $t(
-                          "pages.productCreationPage.sections.categoryAttributes.description",
-                          {
-                            count: visibleCategoryAttributes.length,
-                            unit: attributeCountLabel(
-                              visibleCategoryAttributes.length,
-                            ),
-                            category: selectedCategory.name,
-                          },
-                        )
-                      }}
-                    </template>
-                  </ProductAttributeForm>
-                </Card>
+                  <template #title>
+                    {{
+                      $t(
+                        "pages.productCreationPage.sections.categoryAttributes.title",
+                      )
+                    }}
+                  </template>
+                  <template #description>
+                    {{
+                      $t(
+                        "pages.productCreationPage.sections.categoryAttributes.description",
+                        {
+                          count: visibleCategoryAttributes.length,
+                          unit: attributeCountLabel(
+                            visibleCategoryAttributes.length,
+                          ),
+                          category: selectedCategory.name,
+                        },
+                      )
+                    }}
+                  </template>
+                </ProductAttributeForm>
 
-                <Card
-                  v-if="visibleStoreAttributes.length > 0"
-                  class="border-0 shadow-none"
-                >
-                  <CardHeader>
-                    <CardTitle class="text-base">{{
-                      $t("nav.globalAttributes")
-                    }}</CardTitle>
-                    <CardDescription>
-                      {{
-                        $t(
-                          "pages.productCreationPage.sections.storeAttributes.description",
-                          {
-                            count: visibleStoreAttributes.length,
-                            unit: attributeCountLabel(
-                              visibleStoreAttributes.length,
-                            ),
-                          },
-                        )
-                      }}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent class="pt-0">
-                    <StoreAttributeForm :attributes="storeAttributes" />
-                  </CardContent>
-                </Card>
+                <div v-if="visibleStoreAttributes.length > 0">
+                  <InsetGroupLabel class="mb-1">
+                    {{ $t("nav.globalAttributes") }}
+                  </InsetGroupLabel>
+                  <p class="mb-4 px-1 text-xs text-muted-foreground">
+                    {{
+                      $t(
+                        "pages.productCreationPage.sections.storeAttributes.description",
+                        {
+                          count: visibleStoreAttributes.length,
+                          unit: attributeCountLabel(
+                            visibleStoreAttributes.length,
+                          ),
+                        },
+                      )
+                    }}
+                  </p>
+                  <StoreAttributeForm :attributes="storeAttributes" />
+                </div>
 
                 <div class="flex items-center justify-end pt-2 pb-6">
                   <TooltipProvider :delay-duration="200">
@@ -1574,9 +1551,7 @@ export default {
                         >
                           <Button
                             type="submit"
-                            size="sm"
                             :disabled="isSaveDisabled"
-                            class="disabled:opacity-100 disabled:bg-primary/70"
                           >
                             <Spinner v-if="isSubmitting" class="mr-2" />
                             <Plus v-else class="size-4 mr-2" />

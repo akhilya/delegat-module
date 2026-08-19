@@ -2,8 +2,9 @@
 /**
  * Shared product↔adapter connection actions menu (dropdown trigger).
  * Used by the product Adapters tab and the products-table Adapters column.
- * For cursor-positioned right-click, wrap the row in ContextMenu and reuse
- * ProductAdapterConnectionMenuItems with surface="context".
+ * For cursor-positioned click, wrap the card in ContextMenu and reuse
+ * ProductAdapterConnectionMenuItems with surface="context" (left-click on the
+ * card body, plus right-click).
  */
 import {
   DropdownMenu,

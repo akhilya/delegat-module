@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LogTableFrame } from "@/components/logs";
 import BarcodeCell from "@/components/products/BarcodeCell.vue";
 import { http } from "@/main";
 import {
@@ -23,8 +24,11 @@ import {
   Barcode,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Download,
   Search,
+  X,
 } from "lucide-vue-next";
 
 const PAGE_SIZE = 25;
@@ -44,12 +48,16 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
+    LogTableFrame,
     BarcodeCell,
     Barcode,
     ChevronLeft,
     ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     Download,
-    Search
+    Search,
+    X,
   },
   data() {
     return {
@@ -93,6 +101,12 @@ export default {
     },
     canNext() {
       return this.startIndex + PAGE_SIZE < this.totalCount;
+    },
+    currentPage() {
+      return Math.floor(this.startIndex / PAGE_SIZE) + 1;
+    },
+    lastPage() {
+      return Math.max(1, Math.ceil(this.totalCount / PAGE_SIZE) || 1);
     },
     isBusy() {
       return this.isDownloadingSelected || this.isDownloadingAll;
@@ -139,6 +153,12 @@ export default {
     nextPage() {
       if (!this.canNext) return;
       this.startIndex += PAGE_SIZE;
+      this.fetchPage();
+    },
+
+    goToPage(page) {
+      const next = Math.min(Math.max(1, page), this.lastPage);
+      this.startIndex = (next - 1) * PAGE_SIZE;
       this.fetchPage();
     },
 
@@ -252,18 +272,19 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
     <template #nav-center>
       <div class="relative h-9 w-full">
         <Input
           v-model="searchQuery"
-          class="absolute h-full w-full"
+          class="absolute h-full w-full pr-10"
           :placeholder="$t('pages.barcodesPage.searchPlaceholder')"
           @keypress.enter="applySearch"
         />
         <Button
           class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
           variant="link"
+          :aria-label="$t('pages.barcodesPage.searchPlaceholder')"
           @click="applySearch"
         >
           <Search class="size-4" />
@@ -271,118 +292,155 @@ export default {
       </div>
     </template>
 
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-      <Button
-        v-if="selectedCount > 0"
-        variant="ghost"
-        size="sm"
-        @click="clearSelection"
-      >
-        {{ $t("pages.barcodesPage.clearSelection") }}
-      </Button>
-      <Button
-        variant="outline"
-        :disabled="isBusy || selectedCount === 0"
-        @click="downloadSelected"
-      >
-        <Spinner v-if="isDownloadingSelected" class="mr-2" />
-        <Download v-else class="mr-2 size-4" />
-        {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
-      </Button>
-      <Button :disabled="isBusy || totalCount === 0" @click="downloadAll">
-        <Spinner v-if="isDownloadingAll" class="mr-2" />
-        <Download v-else class="mr-2 size-4" />
-        {{ $t("pages.barcodesPage.downloadAll") }}
-      </Button>
-    </div>
-
     <PageSection
+      class="flex min-h-0 flex-1 flex-col !mb-0"
       :loading="isLoading"
       :empty="!isLoading && items.length === 0"
       :empty-icon="Barcode"
       :empty-title="$t('pages.barcodesPage.emptyTitle')"
       :empty-description="$t('pages.barcodesPage.emptyDescription')"
     >
-      <div class="overflow-hidden rounded-lg border">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-10">
-                  <Checkbox
-                    :model-value="allPageSelected"
-                    :indeterminate="somePageSelected"
-                    @update:model-value="(v) => toggleAllPage(v === true)"
-                  />
-                </TableHead>
-                <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="w-40">SKU</TableHead>
-                <TableHead class="w-56">{{ $t("pages.barcodesPage.columnBarcode") }}</TableHead>
-                <TableHead class="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="row in items" :key="row.id">
-                <TableCell>
-                  <Checkbox
-                    :model-value="isSelected(row)"
-                    @update:model-value="(v) => toggleRow(row, v === true)"
-                  />
-                </TableCell>
-                <TableCell class="max-w-0 font-medium whitespace-normal">
-                  <span class="line-clamp-2">{{ row.name }}</span>
-                </TableCell>
-                <TableCell class="text-muted-foreground max-w-0 font-mono text-sm">
-                  <span class="block truncate">{{ row.sku || "-" }}</span>
-                </TableCell>
-                <TableCell>
-                  <BarcodeCell :barcode="row.barcode" />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-8"
-                    :title="$t('pages.barcodesPage.downloadOne')"
-                    @click="downloadOne(row)"
-                  >
-                    <Download class="size-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+      <LogTableFrame>
+        <Table contain class="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-10">
+                <Checkbox
+                  :model-value="allPageSelected"
+                  :indeterminate="somePageSelected"
+                  :aria-label="$t('pages.barcodesPage.selectAllOnPage')"
+                  @update:model-value="(v) => toggleAllPage(v === true)"
+                />
+              </TableHead>
+              <TableHead>{{ $t("common.name") }}</TableHead>
+              <TableHead class="w-40">SKU</TableHead>
+              <TableHead class="w-56">{{ $t("pages.barcodesPage.columnBarcode") }}</TableHead>
+              <TableHead class="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in items" :key="row.id">
+              <TableCell>
+                <Checkbox
+                  :model-value="isSelected(row)"
+                  :aria-label="row.name"
+                  @update:model-value="(v) => toggleRow(row, v === true)"
+                />
+              </TableCell>
+              <TableCell class="max-w-0 font-medium whitespace-normal">
+                <span class="line-clamp-2">{{ row.name }}</span>
+              </TableCell>
+              <TableCell class="text-muted-foreground max-w-0 font-mono text-sm tabular-nums">
+                <span class="block truncate">{{ row.sku || $t("common.emDash") }}</span>
+              </TableCell>
+              <TableCell>
+                <BarcodeCell :barcode="row.barcode" />
+              </TableCell>
+              <TableCell>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8"
+                  :aria-label="$t('pages.barcodesPage.downloadOne')"
+                  :title="$t('pages.barcodesPage.downloadOne')"
+                  @click="downloadOne(row)"
+                >
+                  <Download class="size-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
 
-        <div
-          v-if="totalCount > 0"
-          class="flex items-center justify-between border-t px-3 py-2"
-        >
-          <p class="text-sm text-muted-foreground">
-            {{ $t("pages.barcodesPage.pageRange", { from: pageFrom, to: pageTo, total: totalCount }) }}
-          </p>
+        <template #footer>
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <p class="text-sm text-muted-foreground tabular-nums">
+              {{ $t("pages.barcodesPage.pageRange", { from: pageFrom, to: pageTo, total: totalCount }) }}
+            </p>
+            <template v-if="selectedCount > 0">
+              <div class="h-4 w-px bg-border" />
+              <span class="text-sm font-medium text-foreground">
+                {{ $t("pages.barcodesPage.selectedCount", { count: selectedCount }) }}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-8"
+                :aria-label="$t('pages.barcodesPage.clearSelection')"
+                @click="clearSelection"
+              >
+                <X class="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8"
+                :disabled="isBusy"
+                @click="downloadSelected"
+              >
+                <Spinner v-if="isDownloadingSelected" class="mr-2" />
+                <Download v-else class="mr-2 size-4" />
+                {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
+              </Button>
+            </template>
+            <Button
+              size="sm"
+              class="h-8"
+              :disabled="isBusy || totalCount === 0"
+              @click="downloadAll"
+            >
+              <Spinner v-if="isDownloadingAll" class="mr-2" />
+              <Download v-else class="mr-2 size-4" />
+              {{ $t("pages.barcodesPage.downloadAll") }}
+            </Button>
+          </div>
           <div class="flex items-center gap-1">
+            <p class="mr-2 text-sm text-muted-foreground tabular-nums">
+              {{ currentPage }} / {{ lastPage }}
+            </p>
             <Button
               variant="outline"
-              size="icon"
-              class="size-8"
+              size="sm"
+              class="h-8 w-8 p-0"
               :disabled="!canPrev || isLoading"
+              :aria-label="$t('pages.barcodesPage.firstPage')"
+              @click="goToPage(1)"
+            >
+              <ChevronsLeft class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="!canPrev || isLoading"
+              :aria-label="$t('pages.barcodesPage.prevPage')"
               @click="prevPage"
             >
               <ChevronLeft class="size-4" />
             </Button>
             <Button
               variant="outline"
-              size="icon"
-              class="size-8"
+              size="sm"
+              class="h-8 w-8 p-0"
               :disabled="!canNext || isLoading"
+              :aria-label="$t('pages.barcodesPage.nextPage')"
               @click="nextPage"
             >
               <ChevronRight class="size-4" />
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="!canNext || isLoading"
+              :aria-label="$t('pages.barcodesPage.lastPage')"
+              @click="goToPage(lastPage)"
+            >
+              <ChevronsRight class="size-4" />
+            </Button>
           </div>
-        </div>
-      </div>
+        </template>
+      </LogTableFrame>
     </PageSection>
   </AppPageChrome>
 </template>

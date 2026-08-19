@@ -13,7 +13,56 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Mapping canvas zoom in/out uses the same plus and minus icons as the rest of the app
+- Changing your password (and setting one in Administration → Users) asks you to type the new password twice
+- Mapping auto-arrange uses Dagre, then stacks card fields above price fields so the two sinks no longer overlap
+- Mapping canvas toolbar is button groups: Save + more, a wider preview-product picker that can open the product, and Reset
+- Buttons use the same Control Plane lift: a short white top sheen and a hairline drop shadow (link stays flat; ghost is shadow-only)
+- Product create Properties uses the same Apple Settings sections as product edit (no Cards / heading mix)
+- Dropdowns, context menus, selects, popovers, and tooltips use the same Apple menu material (frosted paper, hairline ring, denser rows) instead of a bordered `shadow-md` panel
+- Overlays and menus share one motion curve (`ease-out-quart`): sheets open in 280ms (was 500ms), dialogs 200ms, menus 150ms; buttons press-scale; tab panels fade. Respects reduced motion
+- Menu radio/checkbox rows and select lists use a trailing check (Apple picker), not a leading radio disc
+- Product Notes tab is an inset grouped list like store notes: a row opens the bar sheet, Add note is the last row, and the tab grows with the page instead of stacked writing pads
+- Product Sizes tab is one inset group per size (label-left fields, Add size as the last row) and grows with the page instead of a nested table pane
+- Product SKU on Properties uses caption actions under the field (copy / change) instead of icon buttons beside the input
+- Product Adapters tab lists each connection as a spacious inset group: listing id/SKU, price, stock, and last sync sit in composed Apple rows instead of one fact per line. The tab grows with the page instead of scrolling inside a nested pane
+- Product Adapters tab: left-click on a connection card opens the actions menu at the cursor (same as right-click); mapping, marketplace link, sizes, and ⋮ keep their own actions
+- Product Images tab uses compact photo tiles with a drag handle and dashed drop trays (on the card / not on the card)
+- Product category attributes Compare layout scrolls with the page instead of a nested pane
+- Administration → Users is an inset grouped list (row opens the editor). Invite tokens are inset groups in the invite dialog, not a table
+- Administration → Stores is an inset grouped list (row opens store settings). Create and edit dialogs use in-flow bar close; the current store is marked in the caption
+- Catalog Connect keeps the local catalog as the source of truth after the first import: the tool stays open to link remaining marketplaces one at a time, and extra unlinked cards can be imported from another connection without replacing existing products
+- Form field labels, legends, and descriptions use the same small caption size as Apple group headers (not a larger heading under «Credentials»). Category import section titles (adapter category, where to import, attributes) use that same Settings caption — they no longer mix a browser legend with a group header
+- Category import no longer repeats the page title and intro above the two columns; Import sits at the bottom of the destination column
+- Categories, product groups, and their edit pages use Apple inset grouped lists and Settings form sections (attribute / add-product dialogs included)
+- Barcodes use the same Apple table ring and combined footer as products (selection + download in the footer). Store notes are an inset grouped list; the note sheet uses bar chrome and Settings fields (not a writing pad)
+- Adapters, connection settings / mappings, category import, and mapping preview chrome use the same Apple inset grouped lists and sheet bars as Settings (the mapping graph canvas is unchanged)
+- File manager: content type is a wider column so MIME types are not clipped; tags size to the chips instead of a fixed width
+- Operations list: each job is its own inset group; status is the trailing icon only; Copy / AI / Retry / Delete after expand are compact rows
+- Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
+
+### Removed
+
+- Pause / Resume on background operations (jobs are running or stopped)
+
 ### Fixed
+
+- Mapping preview-product picker sits on an opaque card so the canvas grid does not show through the field
+- Product Adapters tab shows the adapter icon and name on each connection card again
+- Nested dropdown and context-menu panels (user language, adapter connection submenus) open beside the parent instead of being clipped by the frosted menu
+- First WooCommerce export of product sizes now sends variations (local variant id), and a later export stores the marketplace variation ids
+- Wildberries card update applies per-size prices from the Sizes tab
+- Creating a product group from product properties shows the group name in the picker instead of its id; Create group stays only in the dropdown
+- Revoking an invitation token from the invite dialog no longer closes that dialog before the confirm appears
+- Catalog Connect refuses inactive connections (`connection_inactive`) and hides them in the tool
+- Adding products to a group moves them out of another group instead of returning 400
+- Delete on an error log sheet opens the confirm from the header trash control (it no longer sits under Close, and no longer uses a `delete` event that Vue can ignore)
+- Inset grouped lists keep a full hairline ring when they scroll or sit in a clipped panel (category import picker and other inset catalogs)
+- Opening an adapter connection (and a mapping row) from an inset list: the row click is no longer swallowed by a nested delete / menu button
+- Sheet close (operations, logs, and other side sheets) lines up with the title row and header actions
+- AI chat FAB and side panel follow `/auth/me` after sign-in or Setup; they no longer stay hidden when the shell first loaded on a public/bare page
+- Product tables on a connection, Catalog Connect / scrape result tables, adapter tool job tables, and log tables show a hairline border frame again
+- Stop on a background job takes effect in the panel immediately and cancels remaining queue work; an in-flight marketplace call for the current item may still finish. Stop is available for Catalog Connect and catalog scrape. One-shot request-scoped sync (single product, prices, stock, Excel, adapter tools) still hides Stop because that HTTP call cannot be aborted.
 
 ## [1.6.0] - 2026-08-18
 

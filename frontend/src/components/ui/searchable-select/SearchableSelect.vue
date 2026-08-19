@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { MENU_ITEM, MENU_ITEM_CHECK } from "@/lib/menuSurface";
 import { t } from "@/i18n";
 
 function focusSearchInput() {
@@ -61,6 +62,10 @@ const props = defineProps({
   allowCreate: {
     type: Boolean,
     default: false,
+  },
+  contentClass: {
+    type: String,
+    default: "",
   },
 });
 
@@ -227,7 +232,12 @@ const closePopover = () => {
       <PopoverContent
         align="start"
         :collision-padding="8"
-        class="w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col"
+        :class="
+          cn(
+            'w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col',
+            props.contentClass,
+          )
+        "
       >
         <!-- Search input (only shown if many options / remote) -->
         <div v-if="showSearch" class="p-2 border-b">
@@ -297,7 +307,8 @@ const closePopover = () => {
             <button
               v-if="canAddCustom"
               type="button"
-              class="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+              class="w-full text-left"
+              :class="MENU_ITEM"
               @click="addCustom"
             >
               <Plus class="size-4 shrink-0" />
@@ -309,31 +320,27 @@ const closePopover = () => {
             </button>
             <div
               v-if="extraSelectedOption"
-              class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+              :class="cn(MENU_ITEM, 'pr-8')"
               @click="selectOption(extraSelectedOption)"
             >
-              <Check class="size-4 shrink-0 opacity-100" />
               <span class="text-sm flex-1 truncate" :title="extraSelectedOption.label">{{
                 extraSelectedOption.label
               }}</span>
+              <Check :class="cn(MENU_ITEM_CHECK, 'text-foreground')" />
             </div>
             <div
               v-for="option in displayedOptions"
               :key="option.value"
-              class="flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+              :class="cn(MENU_ITEM, 'pr-8')"
               @click="selectOption(option)"
             >
-              <Check
-                :class="
-                  cn(
-                    'size-4 shrink-0',
-                    isSelected(option) ? 'opacity-100' : 'opacity-0',
-                  )
-                "
-              />
               <span class="text-sm flex-1 truncate" :title="option.label">{{
                 option.label
               }}</span>
+              <Check
+                v-if="isSelected(option)"
+                :class="cn(MENU_ITEM_CHECK, 'text-foreground')"
+              />
             </div>
 
             <!-- Hint when there are more options -->

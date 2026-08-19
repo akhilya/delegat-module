@@ -3,6 +3,11 @@ import { http } from "@/main";
 import { t } from "@/i18n";
 import { parseServerUtc } from "@/utils/dateTime";
 import { randomUuidCompact } from "@/utils/uuid";
+import {
+  OPERATION_TERMINAL_STATUSES,
+  isOperationActive,
+  shouldApplyOperationFinish,
+} from "@/lib/operationsControl";
 
 let connection = null;
 
@@ -96,6 +101,7 @@ const mutations = {
   FINISH_OPERATION(state, { id, status, summary }) {
     const op = state.operations.find((o) => o.id === id);
     if (!op) return;
+    if (!shouldApplyOperationFinish(op.status, status)) return;
     op.status = status;
     op.finishedAt = op.finishedAt || new Date().toISOString();
     if (summary) {
@@ -115,7 +121,9 @@ const mutations = {
   },
   UPDATE_OPERATION_STATUS(state, { id, status }) {
     const op = state.operations.find((o) => o.id === id);
-    if (op) op.status = status;
+    if (!op) return;
+    if (!shouldApplyOperationFinish(op.status, status)) return;
+    op.status = status;
   },
   SET_OPERATION_PRODUCTS(state, { id, products }) {
     const op = state.operations.find((o) => o.id === id);
@@ -126,7 +134,7 @@ const mutations = {
   },
   CLEAR_COMPLETED(state) {
     state.operations = state.operations.filter(
-      (o) => o.status === "running",
+      (o) => !OPERATION_TERMINAL_STATUSES.has(o.status),
     );
   },
   RESET_STATE(state) {
@@ -454,34 +462,22 @@ const actions = {
     return response.data;
   },
 
-  async pauseOperation({ commit }, id) {
-    commit("UPDATE_OPERATION_STATUS", { id, status: "paused" });
-    try { await http.post(`/operations/${id}/pause`); } catch { /* ignore */ }
-  },
-
-  async resumeOperation({ commit }, id) {
-    commit("UPDATE_OPERATION_STATUS", { id, status: "running" });
-    try { await http.post(`/operations/${id}/resume`); } catch { /* ignore */ }
-  },
-
   async stopOperation({ commit }, id) {
-    // Client-side operations (e.g. file uploads) have a local cancel callback
-    // instead of a server-side stop API.
     const localCancel = cancelCallbacks.get(id);
     if (localCancel) {
       localCancel();
       cancelCallbacks.delete(id);
       commit("FINISH_OPERATION", { id, status: "cancelled", summary: t("store.operationsModule.stoppedSummary") });
-      // Persist cancel immediately so a refresh / tab close cannot leave the op running forever.
       http.post(`/operations/${id}/finish`, {
         status: "cancelled",
         summary: t("store.operationsModule.stoppedSummary"),
       }, { cache: false }).catch(() => {});
       return;
     }
+    commit("FINISH_OPERATION", { id, status: "cancelled", summary: t("store.operationsModule.stoppedSummary") });
     try {
       await http.post(`/operations/${id}/stop`);
-    } catch { /* ignore */ }
+    } catch { /* already finished or network; UI already shows cancelled */ }
   },
 
   async clearOperation({ commit }, id) {
@@ -491,7 +487,7 @@ const actions = {
   },
 
   async clearCompleted({ state, commit }) {
-    const completed = state.operations.filter((o) => o.status !== "running");
+    const completed = state.operations.filter((o) => OPERATION_TERMINAL_STATUSES.has(o.status));
     const ids = completed.map((o) => o.id);
     commit("CLEAR_COMPLETED");
     if (ids.length) {
@@ -518,11 +514,11 @@ const actions = {
 
 const getters = {
   activeOperations: (state) =>
-    state.operations.filter((o) => o.status === "running" || o.status === "paused"),
+    state.operations.filter((o) => isOperationActive(o.status)),
 
   historyOperations: (state) =>
     state.operations
-      .filter((o) => o.status !== "running" && o.status !== "paused")
+      .filter((o) => !isOperationActive(o.status))
       .sort((a, b) => {
         const aTime = parseServerUtc(a.finishedAt || a.startedAt)?.getTime() ?? 0;
         const bTime = parseServerUtc(b.finishedAt || b.startedAt)?.getTime() ?? 0;

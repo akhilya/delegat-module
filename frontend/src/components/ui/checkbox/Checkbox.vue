@@ -36,7 +36,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
   >
     <CheckboxIndicator
       data-slot="checkbox-indicator"
-      class="flex items-center justify-center text-current transition-none"
+      class="flex items-center justify-center text-current transition-none data-[state=checked]:animate-in data-[state=checked]:zoom-in-95 data-[state=checked]:duration-[var(--duration-press)] data-[state=checked]:ease-[var(--ease-out-quart)]"
     >
       <slot>
         <Check class="size-3.5" />

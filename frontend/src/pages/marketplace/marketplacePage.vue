@@ -4,6 +4,10 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  InsetGroup,
+  InsetGroupItem,
+} from "@/components/ui/inset-group";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import ConnectionCreateForm from "@/components/marketplace/ConnectionCreateForm.vue";
@@ -17,7 +21,6 @@ import {
   Store,
   Package,
   Trash2,
-  Settings,
 } from "lucide-vue-next";
 import {
   Dialog,
@@ -40,14 +43,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export default {
   components: {
@@ -59,15 +54,10 @@ export default {
     Store,
     Package,
     Trash2,
-    Settings,
     AdapterIcon,
     ConnectionCreateForm,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    InsetGroup,
+    InsetGroupItem,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -218,10 +208,6 @@ export default {
       this.$refs.createForm?.reset?.();
     },
 
-    openConnection(connectionId) {
-      this.$router.push(`/adapter/${connectionId}`);
-    },
-
     openPlugins() {
       this.$router.push(PAGE_ADMIN_PLUGINS);
     },
@@ -229,6 +215,17 @@ export default {
     getAdapterName(adapterKey) {
       const adapter = this.adapters.find((a) => a.key === adapterKey);
       return adapter?.displayName || adapterKey;
+    },
+
+    connectionRowSubtitle(connection) {
+      return this.$t("marketplace.marketplacePage.connectionRowSubtitle", {
+        adapter: this.getAdapterName(connection.adapterKey),
+        mappings: connection.categoryMappingsCount || 0,
+        products: connection.productLinksCount || 0,
+        status: connection.isActive
+          ? this.$t("marketplace.marketplacePage.active")
+          : this.$t("marketplace.marketplacePage.inactive"),
+      });
     },
 
     onCreateDialogOpenChange(open) {
@@ -244,7 +241,11 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
+    <div class="flex w-full max-w-xl flex-col">
+    <p class="mb-4 text-sm text-muted-foreground">
+      {{ $t("marketplace.marketplacePage.description") }}
+    </p>
+    <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
       <Dialog :open="showCreateDialog" @update:open="onCreateDialogOpenChange">
         <DialogTrigger as-child>
           <Button>
@@ -338,106 +339,59 @@ export default {
       :empty-title="$t('marketplace.marketplacePage.emptyTitle')"
       :empty-description="$t('marketplace.marketplacePage.emptyDescription')"
     >
-
-      <div class="rounded-lg border overflow-hidden">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="hover:bg-transparent">
-                <TableHead class="w-10" />
-                <TableHead>{{ $t("common.name") }}</TableHead>
-                <TableHead class="hidden w-40 sm:table-cell">{{ $t("marketplace.marketplacePage.adapterLabel") }}</TableHead>
-                <TableHead class="w-32 text-right">{{ $t("marketplace.marketplacePage.mappingsColumn") }}</TableHead>
-                <TableHead class="w-28 text-right">{{ $t("marketplace.marketplacePage.productsColumn") }}</TableHead>
-                <TableHead class="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="conn in connections"
-                :key="conn.id"
-                class="group cursor-pointer"
-                @click="openConnection(conn.id)"
-              >
-                <TableCell class="px-3">
-                  <span
-                    class="size-2 rounded-full block"
-                    :class="conn.isActive ? 'bg-success' : 'bg-muted-foreground/40'"
-                    :title="conn.isActive ? $t('marketplace.marketplacePage.active') : $t('marketplace.marketplacePage.inactive')"
-                  />
-                </TableCell>
-                <TableCell class="font-medium max-w-0">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
-                    <span class="truncate block">{{ conn.name }}</span>
-                  </div>
-                  <span class="text-xs text-muted-foreground truncate block sm:hidden pl-6">
-                    {{ getAdapterName(conn.adapterKey) }}
-                  </span>
-                </TableCell>
-                <TableCell class="hidden sm:table-cell text-muted-foreground max-w-xs truncate">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
-                    <span class="truncate">{{ getAdapterName(conn.adapterKey) }}</span>
-                  </div>
-                </TableCell>
-                <TableCell class="text-right tabular-nums text-muted-foreground">
-                  {{ conn.categoryMappingsCount || 0 }}
-                </TableCell>
-                <TableCell class="text-right tabular-nums text-muted-foreground">
-                  {{ conn.productLinksCount || 0 }}
-                </TableCell>
-                <TableCell class="px-2">
-                  <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="size-8"
-                      :title="$t('common.settings')"
-                      @click.stop="openConnection(conn.id)"
-                    >
-                      <Settings class="size-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger as-child>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          :disabled="deletingConnectionId === conn.id"
-                          @click.stop
-                        >
-                          <Spinner v-if="deletingConnectionId === conn.id" />
-                          <Trash2 v-else class="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{{ $t("marketplace.marketplacePage.deleteConnectionTitle") }}</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {{ $t("marketplace.marketplacePage.deleteConnectionDescription", { name: conn.name }) }}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                          <AlertDialogAction
-                            variant="destructive"
-                            @click="handleDeleteConnection(conn.id)"
-                            :disabled="deletingConnectionId != null"
-                          >
-                            <Spinner v-if="deletingConnectionId === conn.id" class="mr-2" />
-                            {{ $t("common.delete") }}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      <InsetGroup>
+        <InsetGroupItem
+          v-for="conn in connections"
+          :key="conn.id"
+          show-chevron
+          @click="$router.push(`/adapter/${conn.id}`)"
+        >
+          <template #leading>
+            <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+          </template>
+          <p class="truncate">{{ conn.name }}</p>
+          <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+            {{ connectionRowSubtitle(conn) }}
+          </p>
+          <template #trailing>
+            <AlertDialog>
+              <AlertDialogTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  :disabled="deletingConnectionId === conn.id"
+                  :aria-label="$t('common.delete')"
+                  @click.stop
+                >
+                  <Spinner v-if="deletingConnectionId === conn.id" />
+                  <Trash2 v-else class="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{{ $t("marketplace.marketplacePage.deleteConnectionTitle") }}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {{ $t("marketplace.marketplacePage.deleteConnectionDescription", { name: conn.name }) }}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    @click="handleDeleteConnection(conn.id)"
+                    :disabled="deletingConnectionId != null"
+                  >
+                    <Spinner v-if="deletingConnectionId === conn.id" class="mr-2" />
+                    {{ $t("common.delete") }}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </template>
+        </InsetGroupItem>
+      </InsetGroup>
     </PageSection>
+    </div>
   </AppPageChrome>
 </template>

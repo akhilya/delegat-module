@@ -26,13 +26,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProductFileManager from "@/components/products/ProductFileManager.vue";
 import ProductImagesEditor from "@/components/productImagesEditor.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
@@ -42,23 +36,16 @@ import ProductVariantsEditor from "@/components/products/ProductVariantsEditor.v
 import { BarcodeInput } from "@/components/ui/barcode";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import CreateProductGroupDialog from "@/components/products/CreateProductGroupDialog.vue";
+import NoteDetailSheet from "@/components/notes/NoteDetailSheet.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import { FieldGroup } from "@/components/ui/field";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import Note from "@/components/note.vue";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
+import { FieldGroup, FieldError, FieldLabel } from "@/components/ui/field";
+import { InsetGroup, InsetGroupItem, InsetGroupLabel } from "@/components/ui/inset-group";
 
 import {
   Save,
   Trash2,
   NotebookPen,
-  Pencil,
   Plus,
   Copy,
   Check,
@@ -98,9 +85,19 @@ import { http, router } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
+import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { formatEquivalents } from "@/lib/currency";
 import { computeDiscountPercent } from "@/lib/productPrice";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import {
+  noteId,
+  noteImportanceClass,
+  noteImportanceLabel,
+  noteListCaption,
+  notePreviewTitle,
+  sortNotesNewestFirst,
+} from "@/lib/notesUi";
+import { MENU_ITEM } from "@/lib/menuSurface";
 import {
   Select,
   SelectContent,
@@ -150,7 +147,6 @@ export default {
     DialogFooter,
     DialogClose,
     Tabs,
-    TabsContent,
     TabsList,
     TabsTrigger,
     Input,
@@ -167,18 +163,18 @@ export default {
     BarcodeInput,
     SearchableSelect,
     CreateProductGroupDialog,
+    NoteDetailSheet,
     SettingsFormField,
+    SettingsFormSection,
     FieldGroup,
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+    FieldError,
+    FieldLabel,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     Save,
     Trash2,
     NotebookPen,
-    Pencil,
-    Note,
     Plus,
     Copy,
     Check,
@@ -190,10 +186,6 @@ export default {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
     AiDescriptionGenerator,
     Select,
     SelectContent,
@@ -247,6 +239,12 @@ export default {
     const productId = computed(() => parseInt(String(route.params.id)));
     const images = ref(undefined);
     const notes = ref([]);
+    const noteSheetOpen = ref(false);
+    const selectedNote = ref(null);
+    const isAddingNote = ref(false);
+    const { formatDateTime: formatStoreDateTime, loadMemberships } =
+      useStoreDateTime();
+    loadMemberships();
     const category = ref(null);
     const categories = ref([]);
     const selectedCategoryId = ref(null);
@@ -274,7 +272,6 @@ export default {
       extendedPriceParameters,
       storeCurrencies,
       storeBaseCurrency,
-      loadMemberships,
     } = useSelectedStore();
 
     const priceField = z.number().min(0).optional().nullable();
@@ -622,7 +619,6 @@ export default {
     }
 
     fetchCategories();
-    loadMemberships();
     fetchStoreAttributes();
     fetchAllGroups();
     fetchProduct();
@@ -643,7 +639,7 @@ export default {
           const product = response.data.value;
           productSKU.value = product.sku;
           setPageTitle(product.sku);
-          notes.value = product.notes || [];
+          notes.value = sortNotesNewestFirst(product.notes || []);
           files.value = (product.files || []).sort((a, b) => {
             if (a.contentType < b.contentType) return -1;
             if (a.contentType > b.contentType) return 1;
@@ -892,21 +888,90 @@ export default {
       });
     }
 
+    const sortedNotes = computed(() => sortNotesNewestFirst(notes.value));
+
+    function noteRowTitle(row) {
+      return notePreviewTitle(
+        row,
+        t("pages.notesPage.sheetTitleFallback"),
+      );
+    }
+
+    function noteRowImportance(row) {
+      return noteImportanceLabel(row.importance, t);
+    }
+
+    function noteRowCaption(row) {
+      return noteListCaption(row, {
+        formatDateTime: formatStoreDateTime,
+        t,
+        includeProduct: false,
+      });
+    }
+
+    function withProductContext(row) {
+      return {
+        ...row,
+        id: noteId(row),
+        productId: productId.value,
+        productName: form.values?.product?.name || "",
+        productSku: productSKU.value,
+      };
+    }
+
+    function openNote(row) {
+      selectedNote.value = withProductContext(row);
+      noteSheetOpen.value = true;
+    }
+
+    function onNoteUpdated(patch) {
+      const id = patch.id;
+      notes.value = notes.value.map((n) =>
+        noteId(n) === id
+          ? {
+              ...n,
+              text: patch.text,
+              importance: patch.importance,
+              updatedAt: new Date().toISOString(),
+            }
+          : n,
+      );
+      if (noteId(selectedNote.value) === id) {
+        selectedNote.value = {
+          ...selectedNote.value,
+          text: patch.text,
+          importance: patch.importance,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+
+    function onNoteDeleted(id) {
+      noteSheetOpen.value = false;
+      selectedNote.value = null;
+      notes.value = notes.value.filter((n) => noteId(n) !== id);
+    }
+
     async function addNote() {
+      if (isAddingNote.value) return;
+      isAddingNote.value = true;
       await store.dispatch("postNote", {
         productId: productId.value,
         input: {
           text: "",
-          importance: "low",
+          importance: "Low",
         },
         onSuccess: (response) => {
-          notes.value.push(response.data.value);
-          displaySonnerSuccess(t("pages.productEditPage.toast.noteAdded"));
+          const created = response?.data?.value ?? response?.data;
+          if (!created) return;
+          notes.value = [...notes.value, created];
+          openNote(created);
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
+      isAddingNote.value = false;
     }
 
     function openSkuDialog() {
@@ -1039,10 +1104,19 @@ export default {
     }
 
     async function onGroupCreated(group) {
-      if (!group?.id) return;
-      const exists = allGroups.value.some((g) => g.id === group.id);
-      if (!exists) allGroups.value = [...allGroups.value, group];
-      await onGroupSelectChange(String(group.id), { notify: false });
+      const id = group?.id ?? group?.Id;
+      if (!id) return;
+      const name = group?.name ?? group?.Name;
+      const next = {
+        id,
+        name: name || String(id),
+        description: group?.description ?? group?.Description ?? null,
+      };
+      const exists = allGroups.value.some((g) => g.id === id);
+      allGroups.value = exists
+        ? allGroups.value.map((g) => (g.id === id ? { ...g, ...next } : g))
+        : [...allGroups.value, next];
+      await onGroupSelectChange(String(id), { notify: false });
     }
 
     const duplicateProductUrl = computed(() =>
@@ -1285,7 +1359,20 @@ export default {
       images,
       handleDeleteProduct,
       notes,
+      sortedNotes,
       addNote,
+      isAddingNote,
+      noteSheetOpen,
+      selectedNote,
+      openNote,
+      onNoteUpdated,
+      onNoteDeleted,
+      noteId,
+      noteRowTitle,
+      noteRowCaption,
+      noteRowImportance,
+      noteImportanceClass,
+      MENU_ITEM,
       category,
       categories,
       selectedCategoryId,
@@ -1466,626 +1553,561 @@ export default {
 
               <div class="flex w-full min-w-0 flex-col gap-6">
                 <!-- Main fields -->
-                <Card class="border-0 shadow-none">
-                  <CardHeader>
-                    <CardTitle class="text-base">
-                      {{ $t("pages.productEditPage.sections.mainData.title") }}
-                    </CardTitle>
-                    <CardDescription>
-                      {{
-                        $t(
-                          "pages.productEditPage.sections.mainData.description",
-                        )
-                      }}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <FieldGroup class="gap-5">
-                      <SettingsFormField
-                        :label="
-                          $t('pages.productEditPage.fields.category.label')
+                <SettingsFormSection
+                  class="max-w-none"
+                  :title="$t('pages.productEditPage.sections.mainData.title')"
+                  :description="
+                    $t('pages.productEditPage.sections.mainData.description')
+                  "
+                >
+                  <SettingsFormField
+                    :label="$t('pages.productEditPage.fields.category.label')"
+                  >
+                    <div class="space-y-1.5 w-full">
+                      <SearchableSelect
+                        :model-value="currentCategorySelectValue"
+                        :options="categorySelectOptions"
+                        :placeholder="
+                          $t(
+                            'pages.productEditPage.fields.category.placeholder',
+                          )
                         "
+                        :disabled="
+                          isProductLoading ||
+                          isChangingCategory ||
+                          isLoadingCategories
+                        "
+                        @update:model-value="onCategorySelectChange"
+                      />
+                      <router-link
+                        v-if="category"
+                        :to="`/categories/${category.id}/edit`"
+                        class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <div class="space-y-1.5 w-full">
-                          <SearchableSelect
-                            :model-value="currentCategorySelectValue"
-                            :options="categorySelectOptions"
-                            :placeholder="
-                              $t(
-                                'pages.productEditPage.fields.category.placeholder',
-                              )
-                            "
-                            :disabled="
-                              isProductLoading ||
-                              isChangingCategory ||
-                              isLoadingCategories
-                            "
-                            @update:model-value="onCategorySelectChange"
-                          />
-                          <router-link
-                            v-if="category"
-                            :to="`/categories/${category.id}/edit`"
-                            class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {{
-                              $t(
-                                "pages.productEditPage.fields.category.editLink",
-                              )
-                            }}
-                          </router-link>
-                        </div>
-                      </SettingsFormField>
+                        {{
+                          $t("pages.productEditPage.fields.category.editLink")
+                        }}
+                      </router-link>
+                    </div>
+                  </SettingsFormField>
 
-                      <SettingsFormField
-                        :label="$t('pages.productEditPage.fields.group.label')"
+                  <SettingsFormField
+                    :label="$t('pages.productEditPage.fields.group.label')"
+                  >
+                    <div class="space-y-1.5">
+                      <SearchableSelect
+                        :model-value="currentGroupSelectValue"
+                        :options="groupSelectOptions"
+                        :placeholder="
+                          $t('pages.productEditPage.fields.group.placeholder')
+                        "
+                        :disabled="isProductLoading || isChangingGroup"
+                        @update:model-value="onGroupSelectChange"
                       >
-                        <div class="space-y-1.5">
-                          <SearchableSelect
-                            :model-value="currentGroupSelectValue"
-                            :options="groupSelectOptions"
-                            :placeholder="
-                              $t(
-                                'pages.productEditPage.fields.group.placeholder',
-                              )
-                            "
-                            :disabled="isProductLoading || isChangingGroup"
-                            @update:model-value="onGroupSelectChange"
+                        <template #footer="{ close }">
+                          <button
+                            type="button"
+                            class="w-full text-left"
+                            :class="MENU_ITEM"
+                            @click="openCreateGroupDialogFromSelect(close)"
                           >
-                            <template #footer="{ close }">
-                              <button
-                                type="button"
-                                class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
-                                @click="openCreateGroupDialogFromSelect(close)"
-                              >
-                                <Plus class="size-4 shrink-0" />
-                                <span class="flex-1 truncate text-sm">
-                                  {{
-                                    $t(
-                                      "pages.productEditPage.fields.group.createLink",
-                                    )
-                                  }}
-                                </span>
-                              </button>
-                            </template>
-                          </SearchableSelect>
-                          <div
-                            class="flex flex-wrap items-center gap-x-3 gap-y-1"
-                          >
-                            <router-link
-                              v-if="productGroup"
-                              :to="`/product-groups/${productGroup.id}/edit`"
-                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-                            >
-                              {{
-                                $t(
-                                  "pages.productEditPage.fields.group.editLink",
-                                )
-                              }}
-                            </router-link>
-                            <button
-                              type="button"
-                              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-                              :disabled="isProductLoading || isChangingGroup"
-                              @click="showCreateGroupDialog = true"
-                            >
+                            <Plus class="size-4 shrink-0" />
+                            <span class="flex-1 truncate text-sm">
                               {{
                                 $t(
                                   "pages.productEditPage.fields.group.createLink",
                                 )
                               }}
-                            </button>
-                          </div>
-                        </div>
-                      </SettingsFormField>
+                            </span>
+                          </button>
+                        </template>
+                      </SearchableSelect>
+                      <router-link
+                        v-if="productGroup"
+                        :to="`/product-groups/${productGroup.id}/edit`"
+                        class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                      >
+                        {{
+                          $t("pages.productEditPage.fields.group.editLink")
+                        }}
+                      </router-link>
+                    </div>
+                  </SettingsFormField>
 
+                  <SettingsFormField
+                    :label="$t('pages.productEditPage.fields.sku.label')"
+                    label-for="product-sku"
+                  >
+                    <div class="space-y-1.5">
+                      <Input
+                        id="product-sku"
+                        type="text"
+                        readonly
+                        :model-value="productSKU"
+                        class="w-full font-mono tabular-nums"
+                        @click="selectSkuField"
+                        @focus="selectSkuField"
+                      />
+                      <div
+                        class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                      >
+                        <button
+                          v-if="productSKU"
+                          type="button"
+                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors disabled:opacity-50"
+                          @click="copySku"
+                        >
+                          {{
+                            skuCopied
+                              ? $t("common.copied")
+                              : $t(
+                                  "pages.productEditPage.skuDialog.copyAction",
+                                )
+                          }}
+                        </button>
+                        <button
+                          type="button"
+                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
+                          :disabled="isProductLoading"
+                          @click="openSkuDialog"
+                        >
+                          {{
+                            $t("pages.productEditPage.fields.sku.changeAction")
+                          }}
+                        </button>
+                      </div>
+                    </div>
+                  </SettingsFormField>
+
+                  <FormField
+                    v-slot="{ value, setValue, errorMessage }"
+                    name="product.barcode"
+                  >
+                    <FormItem class="gap-0">
                       <SettingsFormField
-                        :label="$t('pages.productEditPage.fields.sku.label')"
-                        label-for="product-sku"
+                        :label="
+                          $t('pages.productEditPage.fields.barcode.label')
+                        "
+                        label-for="product-barcode"
+                        :error="errorMessage"
                       >
-                        <div class="flex items-center gap-2">
-                          <Input
-                            id="product-sku"
-                            type="text"
-                            readonly
-                            :model-value="productSKU"
-                            class="min-w-0 flex-1 font-mono tabular-nums"
-                            @click="selectSkuField"
-                            @focus="selectSkuField"
+                        <FormControl>
+                          <BarcodeInput
+                            id="product-barcode"
+                            :model-value="value || ''"
+                            @update:model-value="setValue($event)"
                           />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            class="size-9 shrink-0"
-                            type="button"
-                            :title="$t('pages.productEditPage.skuDialog.copyAction')"
-                            :aria-label="$t('pages.productEditPage.skuDialog.copyAction')"
-                            :disabled="!productSKU"
-                            @click="copySku"
-                          >
-                            <Check v-if="skuCopied" class="size-4 text-success" />
-                            <Copy v-else class="size-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            class="size-9 shrink-0"
-                            :title="
-                              $t(
-                                'pages.productEditPage.fields.sku.changeAction',
-                              )
-                            "
-                            :aria-label="
-                              $t(
-                                'pages.productEditPage.fields.sku.changeAction',
-                              )
-                            "
-                            type="button"
-                            @click="openSkuDialog"
-                          >
-                            <Pencil class="size-4" />
-                          </Button>
-                        </div>
+                        </FormControl>
                       </SettingsFormField>
+                    </FormItem>
+                  </FormField>
 
-                      <FormField
-                        v-slot="{ value, setValue, errorMessage }"
-                        name="product.barcode"
+                  <FormField
+                    v-slot="{ componentField, errorMessage }"
+                    name="product.name"
+                  >
+                    <FormItem class="gap-0">
+                      <SettingsFormField
+                        :label="$t('pages.productEditPage.fields.name.label')"
+                        label-for="product-name"
+                        :error="errorMessage"
+                        required
                       >
-                        <FormItem class="gap-0">
-                          <SettingsFormField
-                            :label="
-                              $t('pages.productEditPage.fields.barcode.label')
-                            "
-                            label-for="product-barcode"
-                            :error="errorMessage"
-                          >
-                            <FormControl>
-                              <BarcodeInput
-                                id="product-barcode"
-                                :model-value="value || ''"
-                                @update:model-value="setValue($event)"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
-                        </FormItem>
-                      </FormField>
+                        <FormControl>
+                          <Input
+                            id="product-name"
+                            type="text"
+                            :maxlength="FIELD_LIMITS.productName"
+                            v-bind="componentField"
+                          />
+                        </FormControl>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
 
-                      <FormField
-                        v-slot="{ componentField, errorMessage }"
-                        name="product.name"
-                      >
-                        <FormItem class="gap-0">
-                          <SettingsFormField
-                            :label="
-                              $t('pages.productEditPage.fields.name.label')
-                            "
-                            label-for="product-name"
-                            :error="errorMessage"
-                            required
-                          >
-                            <FormControl>
-                              <Input
-                                id="product-name"
-                                type="text"
-                                :maxlength="FIELD_LIMITS.productName"
-                                v-bind="componentField"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
-                        </FormItem>
-                      </FormField>
-
-                      <FormField
-                        v-slot="{ componentField, errorMessage }"
-                        name="product.description"
-                      >
-                        <FormItem class="gap-1.5">
-                          <div class="flex items-center justify-between gap-2">
-                            <label
-                              for="product-description"
-                              class="text-sm font-medium leading-none"
-                              >{{
-                                $t(
-                                  "pages.productEditPage.fields.description.label",
-                                )
-                              }}</label
-                            >
-                            <AiDescriptionGenerator
-                              v-if="aiEnabled"
-                              :product-name="form.values.product?.name"
-                              :product-sku="productSKU"
-                              :category-name="category?.name"
-                              :existing-description="
-                                form.values.product?.description
-                              "
-                              :attributes-summary="aiAttributesSummary"
-                              @update:generating="
-                                isDescriptionGenerating = $event
-                              "
-                              @generated="onDescriptionGenerated"
-                            />
-                          </div>
-                          <div class="relative">
-                            <FormControl>
-                              <Textarea
-                                id="product-description"
-                                ref="descriptionRef"
-                                v-bind="componentField"
-                                :disabled="isDescriptionGenerating"
-                                :aria-busy="isDescriptionGenerating"
-                                :maxlength="FIELD_LIMITS.productDescription"
-                                @input="autoResizeDescription"
-                                class="min-h-24 overflow-hidden resize-none transition-opacity"
-                                :class="
-                                  isDescriptionGenerating ? 'opacity-60' : ''
-                                "
-                              />
-                            </FormControl>
-                            <div
-                              v-if="isDescriptionGenerating"
-                              class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
-                            >
-                              <p
-                                class="flex items-center gap-2 text-xs text-muted-foreground"
-                              >
-                                <Spinner size="sm" />
-                                {{ descriptionGeneratingHint }}
-                              </p>
-                            </div>
-                          </div>
+                  <FormField
+                    v-slot="{ componentField, errorMessage }"
+                    name="product.description"
+                  >
+                    <FormItem class="gap-1.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <FieldLabel for="product-description">{{
+                          $t("pages.productEditPage.fields.description.label")
+                        }}</FieldLabel>
+                        <AiDescriptionGenerator
+                          v-if="aiEnabled"
+                          :product-name="form.values.product?.name"
+                          :product-sku="productSKU"
+                          :category-name="category?.name"
+                          :existing-description="
+                            form.values.product?.description
+                          "
+                          :attributes-summary="aiAttributesSummary"
+                          @update:generating="isDescriptionGenerating = $event"
+                          @generated="onDescriptionGenerated"
+                        />
+                      </div>
+                      <div class="relative">
+                        <FormControl>
+                          <Textarea
+                            id="product-description"
+                            ref="descriptionRef"
+                            v-bind="componentField"
+                            :disabled="isDescriptionGenerating"
+                            :aria-busy="isDescriptionGenerating"
+                            :maxlength="FIELD_LIMITS.productDescription"
+                            @input="autoResizeDescription"
+                            class="min-h-24 overflow-hidden resize-none transition-opacity"
+                            :class="isDescriptionGenerating ? 'opacity-60' : ''"
+                          />
+                        </FormControl>
+                        <div
+                          v-if="isDescriptionGenerating"
+                          class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
+                        >
                           <p
-                            v-if="errorMessage"
-                            class="text-sm text-destructive"
+                            class="flex items-center gap-2 text-xs text-muted-foreground"
                           >
-                            {{ errorMessage }}
+                            <Spinner size="sm" />
+                            {{ descriptionGeneratingHint }}
                           </p>
-                        </FormItem>
-                      </FormField>
+                        </div>
+                      </div>
+                      <FieldError v-if="errorMessage">{{
+                        errorMessage
+                      }}</FieldError>
+                    </FormItem>
+                  </FormField>
 
-                      <template v-if="!category?.hasSizes">
-                        <div class="space-y-4 border-t pt-5">
-                          <div>
-                            <h4 class="text-sm font-medium">
-                              {{
-                                $t("pages.productEditPage.sections.stock.title")
-                              }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
-                              {{
+                  <template v-if="!category?.hasSizes">
+                    <div class="space-y-4 border-t pt-5">
+                      <div>
+                        <InsetGroupLabel>
+                          {{ $t("pages.productEditPage.sections.stock.title") }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
+                          {{
+                            $t(
+                              "pages.productEditPage.sections.stock.description",
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <div class="grid grid-cols-1 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.storageQuantity"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
                                 $t(
-                                  "pages.productEditPage.sections.stock.description",
+                                  'pages.productEditPage.fields.quantity.label',
                                 )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.storageQuantity"
+                              "
+                              label-for="product-quantity"
+                              :error="errorMessage"
                             >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.quantity.label',
+                              <NumberField
+                                id="product-quantity"
+                                class="w-full"
+                                :min="0"
+                                :step="1"
+                                :model-value="value ?? undefined"
+                                @update:model-value="(v) => setValue(v ?? null)"
+                              >
+                                <NumberFieldContent class="w-full">
+                                  <NumberFieldDecrement />
+                                  <FormControl>
+                                    <NumberFieldInput />
+                                  </FormControl>
+                                  <NumberFieldIncrement />
+                                </NumberFieldContent>
+                              </NumberField>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
+
+                    <div class="space-y-4 border-t pt-5">
+                      <div>
+                        <InsetGroupLabel>
+                          {{ $t("pages.productEditPage.sections.price.title") }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
+                          {{
+                            $t(
+                              "pages.productEditPage.sections.price.description",
+                              {
+                                currency:
+                                  storeBaseCurrency ||
+                                  $t(
+                                    "pages.productEditPage.fields.price.defaultCurrencyFallback",
+                                  ),
+                              },
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <div class="grid grid-cols-1 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.price"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t('pages.productEditPage.fields.price.label', {
+                                  currency:
+                                    storeBaseCurrency || $t('common.emDash'),
+                                })
+                              "
+                              label-for="product-price"
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  id="product-price"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
                                     )
                                   "
-                                  label-for="product-quantity"
-                                  :error="errorMessage"
-                                >
-                                  <NumberField
-                                    id="product-quantity"
-                                    class="w-full"
-                                    :min="0"
-                                    :step="1"
-                                    :model-value="value ?? undefined"
-                                    @update:model-value="
-                                      (v) => setValue(v ?? null)
-                                    "
-                                  >
-                                    <NumberFieldContent class="w-full">
-                                      <NumberFieldDecrement />
-                                      <FormControl>
-                                        <NumberFieldInput />
-                                      </FormControl>
-                                      <NumberFieldIncrement />
-                                    </NumberFieldContent>
-                                  </NumberField>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
+                                />
+                              </FormControl>
+                              <p
+                                v-if="pricePreview(value).length"
+                                class="text-xs text-muted-foreground mt-1"
+                              >
+                                {{ pricePreview(value).join(" · ") }}
+                              </p>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
 
-                        <div class="space-y-4 border-t pt-5">
-                          <div>
-                            <h4 class="text-sm font-medium">
-                              {{
-                                $t("pages.productEditPage.sections.price.title")
-                              }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
-                              {{
+                    <div
+                      v-if="extendedPriceParameters"
+                      class="space-y-4 border-t pt-5"
+                    >
+                      <div>
+                        <InsetGroupLabel>
+                          {{
+                            $t(
+                              "pages.productEditPage.sections.extendedPrice.title",
+                            )
+                          }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
+                          {{
+                            $t(
+                              "pages.productEditPage.sections.extendedPrice.description",
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.oldPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
                                 $t(
-                                  "pages.productEditPage.sections.price.description",
+                                  'pages.productEditPage.fields.oldPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              :error="errorMessage"
+                              :description="
+                                $t(
+                                  'pages.productEditPage.fields.oldPrice.description',
+                                )
+                              "
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, errorMessage }"
+                          name="product.discount"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productEditPage.fields.discount.label',
+                                )
+                              "
+                              :error="errorMessage"
+                              :description="
+                                $t(
+                                  'pages.productEditPage.fields.discount.description',
+                                )
+                              "
+                            >
+                              <FormControl>
+                                <Input
+                                  type="text"
+                                  readonly
+                                  class="bg-muted"
+                                  :model-value="
+                                    value != null ? String(value) : '-'
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.minPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productEditPage.fields.minPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.netPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productEditPage.fields.netPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.currency"
+                        >
+                          <FormItem class="gap-0 sm:col-span-2">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productEditPage.fields.currency.label',
+                                )
+                              "
+                              :error="errorMessage"
+                              :description="
+                                $t(
+                                  'pages.productEditPage.fields.currency.description',
                                   {
                                     currency:
                                       storeBaseCurrency ||
                                       $t(
-                                        "pages.productEditPage.fields.price.defaultCurrencyFallback",
+                                        'pages.productEditPage.fields.currency.defaultCurrencyFallback',
                                       ),
                                   },
                                 )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.price"
+                              "
                             >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.price.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  label-for="product-price"
-                                  :error="errorMessage"
+                              <FormControl>
+                                <Select
+                                  :model-value="value || storeBaseCurrency"
+                                  @update:model-value="setValue($event)"
+                                  class="w-full"
                                 >
-                                  <FormControl>
-                                    <Input
-                                      id="product-price"
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      placeholder="0.00"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                  <p
-                                    v-if="pricePreview(value).length"
-                                    class="text-xs text-muted-foreground mt-1"
-                                  >
-                                    {{ pricePreview(value).join(" · ") }}
-                                  </p>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
-
-                        <div
-                          v-if="extendedPriceParameters"
-                          class="space-y-4 border-t pt-5"
-                        >
-                          <div>
-                            <h4 class="text-sm font-medium">
-                              {{
-                                $t(
-                                  "pages.productEditPage.sections.extendedPrice.title",
-                                )
-                              }}
-                            </h4>
-                            <p class="text-xs text-muted-foreground mt-0.5">
-                              {{
-                                $t(
-                                  "pages.productEditPage.sections.extendedPrice.description",
-                                )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.oldPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.oldPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productEditPage.fields.oldPrice.description',
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, errorMessage }"
-                              name="product.discount"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.discount.label',
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productEditPage.fields.discount.description',
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="text"
-                                      readonly
-                                      class="bg-muted"
-                                      :model-value="
-                                        value != null ? String(value) : '-'
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.minPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.minPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.netPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.netPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.currency"
-                            >
-                              <FormItem class="gap-0 sm:col-span-2">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productEditPage.fields.currency.label',
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productEditPage.fields.currency.description',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t(
-                                            'pages.productEditPage.fields.currency.defaultCurrencyFallback',
-                                          ),
-                                      },
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Select
-                                      :model-value="value || storeBaseCurrency"
-                                      @update:model-value="setValue($event)"
-                                      class="w-full"
+                                  <SelectTrigger class="w-full"
+                                    ><SelectValue
+                                  /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem
+                                      v-for="c in storeCurrencies"
+                                      :key="c.code"
+                                      :value="c.code"
+                                      >{{ c.code }}</SelectItem
                                     >
-                                      <SelectTrigger class="w-full"
-                                        ><SelectValue
-                                      /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem
-                                          v-for="c in storeCurrencies"
-                                          :key="c.code"
-                                          :value="c.code"
-                                          >{{ c.code }}</SelectItem
-                                        >
-                                      </SelectContent>
-                                    </Select>
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
-                      </template>
-                    </FieldGroup>
-                  </CardContent>
-                </Card>
+                                  </SelectContent>
+                                </Select>
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
+                  </template>
+                </SettingsFormSection>
 
                 <CreateProductGroupDialog
                   v-model:open="showCreateGroupDialog"
@@ -2187,62 +2209,53 @@ export default {
                 </Dialog>
 
                 <!-- Category attributes -->
-                <Card
+                <ProductAttributeForm
                   v-if="category && visibleCategoryAttributes.length > 0"
-                  class="border-0 shadow-none"
+                  :attributes="category.attributes"
                 >
-                  <ProductAttributeForm :attributes="category.attributes">
-                    <template #title>
-                      {{
-                        $t(
-                          "pages.productEditPage.sections.categoryAttributes.title",
-                        )
-                      }}
-                    </template>
-                    <template #description>
-                      {{
-                        $t(
-                          "pages.productEditPage.sections.categoryAttributes.description",
-                          {
-                            count: visibleCategoryAttributes.length,
-                            unit: attributeCountLabel(
-                              visibleCategoryAttributes.length,
-                            ),
-                            category: category.name,
-                          },
-                        )
-                      }}
-                    </template>
-                  </ProductAttributeForm>
-                </Card>
+                  <template #title>
+                    {{
+                      $t(
+                        "pages.productEditPage.sections.categoryAttributes.title",
+                      )
+                    }}
+                  </template>
+                  <template #description>
+                    {{
+                      $t(
+                        "pages.productEditPage.sections.categoryAttributes.description",
+                        {
+                          count: visibleCategoryAttributes.length,
+                          unit: attributeCountLabel(
+                            visibleCategoryAttributes.length,
+                          ),
+                          category: category.name,
+                        },
+                      )
+                    }}
+                  </template>
+                </ProductAttributeForm>
 
                 <!-- Store attributes -->
-                <Card
-                  v-if="visibleStoreAttributes.length > 0"
-                  class="border-0 shadow-none"
-                >
-                  <CardHeader>
-                    <CardTitle class="text-base">
-                      {{ $t("nav.globalAttributes") }}
-                    </CardTitle>
-                    <CardDescription>
-                      {{
-                        $t(
-                          "pages.productEditPage.sections.storeAttributes.description",
-                          {
-                            count: visibleStoreAttributes.length,
-                            unit: attributeCountLabel(
-                              visibleStoreAttributes.length,
-                            ),
-                          },
-                        )
-                      }}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent class="pt-0">
-                    <StoreAttributeForm :attributes="storeAttributes" />
-                  </CardContent>
-                </Card>
+                <div v-if="visibleStoreAttributes.length > 0">
+                  <InsetGroupLabel class="mb-1">
+                    {{ $t("nav.globalAttributes") }}
+                  </InsetGroupLabel>
+                  <p class="mb-4 px-1 text-xs text-muted-foreground">
+                    {{
+                      $t(
+                        "pages.productEditPage.sections.storeAttributes.description",
+                        {
+                          count: visibleStoreAttributes.length,
+                          unit: attributeCountLabel(
+                            visibleStoreAttributes.length,
+                          ),
+                        },
+                      )
+                    }}
+                  </p>
+                  <StoreAttributeForm :attributes="storeAttributes" />
+                </div>
               </div>
             </form>
 
@@ -2263,11 +2276,7 @@ export default {
             </div>
 
             <!-- Images tab -->
-            <div
-              v-show="tab == 'images'"
-              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
-              style="height: calc(100vh - 8.5rem)"
-            >
+            <div v-show="tab == 'images'">
               <ProductImagesEditor
                 :files="files"
                 v-model:images="images"
@@ -2277,21 +2286,12 @@ export default {
             </div>
 
             <!-- Sizes tab -->
-            <div
-              v-if="category?.hasSizes"
-              v-show="tab == 'sizes'"
-              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
-              style="height: calc(100vh - 8.5rem)"
-            >
+            <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="space-y-6">
               <ProductVariantsEditor :productId="productId" />
             </div>
 
             <!-- Marketplaces tab -->
-            <div
-              v-show="tab == 'marketplaces'"
-              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
-              style="height: calc(100vh - 8.5rem)"
-            >
+            <div v-show="tab == 'marketplaces'">
               <ProductMarketplaceIntegrations
                 :productId="productId"
                 @product-updated="fetchProduct"
@@ -2299,52 +2299,56 @@ export default {
             </div>
 
             <!-- Notes tab -->
-            <div
-              v-show="tab == 'notes'"
-              class="flex min-h-0 flex-col overflow-hidden rounded-xl border"
-              style="height: calc(100vh - 8.5rem)"
-            >
-              <div
-                class="flex h-11 shrink-0 items-center justify-between border-b px-4"
-              >
-                <p class="flex items-center gap-2 text-sm font-medium">
-                  <NotebookPen class="size-4" />
-                  {{ $t("pages.productEditPage.tabs.notes") }}
-                </p>
-                <Button variant="ghost" size="sm" @click="addNote" class="h-7">
-                  <Plus class="size-4 mr-1" />
-                  {{ $t("common.add") }}
-                </Button>
-              </div>
-              <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                <EmptyState
-                  v-if="notes.length === 0"
-                  :framed="false"
-                  :title="$t('pages.productEditPage.notesEmpty.title')"
-                  :description="
-                    $t('pages.productEditPage.notesEmpty.description')
+            <div v-show="tab == 'notes'" class="space-y-6">
+              <InsetGroup v-if="sortedNotes.length">
+                <InsetGroupItem
+                  v-for="note in sortedNotes"
+                  :key="noteId(note)"
+                  show-chevron
+                  :aria-label="
+                    $t('pages.productEditPage.fields.notes.openAria')
                   "
+                  @click="openNote(note)"
                 >
-                  <template #icon>
-                    <NotebookPen />
+                  <template #leading>
+                    <NotebookPen class="size-4" />
                   </template>
-                </EmptyState>
-                <div v-else class="flex flex-col gap-4 p-4">
-                  <div v-for="(note, index) in notes" :key="note.id || index">
-                    <Note
-                      v-model:note="notes[index]"
-                      :productId="productId"
-                      @onDelete="notes.splice(index, 1)"
-                    />
-                  </div>
-                </div>
-              </div>
+                  <p class="truncate">{{ noteRowTitle(note) }}</p>
+                  <p
+                    v-if="noteRowCaption(note)"
+                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+                  >
+                    {{ noteRowCaption(note) }}
+                  </p>
+                  <template #trailing>
+                    <span
+                      class="max-w-28 truncate text-xs"
+                      :class="noteImportanceClass(note.importance)"
+                    >
+                      {{ noteRowImportance(note) }}
+                    </span>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+              <InsetGroup>
+                <InsetGroupItem
+                  :disabled="isAddingNote || isProductLoading"
+                  :aria-label="$t('pages.productEditPage.fields.notes.addLink')"
+                  @click="addNote"
+                >
+                  <template #leading>
+                    <Spinner v-if="isAddingNote" />
+                    <Plus v-else class="size-4" />
+                  </template>
+                  {{ $t("pages.productEditPage.fields.notes.addLink") }}
+                </InsetGroupItem>
+              </InsetGroup>
             </div>
 
             <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
             <div
               v-show="tab === 'properties' && productSKU"
-              class="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between"
+              class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <AlertDialog>
                 <AlertDialogTrigger as-child>
@@ -2492,5 +2496,12 @@ export default {
         </div>
       </div>
     </Teleport>
+    <NoteDetailSheet
+      v-model:open="noteSheetOpen"
+      :note="selectedNote"
+      :show-product-link="false"
+      @updated="onNoteUpdated"
+      @deleted="onNoteDeleted"
+    />
   </AppPageChrome>
 </template>

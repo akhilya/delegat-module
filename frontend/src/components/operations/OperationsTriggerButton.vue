@@ -56,28 +56,19 @@ function showFabs() {
         <ChevronRight class="size-3" />
       </Button>
 
-      <!-- Main operations button -->
       <Button
         type="button"
         size="icon"
-        class="relative size-12 rounded-full shadow-lg shrink-0"
+        class="relative size-12 shrink-0 rounded-full border border-border/60"
         @click="toggle"
       >
         <Activity class="size-5" />
-
-        <!-- Badge -->
         <span
           v-if="activeCount > 0"
-          class="absolute -top-1 -right-1 size-5 rounded-full bg-error text-error-foreground text-[10px] font-bold flex items-center justify-center pointer-events-none"
+          class="pointer-events-none absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground"
         >
           {{ activeCount > 9 ? "9+" : activeCount }}
         </span>
-
-        <!-- Pulse ring -->
-        <span
-          v-if="activeCount > 0"
-          class="absolute inset-0 rounded-full bg-primary/30 animate-ping pointer-events-none"
-        />
       </Button>
     </div>
   </Teleport>

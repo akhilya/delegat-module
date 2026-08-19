@@ -27,7 +27,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -50,9 +49,13 @@ import {
   ChevronDown,
   Download,
   LayoutGrid,
+  Minus,
+  Plus,
   RefreshCw,
   Upload,
+  ExternalLink,
 } from "lucide-vue-next";
+import { RouterLink } from "vue-router";
 import { Spinner } from "@/components/ui/spinner";
 import {
   SplitterGroup,
@@ -100,7 +103,7 @@ import {
   sanitizeGraphEdges,
   mergeProductFieldSources,
 } from "./graphModel.js";
-import { layoutGraph } from "./graphLayout.js";
+import { layoutGraph, sinksOverlap } from "./graphLayout.js";
 import {
   localizeExternalFieldDescription,
   localizeExternalFieldName,
@@ -1319,7 +1322,9 @@ async function load(options = {}) {
     const rawNodeList = graph.nodes || [];
     const noneHavePosition =
       rawNodeList.length > 0 && rawNodeList.every((n) => !n?.position);
-    const needsLayout = !preserveLayout && (migrated || noneHavePosition);
+    const needsLayout =
+      !preserveLayout &&
+      (migrated || noneHavePosition || sinksOverlap(safeNodes));
     const nodeIds = new Set(safeNodes.map((n) => n.id));
     const { edges: safeEdges } = sanitizeGraphEdges(graph.edges, nodeIds);
 
@@ -1339,7 +1344,7 @@ async function load(options = {}) {
 
     if (needsLayout) {
       await loadStep("load:relayoutMeasured", async () => {
-        const measured = collectMeasuredHeights(nodes.value);
+        const measured = collectMeasuredSizes(nodes.value);
         if (measured.size > 0) {
           const obj = toObject();
           setNodes(layoutGraph(obj.nodes, obj.edges, measured));
@@ -1849,11 +1854,14 @@ async function runPreview() {
   }
 }
 
-function collectMeasuredHeights(nodeList) {
+function collectMeasuredSizes(nodeList) {
   const map = new Map();
   for (const n of nodeList || []) {
     const h = n.dimensions?.height ?? n.measured?.height;
-    if (typeof h === "number" && h > 0) map.set(n.id, h);
+    const w = n.dimensions?.width ?? n.measured?.width;
+    if ((typeof h === "number" && h > 0) || (typeof w === "number" && w > 0)) {
+      map.set(n.id, { width: w, height: h });
+    }
   }
   return map;
 }
@@ -1861,7 +1869,7 @@ function collectMeasuredHeights(nodeList) {
 // Re-run the layered auto-layout on the current graph.
 function autoArrange() {
   const obj = toObject();
-  const measured = collectMeasuredHeights(nodes.value);
+  const measured = collectMeasuredSizes(nodes.value);
   setNodes(layoutGraph(obj.nodes, obj.edges, measured));
   nextTick(() => fitView({ padding: 0.2 }));
 }
@@ -1958,15 +1966,19 @@ async function importMappingFile(event) {
         @contextmenu="onContextMenu"
       >
       <div
-        class="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-xl border bg-card p-1"
+        class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
       >
-        <DropdownMenu>
-          <ButtonGroup>
-            <DropdownMenuTrigger as-child>
-              <Button size="sm">
-                {{ t("marketplace.canvas.actions") }}
-              </Button>
-            </DropdownMenuTrigger>
+        <ButtonGroup>
+          <Button
+            size="sm"
+            :disabled="saving || errorCount > 0"
+            @click="save"
+          >
+            <Spinner v-if="saving" />
+            <Save v-else class="size-4" />
+            {{ t("marketplace.canvas.save") }}
+          </Button>
+          <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <Button
                 size="sm"
@@ -1976,65 +1988,73 @@ async function importMappingFile(event) {
                 <ChevronDown class="size-4" />
               </Button>
             </DropdownMenuTrigger>
-          </ButtonGroup>
-          <DropdownMenuContent align="start" class="w-56">
-            <DropdownMenuItem
-              :disabled="saving || errorCount > 0"
-              @select="save"
+            <DropdownMenuContent align="start" class="w-56">
+              <DropdownMenuItem @select="showAutoArrangeConfirm = true">
+                <LayoutGrid class="size-4" />
+                {{ t("marketplace.fieldMappingPage.autoArrange") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                :disabled="syncingFields"
+                @select="syncAdapterFieldSchema"
+              >
+                <Spinner v-if="syncingFields" class="size-4" />
+                <RefreshCw v-else class="size-4" />
+                {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem @select="exportMappingFile">
+                <Download class="size-4" />
+                {{ t("marketplace.fieldMappingPage.export") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="triggerImportFile">
+                <Upload class="size-4" />
+                {{ t("marketplace.fieldMappingPage.import") }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ButtonGroup>
+
+        <div class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full">
+          <SearchableSelect
+            class="h-8 w-full bg-card dark:bg-card"
+            content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
+            remote
+            :loading="previewProductsLoading"
+            :options="previewProducts"
+            :model-value="previewProductId ? String(previewProductId) : ''"
+            @update:modelValue="emit('select-preview', $event)"
+            @search="emit('search-preview', $event)"
+            :placeholder="t('marketplace.canvas.previewPlaceholder')"
+          />
+        </div>
+
+        <ButtonGroup v-if="previewProductId">
+          <Button size="sm" as-child>
+            <RouterLink
+              :to="`/products/${previewProductId}/edit`"
+              :title="t('marketplace.canvas.openPreviewProductTitle')"
             >
-              <Spinner v-if="saving" class="mr-2" />
-              <Save v-else class="size-4 mr-2" />
-              {{ t("marketplace.canvas.save") }}
-              <DropdownMenuShortcut :keys="['mod', 'S']" />
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @select="showAutoArrangeConfirm = true">
-              <LayoutGrid class="size-4 mr-2" />
-              {{ t("marketplace.fieldMappingPage.autoArrange") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem :disabled="syncingFields" @select="syncAdapterFieldSchema">
-              <Spinner v-if="syncingFields" class="mr-2" />
-              <RefreshCw v-else class="size-4 mr-2" />
-              {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @select="exportMappingFile">
-              <Download class="size-4 mr-2" />
-              {{ t("marketplace.fieldMappingPage.export") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="triggerImportFile">
-              <Upload class="size-4 mr-2" />
-              {{ t("marketplace.fieldMappingPage.import") }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span class="mx-0.5 h-5 w-px bg-border" />
-        <SearchableSelect
-          class="w-72"
-          remote
-          :loading="previewProductsLoading"
-          :options="previewProducts"
-          :model-value="previewProductId ? String(previewProductId) : ''"
-          @update:modelValue="emit('select-preview', $event)"
-          @search="emit('search-preview', $event)"
-          :placeholder="t('marketplace.canvas.previewPlaceholder')"
-        />
+              <ExternalLink class="size-4" />
+              {{ t("marketplace.canvas.openPreviewProduct") }}
+            </RouterLink>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            @click="emit('clear-preview')"
+            :title="t('marketplace.canvas.resetPreviewTitle')"
+          >
+            <EyeOff class="size-4" />
+            {{ t("marketplace.canvas.resetPreview") }}
+          </Button>
+        </ButtonGroup>
+
         <span
           v-if="previewing"
           class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
         >
           <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
         </span>
-        <Button
-          v-if="previewProductId"
-          size="sm"
-          variant="ghost"
-          @click="emit('clear-preview')"
-          :title="t('marketplace.canvas.resetPreviewTitle')"
-        >
-          <EyeOff class="mr-1.5 size-4" />
-          {{ t("marketplace.canvas.resetPreview") }}
-        </Button>
         <input
           ref="importFileInput"
           type="file"
@@ -2042,7 +2062,6 @@ async function importMappingFile(event) {
           class="hidden"
           @change="importMappingFile"
         />
-        <span v-if="errorCount" class="mx-1 h-5 w-px bg-border" />
         <Badge v-if="errorCount" variant="destructive" class="gap-1">
           <AlertTriangle class="size-3" /> {{ errorCount }}
         </Badge>
@@ -2111,7 +2130,7 @@ async function importMappingFile(event) {
                     class="vue-flow__controls-button vue-flow__controls-zoomin"
                     @click="zoomIn()"
                   >
-                    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M32 18.133H18.133V32h-4.266V18.133H0v-4.266h13.867V0h4.266v13.867H32z" /></svg>
+                    <Plus class="size-3.5" aria-hidden="true" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
@@ -2127,7 +2146,7 @@ async function importMappingFile(event) {
                     class="vue-flow__controls-button vue-flow__controls-zoomout"
                     @click="zoomOut()"
                   >
-                    <svg viewBox="0 0 32 5" aria-hidden="true"><path d="M0 0h32v4.2H0z" /></svg>
+                    <Minus class="size-3.5" aria-hidden="true" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">

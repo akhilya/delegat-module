@@ -1,6 +1,4 @@
 <script>
-import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import {
   Table,
@@ -17,9 +15,7 @@ import {
   LogDateCell,
   LogMethodCell,
   LogStatusBadge,
-  LogCodeBlock,
-  LogMetaGrid,
-  LogDetailSheet,
+  ErrorLogDetailSheet,
   LogSelectCheckbox,
   LogSortHeader,
   formatLogDate as formatLogDateRaw,
@@ -32,17 +28,10 @@ import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import {
-  AlertTriangle,
-  Check,
-  Copy,
-  Trash2,
-} from "lucide-vue-next";
+import { AlertTriangle } from "lucide-vue-next";
 
 export default {
   components: {
-    Spinner,
-    Button,
     Input,
     Table,
     TableBody,
@@ -56,15 +45,10 @@ export default {
     LogDateCell,
     LogMethodCell,
     LogStatusBadge,
-    LogCodeBlock,
-    LogMetaGrid,
-    LogDetailSheet,
+    ErrorLogDetailSheet,
     LogSelectCheckbox,
     LogSortHeader,
     AlertTriangle,
-    Check,
-    Copy,
-    Trash2
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -122,6 +106,10 @@ export default {
         {
           label: this.$t("pages.errorLogsPage.metaType"),
           value: this.selected.exceptionType || "-",
+        },
+        {
+          label: this.$t("pages.errorLogsPage.codeLabel"),
+          value: this.selected.statusCode || "-",
         },
       ];
     },
@@ -236,12 +224,7 @@ export default {
     },
 
     async removeLog(log) {
-      const ok = await confirm({
-        title: this.$t("pages.errorLogsPage.deleteConfirmTitle"),
-        description: this.$t("pages.errorLogsPage.deleteConfirmDescription"),
-      });
-      if (!ok) return;
-
+      if (!log?.id) return;
       this.deletingLogId = log.id;
       await this.deleteErrorLog({
         id: log.id,
@@ -444,70 +427,14 @@ export default {
       </Table>
     </LogListPanel>
 
-    <LogDetailSheet
+    <ErrorLogDetailSheet
       v-model:open="detailOpen"
-      :title="
-        selected
-          ? `${selected.method} · ${selected.statusCode}`
-          : $t('pages.errorLogsPage.detailFallbackTitle')
-      "
-      :description="selected ? formatPath(selected) : '…'"
-    >
-      <template v-if="selected" #actions>
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-8"
-          @click="copyLogDetails(selected)"
-        >
-          <Check v-if="copiedLogId === selected.id" class="mr-1.5 size-3.5" />
-          <Copy v-else class="mr-1.5 size-3.5" />
-          {{ $t("pages.errorLogsPage.copyAll") }}
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          class="h-8"
-          :disabled="deletingLogId === selected.id"
-          @click="removeLog(selected)"
-        >
-          <Spinner v-if="deletingLogId === selected.id" size="sm" class="mr-1.5" />
-          <Trash2 v-else class="mr-1.5 size-3.5" />
-          {{ $t("common.delete") }}
-        </Button>
-      </template>
-
-      <div
-        v-if="selected"
-        class="min-h-0 flex-1 space-y-4 overflow-y-auto pb-2"
-      >
-        <LogMetaGrid :items="detailMeta" />
-        <div class="flex items-center justify-between gap-2 text-sm">
-          <span class="text-muted-foreground">{{ $t("pages.errorLogsPage.codeLabel") }}</span>
-          <LogStatusBadge :status-code="selected.statusCode" />
-        </div>
-        <LogCodeBlock
-          :label="$t('pages.errorLogsPage.messageLabel')"
-          :text="selected.message || '-'"
-          tone="destructive"
-          max-height-class="max-h-28"
-        />
-        <LogCodeBlock
-          :label="$t('pages.errorLogsPage.requestLabel')"
-          :text="formatPath(selected)"
-          max-height-class="max-h-24"
-        />
-        <LogCodeBlock
-          label="Trace ID"
-          :text="selected.traceIdentifier || '-'"
-          max-height-class="max-h-20"
-        />
-        <LogCodeBlock
-          label="Stack trace"
-          :text="selected.stackTrace || '-'"
-          max-height-class="max-h-96"
-        />
-      </div>
-    </LogDetailSheet>
+      :log="selected"
+      :meta-items="detailMeta"
+      :copied="selected ? copiedLogId === selected.id : false"
+      :deleting="selected ? deletingLogId === selected.id : false"
+      @copy="copyLogDetails"
+      @remove="removeLog"
+    />
   </div>
 </template>

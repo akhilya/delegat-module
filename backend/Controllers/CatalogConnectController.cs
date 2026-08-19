@@ -115,6 +115,7 @@ public class CatalogConnectController : ControllerBase
         if (connection == null)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
+        CatalogMatchService.EnsureConnectionActive(connection);
         return connection;
     }
 

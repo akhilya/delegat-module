@@ -2,6 +2,7 @@
 import { reactiveOmit } from "@vueuse/core";
 import { ComboboxItemIndicator, useForwardProps } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { MENU_ITEM_CHECK } from "@/lib/menuSurface";
 
 const props = defineProps({
   asChild: { type: Boolean, required: false },
@@ -18,7 +19,7 @@ const forwarded = useForwardProps(delegatedProps);
   <ComboboxItemIndicator
     data-slot="combobox-item-indicator"
     v-bind="forwarded"
-    :class="cn('ml-auto', props.class)"
+    :class="cn(MENU_ITEM_CHECK, props.class)"
   >
     <slot />
   </ComboboxItemIndicator>

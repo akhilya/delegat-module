@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const props = defineProps({
   class: { type: null, required: false },
-  variant: { type: String, required: false },
+  variant: { type: String, default: "legend" },
 });
 </script>
 
@@ -13,9 +13,7 @@ const props = defineProps({
     :data-variant="variant"
     :class="
       cn(
-        'mb-3 font-medium',
-        'data-[variant=legend]:text-base',
-        'data-[variant=label]:text-sm',
+        'float-none mb-2 w-full p-0 px-1 text-xs font-medium leading-4 text-muted-foreground',
         props.class,
       )
     "

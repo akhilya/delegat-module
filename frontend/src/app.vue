@@ -18,6 +18,8 @@ import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
 import { brandName } from "@/brand";
 import { loadMe } from "@/main";
+import { ME_UPDATED_EVENT } from "@/lib/meCache";
+import { resolveAiChromeEnabled } from "@/lib/shellAi";
 
 const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPanel.vue"));
 
@@ -77,22 +79,44 @@ export default {
       return this.isMobileScreen && !this.mobileWarningDismissed && !this.isBareLayout;
     },
   },
+  watch: {
+    isBareLayout() {
+      this.syncAiChrome();
+    },
+  },
   mounted() {
     this.$store.dispatch("operations/initSignalR");
     window.addEventListener("beforeunload", this._onBeforeUnload);
-    if (!this.isBareLayout) {
-      loadMe().then((me) => {
-        this.aiEnabled = me?.aiEnabled === true;
-      }).catch(() => {
-        this.aiEnabled = false;
-      });
-    }
+    this._onMeUpdated = (event) => {
+      this.applyAiChrome(event.detail);
+    };
+    window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    this.syncAiChrome();
   },
   beforeUnmount() {
     this.$store.dispatch("operations/destroySignalR");
     window.removeEventListener("beforeunload", this._onBeforeUnload);
+    window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
   },
   methods: {
+    applyAiChrome(me) {
+      this.aiEnabled = resolveAiChromeEnabled({
+        isBareLayout: this.isBareLayout,
+        me,
+      });
+    },
+    async syncAiChrome() {
+      if (this.isBareLayout) {
+        this.aiEnabled = false;
+        return;
+      }
+      try {
+        const me = await loadMe();
+        this.applyAiChrome(me);
+      } catch {
+        this.aiEnabled = false;
+      }
+    },
     _onBeforeUnload(e) {
       if (this.hasActiveUploads) {
         e.preventDefault();

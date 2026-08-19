@@ -96,9 +96,9 @@
     },
     "shadows": [
       {
-        "name": "hairline-lift",
-        "value": "shadow-xs (Tailwind)",
-        "purpose": "Outline button separation only; not card stacks."
+        "name": "button-lift",
+        "value": "0 1px 2px oklch(0 0 0 / 0.1)",
+        "purpose": "Control Plane hairline drop shadow on [data-slot=button]; ghost is 0 1px 1px / 0.05; not card stacks."
       }
     ],
     "motion": [
@@ -124,17 +124,17 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Ink fill primary action; default height 36px.",
+      "description": "Ink fill primary action; default height 36px. Short white top sheen + hairline drop shadow (Control Plane).",
       "html": "<button type=\"button\" class=\"ds-btn-primary\">Сохранить</button>",
-      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; background: oklch(0.205 0 0); color: oklch(0.985 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-primary:hover { background: color-mix(in oklch, oklch(0.205 0 0) 90%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; background-color: oklch(0.205 0 0); background-image: linear-gradient(180deg, oklch(1 0 0 / 0.08), oklch(1 0 0 / 0) 42%); color: oklch(0.985 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 2px oklch(0 0 0 / 0.1); transition: background 0.15s ease-out; } .ds-btn-primary:hover { background-color: color-mix(in oklch, oklch(0.205 0 0) 90%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 1px 2px oklch(0 0 0 / 0.1), 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
     },
     {
       "name": "Outline Button",
       "kind": "button",
       "refersTo": "button-outline",
-      "description": "Stroked secondary action on paper.",
+      "description": "Stroked secondary action on paper. Same Control Plane sheen and hairline drop shadow as primary.",
       "html": "<button type=\"button\" class=\"ds-btn-outline\">Отмена</button>",
-      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0.5rem 1rem; border: 1px solid oklch(0.76676 0.00009 271.152); border-radius: 0.375rem; background: oklch(1 0 0); color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s ease-out; } .ds-btn-outline:hover { background: oklch(0.97 0 0); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 2.25rem; padding: 0.5rem 1rem; border: 1px solid oklch(0.76676 0.00009 271.152); border-radius: 0.375rem; background-color: oklch(1 0 0); background-image: linear-gradient(180deg, oklch(1 0 0 / 0.12), oklch(1 0 0 / 0) 40%); color: oklch(0.145 0 0); font-family: Onest, Helvetica Neue, Arial, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 2px oklch(0 0 0 / 0.1); transition: background 0.15s ease-out; } .ds-btn-outline:hover { background-color: oklch(0.97 0 0); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 1px 2px oklch(0 0 0 / 0.1), 0 0 0 3px color-mix(in oklch, oklch(0.708 0 0) 50%, transparent); }"
     },
     {
       "name": "Ghost Button",
@@ -191,7 +191,7 @@
     "keyCharacteristics": [
       "Single family: Onest (Cyrillic-safe), no system-ui",
       "Restrained OKLCH neutrals; semantic color for status only",
-      "Flat-by-default elevation; borders and tonal layers over heavy shadows",
+      "Flat-by-default elevation; button hairline lift + white top sheen (Control Plane); no card shadow stacks",
       "Light default + full .dark token swap",
       "shadcn-vue primitives only; no parallel custom control kits",
       "Apple Settings language for catalogs: inset grouped lists (one paper group, equal rows, one shared ring)"
@@ -199,7 +199,7 @@
     "rules": [
       {
         "name": "The Semantic-Only Rule",
-        "body": "Hue is reserved for status and irreversible actions. Never paint marketing gradients, brand purple, or decorative accent washes across operational chrome.",
+        "body": "Hue is reserved for status and irreversible actions. Never paint marketing gradients, brand purple, or decorative accent washes across operational chrome. The Control Plane button sheen is a short white overlay, not a hue wash.",
         "section": "colors"
       },
       {
@@ -219,7 +219,7 @@
       },
       {
         "name": "The Flat-By-Default Rule",
-        "body": "Surfaces rest flat. Shadows appear only as light state affordances, never as decorative hierarchy.",
+        "body": "Surfaces rest flat. The only standing shadow is the Control Plane button lift (plus the focused ring). Do not float cards.",
         "section": "elevation"
       },
       {

@@ -8,7 +8,6 @@ import { defineComponent, h } from "vue";
 import { HugeiconsIcon } from "@hugeicons/vue";
 import {
   Activity01Icon as Activity01IconData,
-  Add01Icon as Add01IconData,
   Alert02Icon as Alert02IconData,
   AlertCircleIcon as AlertCircleIconData,
   ArrowDataTransferHorizontalIcon as ArrowDataTransferHorizontalIconData,
@@ -93,6 +92,7 @@ import {
   PauseIcon as PauseIconData,
   PlayIcon as PlayIconData,
   Plug01Icon as Plug01IconData,
+  PlusSignIcon as PlusSignIconData,
   PuzzleIcon as PuzzleIconData,
   RefreshIcon as RefreshIconData,
   RobotIcon as RobotIconData,
@@ -257,7 +257,7 @@ export const Pause = createHugeIcon(PauseIconData, "Pause");
 export const Pencil = createHugeIcon(Edit01IconData, "Pencil");
 export const Play = createHugeIcon(PlayIconData, "Play");
 export const Plug = createHugeIcon(Plug01IconData, "Plug");
-export const Plus = createHugeIcon(Add01IconData, "Plus");
+export const Plus = createHugeIcon(PlusSignIconData, "Plus");
 export const Puzzle = createHugeIcon(PuzzleIconData, "Puzzle");
 export const RefreshCw = createHugeIcon(RefreshIconData, "RefreshCw");
 export const Rows3 = createHugeIcon(LayoutThreeRowIconData, "Rows3");

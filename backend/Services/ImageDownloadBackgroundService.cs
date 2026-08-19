@@ -104,29 +104,16 @@ public class ImageDownloadBackgroundService : BackgroundService
             if (ct.IsCancellationRequested)
                 break;
 
-            // Check if operation was paused or cancelled
             if (pending.batchId != null)
             {
-                var opStatus = await context.operations.AsNoTracking()
-                    .Where(o => o.operationId == pending.batchId)
-                    .Select(o => o.status)
-                    .FirstOrDefaultAsync(ct);
-
-                if (opStatus == "cancelled")
+                if (await OperationLifecycle.IsStopRequestedAsync(context, pending.batchId, ct))
                 {
-                    // Leave Pending rows would be re-picked every poll forever; 7-day cleanup
-                    // only deletes terminal statuses, so mark them Cancelled now.
                     var cancelled = await QueryBatchRowsToCancel(context, pending.batchId)
                         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, ImageDownloadStatus.Cancelled), ct);
                     _logger.LogInformation(
-                        "Operation {BatchId} is cancelled; marked {Count} queue row(s) as Cancelled",
+                        "Operation {BatchId} was stopped; marked {Count} queue row(s) as Cancelled",
                         pending.batchId, cancelled);
-                    break;
-                }
-
-                if (opStatus == "paused")
-                {
-                    _logger.LogDebug("Operation {BatchId} is paused, skipping download", pending.batchId);
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId, "cancelled", "Stopped");
                     break;
                 }
 
@@ -189,8 +176,9 @@ public class ImageDownloadBackgroundService : BackgroundService
                 }
             }
 
-            // Delay between images to avoid overloading the CDN
-            if (!ct.IsCancellationRequested)
+            if (!ct.IsCancellationRequested
+                && (pending.batchId == null
+                    || !await OperationLifecycle.IsStopRequestedAsync(context, pending.batchId, ct)))
                 await Task.Delay(DELAY_BETWEEN_IMAGES_MS, ct);
         }
     }
@@ -401,7 +389,7 @@ public class ImageDownloadBackgroundService : BackgroundService
                     .FirstOrDefaultAsync(ct);
 
                 // Parent import still running — images may still be queued; leave the child open.
-                if (parentStatus is "running" or "paused")
+                if (parentStatus == OperationLifecycle.Running)
                     continue;
             }
 
@@ -426,7 +414,7 @@ public class ImageDownloadBackgroundService : BackgroundService
             string summary;
             if (rows.Count == 0)
             {
-                status = parentStatus == "cancelled" ? "cancelled" : "completed";
+                status = parentStatus is "cancelled" or "paused" ? "cancelled" : "completed";
                 summary = parentStatus == "cancelled"
                     ? "Cancelled (no images queued)"
                     : "No images to download";
