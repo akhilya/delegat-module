@@ -137,6 +137,8 @@ const typeIcon = computed(() => {
     case "ai-mapping":
       return Sparkles;
     case "catalog-match":
+    case "catalog-connect-import":
+    case "catalog-connect-match":
       return Cable;
     case "catalog-scrape":
       return Search;

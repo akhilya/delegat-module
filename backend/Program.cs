@@ -317,6 +317,7 @@ builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<CategoryImportQueueService>();
 builder.Services.AddScoped<ProductSyncService>();
 builder.Services.AddScoped<CatalogMatchService>();
+builder.Services.AddScoped<CatalogConnectJobService>();
 builder.Services.AddScoped<CatalogScrapeService>();
 builder.Services.AddScoped<ToolCatalogService>();
 builder.Services.AddScoped<GroupSyncService>();
@@ -335,6 +336,7 @@ builder.Services.AddHostedService<ProductBulkUpdateBackgroundService>();
 builder.Services.AddScoped<ProductBulkUpdateService>();
 builder.Services.AddScoped<Delegat.Services.FolderJobs.FolderJobService>();
 builder.Services.AddHostedService<FolderJobBackgroundService>();
+builder.Services.AddHostedService<CatalogConnectBackgroundService>();
 builder.Services.AddHostedService<QueueCleanupBackgroundService>();
 
 if (builder.Environment.IsDevelopment())
@@ -654,14 +656,18 @@ using (var scope = app.Services.CreateScope())
         .Where(p => p.status == FolderJobStatus.InProgress)
         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, FolderJobStatus.Pending));
 
+    var stuckCatalogConnect = await db.pendingCatalogConnectJobs
+        .Where(p => p.status == CatalogConnectJobStatus.InProgress)
+        .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CatalogConnectJobStatus.Pending));
+
     var stuckCategoryImports = await db.pendingCategoryImports
         .Where(p => p.status == CategoryImportStatus.InProgress)
         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending));
 
-    if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs + stuckCategoryImports > 0)
+    if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs + stuckCatalogConnect + stuckCategoryImports > 0)
         resetLogger.LogWarning(
-            "Startup recovery: reset {Imports} imports, {Exports} exports, {Images} images, {Transfers} transfers, {Bulk} bulk updates, {Folders} folder jobs, {Categories} category imports from InProgress to Pending",
-            stuckImports, stuckExports, stuckImages, stuckTransfers, stuckBulkUpdates, stuckFolderJobs, stuckCategoryImports);
+            "Startup recovery: reset {Imports} imports, {Exports} exports, {Images} images, {Transfers} transfers, {Bulk} bulk updates, {Folders} folder jobs, {CatalogConnect} catalog connect, {Categories} category imports from InProgress to Pending",
+            stuckImports, stuckExports, stuckImages, stuckTransfers, stuckBulkUpdates, stuckFolderJobs, stuckCatalogConnect, stuckCategoryImports);
 }
 
 // Middleware pipeline

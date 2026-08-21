@@ -37,6 +37,12 @@ import {
   catalogConnectMatchQueue,
   isCatalogConnectConnectionActive,
 } from "@/lib/catalogConnectMatchQueue";
+import {
+  isCatalogConnectJobActive,
+  readDismissedPreviewOpId,
+  shouldRestorePreview,
+  writeDismissedPreviewOpId,
+} from "@/lib/catalogConnectJobs";
 import { PAGE_MARKETPLACE, PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
 import { getDocsPageUrl } from "@/utils/docsUrl";
 import { http } from "@/main";
@@ -98,6 +104,11 @@ export default {
       previewBusy: false,
       applyBusy: false,
       applyOperationId: null,
+      scanOperationId: null,
+      scanProcessed: 0,
+      scanTotal: 0,
+      previewOperationId: null,
+      jobPollTimer: null,
       previewRows: [],
       previewMeta: {
         matchedCount: 0,
@@ -268,29 +279,74 @@ export default {
     },
     applyLiveLog() {
       if (!this.applyBusy || !this.applyOperationId) return "";
-      const op = this.$store.state.operations.operations.find(
-        (o) => o.id === this.applyOperationId,
-      );
+      const op = this.applyLiveOp;
       const logs = op?.logs || [];
       const last = logs.length ? logs[logs.length - 1] : null;
       if (last?.message) return last.message;
       if (op?.progress) {
-        return this.$t("pages.catalogConnect.applyProgress", {
-          completed: op.progress.completed ?? 0,
-          total: op.progress.total ?? 0,
-        });
+        const completed = op.progress.completed ?? 0;
+        const total = op.progress.total ?? 0;
+        if (total > 0) {
+          return this.$t("pages.catalogConnect.scanProgress", { completed, total });
+        }
+        return this.$t("pages.catalogConnect.applyProgress", { completed, total });
       }
       return this.$t("pages.catalogConnect.applyWorking");
+    },
+    scanLiveOp() {
+      if (!this.scanOperationId) return null;
+      return this.$store.state.operations.operations.find(
+        (o) => o.id === this.scanOperationId,
+      ) || null;
+    },
+    applyLiveOp() {
+      if (!this.applyOperationId) return null;
+      return this.$store.state.operations.operations.find(
+        (o) => o.id === this.applyOperationId,
+      ) || null;
+    },
+    scanProgressText() {
+      const completed = this.scanLiveOp?.progress?.completed ?? this.scanProcessed;
+      const total = this.scanLiveOp?.progress?.total ?? this.scanTotal;
+      if (total > 0) {
+        return this.$t("pages.catalogConnect.scanProgress", { completed, total });
+      }
+      if (completed > 0) {
+        return this.$t("pages.catalogConnect.scanProgressUnknown", { completed });
+      }
+      if (this.step === STEP_IMPORT && this.importBatchId && !this.scanOperationId) {
+        return this.$t("pages.catalogConnect.importWaitingProducts");
+      }
+      if (this.step === STEP_IMPORT) {
+        return this.$t("pages.catalogConnect.importScanWorking");
+      }
+      return this.$t("pages.catalogConnect.matchScanWorking");
+    },
+  },
+  watch: {
+    "scanLiveOp.status"(status) {
+      if (["completed", "failed", "partial", "cancelled"].includes(status)) {
+        this.syncActiveJob();
+      }
+    },
+    "applyLiveOp.status"(status) {
+      if (["completed", "failed", "partial", "cancelled"].includes(status)) {
+        this.syncActiveJob();
+      }
     },
   },
   async mounted() {
     await this.bootstrap();
+  },
+  beforeUnmount() {
+    this.stopJobPoll();
   },
   methods: {
     ...mapActions([
       "getConnections",
       "getAvailableAdapters",
       "importUnlinkedProducts",
+      "getCatalogConnectJobs",
       "previewCatalogMatch",
       "applyCatalogMatch",
       "repairCatalogMatch",
@@ -305,6 +361,224 @@ export default {
     unwrapResult(response) {
       const data = extractResponseData(response, {});
       return data?.value && typeof data.value === "object" ? data.value : data;
+    },
+    stopJobPoll() {
+      if (this.jobPollTimer) {
+        clearInterval(this.jobPollTimer);
+        this.jobPollTimer = null;
+      }
+    },
+    startJobPoll() {
+      this.stopJobPoll();
+      this.jobPollTimer = setInterval(() => {
+        this.syncActiveJob();
+      }, 2000);
+    },
+    fetchJobsState() {
+      return new Promise((resolve, reject) => {
+        this.getCatalogConnectJobs({
+          onSuccess: (response) => resolve(this.unwrapResult(response) || {}),
+          onError: (error) => reject(error),
+        });
+      });
+    },
+    applyScanProgress(job) {
+      if (!job) return;
+      this.scanOperationId = job.operationId || this.scanOperationId;
+      this.scanProcessed = job.processedItems ?? this.scanProcessed;
+      this.scanTotal = job.totalItems ?? this.scanTotal;
+      if (job.mode) this.previewMeta = { ...this.previewMeta, mode: job.mode };
+    },
+    hydratePreview(preview, operationId) {
+      if (operationId) this.previewOperationId = operationId;
+      const items = preview?.items || [];
+      this.previewRows = items;
+      this.previewMeta = {
+        matchedCount: preview?.matchedCount ?? items.filter((r) => r.status === "matched").length,
+        ambiguousCount: preview?.ambiguousCount ?? items.filter((r) => r.status === "ambiguous").length,
+        unmatchedCount: preview?.unmatchedCount ?? items.filter((r) => r.status === "unmatched").length,
+        alreadyLinkedCount: preview?.alreadyLinkedCount ?? 0,
+        mode: preview?.mode || "fromRemote",
+      };
+      const selected = {};
+      for (const row of items) {
+        if (row.status === "matched") selected[this.rowKey(row)] = true;
+      }
+      this.selectedMatched = selected;
+      this.ambiguousPicks = {};
+      this.importUnmatchedIds = {};
+      this.pastedRemoteIds = {};
+      this.reviewTab = items.some((r) => r.status === "matched")
+        ? "matched"
+        : items.some((r) => r.status === "ambiguous")
+          ? "ambiguous"
+          : "unmatched";
+    },
+    dismissPreview(operationId) {
+      if (operationId) writeDismissedPreviewOpId(operationId);
+    },
+    async restoreFromJobs() {
+      let state;
+      try {
+        state = await this.fetchJobsState();
+      } catch {
+        return false;
+      }
+      const active = state.active;
+      if (isCatalogConnectJobActive(active)) {
+        this.applyScanProgress(active);
+        this.startJobPoll();
+        if (active.kind === "import") {
+          this.sourceId = active.connectionId;
+          this.step = STEP_IMPORT;
+          this.importBusy = true;
+          return true;
+        }
+        if (active.kind === "match") {
+          this.matchConnectionId = active.connectionId;
+          this.step = STEP_MATCH;
+          this.previewBusy = true;
+          return true;
+        }
+        if (active.kind === "apply") {
+          this.matchConnectionId = active.connectionId;
+          this.applyOperationId = active.operationId;
+          this.applyBusy = true;
+          if (state.latestPreview?.preview) {
+            this.hydratePreview(state.latestPreview.preview, state.latestPreview.operationId);
+          }
+          this.step = STEP_REVIEW;
+          return true;
+        }
+      }
+      if (shouldRestorePreview(state.latestPreview, readDismissedPreviewOpId())) {
+        this.matchConnectionId = state.latestPreview.connectionId;
+        this.hydratePreview(state.latestPreview.preview, state.latestPreview.operationId);
+        this.step = STEP_REVIEW;
+        return true;
+      }
+      const latestImport = state.latestCompleted;
+      if (latestImport?.kind === "import" && latestImport.importBatchId) {
+        try {
+          const { data } = await http.get(`/operations/${latestImport.importBatchId}/status`);
+          const status = data?.status || data?.value?.status;
+          if (status === "running" || status === "paused") {
+            this.sourceId = latestImport.connectionId;
+            this.importBatchId = latestImport.importBatchId;
+            this.importBusy = true;
+            this.step = STEP_IMPORT;
+            this.waitForOperation(latestImport.importBatchId).then(() =>
+              this.finishImportJob(latestImport),
+            );
+            return true;
+          }
+        } catch {
+          /* batch already gone */
+        }
+      }
+      return false;
+    },
+    async syncActiveJob() {
+      let state;
+      try {
+        state = await this.fetchJobsState();
+      } catch {
+        return;
+      }
+      const active = state.active;
+      if (isCatalogConnectJobActive(active)) {
+        this.applyScanProgress(active);
+        return;
+      }
+      this.stopJobPoll();
+      const done = state.latestCompleted;
+      if (this.importBusy) {
+        await this.finishImportJob(done?.kind === "import" ? done : { status: "completed", queuedCount: 0 });
+        return;
+      }
+      if (this.previewBusy) {
+        const matchDone = done?.kind === "match" ? done : state.latestPreview;
+        await this.finishMatchJob(matchDone);
+        return;
+      }
+      if (this.applyBusy) {
+        const applyJob = done?.kind === "apply" ? done : null;
+        if (applyJob?.status === "failed" || applyJob?.status === "cancelled") {
+          this.applyBusy = false;
+          this.applyOperationId = null;
+          displaySonnerError(applyJob.error || this.$t("errors.generic"));
+          return;
+        }
+        await this.finishApplyJob(applyJob);
+      }
+    },
+    async finishImportJob(job) {
+      if (job?.status === "failed" || job?.status === "cancelled") {
+        this.importBusy = false;
+        this.scanOperationId = null;
+        if (job.status === "failed") {
+          displaySonnerError(job.error || this.$t("errors.generic"));
+        }
+        return;
+      }
+      const queued = job?.import?.queued ?? job?.queuedCount ?? 0;
+      const batchId = job?.import?.batchId || job?.importBatchId;
+      this.importBatchId = batchId || null;
+      this.scanOperationId = null;
+      if (queued > 0 && batchId) {
+        await this.waitForOperation(batchId);
+      }
+      if (queued > 0) {
+        displaySonnerSuccess(
+          this.$t("pages.catalogConnect.importQueued", { count: queued }),
+        );
+      }
+      this.importBusy = false;
+      await this.loadConnections();
+      await this.loadProductCount();
+      this.changingSource = false;
+      if (this.hasLocalProducts) {
+        this.step = STEP_HOME;
+      } else {
+        this.step = STEP_SOURCE;
+      }
+    },
+    async finishMatchJob(job) {
+      this.previewBusy = false;
+      this.scanOperationId = null;
+      if (!job || job.status === "failed" || job.status === "cancelled") {
+        if (job?.status === "failed") {
+          displaySonnerError(job.error || this.$t("errors.generic"));
+        }
+        await this.goHome();
+        return;
+      }
+      const items = job.preview?.items || [];
+      if (items.length === 0) {
+        await this.repairCurrentConnectionMappings();
+        await this.goHome();
+        return;
+      }
+      this.hydratePreview(job.preview, job.operationId);
+      this.step = STEP_REVIEW;
+    },
+    async finishApplyJob(job) {
+      const result = job?.apply;
+      this.applyBusy = false;
+      this.applyOperationId = null;
+      if (result) {
+        this.lastApply = result;
+        this.dismissPreview(job?.operationId);
+        displaySonnerSuccess(
+          this.$t("pages.catalogConnect.applyDone", {
+            linked: result.linked ?? 0,
+            imported: result.imported ?? 0,
+            mappings: result.mappingsCreated ?? 0,
+            fields: result.attributesImported ?? 0,
+          }),
+        );
+      }
+      await this.goHome();
     },
     adapterFor(conn) {
       return this.adapters.find((a) => a.key === conn.adapterKey) || conn;
@@ -353,8 +627,9 @@ export default {
     async bootstrap() {
       this.loading = true;
       await Promise.all([this.loadConnections(), this.loadProductCount()]);
+      const restored = await this.restoreFromJobs();
       this.loading = false;
-      this.startFlow();
+      if (!restored) this.startFlow();
     },
     async loadProductCount() {
       await new Promise((resolve) => {
@@ -432,6 +707,7 @@ export default {
       this.loadPreview();
     },
     async goHome() {
+      this.dismissPreview(this.previewOperationId || this.scanOperationId);
       this.matchConnectionId = null;
       this.changingSource = false;
       await Promise.all([this.loadConnections(), this.loadProductCount()]);
@@ -450,38 +726,42 @@ export default {
     },
     async runSourceImport() {
       if (!this.sourceId || this.importBusy) return;
+      const operationId = randomUuidCompact();
+      this.scanOperationId = operationId;
+      this.scanProcessed = 0;
+      this.scanTotal = 0;
       this.importBusy = true;
       try {
+        await this.$store.dispatch("operations/startOperation", {
+          id: operationId,
+          type: "catalog-connect-import",
+          title: this.$t("pages.catalogConnect.importScanTitle", {
+            name: this.sourceConnection?.name || this.adapterName(this.sourceConnection),
+          }),
+          connectionId: this.sourceId,
+          connectionName: this.sourceConnection?.name,
+          batchType: "catalog-connect",
+        });
         await this.importUnlinkedProducts({
           connectionId: this.sourceId,
-          onSuccess: async (response) => {
-            const result = this.unwrapResult(response);
-            this.importBatchId = result.batchId;
-            this.$store.dispatch("operations/openPanel");
-            if (result.queued > 0 && result.batchId) {
-              await this.waitForOperation(result.batchId);
-            }
-            displaySonnerSuccess(
-              this.$t("pages.catalogConnect.importQueued", { count: result.queued ?? 0 }),
-            );
-            await this.loadConnections();
-            await this.loadProductCount();
-            this.changingSource = false;
-            if (this.hasLocalProducts) {
-              this.step = STEP_HOME;
-            } else {
-              this.step = STEP_SOURCE;
-            }
+          operationId,
+          onSuccess: () => {
+            this.startJobPoll();
           },
           onError: (error) => {
+            this.importBusy = false;
+            this.scanOperationId = null;
             displaySonnerError(error);
           },
         });
-      } finally {
+      } catch (error) {
         this.importBusy = false;
+        this.scanOperationId = null;
+        displaySonnerError(error);
       }
     },
     async skipCurrentMatch() {
+      this.dismissPreview(this.scanOperationId);
       await this.repairCurrentConnectionMappings();
       await this.goHome();
     },
@@ -489,59 +769,37 @@ export default {
       if (!this.matchConnectionId || this.previewBusy) return;
       this.previewBusy = true;
       this.previewRows = [];
+      const operationId = randomUuidCompact();
+      this.scanOperationId = operationId;
+      this.scanProcessed = 0;
+      this.scanTotal = 0;
       try {
-        const all = [];
-        let page = 1;
-        let meta = null;
-        while (page <= 50) {
-          const result = await new Promise((resolve, reject) => {
-            this.previewCatalogMatch({
-              connectionId: this.matchConnectionId,
-              page,
-              pageSize: 200,
-              status: "all",
-              onSuccess: (response) => resolve(this.unwrapResult(response)),
-              onError: (error) => reject(error),
-            });
-          });
-          meta = result;
-          const items = result.items || [];
-          all.push(...items);
-          if (all.length >= (result.total ?? items.length)) break;
-          page += 1;
-        }
-        if (all.length === 0) {
-          await this.repairCurrentConnectionMappings();
-          this.previewBusy = false;
-          await this.goHome();
-          return;
-        }
-        this.previewRows = all;
-        this.previewMeta = {
-          matchedCount: meta?.matchedCount ?? all.filter((r) => r.status === "matched").length,
-          ambiguousCount: meta?.ambiguousCount ?? all.filter((r) => r.status === "ambiguous").length,
-          unmatchedCount: meta?.unmatchedCount ?? all.filter((r) => r.status === "unmatched").length,
-          alreadyLinkedCount: meta?.alreadyLinkedCount ?? 0,
-          mode: meta?.mode || "fromRemote",
-        };
-        const selected = {};
-        for (const row of all) {
-          if (row.status === "matched") selected[this.rowKey(row)] = true;
-        }
-        this.selectedMatched = selected;
-        this.ambiguousPicks = {};
-        this.importUnmatchedIds = {};
-        this.pastedRemoteIds = {};
-        this.reviewTab = all.some((r) => r.status === "matched")
-          ? "matched"
-          : all.some((r) => r.status === "ambiguous")
-            ? "ambiguous"
-            : "unmatched";
-        this.step = STEP_REVIEW;
+        await this.$store.dispatch("operations/startOperation", {
+          id: operationId,
+          type: "catalog-connect-match",
+          title: this.$t("pages.catalogConnect.matchScanTitle", {
+            name: this.matchConnection?.name || this.adapterName(this.matchConnection),
+          }),
+          connectionId: this.matchConnectionId,
+          connectionName: this.matchConnection?.name,
+          batchType: "catalog-connect",
+        });
+        await this.previewCatalogMatch({
+          connectionId: this.matchConnectionId,
+          operationId,
+          onSuccess: () => {
+            this.startJobPoll();
+          },
+          onError: (error) => {
+            this.previewBusy = false;
+            this.scanOperationId = null;
+            displaySonnerError(error);
+          },
+        });
       } catch (error) {
-        displaySonnerError(error);
-      } finally {
         this.previewBusy = false;
+        this.scanOperationId = null;
+        displaySonnerError(error);
       }
     },
     async confirmMatches() {
@@ -614,26 +872,19 @@ export default {
           items,
           importUnmatched: unmatchedToImport.length > 0,
           operationId,
-          onSuccess: async (response) => {
-            const result = this.unwrapResult(response);
-            this.lastApply = result;
-            displaySonnerSuccess(
-              this.$t("pages.catalogConnect.applyDone", {
-                linked: result.linked ?? 0,
-                imported: result.imported ?? 0,
-                mappings: result.mappingsCreated ?? 0,
-                fields: result.attributesImported ?? 0,
-              }),
-            );
-            await this.goHome();
+          onSuccess: () => {
+            this.startJobPoll();
           },
           onError: (error) => {
+            this.applyBusy = false;
+            this.applyOperationId = null;
             displaySonnerError(error);
           },
         });
-      } finally {
+      } catch (error) {
         this.applyBusy = false;
         this.applyOperationId = null;
+        displaySonnerError(error);
       }
     },
     async repairCurrentConnectionMappings() {
@@ -957,7 +1208,15 @@ export default {
 
     <template v-else-if="step === STEP_IMPORT">
       <div class="flex w-full max-w-xl flex-col">
-        <p class="mb-6 text-sm text-muted-foreground">
+        <EmptyState
+          v-if="importBusy"
+          loading
+          framed
+          class="mb-6 tabular-nums"
+          :title="scanProgressText"
+          :description="importHint"
+        />
+        <p v-else class="mb-6 text-sm text-muted-foreground">
           {{ importHint }}
         </p>
         <InsetGroup v-if="sourceConnection">
@@ -991,7 +1250,9 @@ export default {
         <EmptyState
           loading
           framed
-          :title="$t('pages.catalogConnect.matchHint', { name: matchConnection?.name || '' })"
+          class="tabular-nums"
+          :title="scanProgressText"
+          :description="$t('pages.catalogConnect.matchHint', { name: matchConnection?.name || '' })"
         />
         <Button
           class="mt-4 self-start"
@@ -1207,7 +1468,7 @@ export default {
             {{ $t("common.back") }}
           </Button>
         </div>
-        <p v-if="applyBusy" class="mt-3 text-sm text-muted-foreground">
+        <p v-if="applyBusy" class="mt-3 text-sm text-muted-foreground tabular-nums">
           {{ applyLiveLog }}
         </p>
       </div>

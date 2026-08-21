@@ -1306,6 +1306,79 @@ namespace Delegat.Migrations
                     b.ToTable("operationLogEntries");
                 });
 
+            modelBuilder.Entity("Delegat.Models.PendingCatalogConnectJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("kind")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("lastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("lastError")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("mode")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("payloadJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("processedItems")
+                        .HasColumnType("int");
+
+                    b.Property<int>("queuedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("resultJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("totalItems")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("operationId")
+                        .IsUnique();
+
+                    b.HasIndex("storeId");
+
+                    b.HasIndex("status", "createdAt");
+
+                    b.HasIndex("connectionId", "kind", "status");
+
+                    b.ToTable("pendingCatalogConnectJobs");
+                });
+
             modelBuilder.Entity("Delegat.Models.PendingCategoryImport", b =>
                 {
                     b.Property<int>("Id")

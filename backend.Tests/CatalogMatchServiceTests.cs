@@ -1,5 +1,6 @@
 using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK.RateLimit;
+using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
@@ -97,7 +98,7 @@ public class CatalogMatchServiceTests
 
         Assert.Equal("fromLocal", preview.Mode);
         Assert.Equal(0, adapter.ImportAllCalls);
-        Assert.True(adapter.ImportProductCalls > 0);
+        Assert.True(adapter.ImportProductsBatchCalls + adapter.ImportProductCalls > 0);
         var row = Assert.Single(preview.Items);
         Assert.Equal("matched", row.Status);
         Assert.Equal("wb-1", row.ExternalProductId);
@@ -440,6 +441,75 @@ public class CatalogMatchServiceTests
         Assert.Equal("oz-1", (await db.pendingProductImports.SingleAsync()).externalProductId);
     }
 
+    [Fact]
+    public async Task CatalogConnectJob_MatchPreview_PersistsRowsForLaterNavigation()
+    {
+        var (svc, connection, adapter, db, _, _) = await SeedTwoAsync(secondProduct: false);
+        adapter.Add(new ExternalProduct("oz-1", "ART-1", "Remote card", CategoryId: "10:2"));
+        var jobs = CreateJobService(db, svc);
+
+        var enqueued = await jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        var row = await db.pendingCatalogConnectJobs.SingleAsync();
+        Assert.Equal(enqueued.OperationId, row.operationId);
+        await jobs.ProcessJobAsync(row, CancellationToken.None);
+
+        Assert.Equal(CatalogConnectJobStatus.Completed, row.status);
+        var state = await jobs.GetStateAsync(connection.storeId, CancellationToken.None);
+        Assert.Null(state.Active);
+        var preview = Assert.Single(state.LatestPreview!.Preview!.Items);
+        Assert.Equal("matched", preview.Status);
+        Assert.Equal("oz-1", preview.ExternalProductId);
+    }
+
+    [Fact]
+    public async Task CatalogConnectJob_Import_PagesRemoteCatalogAndRecordsTotal()
+    {
+        var (svc, connection, adapter, db, _, _) = await SeedTwoAsync(secondProduct: false);
+        adapter.Capabilities |= MarketplaceCapabilities.ImportAllProducts;
+        adapter.MaxPageSize = 1;
+        adapter.Catalog.AddRange([
+            new ExternalProduct("a", "A", "A"),
+            new ExternalProduct("b", "B", "B"),
+        ]);
+        var jobs = CreateJobService(db, svc);
+
+        await jobs.EnqueueImportAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        var row = await db.pendingCatalogConnectJobs.SingleAsync();
+        await jobs.ProcessJobAsync(row, CancellationToken.None);
+
+        Assert.Equal(2, adapter.ImportAllCalls);
+        Assert.Equal(2, await db.pendingProductImports.CountAsync());
+        Assert.Equal(2, row.queuedCount);
+        Assert.Equal(2, row.totalItems);
+        Assert.Equal(CatalogConnectJobStatus.Completed, row.status);
+    }
+
+    [Fact]
+    public async Task CatalogConnectJob_SecondEnqueueSameKind_ReturnsExisting()
+    {
+        var (svc, connection, _, db, _, _) = await SeedTwoAsync(secondProduct: false);
+        var jobs = CreateJobService(db, svc);
+        var first = await jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        var second = await jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        Assert.Equal(first.OperationId, second.OperationId);
+        Assert.Equal(1, await db.pendingCatalogConnectJobs.CountAsync());
+    }
+
+    [Fact]
+    public async Task CatalogConnectJob_BusyOtherKind_Throws()
+    {
+        var (svc, connection, _, db, _, _) = await SeedTwoAsync(secondProduct: false);
+        var jobs = CreateJobService(db, svc);
+        await jobs.EnqueueImportAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None));
+        Assert.Equal("catalog_connect_busy", ex.Code);
+    }
+
+    private static CatalogConnectJobService CreateJobService(DataContext db, CatalogMatchService match) =>
+        new(db, match, new NoopOperationLogger(), NullLogger<CatalogConnectJobService>.Instance);
+
     private static IDisposable SetEnv(string name, string? value)
     {
         var previous = Environment.GetEnvironmentVariable(name);
@@ -614,10 +684,21 @@ public class CatalogMatchServiceTests
 
             return Task.FromResult(results);
         }
+        public int MaxPageSize { get; set; } = 10_000;
         public Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(MarketplaceConnection connection, int pageSize = 100, string? cursor = null, string? offerIdFilter = null, CancellationToken ct = default)
         {
             ImportAllCalls++;
-            return Task.FromResult(new PagedResult<ExternalProduct>(Catalog.ToList(), false));
+            var limit = Math.Max(1, Math.Min(pageSize, MaxPageSize));
+            var offset = 0;
+            if (!string.IsNullOrEmpty(cursor) && int.TryParse(cursor, out var parsed))
+                offset = Math.Max(0, parsed);
+            var slice = Catalog.Skip(offset).Take(limit).ToList();
+            var next = offset + slice.Count;
+            return Task.FromResult(new PagedResult<ExternalProduct>(
+                slice,
+                next < Catalog.Count,
+                next < Catalog.Count ? next.ToString() : null,
+                Catalog.Count));
         }
         public Task<ExportResult> ExportProductAsync(MarketplaceConnection connection, Dictionary<string, object> productData, string? existingExternalId = null, CancellationToken ct = default)
             => throw new NotImplementedException();

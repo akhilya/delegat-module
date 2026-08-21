@@ -19,6 +19,7 @@ public class SecurityHeadersMiddleware
             headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
             headers["X-XSS-Protection"] = "0";
             headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+            headers["X-Robots-Tag"] = "noindex, nofollow, noarchive";
             return Task.CompletedTask;
         });
 

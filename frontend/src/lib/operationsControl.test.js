@@ -18,6 +18,8 @@ describe("operationsControl", () => {
     assert.equal(canStopOperation("batch-export", "running"), true);
     assert.equal(canStopOperation("catalog-scrape", "running"), true);
     assert.equal(canStopOperation("catalog-match", "running"), true);
+    assert.equal(canStopOperation("catalog-connect-import", "running"), true);
+    assert.equal(canStopOperation("catalog-connect-match", "running"), true);
     assert.equal(canStopOperation("product-transfer", "running"), true);
     assert.equal(canStopOperation("image-download", "paused"), true);
   });

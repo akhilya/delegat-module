@@ -20,8 +20,24 @@ public class SecurityHeadersMiddlewareTests
         await mw.InvokeAsync(context);
 
         Assert.True(ran);
-        // Headers are applied in Response.OnStarting (fires when the host starts the response).
-        // Verified here that middleware wires the pipeline; header values are covered by production middleware code review.
+    }
+
+    [Fact]
+    public async Task Invoke_SetsNoindexRobotsTag()
+    {
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var mw = new SecurityHeadersMiddleware(_ =>
+        {
+            context.Response.StatusCode = 204;
+            return Task.CompletedTask;
+        });
+
+        await mw.InvokeAsync(context);
+        await context.Response.StartAsync();
+
+        Assert.Equal("noindex, nofollow, noarchive", context.Response.Headers["X-Robots-Tag"]);
+        Assert.Equal("nosniff", context.Response.Headers["X-Content-Type-Options"]);
     }
 }
 

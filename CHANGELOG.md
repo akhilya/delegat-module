@@ -11,10 +11,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Instance dashboard asks search engines not to index it (`robots.txt`, HTML `noindex`, `X-Robots-Tag` on the SPA and API)
 - Tools: Try Public API (`/tools/public-api-try`) sends GET `/me`, GET `/stores`, or a custom `/api/v1` path with a partner key and shows the response
 - Public API v1: product size variants (`GET` product includes `variants`; list/create/patch/delete under `/products/{id}/variants`)
 - Public API v1: create category accepts `hasSizes`; category list attributes include `options` and the other GET-detail fields
 - Public API v1: product list `search` matches barcode, variant SKU/barcode, and marketplace ids (same as the catalog), and items include `variantCount`
+- Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
 
 ### Changed
 

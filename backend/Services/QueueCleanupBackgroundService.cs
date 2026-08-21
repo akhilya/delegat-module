@@ -85,11 +85,14 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         var orphanedCategoryImports = await QueryOrphanedCategoryImports(db)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Cancelled), ct);
 
-        if (orphanedImages + orphanedImports + orphanedExports + orphanedTransfers + orphanedBulkUpdates + orphanedFolderJobs + orphanedCategoryImports > 0)
+        var orphanedCatalogConnect = await QueryOrphanedCatalogConnectJobs(db)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CatalogConnectJobStatus.Cancelled), ct);
+
+        if (orphanedImages + orphanedImports + orphanedExports + orphanedTransfers + orphanedBulkUpdates + orphanedFolderJobs + orphanedCategoryImports + orphanedCatalogConnect > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}, transfers={Transfers}, bulk={Bulk}, folders={Folders}, categories={Categories}",
-                orphanedImages, orphanedImports, orphanedExports, orphanedTransfers, orphanedBulkUpdates, orphanedFolderJobs, orphanedCategoryImports);
+                "Queue cleanup cancelled orphan rows: images={Images}, imports={Imports}, exports={Exports}, transfers={Transfers}, bulk={Bulk}, folders={Folders}, categories={Categories}, catalogConnect={CatalogConnect}",
+                orphanedImages, orphanedImports, orphanedExports, orphanedTransfers, orphanedBulkUpdates, orphanedFolderJobs, orphanedCategoryImports, orphanedCatalogConnect);
         }
 
         // Cancel stale InProgress whose operation is cancelled/missing
@@ -327,5 +330,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
             (p.status == CategoryImportStatus.Pending
              || p.status == CategoryImportStatus.InProgress
              || p.status == CategoryImportStatus.Failed)
+            && db.operations.Any(o => o.operationId == p.operationId && o.status == "cancelled"));
+
+    internal static IQueryable<PendingCatalogConnectJob> QueryOrphanedCatalogConnectJobs(DataContext db) =>
+        db.pendingCatalogConnectJobs.Where(p =>
+            (p.status == CatalogConnectJobStatus.Pending
+             || p.status == CatalogConnectJobStatus.InProgress
+             || p.status == CatalogConnectJobStatus.Failed)
             && db.operations.Any(o => o.operationId == p.operationId && o.status == "cancelled"));
 }

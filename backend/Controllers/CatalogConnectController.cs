@@ -14,35 +14,53 @@ public class CatalogConnectController : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly CatalogConnectJobService _jobs;
     private readonly CatalogMatchService _catalogMatch;
 
     public CatalogConnectController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
+        CatalogConnectJobService jobs,
         CatalogMatchService catalogMatch)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _jobs = jobs;
         _catalogMatch = catalogMatch;
     }
 
     /// <summary>
-    /// Queue every unlinked remote product for import. Unique marketplace
-    /// categories are queued first so products wait for a mapping.
+    /// Active Catalog Connect job for the selected store, plus the last completed match preview.
+    /// </summary>
+    [HttpGet]
+    [Route("/marketplace/catalog-connect/jobs")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> Jobs(CancellationToken ct)
+    {
+        var storeId = await RequireStoreIdAsync();
+        var state = await _jobs.GetStateAsync(storeId, ct);
+        return Ok(state);
+    }
+
+    /// <summary>
+    /// Queue a background scan that pages the remote catalog and enqueues unlinked products.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/products/import-unlinked")]
     [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
-    public async Task<IActionResult> ImportUnlinked(int connectionId, CancellationToken ct)
+    public async Task<IActionResult> ImportUnlinked(
+        int connectionId,
+        [FromBody] CatalogConnectJobStartInput? input,
+        CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
-        var result = await _catalogMatch.QueueUnlinkedImportAsync(connection, userId, ct);
-        return Ok(result);
+        var job = await _jobs.EnqueueImportAsync(connection, userId, input?.operationId, ct);
+        return Ok(job);
     }
 
     /// <summary>
-    /// Preview barcode/SKU matches for unlinked remote products against the local catalog.
+    /// Queue a background barcode/SKU match preview. Results stay until replaced.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/match/preview")]
@@ -53,18 +71,13 @@ public class CatalogConnectController : ControllerBase
         CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
-        var result = await _catalogMatch.PreviewAsync(
-            connection,
-            input?.page ?? 1,
-            input?.pageSize ?? 50,
-            input?.status,
-            ct);
-        return Ok(result);
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var job = await _jobs.EnqueueMatchAsync(connection, userId, input?.operationId, ct);
+        return Ok(job);
     }
 
     /// <summary>
-    /// Bulk-link reviewed matches (load cards by id, copy mapped fields).
-    /// Unmatched rows stay unlinked unless importUnmatched is set.
+    /// Bulk-link reviewed matches in the background.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/match/apply")]
@@ -79,14 +92,14 @@ public class CatalogConnectController : ControllerBase
 
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
-        var result = await _catalogMatch.ApplyAsync(
+        var job = await _jobs.EnqueueApplyAsync(
             connection,
+            userId,
             input.items,
             input.importUnmatched,
-            userId,
-            ct,
-            input.operationId);
-        return Ok(result);
+            input.operationId,
+            ct);
+        return Ok(job);
     }
 
     /// <summary>
@@ -103,14 +116,19 @@ public class CatalogConnectController : ControllerBase
         return Ok(result);
     }
 
-    private async Task<MarketplaceConnection> GetConnectionAsync(int connectionId)
+    private async Task<int> RequireStoreIdAsync()
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+        return selectedStoreId.Value;
+    }
 
+    private async Task<MarketplaceConnection> GetConnectionAsync(int connectionId)
+    {
+        var selectedStoreId = await RequireStoreIdAsync();
         var connection = await _unitOfWork.Repository<MarketplaceConnection>().FindAsync(
-            c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
+            c => c.Id == connectionId && c.storeId == selectedStoreId);
 
         if (connection == null)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
@@ -119,11 +137,17 @@ public class CatalogConnectController : ControllerBase
         return connection;
     }
 
+    public class CatalogConnectJobStartInput
+    {
+        public string? operationId { get; set; }
+    }
+
     public class CatalogMatchPreviewInput
     {
         public int page { get; set; } = 1;
         public int pageSize { get; set; } = 50;
         public string? status { get; set; }
+        public string? operationId { get; set; }
     }
 
     public class CatalogMatchApplyInput

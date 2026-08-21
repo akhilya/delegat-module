@@ -1685,12 +1685,12 @@ export default {
       await http.delete(`/products/${productId}/variants/${variantId}`);
     },
 
-    async importUnlinkedProducts(ctx, { connectionId, onSuccess, onError }) {
+    async importUnlinkedProducts(ctx, { connectionId, operationId, onSuccess, onError }) {
       try {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/products/import-unlinked`,
-          {},
-          { cache: false, timeout: 5 * 60 * 1000 },
+          { operationId },
+          { cache: false, timeout: 30 * 1000 },
         );
         await onSuccess?.({ data: response.data });
       } catch (error) {
@@ -1698,12 +1698,21 @@ export default {
       }
     },
 
-    async previewCatalogMatch(ctx, { connectionId, page, pageSize, status, onSuccess, onError }) {
+    async getCatalogConnectJobs(ctx, { onSuccess, onError }) {
+      try {
+        const response = await http.get("/marketplace/catalog-connect/jobs", { cache: false });
+        onSuccess?.({ data: response.data });
+      } catch (error) {
+        onError?.(error);
+      }
+    },
+
+    async previewCatalogMatch(ctx, { connectionId, operationId, onSuccess, onError }) {
       try {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/match/preview`,
-          { page, pageSize, status },
-          { cache: false, timeout: 5 * 60 * 1000 },
+          { operationId },
+          { cache: false, timeout: 30 * 1000 },
         );
         onSuccess?.({ data: response.data });
       } catch (error) {
@@ -1716,7 +1725,7 @@ export default {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/match/apply`,
           { items, importUnmatched: Boolean(importUnmatched), operationId },
-          { cache: false, timeout: 5 * 60 * 1000 },
+          { cache: false, timeout: 30 * 1000 },
         );
         onSuccess?.({ data: response.data });
       } catch (error) {

@@ -24,6 +24,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<PendingProductTransfer> pendingProductTransfers { get; set; }
     public DbSet<PendingProductBulkUpdate> pendingProductBulkUpdates { get; set; }
     public DbSet<PendingFolderJob> pendingFolderJobs { get; set; }
+    public DbSet<PendingCatalogConnectJob> pendingCatalogConnectJobs { get; set; }
     public DbSet<PendingCategoryImport> pendingCategoryImports { get; set; }
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
@@ -515,6 +516,22 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(j => j.storeId);
         builder.Entity<PendingFolderJob>()
             .HasIndex(j => j.operationId);
+
+        builder.Entity<PendingCatalogConnectJob>()
+            .Property(j => j.operationId)
+            .HasMaxLength(PendingCatalogConnectJob.OPERATION_ID_MAX_LENGTH);
+        builder.Entity<PendingCatalogConnectJob>()
+            .Property(j => j.mode)
+            .HasMaxLength(PendingCatalogConnectJob.MODE_MAX_LENGTH);
+        builder.Entity<PendingCatalogConnectJob>()
+            .HasIndex(j => new { j.status, j.createdAt });
+        builder.Entity<PendingCatalogConnectJob>()
+            .HasIndex(j => j.storeId);
+        builder.Entity<PendingCatalogConnectJob>()
+            .HasIndex(j => j.operationId)
+            .IsUnique();
+        builder.Entity<PendingCatalogConnectJob>()
+            .HasIndex(j => new { j.connectionId, j.kind, j.status });
 
         builder.Entity<PendingCategoryImport>()
             .Property(j => j.operationId)

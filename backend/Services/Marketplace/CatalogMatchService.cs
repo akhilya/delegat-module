@@ -78,8 +78,10 @@ public class CatalogMatchService
 {
     public const int MaxRemoteProducts = 10_000;
     public const int LocalLookupThreshold = 200;
-    private const int RemotePageSize = 100;
-    private const int LookupConcurrency = 4;
+    /// <summary>Adapters clamp internally (WB 100, OpenCart 200, Ozon 1000).</summary>
+    private const int RemotePageSize = 1000;
+    private const int LookupConcurrency = 8;
+    private const int LocalLookupBatchSize = 100;
 
     private readonly DataContext _db;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
@@ -137,7 +139,9 @@ public class CatalogMatchService
         int page,
         int pageSize,
         string? statusFilter,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? operationId = null,
+        Func<int, int?, string, Task>? onProgress = null)
     {
         EnsureConnectionActive(connection);
         var adapter = RequireImportAdapter(connection);
@@ -163,10 +167,19 @@ public class CatalogMatchService
         }
 
         var mode = ChoosePreviewMode(hasAll, hasOne, localCount);
+        if (onProgress != null)
+            await onProgress(0, mode == "fromLocal" ? localCount : null, mode);
+
         if (mode == "fromRemote")
-            (dtos, alreadyLinkedCount) = await PreviewFromRemoteAsync(connection, adapter, ct);
+        {
+            (dtos, alreadyLinkedCount) = await PreviewFromRemoteAsync(
+                connection, adapter, ct, operationId, onProgress);
+        }
         else
-            (dtos, alreadyLinkedCount) = await PreviewFromLocalAsync(connection, adapter, ct);
+        {
+            (dtos, alreadyLinkedCount) = await PreviewFromLocalAsync(
+                connection, adapter, ct, operationId, onProgress);
+        }
 
         var filter = (statusFilter ?? "all").Trim().ToLowerInvariant();
         var filtered = filter switch
@@ -179,7 +192,8 @@ public class CatalogMatchService
 
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
-        if (pageSize > 200) pageSize = 200;
+        var unlimited = pageSize >= MaxRemoteProducts;
+        if (!unlimited && pageSize > 200) pageSize = 200;
 
         return new CatalogMatchPreviewResult
         {
@@ -189,9 +203,11 @@ public class CatalogMatchService
             UnmatchedCount = dtos.Count(r => r.Status == "unmatched"),
             AlreadyLinkedCount = alreadyLinkedCount,
             Page = page,
-            PageSize = pageSize,
+            PageSize = unlimited ? filtered.Count : pageSize,
             Mode = mode,
-            Items = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
+            Items = unlimited
+                ? filtered
+                : filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
         };
     }
 
@@ -361,37 +377,97 @@ public class CatalogMatchService
     public async Task<CatalogImportUnlinkedResult> QueueUnlinkedImportAsync(
         MarketplaceConnection connection,
         int userId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? operationId = null,
+        string? batchId = null,
+        Func<int, int?, int, Task>? onProgress = null)
     {
         EnsureConnectionActive(connection);
         var adapter = RequireImportAllAdapter(connection);
         var linkedIds = await LinkedExternalIdsAsync(connection.Id, ct);
-        var remotes = await FetchUnlinkedRemotesAsync(adapter, connection, linkedIds, ct);
+        batchId = string.IsNullOrWhiteSpace(batchId)
+            ? Guid.NewGuid().ToString("N")
+            : batchId.Trim();
 
-        var batchId = Guid.NewGuid().ToString("N");
-        var queued = await QueueImportsAsync(
+        var totalQueued = 0;
+        var categoryJobs = 0;
+        var remotesSeen = 0;
+        var startedImportOp = false;
+        int? remoteTotal = null;
+
+        await ScanUnlinkedRemotesAsync(
+            adapter,
             connection,
-            userId,
-            remotes.Select(r => (r.ExternalId, (string?)r.Name, r.CategoryId, r.CategoryName)).ToList(),
-            batchId,
+            linkedIds,
+            async (page, scanned, total, pageCt) =>
+            {
+                remotesSeen += page.Count;
+                if (total is int known && known > 0)
+                    remoteTotal = known;
+
+                if (page.Count > 0)
+                {
+                    var queued = await QueueImportsAsync(
+                        connection,
+                        userId,
+                        page.Select(r => (r.ExternalId, (string?)r.Name, r.CategoryId, r.CategoryName)).ToList(),
+                        batchId,
+                        pageCt);
+                    totalQueued += queued.Queued;
+                    categoryJobs += queued.CategoryJobs;
+
+                    if (totalQueued > 0 && !startedImportOp)
+                    {
+                        await StartBatchImportOperationsAsync(
+                            connection, userId, batchId, totalQueued, categoryJobs);
+                        startedImportOp = true;
+                    }
+                    else if (startedImportOp)
+                    {
+                        var importOp = await _db.operations.AsNoTracking()
+                            .FirstOrDefaultAsync(o => o.operationId == batchId, pageCt);
+                        await _operationLogger.ProgressAsync(
+                            batchId,
+                            connection.storeId,
+                            totalQueued,
+                            importOp?.completedItems ?? 0,
+                            importOp?.failedItems ?? 0);
+                    }
+                }
+
+                if (onProgress != null)
+                    await onProgress(scanned, remoteTotal, totalQueued);
+                if (!string.IsNullOrEmpty(operationId))
+                {
+                    await _operationLogger.ProgressAsync(
+                        operationId,
+                        connection.storeId,
+                        remoteTotal ?? 0,
+                        scanned,
+                        0);
+                }
+            },
             ct);
 
-        if (queued.Queued > 0)
-            await StartBatchImportOperationsAsync(
-                connection, userId, batchId, queued.Queued, queued.CategoryJobs);
-        if (remotes.Count > queued.Queued)
+        if (startedImportOp && remotesSeen > totalQueued)
         {
-            var msg = queued.Queued == 0
+            var msg = totalQueued == 0
                 ? "No products were queued (product limit reached)."
-                : $"Only {queued.Queued} of {remotes.Count} unlinked products were queued (product limit).";
-            if (queued.Queued > 0)
+                : $"Only {totalQueued} of {remotesSeen} unlinked products were queued (product limit).";
+            if (totalQueued > 0)
                 await _operationLogger.LogAsync(batchId, connection.storeId, "warning", msg);
+        }
+        else if (!startedImportOp && remotesSeen > 0)
+        {
+            var msg = "No products were queued (product limit reached).";
+            if (!string.IsNullOrEmpty(operationId))
+                await _operationLogger.LogAsync(operationId, connection.storeId, "warning", msg);
         }
 
         return new CatalogImportUnlinkedResult
         {
             BatchId = batchId,
-            Queued = queued.Queued,
+            Queued = totalQueued,
             AlreadyLinked = linkedIds.Count,
         };
     }
@@ -441,37 +517,50 @@ public class CatalogMatchService
         int queued,
         int categoryJobs)
     {
-        await _operationLogger.StartAsync(
-            batchId,
-            connection.storeId,
-            userId,
-            "batch-import",
-            $"Import {queued} products",
-            connectionId: connection.Id,
-            connectionName: connection.name,
-            batchId: batchId,
-            batchType: "import",
-            totalItems: queued);
-
-        var imageBatchId = $"{batchId}-img";
-        await _operationLogger.StartAsync(
-            imageBatchId,
-            connection.storeId,
-            userId,
-            "image-download",
-            "Image download",
-            connectionId: connection.Id,
-            connectionName: connection.name,
-            batchId: imageBatchId,
-            batchType: "image-download",
-            totalItems: 0);
-
-        await _operationLogger.LogAsync(batchId, connection.storeId, "info",
-            $"Added {queued} products to the queue.");
-        if (categoryJobs > 0)
+        if (queued > 0)
         {
+            var exists = await _db.operations.AsNoTracking()
+                .AnyAsync(o => o.operationId == batchId);
+            if (!exists)
+            {
+                await _operationLogger.StartAsync(
+                    batchId,
+                    connection.storeId,
+                    userId,
+                    "batch-import",
+                    $"Import {queued} products",
+                    connectionId: connection.Id,
+                    connectionName: connection.name,
+                    batchId: batchId,
+                    batchType: "import",
+                    totalItems: queued);
+            }
+
+            var imageBatchId = $"{batchId}-img";
+            var imageExists = await _db.operations.AsNoTracking()
+                .AnyAsync(o => o.operationId == imageBatchId);
+            if (!imageExists)
+            {
+                await _operationLogger.StartAsync(
+                    imageBatchId,
+                    connection.storeId,
+                    userId,
+                    "image-download",
+                    "Image download",
+                    connectionId: connection.Id,
+                    connectionName: connection.name,
+                    batchId: imageBatchId,
+                    batchType: "image-download",
+                    totalItems: 0);
+            }
+
             await _operationLogger.LogAsync(batchId, connection.storeId, "info",
-                $"Queued {categoryJobs} {(categoryJobs == 1 ? "category" : "categories")} for import before products.");
+                $"Added {queued} products to the queue.");
+            if (categoryJobs > 0)
+            {
+                await _operationLogger.LogAsync(batchId, connection.storeId, "info",
+                    $"Queued {categoryJobs} {(categoryJobs == 1 ? "category" : "categories")} for import before products.");
+            }
         }
     }
 
@@ -488,7 +577,6 @@ public class CatalogMatchService
         var existing = await _db.pendingProductImports
             .AsNoTracking()
             .Where(p => p.connectionId == connection.Id
-                && p.batchId == batchId
                 && (p.status == ProductImportStatus.Pending || p.status == ProductImportStatus.InProgress))
             .Select(p => p.externalProductId)
             .ToListAsync(ct);
@@ -910,10 +998,29 @@ public class CatalogMatchService
     private async Task<(List<CatalogMatchRowDto> Rows, int AlreadyLinked)> PreviewFromRemoteAsync(
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? operationId,
+        Func<int, int?, string, Task>? onProgress)
     {
         var linkedIds = await LinkedExternalIdsAsync(connection.Id, ct);
-        var remotes = await FetchUnlinkedRemotesAsync(adapter, connection, linkedIds, ct);
+        var remotes = new List<ExternalProduct>();
+        await ScanUnlinkedRemotesAsync(
+            adapter,
+            connection,
+            linkedIds,
+            async (page, scanned, total, pageCt) =>
+            {
+                remotes.AddRange(page);
+                if (onProgress != null)
+                    await onProgress(scanned, total, "fromRemote");
+                if (!string.IsNullOrEmpty(operationId))
+                {
+                    await _operationLogger.ProgressAsync(
+                        operationId, connection.storeId, total ?? 0, scanned, 0);
+                }
+            },
+            ct);
+
         var locals = await LoadLocalCandidatesAsync(connection.storeId, connection.Id, ct);
 
         var remoteKeys = remotes
@@ -945,7 +1052,9 @@ public class CatalogMatchService
     private async Task<(List<CatalogMatchRowDto> Rows, int AlreadyLinked)> PreviewFromLocalAsync(
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? operationId,
+        Func<int, int?, string, Task>? onProgress)
     {
         var locals = await LoadLocalCandidatesAsync(connection.storeId, connection.Id, ct);
         var linkedIds = await LinkedExternalIdsAsync(connection.Id, ct);
@@ -955,9 +1064,39 @@ public class CatalogMatchService
 
         var hits = new List<(CatalogMatchEngine.LocalProduct Local, ExternalProduct Remote, string MatchedBy)>();
         var unmatched = new List<CatalogMatchEngine.LocalProduct>();
-        using var gate = new SemaphoreSlim(LookupConcurrency);
+        var remaining = locals.ToList();
+        var total = locals.Count;
+        var processed = 0;
 
-        var lookups = locals.Select(async local =>
+        async Task ReportAsync()
+        {
+            if (onProgress != null)
+                await onProgress(processed, total, "fromLocal");
+            if (!string.IsNullOrEmpty(operationId))
+            {
+                await _operationLogger.ProgressAsync(
+                    operationId, connection.storeId, total, processed, 0);
+            }
+        }
+
+        remaining = await MatchLocalsFromBatchAsync(
+            adapter, connection, remaining, hits, linkedIds, "sku",
+            local => CatalogMatchEngine.NormalizeSku(local.Sku) == null ? null : local.Sku,
+            ct);
+        processed = total - remaining.Count;
+        await ReportAsync();
+
+        remaining = await MatchLocalsFromBatchAsync(
+            adapter, connection, remaining, hits, linkedIds, "barcode",
+            local => MarketplaceImportBarcode.NormalizeIfValid(local.Barcode) == null
+                ? null
+                : local.Barcode,
+            ct);
+        processed = total - remaining.Count;
+        await ReportAsync();
+
+        using var gate = new SemaphoreSlim(LookupConcurrency);
+        var lookups = remaining.Select(async local =>
         {
             await gate.WaitAsync(ct);
             try
@@ -972,14 +1111,21 @@ public class CatalogMatchService
 
         foreach (var (local, hit) in await Task.WhenAll(lookups))
         {
+            processed++;
             if (hit.Remote == null || linkedIds.Contains(hit.Remote.ExternalId))
             {
                 unmatched.Add(local);
-                continue;
+            }
+            else
+            {
+                hits.Add((local, hit.Remote, hit.MatchedBy!));
             }
 
-            hits.Add((local, hit.Remote, hit.MatchedBy!));
+            if (processed == total || processed % 10 == 0)
+                await ReportAsync();
         }
+
+        await ReportAsync();
 
         var rows = new List<CatalogMatchRowDto>();
         foreach (var group in hits.GroupBy(h => h.Remote.ExternalId, StringComparer.Ordinal))
@@ -999,6 +1145,74 @@ public class CatalogMatchService
             rows.Add(ToUnmatchedLocalDto(local));
 
         return (rows, alreadyLinked);
+    }
+
+    private async Task<List<CatalogMatchEngine.LocalProduct>> MatchLocalsFromBatchAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        List<CatalogMatchEngine.LocalProduct> remaining,
+        List<(CatalogMatchEngine.LocalProduct Local, ExternalProduct Remote, string MatchedBy)> hits,
+        HashSet<string> linkedIds,
+        string matchedBy,
+        Func<CatalogMatchEngine.LocalProduct, string?> keySelector,
+        CancellationToken ct)
+    {
+        if (remaining.Count == 0)
+            return remaining;
+
+        var keys = remaining
+            .Select(keySelector)
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Select(k => k!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (keys.Count == 0)
+            return remaining;
+
+        var remotes = new List<ExternalProduct>();
+        for (var i = 0; i < keys.Count; i += LocalLookupBatchSize)
+        {
+            var chunk = keys.Skip(i).Take(LocalLookupBatchSize).ToList();
+            try
+            {
+                var batch = await adapter.ImportProductsBatchAsync(connection, chunk, ct);
+                if (batch.Count > 0)
+                    remotes.AddRange(batch);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Catalog connect bulk lookup failed for {Count} keys", chunk.Count);
+            }
+        }
+
+        if (remotes.Count == 0)
+            return remaining;
+
+        var still = new List<CatalogMatchEngine.LocalProduct>();
+        var usedRemoteIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var local in remaining)
+        {
+            var key = keySelector(local);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                still.Add(local);
+                continue;
+            }
+
+            var remote = remotes.FirstOrDefault(r => AcceptsLookup(r, key)
+                && !linkedIds.Contains(r.ExternalId)
+                && !usedRemoteIds.Contains(r.ExternalId));
+            if (remote == null)
+            {
+                still.Add(local);
+                continue;
+            }
+
+            usedRemoteIds.Add(remote.ExternalId);
+            hits.Add((local, remote, matchedBy));
+        }
+
+        return still;
     }
 
     private async Task<(ExternalProduct? Remote, string? MatchedBy)> LookupRemoteForLocalAsync(
@@ -1121,33 +1335,40 @@ public class CatalogMatchService
         return await query.CountAsync(ct);
     }
 
-    private async Task<List<ExternalProduct>> FetchUnlinkedRemotesAsync(
+    private async Task ScanUnlinkedRemotesAsync(
         IMarketplaceAdapter adapter,
         MarketplaceConnection connection,
         HashSet<string> linkedIds,
+        Func<IReadOnlyList<ExternalProduct>, int, int?, CancellationToken, Task> onPage,
         CancellationToken ct)
     {
-        var remotes = new List<ExternalProduct>();
+        var scanned = 0;
+        int? total = null;
         string? cursor = null;
-        while (remotes.Count < MaxRemoteProducts)
+        while (scanned < MaxRemoteProducts)
         {
             var page = await adapter.ImportAllProductsAsync(
                 connection, RemotePageSize, cursor, null, ct);
+            if (page.TotalCount is int known && known > 0)
+                total = known;
+
+            var unlinked = new List<ExternalProduct>();
             foreach (var item in page.Items)
             {
+                scanned++;
                 if (linkedIds.Contains(item.ExternalId))
                     continue;
-                remotes.Add(item);
-                if (remotes.Count >= MaxRemoteProducts)
+                unlinked.Add(item);
+                if (scanned >= MaxRemoteProducts)
                     break;
             }
 
-            if (!page.HasMore || string.IsNullOrEmpty(page.NextCursor))
+            await onPage(unlinked, Math.Min(scanned, total ?? scanned), total, ct);
+
+            if (scanned >= MaxRemoteProducts || !page.HasMore || string.IsNullOrEmpty(page.NextCursor))
                 break;
             cursor = page.NextCursor;
         }
-
-        return remotes;
     }
 
     private async Task<List<CatalogMatchEngine.LocalProduct>> LoadLocalCandidatesAsync(
