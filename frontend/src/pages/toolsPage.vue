@@ -7,13 +7,13 @@ import {
 } from "@/components/ui/inset-group";
 import { EmptyState } from "@/components/ui/empty-state";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
-import { Cable, Search, Wand2 } from "lucide-vue-next";
+import { Cable, Play, Search, Wand2 } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import { http } from "@/main";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { toolDescription, toolHref, toolTitle } from "@/lib/toolsCatalog";
 
-const ICONS = { Cable, Search, Wand2 };
+const ICONS = { Cable, Search, Wand2, Play };
 
 export default {
   components: {
@@ -81,11 +81,7 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <EmptyState
-      v-if="loading"
-      loading
-      class="min-h-0 flex-1"
-    />
+    <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
     <EmptyState
       v-else-if="tools.length === 0"
       :title="$t('pages.toolsPage.emptyTitle')"
@@ -116,7 +112,9 @@ export default {
                 <component :is="iconFor(entry)" class="size-4" />
               </template>
               <p class="truncate">{{ toolTitle(entry, $t) }}</p>
-              <p class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal">
+              <p
+                class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+              >
                 {{ toolDescription(entry, $t) }}
               </p>
               <template v-if="needsConnection(entry)" #trailing>
@@ -148,7 +146,9 @@ export default {
                 <component :is="iconFor(entry)" v-else class="size-4" />
               </template>
               <p class="truncate">{{ toolTitle(entry, $t) }}</p>
-              <p class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal">
+              <p
+                class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+              >
                 {{ toolDescription(entry, $t) }}
               </p>
               <template v-if="needsConnection(entry)" #trailing>

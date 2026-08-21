@@ -52,31 +52,22 @@ public class PublicCategoriesController : ControllerBase
             .Select(g => new { CategoryId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.CategoryId!.Value, g => g.Count, ct);
 
-        var items = categories.Select(c => new
+        var items = categories.Select(c =>
         {
-            id = c.Id,
-            name = c.name,
-            description = c.description,
-            hasSizes = c.hasSizes,
-            createdAt = c.createdAt,
-            productCount = productCounts.GetValueOrDefault(c.Id, 0),
-            attributes = c.attributes.OrderBy(a => a.sortOrder).Select(a => new
+            var count = productCounts.GetValueOrDefault(c.Id, 0);
+            return new
             {
-                id = a.Id,
-                name = a.name,
-                key = a.key,
-                type = a.type.ToString(),
-                isRequired = a.isRequired,
-                isUnique = a.isUnique,
-                allowCustomValues = a.allowCustomValues,
-                group = a.group,
-                groupIcon = a.groupIcon,
-                maxLength = a.maxLength,
-                minValue = a.minValue,
-                maxValue = a.maxValue,
-                maxValues = a.maxValues,
-                validationPattern = a.validationPattern
-            })
+                id = c.Id,
+                name = c.name,
+                description = c.description,
+                hasSizes = c.hasSizes,
+                createdAt = c.createdAt,
+                productCount = count,
+                productsCount = count,
+                attributes = c.attributes
+                    .OrderBy(a => a.sortOrder)
+                    .Select(a => ((IMapToDTO<CategoryAttribute.AttributeDTO>)a).MapToDTO(_sp))
+            };
         }).ToList();
 
         return Ok(PublicApiResults.Page(items, 1, items.Count, items.Count));
@@ -95,7 +86,9 @@ public class PublicCategoriesController : ControllerBase
         if (category == null)
             throw ApiException.NotFound("Category not found", code: "category_not_found");
 
-        return Ok(((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(_sp));
+        var dto = ((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(_sp);
+        dto.productsCount = await _db.products.CountAsync(p => p.categoryId == categoryId, ct);
+        return Ok(dto);
     }
 
     [HttpPost]
@@ -108,6 +101,7 @@ public class PublicCategoriesController : ControllerBase
         {
             name = input.name,
             description = input.description,
+            hasSizes = input.hasSizes,
             storeId = storeId
         });
 
@@ -144,7 +138,7 @@ public class PublicCategoriesController : ControllerBase
 
         var hasProducts = await _db.products.AnyAsync(p => p.categoryId == categoryId, ct);
         if (hasProducts)
-            throw ApiException.Conflict("Cannot delete a category that has products");
+            throw ApiException.Conflict("Cannot delete a category that has products", code: "category_has_products");
 
         _db.categories.Remove(category);
         await _db.SaveChangesAsync(ct);

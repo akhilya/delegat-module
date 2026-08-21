@@ -23,17 +23,17 @@ import { LogTableFrame, LogDateCell } from "@/components/logs";
 import ApiRequestLogsPanel from "@/components/logs/ApiRequestLogsPanel.vue";
 import { http, loadMe } from "@/main";
 import { ME_UPDATED_EVENT } from "@/lib/meCache";
-import {
-  displaySonnerError,
-  displaySonnerSuccess,
-} from "@/store/sonnerHelper";
+import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { PAGE_PUBLIC_API_TRY } from "@/router";
+import { RouterLink } from "vue-router";
 import {
   Copy,
   ExternalLink,
   KeyRound,
+  ScrollText,
   Trash2,
 } from "lucide-vue-next";
 
@@ -61,12 +61,14 @@ export default {
     Copy,
     ExternalLink,
     KeyRound,
-    Trash2
+    ScrollText,
+    Trash2,
+    RouterLink,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
     loadMemberships();
-    return { storeTimezone: timezone };
+    return { storeTimezone: timezone, PAGE_PUBLIC_API_TRY };
   },
   data() {
     return {
@@ -88,7 +90,9 @@ export default {
       return this.$route.query.tab === "logs" ? "logs" : "keys";
     },
     logsEnabled() {
-      return this.publicApiEnabled === true && this.logApiRequestsEnabled === true;
+      return (
+        this.publicApiEnabled === true && this.logApiRequestsEnabled === true
+      );
     },
     showKeys() {
       return this.tab === "keys";
@@ -138,7 +142,11 @@ export default {
       const name = this.newKeyName.trim();
       this.isCreatingKey = true;
       try {
-        const response = await http.post("/api-keys", { name }, { cache: false });
+        const response = await http.post(
+          "/api-keys",
+          { name },
+          { cache: false },
+        );
         const data = response.data?.value ?? response.data;
         this.createdPlaintext = data?.plaintext || null;
         this.newKeyName = "";
@@ -210,12 +218,9 @@ export default {
 <template>
   <div
     class="flex min-h-0 flex-col pb-4"
-    :class="showLogs ? 'flex-1 overflow-hidden' : ''"
+    :class="showLogs && logsEnabled ? 'min-h-0 flex-1 overflow-hidden' : ''"
   >
-    <div
-      v-if="!publicApiEnabled"
-      class="mb-6 max-w-xl"
-    >
+    <div v-if="!publicApiEnabled" class="mb-6 max-w-xl">
       <InsetGroup>
         <InsetGroupItem as="div">
           <template #leading>
@@ -229,10 +234,14 @@ export default {
     <div v-show="showKeys" class="keys-panel">
       <PageSection>
         <section v-if="createdPlaintext" class="mb-6 max-w-xl">
-          <InsetGroupLabel>{{ $t("pages.apiPage.keys.copyWarning") }}</InsetGroupLabel>
+          <InsetGroupLabel>{{
+            $t("pages.apiPage.keys.copyWarning")
+          }}</InsetGroupLabel>
           <InsetGroup>
             <InsetGroupItem as="div">
-              <code class="block break-all text-xs">{{ createdPlaintext }}</code>
+              <code class="block break-all text-xs">{{
+                createdPlaintext
+              }}</code>
               <template #trailing>
                 <Button variant="outline" size="sm" @click="copyPlaintext">
                   <Copy class="mr-1 size-3.5" />
@@ -258,13 +267,17 @@ export default {
                 :maxlength="FIELD_LIMITS.apiKeyName"
               />
             </SettingsFormField>
-            <Button type="submit" class="shrink-0" :disabled="isCreatingKey || !newKeyName.trim()">
+            <Button
+              type="submit"
+              class="shrink-0"
+              :disabled="isCreatingKey || !newKeyName.trim()"
+            >
               <Spinner v-if="isCreatingKey" class="mr-2" />
               <KeyRound v-else class="mr-2 size-4" />
               {{ $t("pages.apiPage.keys.create") }}
             </Button>
           </FieldGroup>
-          <div class="mt-2 px-1">
+          <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
             <Button
               as="a"
               href="/swagger"
@@ -276,10 +289,18 @@ export default {
               {{ $t("pages.apiPage.openSwagger") }}
               <ExternalLink class="size-3.5" />
             </Button>
+            <Button variant="link" class="h-auto px-0 text-xs" as-child>
+              <RouterLink :to="PAGE_PUBLIC_API_TRY">
+                {{ $t("pages.apiPage.openTryTool") }}
+              </RouterLink>
+            </Button>
           </div>
         </form>
 
-        <div v-if="apiKeysLoading" class="flex min-h-[12rem] flex-1 items-center justify-center">
+        <div
+          v-if="apiKeysLoading"
+          class="flex min-h-[12rem] flex-1 items-center justify-center"
+        >
           <Spinner size="2xl" class="text-muted-foreground" />
         </div>
 
@@ -295,24 +316,41 @@ export default {
             <Table class="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead class="min-w-0">{{ $t("pages.apiPage.keys.columnName") }}</TableHead>
-                  <TableHead class="w-36">{{ $t("pages.apiPage.keys.columnHint") }}</TableHead>
-                  <TableHead class="w-36">{{ $t("pages.apiPage.keys.columnCreated") }}</TableHead>
-                  <TableHead class="w-48 whitespace-normal">{{ $t("pages.apiPage.keys.columnUsed") }}</TableHead>
-                  <TableHead class="w-28">{{ $t("pages.apiPage.keys.columnStatus") }}</TableHead>
+                  <TableHead class="min-w-0">{{
+                    $t("pages.apiPage.keys.columnName")
+                  }}</TableHead>
+                  <TableHead class="w-36">{{
+                    $t("pages.apiPage.keys.columnHint")
+                  }}</TableHead>
+                  <TableHead class="w-36">{{
+                    $t("pages.apiPage.keys.columnCreated")
+                  }}</TableHead>
+                  <TableHead class="w-48 whitespace-normal">{{
+                    $t("pages.apiPage.keys.columnUsed")
+                  }}</TableHead>
+                  <TableHead class="w-28">{{
+                    $t("pages.apiPage.keys.columnStatus")
+                  }}</TableHead>
                   <TableHead class="w-14 text-right" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow v-for="key in apiKeys" :key="key.id">
                   <TableCell class="max-w-0 font-medium">
-                    <span class="block truncate" :title="key.name">{{ key.name }}</span>
+                    <span class="block truncate" :title="key.name">{{
+                      key.name
+                    }}</span>
                   </TableCell>
                   <TableCell>
-                    <code class="text-xs text-muted-foreground">{{ key.displayHint }}</code>
+                    <code class="text-xs text-muted-foreground">{{
+                      key.displayHint
+                    }}</code>
                   </TableCell>
                   <TableCell>
-                    <LogDateCell :value="key.createdAt" :timezone="storeTimezone" />
+                    <LogDateCell
+                      :value="key.createdAt"
+                      :timezone="storeTimezone"
+                    />
                   </TableCell>
                   <TableCell>
                     <LogDateCell
@@ -351,18 +389,22 @@ export default {
       </PageSection>
     </div>
 
-    <div
-      v-if="showLogs && !logsEnabled"
-      class="rounded-xl px-4 py-8 text-center text-sm text-muted-foreground ring-1 ring-border/70"
-    >
-      {{ $t("pages.apiPage.logs.disabledHint") }}
+    <div v-if="showLogs && !logsEnabled" class="max-w-xl">
+      <InsetGroup>
+        <InsetGroupItem as="div">
+          <template #leading>
+            <ScrollText class="size-4" />
+          </template>
+          <p>{{ $t("pages.apiPage.logs.disabledHint") }}</p>
+        </InsetGroupItem>
+      </InsetGroup>
     </div>
 
     <ApiRequestLogsPanel
       v-else-if="logsEnabled"
       v-show="showLogs"
       ref="logsPanel"
-      class="mb-4 min-h-0 flex-1"
+      class="min-h-0 flex-1"
       :class="showLogs ? '' : '!hidden'"
       :api-keys="apiKeys"
     />

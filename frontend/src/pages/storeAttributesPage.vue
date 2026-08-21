@@ -3,14 +3,10 @@ import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import Input from "@/components/ui/input/Input.vue";
-import Textarea from "@/components/ui/textarea/Textarea.vue";
-import Switch from "@/components/ui/switch/Switch.vue";
-import Label from "@/components/ui/label/Label.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import {
   Select,
   SelectContent,
@@ -24,69 +20,24 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { t } from "@/i18n";
+import { Plus, Settings2, Trash2, GripVertical } from "lucide-vue-next";
+import { PAGE_STORE_ATTRIBUTE_EDIT } from "@/router";
+import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
-  Plus,
-  Trash2,
-  GripVertical,
-  Settings2,
-  Pencil,
-  Download,
-  Upload,
-} from "lucide-vue-next";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { PAGE_PRODUCTS } from "@/router";
+  STORE_ATTRIBUTE_TYPES,
+  STORE_ATTRIBUTE_TYPE_VALUES,
+  generateAttributeKey,
+  resolveStoreAttributeTypeValue,
+  storeAttributeRowCaption,
+} from "@/lib/storeAttributeUi";
 import draggable from "vuedraggable";
-
-const LARGE_OPTIONS_THRESHOLD = 50;
-
-const ATTRIBUTE_TYPES = {
-  0: { label: t("pages.storeAttributesPage.types.text"), value: 0 },
-  1: { label: t("pages.storeAttributesPage.types.number"), value: 1 },
-  2: { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
-  3: { label: t("pages.storeAttributesPage.types.select"), value: 3 },
-  4: { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
-  5: { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
-  // String keys for JSON enum serialization (JsonStringEnumConverter)
-  "Text": { label: t("pages.storeAttributesPage.types.text"), value: 0 },
-  "Number": { label: t("pages.storeAttributesPage.types.number"), value: 1 },
-  "Boolean": { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
-  "Select": { label: t("pages.storeAttributesPage.types.select"), value: 3 },
-  "MultiSelect": { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
-  "Barcode": { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
-};
-
-const ATTRIBUTE_TYPE_OPTIONS = [
-  { label: t("pages.storeAttributesPage.types.text"), value: 0 },
-  { label: t("pages.storeAttributesPage.types.number"), value: 1 },
-  { label: t("pages.storeAttributesPage.types.boolean"), value: 2 },
-  { label: t("pages.storeAttributesPage.types.select"), value: 3 },
-  { label: t("pages.storeAttributesPage.types.multiSelect"), value: 4 },
-  { label: t("pages.storeAttributesPage.types.barcode"), value: 5 },
-];
 
 export default {
   components: {
@@ -94,13 +45,11 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    Card,
     Input,
-    Textarea,
-    Switch,
-    Label,
     SettingsFormField,
     FieldGroup,
+    InsetGroup,
+    InsetGroupItem,
     Select,
     SelectContent,
     SelectItem,
@@ -111,101 +60,60 @@ export default {
     DialogDescription,
     DialogHeader,
     DialogTitle,
+    DialogTrigger,
     DialogFooter,
     DialogClose,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-    Table,
-    TableHead,
-    TableHeader,
-    TableRow,
-    TableCell,
+    ConfirmDialog,
     Plus,
     Trash2,
     GripVertical,
-    Settings2,
-    Pencil,
-    Download,
-    Upload,
-    SearchableSelect,
-    draggable
+    draggable,
   },
   data() {
     return {
       attributes: [],
       isLoading: false,
-      isAddingAttribute: false,
-      isDeletingAttribute: false,
+      isCreating: false,
+      isDeleting: false,
       isReordering: false,
+      showCreateDialog: false,
+      newAttributeName: "",
+      newAttributeKey: "",
+      newAttributeType: 0,
       FIELD_LIMITS,
-      showAttributeDialog: false,
-      editingAttribute: null,
-      attributeForm: {
-        name: "",
-        key: "",
-        type: 0,
-        isRequired: false,
-        isUnique: false,
-        isMultiline: false,
-        showOnProductPage: true,
-        options: "",
-        defaultValue: "",
-        description: "",
-        descriptionInTooltip: false,
-      },
-      attributeOptionsJson: null,
-      cachedOptionsCount: 0,
-      defaultValueOptions: [],
-      defaultValueOptionsReady: false,
-      isLoadingDefaultValueOptions: false,
-      PAGE_PRODUCTS,
-      ATTRIBUTE_TYPES,
-      ATTRIBUTE_TYPE_OPTIONS,
-      LARGE_OPTIONS_THRESHOLD,
-      breadcrumbs: [
-        { label: this.$t("routes.products"), to: PAGE_PRODUCTS },
-        { label: this.$t("nav.globalAttributes") },
-      ],
+      STORE_ATTRIBUTE_TYPE_VALUES,
+      emptyListIcon: Settings2,
     };
   },
   computed: {
-    attributeTypeLabel() {
-      return ATTRIBUTE_TYPES[this.attributeForm.type]?.label || this.$t("pages.storeAttributesPage.types.text");
+    breadcrumbs() {
+      return [{ label: this.$t("pages.storeAttributesPage.breadcrumb") }];
     },
-    showOptionsField() {
-      const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
-      return typeValue === 3 || typeValue === 4;
-    },
-    isTextAttributeType() {
-      const typeValue = ATTRIBUTE_TYPES[this.attributeForm.type]?.value ?? this.attributeForm.type;
-      return typeValue === 0;
-    },
-    hasLargeOptions() {
-      return this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD;
-    },
-    editingOptionsCount() {
-      return this.cachedOptionsCount;
-    },
-    defaultValueSelectOptions() {
-      if (!this.defaultValueOptionsReady) return [];
-      return this.defaultValueOptions;
+    createTypeLabel() {
+      return this.getAttributeTypeLabel(this.newAttributeType);
     },
   },
   methods: {
     ...mapActions([
       "getAllStoreAttributes",
       "createStoreAttribute",
-      "updateStoreAttribute",
       "deleteStoreAttribute",
       "reorderStoreAttributes",
     ]),
+
+    getAttributeTypeLabel(type) {
+      const i18nKey = STORE_ATTRIBUTE_TYPES[type]?.i18nKey;
+      return i18nKey
+        ? this.$t(`pages.storeAttributesPage.types.${i18nKey}`)
+        : this.$t("pages.storeAttributesPage.types.unknown");
+    },
+
+    attributeRowCaption(attribute) {
+      return storeAttributeRowCaption(attribute, {
+        typeLabel: this.getAttributeTypeLabel(attribute.type),
+        optionsWord: this.$t("pages.storeAttributesPage.optionsWord"),
+      });
+    },
 
     async fetchAttributes() {
       this.isLoading = true;
@@ -220,149 +128,31 @@ export default {
       this.isLoading = false;
     },
 
-    resetAttributeDialogOptionsState() {
-      this.cachedOptionsCount = 0;
-      this.defaultValueOptions = [];
-      this.defaultValueOptionsReady = false;
-      this.isLoadingDefaultValueOptions = false;
+    onCreateNameInput() {
+      this.newAttributeKey = generateAttributeKey(this.newAttributeName);
     },
 
-    syncOptionsCountCache() {
-      const raw = this.getOptionsRaw();
-      this.cachedOptionsCount = raw ? this.getOptionsCount(raw) : 0;
+    resetCreateDialog() {
+      this.newAttributeName = "";
+      this.newAttributeKey = "";
+      this.newAttributeType = 0;
     },
 
-    primeDefaultValueOptions() {
-      const raw = this.getOptionsRaw();
-      if (!raw) {
-        this.defaultValueOptions = [];
-        this.defaultValueOptionsReady = true;
-        return;
-      }
-
-      if (this.cachedOptionsCount <= LARGE_OPTIONS_THRESHOLD) {
-        this.defaultValueOptions = this.parseOptions(raw);
-        this.defaultValueOptionsReady = true;
-        return;
-      }
-
-      this.defaultValueOptions = [];
-      this.defaultValueOptionsReady = false;
+    openAttribute(attributeId) {
+      this.$router.push(
+        PAGE_STORE_ATTRIBUTE_EDIT.replace(":id", String(attributeId)),
+      );
     },
 
-    loadDefaultValueOptionsIfNeeded() {
-      if (this.defaultValueOptionsReady || this.isLoadingDefaultValueOptions) return;
-
-      const raw = this.getOptionsRaw();
-      if (!raw) {
-        this.defaultValueOptions = [];
-        this.defaultValueOptionsReady = true;
-        return;
-      }
-
-      this.isLoadingDefaultValueOptions = true;
-      window.setTimeout(() => {
-        this.defaultValueOptions = this.parseOptions(raw);
-        this.defaultValueOptionsReady = true;
-        this.isLoadingDefaultValueOptions = false;
-      }, 0);
-    },
-
-    openAddAttributeDialog() {
-      this.editingAttribute = null;
-      this.attributeOptionsJson = null;
-      this.resetAttributeDialogOptionsState();
-      this.attributeForm = {
-        name: "",
-        key: "",
-        type: 0,
-        isRequired: false,
-        isUnique: false,
-        isMultiline: false,
-        showOnProductPage: true,
-        options: "",
-        defaultValue: "",
-        description: "",
-        descriptionInTooltip: false,
-      };
-      this.showAttributeDialog = true;
-    },
-
-    openEditAttributeDialog(attribute) {
-      this.resetAttributeDialogOptionsState();
-      this.editingAttribute = attribute;
-      const normalizedType = ATTRIBUTE_TYPES[attribute.type]?.value ?? attribute.type;
-      const optionsRaw = attribute.options || "";
-      this.cachedOptionsCount = optionsRaw ? this.getOptionsCount(optionsRaw) : 0;
-      this.attributeOptionsJson =
-        this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD && optionsRaw
-          ? optionsRaw
-          : null;
-      this.attributeForm = {
-        name: attribute.name,
-        key: attribute.key,
-        type: normalizedType,
-        isRequired: attribute.isRequired,
-        isUnique: attribute.isUnique === true,
-        isMultiline: attribute.isMultiline ?? false,
-        showOnProductPage: attribute.isRequired || attribute.showOnProductPage !== false,
-        options: this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
-          ? ""
-          : this.formatOptionsForEdit(optionsRaw),
-        defaultValue: attribute.defaultValue || "",
-        description: attribute.description || "",
-        descriptionInTooltip: attribute.descriptionInTooltip === true,
-      };
-      this.primeDefaultValueOptions();
-      this.showAttributeDialog = true;
-    },
-
-    generateKey() {
-      if (!this.attributeForm.name) return;
-      // Convert name to snake_case key. Cyrillic chars are written as \uXXXX escapes
-      // below so this source file has no non-ASCII glyphs; runtime behavior is unchanged.
-      this.attributeForm.key = this.attributeForm.name
-        .toLowerCase()
-        .replace(/[^a-z\u0400-\u04FF0-9\s]/gi, "")
-        .replace(/\s+/g, "_")
-        .replace(/[\u0400-\u04FF]/gi, (char) => {
-          const translitMap = {
-            "\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g",
-            "\u0434": "d", "\u0435": "e", "\u0451": "yo", "\u0436": "zh",
-            "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k",
-            "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o",
-            "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t",
-            "\u0443": "u", "\u0444": "f", "\u0445": "h", "\u0446": "ts",
-            "\u0447": "ch", "\u0448": "sh", "\u0449": "sch", "\u044a": "",
-            "\u044b": "y", "\u044c": "", "\u044d": "e", "\u044e": "yu",
-            "\u044f": "ya",
-          };
-          return translitMap[char.toLowerCase()] || char;
-        });
-    },
-
-    setAttributeRequired(value) {
-      this.attributeForm.isRequired = !!value;
-      if (this.attributeForm.isRequired) {
-        this.attributeForm.showOnProductPage = true;
-      }
-    },
-
-    setShowOnProductPage(value) {
-      if (this.attributeForm.isRequired) {
-        this.attributeForm.showOnProductPage = true;
-        return;
-      }
-      this.attributeForm.showOnProductPage = !!value;
-    },
-
-    async handleSaveAttribute() {
+    async handleCreateAttribute() {
       const nameIssue = fieldLimitIssue(
-        this.attributeForm.name,
+        this.newAttributeName,
         FIELD_LIMITS.attributeName,
       );
       if (nameIssue === "empty") {
-        displaySonnerError(this.$t("pages.storeAttributesPage.validation.nameRequired"));
+        displaySonnerError(
+          this.$t("pages.storeAttributesPage.validation.nameRequired"),
+        );
         return;
       }
       if (nameIssue === "tooLong") {
@@ -372,11 +162,13 @@ export default {
         return;
       }
       const keyIssue = fieldLimitIssue(
-        this.attributeForm.key,
+        this.newAttributeKey,
         FIELD_LIMITS.attributeKey,
       );
       if (keyIssue === "empty") {
-        displaySonnerError(this.$t("pages.storeAttributesPage.validation.keyRequired"));
+        displaySonnerError(
+          this.$t("pages.storeAttributesPage.validation.keyRequired"),
+        );
         return;
       }
       if (keyIssue === "tooLong") {
@@ -385,87 +177,58 @@ export default {
         );
         return;
       }
-      if (
-        fieldLimitIssue(
-          this.attributeForm.description,
-          FIELD_LIMITS.attributeDescription,
-          { required: false },
-        ) === "tooLong"
-      ) {
-        displaySonnerError(
-          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeDescription }),
-        );
-        return;
-      }
-      if (
-        fieldLimitIssue(
-          this.attributeForm.defaultValue,
-          FIELD_LIMITS.attributeDefault,
-          { required: false },
-        ) === "tooLong"
-      ) {
-        displaySonnerError(
-          this.$t("common.tooLong", { max: FIELD_LIMITS.attributeDefault }),
-        );
-        return;
-      }
 
-      this.isAddingAttribute = true;
-
-      const attributeData = {
-        name: this.attributeForm.name.trim(),
-        key: this.attributeForm.key.trim(),
-        type: this.attributeForm.type,
-        isRequired: this.attributeForm.isRequired,
-        isUnique: this.attributeForm.isUnique,
-        isMultiline: this.isTextAttributeType ? this.attributeForm.isMultiline : false,
-        showOnProductPage: this.attributeForm.isRequired || this.attributeForm.showOnProductPage,
-        options: this.showOptionsField ? this.resolveOptionsForSave() : null,
-        defaultValue: this.attributeForm.defaultValue.trim() || null,
-        description: this.attributeForm.description.trim() || null,
-        descriptionInTooltip: this.attributeForm.descriptionInTooltip,
-      };
-
-      if (this.editingAttribute) {
-        await this.updateStoreAttribute({
-          id: this.editingAttribute.id,
-          attribute: attributeData,
-          onSuccess: () => {
-            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.updated"));
-            this.showAttributeDialog = false;
+      this.isCreating = true;
+      await this.createStoreAttribute({
+        attribute: {
+          name: this.newAttributeName.trim(),
+          key: this.newAttributeKey.trim(),
+          type: resolveStoreAttributeTypeValue(this.newAttributeType),
+          isRequired: false,
+          isUnique: false,
+          isMultiline: false,
+          showOnProductPage: true,
+          options: null,
+          defaultValue: null,
+          description: null,
+          descriptionInTooltip: false,
+        },
+        onSuccess: (response) => {
+          const id = response.data?.value?.id ?? response.data?.id;
+          displaySonnerSuccess(
+            this.$t("pages.storeAttributesPage.toast.added"),
+          );
+          this.resetCreateDialog();
+          this.showCreateDialog = false;
+          if (id != null) {
+            this.openAttribute(id);
+          } else {
             this.fetchAttributes();
-          },
-          onError: (error) => {
-            displaySonnerError(error);
-          },
-        });
-      } else {
-        await this.createStoreAttribute({
-          attribute: attributeData,
-          onSuccess: () => {
-            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.added"));
-            this.showAttributeDialog = false;
-            this.fetchAttributes();
-          },
-          onError: (error) => {
-            displaySonnerError(error);
-          },
-        });
-      }
-
-      this.isAddingAttribute = false;
+          }
+        },
+        onError: (error) => {
+          displaySonnerError(error);
+        },
+      });
+      this.isCreating = false;
     },
 
     async handleDeleteAttribute(attributeId) {
-      this.isDeletingAttribute = true;
+      this.isDeleting = true;
       await this.deleteStoreAttribute({
         id: attributeId,
         onSuccess: (response) => {
           const deletedCount = response.data?.value?.deletedValuesCount || 0;
           if (deletedCount > 0) {
-            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.deletedWithValues", { count: deletedCount }));
+            displaySonnerSuccess(
+              this.$t("pages.storeAttributesPage.toast.deletedWithValues", {
+                count: deletedCount,
+              }),
+            );
           } else {
-            displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.deleted"));
+            displaySonnerSuccess(
+              this.$t("pages.storeAttributesPage.toast.deleted"),
+            );
           }
           this.fetchAttributes();
         },
@@ -473,256 +236,24 @@ export default {
           displaySonnerError(error);
         },
       });
-      this.isDeletingAttribute = false;
+      this.isDeleting = false;
     },
 
     async handleReorder() {
       this.isReordering = true;
-      const attributeIds = this.attributes.map((a) => a.id);
+      const attributeIds = this.attributes.map((attribute) => attribute.id);
       await this.reorderStoreAttributes({
         attributeIds,
         onSuccess: () => {
-          displaySonnerSuccess(this.$t("pages.storeAttributesPage.toast.orderSaved"));
+          displaySonnerSuccess(
+            this.$t("pages.storeAttributesPage.toast.orderSaved"),
+          );
         },
         onError: (error) => {
           displaySonnerError(error);
         },
       });
       this.isReordering = false;
-    },
-
-    getAttributeTypeLabel(type) {
-      return ATTRIBUTE_TYPES[type]?.label || this.$t("pages.storeAttributesPage.types.unknown");
-    },
-
-    getOptionsRaw() {
-      if (this.attributeOptionsJson) return this.attributeOptionsJson;
-      if (this.attributeForm.options?.trim()) return this.attributeForm.options;
-      return this.editingAttribute?.options || "";
-    },
-
-    resolveOptionsForSave() {
-      if (this.attributeOptionsJson) return this.attributeOptionsJson;
-      if (this.attributeForm.options?.trim()) return this.serializeOptionsForSave();
-      if (this.editingAttribute?.options) return this.editingAttribute.options;
-      return null;
-    },
-
-    formatOptionsForTextarea(options) {
-      return this.parseOptions(options)
-        .map((option) =>
-          option.value !== option.label
-            ? `${option.value}:${option.label}`
-            : option.label,
-        )
-        .join(", ");
-    },
-
-    applyImportedOptions(parsed) {
-      if (!parsed.length) {
-        displaySonnerError(this.$t("pages.storeAttributesPage.options.fileHasNoOptions"));
-        return;
-      }
-
-      const json = JSON.stringify(parsed);
-      if (parsed.length > LARGE_OPTIONS_THRESHOLD) {
-        this.attributeOptionsJson = json;
-        this.attributeForm.options = "";
-      } else {
-        this.attributeOptionsJson = null;
-        this.attributeForm.options = this.formatOptionsForTextarea(json);
-      }
-
-      if (this.editingAttribute) {
-        this.editingAttribute = { ...this.editingAttribute, options: json };
-      }
-
-      this.cachedOptionsCount = parsed.length;
-      this.primeDefaultValueOptions();
-      displaySonnerSuccess(this.$t("pages.storeAttributesPage.options.imported", { count: parsed.length.toLocaleString() }));
-    },
-
-    parseImportedOptionsText(text) {
-      const trimmed = text.trim();
-      if (!trimmed) return [];
-
-      try {
-        const json = JSON.parse(trimmed);
-        if (Array.isArray(json)) {
-          return json
-            .map((item) => {
-              if (typeof item === "string") {
-                return { value: item, label: item };
-              }
-              const value = item.value ?? item.label ?? "";
-              const label = item.label ?? item.value ?? "";
-              return { value: String(value), label: String(label) };
-            })
-            .filter((option) => option.value);
-        }
-        if (Array.isArray(json.options)) {
-          return this.parseImportedOptionsText(JSON.stringify(json.options));
-        }
-      } catch {
-        // plain text / csv
-      }
-
-      const items = trimmed.includes("\n")
-        ? trimmed.split(/\r?\n/)
-        : trimmed.split(",");
-
-      return items
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map((item) => {
-          if (item.includes(":")) {
-            const [value, ...labelParts] = item.split(":");
-            return {
-              value: value.trim(),
-              label: labelParts.join(":").trim(),
-            };
-          }
-          return { value: item, label: item };
-        });
-    },
-
-    exportAttributeOptions() {
-      const raw = this.getOptionsRaw();
-      if (!raw) {
-        displaySonnerError(this.$t("pages.storeAttributesPage.options.noOptionsToExport"));
-        return;
-      }
-
-      const parsed = this.parseOptions(raw);
-      if (!parsed.length) {
-        displaySonnerError(this.$t("pages.storeAttributesPage.options.noOptionsToExport"));
-        return;
-      }
-
-      const json = JSON.stringify(parsed, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      const key = this.attributeForm.key?.trim() || "attribute";
-      anchor.href = url;
-      anchor.download = `${key}-options.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      displaySonnerSuccess(this.$t("pages.storeAttributesPage.options.exported", { count: parsed.length.toLocaleString() }));
-    },
-
-    triggerOptionsImport() {
-      this.$refs.optionsFileInput?.click();
-    },
-
-    handleOptionsImport(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        try {
-          const text = loadEvent.target?.result;
-          if (typeof text !== "string") {
-            displaySonnerError(this.$t("pages.storeAttributesPage.options.readFailed"));
-            return;
-          }
-          const parsed = this.parseImportedOptionsText(text);
-          this.applyImportedOptions(parsed);
-        } catch {
-          displaySonnerError(this.$t("pages.storeAttributesPage.options.readError"));
-        }
-      };
-      reader.onerror = () => {
-        displaySonnerError(this.$t("pages.storeAttributesPage.options.readError"));
-      };
-      reader.readAsText(file);
-      event.target.value = "";
-    },
-
-    clearAttributeOptions() {
-      this.attributeOptionsJson = null;
-      this.attributeForm.options = "";
-      this.attributeForm.defaultValue = "";
-      if (this.editingAttribute) {
-        this.editingAttribute = { ...this.editingAttribute, options: null };
-      }
-      this.resetAttributeDialogOptionsState();
-    },
-
-    onOptionsTextInput() {
-      if (!this.hasLargeOptions) {
-        this.syncOptionsCountCache();
-        this.primeDefaultValueOptions();
-      }
-    },
-
-    parseOptions(optionsStr) {
-      if (!optionsStr) return [];
-
-      try {
-        const parsed = JSON.parse(optionsStr);
-        if (Array.isArray(parsed)) {
-          return parsed.map((o) => ({
-            value: o.value || o.label || o,
-            label: o.label || o.value || o,
-          }));
-        }
-      } catch {
-        // not JSON
-      }
-
-      return optionsStr.split(",").map((o) => o.trim()).filter(Boolean).map((item) => {
-        if (item.includes(":")) {
-          const [value, ...labelParts] = item.split(":");
-          return { value: value.trim(), label: labelParts.join(":").trim() };
-        }
-        return { value: item, label: item };
-      });
-    },
-
-    formatOptionsForEdit(optionsStr) {
-      if (!optionsStr) return "";
-
-      try {
-        const parsed = JSON.parse(optionsStr);
-        if (Array.isArray(parsed)) {
-          if (parsed.length > LARGE_OPTIONS_THRESHOLD) {
-            return "";
-          }
-          return parsed.map((o) => {
-            const value = o.value || o.label || o;
-            const label = o.label || o.value || o;
-            if (typeof o === "string") return o;
-            return value !== label ? `${value}:${label}` : label;
-          }).join(", ");
-        }
-      } catch {
-        // already formatted
-      }
-
-      return optionsStr;
-    },
-
-    serializeOptionsForSave() {
-      const raw = this.attributeForm.options.trim();
-      if (!raw) return null;
-      const parsed = this.parseOptions(raw);
-      if (parsed.length === 0) return null;
-      return JSON.stringify(parsed);
-    },
-
-    getOptionsCount(optionsStr) {
-      if (!optionsStr) return 0;
-
-      try {
-        const parsed = JSON.parse(optionsStr);
-        if (Array.isArray(parsed)) return parsed.length;
-      } catch {
-        // not JSON
-      }
-
-      return this.parseOptions(optionsStr).length;
     },
   },
   mounted() {
@@ -733,411 +264,204 @@ export default {
 
 <template>
   <AppPageChrome :breadcrumb-items="breadcrumbs">
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-      <Button @click="openAddAttributeDialog">
-        <Plus class="size-4 mr-2" />
-        {{ $t("pages.storeAttributesPage.header.addButton") }}
-      </Button>
-    </div>
-
-    <PageSection
-      :loading="isLoading"
-      :empty="attributes.length === 0"
-      :empty-icon="Settings2"
-      :empty-title="$t('pages.storeAttributesPage.empty.title')"
-      :empty-description="$t('pages.storeAttributesPage.empty.description')"
-      class="flex flex-col"
-    >
-      <template #empty-action>
-          <Button @click="openAddAttributeDialog">
-            <Plus class="size-4 mr-2" />
-            {{ $t("pages.storeAttributesPage.header.addButton") }}
-          </Button>
-      </template>
-
-        <Card class="gap-0 overflow-hidden p-0 py-0">
-          <Table>
-              <TableHeader>
-                <TableRow class="hover:bg-transparent">
-                  <TableHead class="w-9 px-3" />
-                  <TableHead class="px-3">{{ $t("pages.storeAttributesPage.table.name") }}</TableHead>
-                  <TableHead class="hidden w-40 px-3 sm:table-cell">{{ $t("pages.storeAttributesPage.table.key") }}</TableHead>
-                  <TableHead class="w-32 px-3">{{ $t("pages.storeAttributesPage.table.type") }}</TableHead>
-                  <TableHead class="hidden w-28 px-3 text-right md:table-cell">{{ $t("pages.storeAttributesPage.table.options") }}</TableHead>
-                  <TableHead class="w-16 px-2 text-center">{{ $t("pages.storeAttributesPage.table.requiredShort") }}</TableHead>
-                  <TableHead class="hidden lg:table-cell px-3">{{ $t("pages.storeAttributesPage.table.description") }}</TableHead>
-                  <TableHead class="w-24 px-2" />
-                </TableRow>
-              </TableHeader>
-              <draggable
-                v-model="attributes"
-                tag="tbody"
-                item-key="id"
-                handle=".drag-handle"
-                ghost-class="opacity-50"
-                @end="handleReorder"
-              >
-                <template #item="{ element: attribute }">
-                  <TableRow class="group">
-                    <TableCell class="w-9 px-3">
-                      <GripVertical
-                        class="drag-handle size-4 text-muted-foreground/70 cursor-grab active:cursor-grabbing hover:text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell class="px-3 font-medium max-w-0">
-                      <span class="truncate block">{{ attribute.name }}</span>
-                      <span class="text-xs text-muted-foreground font-mono truncate block sm:hidden">
-                        {{ attribute.key }}
-                      </span>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground hidden max-w-0 px-3 font-mono text-xs sm:table-cell">
-                      <span class="block truncate">{{ attribute.key }}</span>
-                    </TableCell>
-                    <TableCell class="px-3 text-muted-foreground">
-                      {{ getAttributeTypeLabel(attribute.type) }}
-                    </TableCell>
-                    <TableCell class="hidden md:table-cell px-3 text-right tabular-nums text-muted-foreground">
-                      {{ attribute.options ? getOptionsCount(attribute.options) : "-" }}
-                    </TableCell>
-                    <TableCell class="px-2 text-center text-muted-foreground">
-                      <span v-if="attribute.isRequired" class="text-destructive" :title="$t('pages.storeAttributesPage.dialog.requiredFieldLabel')">*</span>
-                      <span
-                        v-if="attribute.isUnique"
-                        class="ml-1 text-[10px] font-medium uppercase tracking-wide"
-                        :title="$t('pages.storeAttributesPage.dialog.uniqueFieldLabel')"
-                      >{{ $t("pages.storeAttributesPage.dialog.uniqueBadge") }}</span>
-                      <span v-if="!attribute.isRequired && !attribute.isUnique">-</span>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground hidden max-w-0 px-3 lg:table-cell">
-                      <span class="block truncate">{{ attribute.description || "-" }}</span>
-                    </TableCell>
-                    <TableCell class="px-2">
-                      <div class="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8"
-                          @click="openEditAttributeDialog(attribute)"
-                        >
-                          <Pencil class="size-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger as-child>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <Trash2 class="size-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>{{ $t("pages.storeAttributesPage.deleteDialog.title") }}</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {{ $t("pages.storeAttributesPage.deleteDialog.description", { name: attribute.name }) }}
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                              <AlertDialogAction
-                                variant="destructive"
-                                @click="handleDeleteAttribute(attribute.id)"
-                                :disabled="isDeletingAttribute"
-                              >
-                                <Spinner v-if="isDeletingAttribute" class="mr-2" />
-                                {{ $t("common.delete") }}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                </template>
-              </draggable>
-          </Table>
-        </Card>
-    </PageSection>
-
-    <!-- Attribute Dialog -->
-    <Dialog v-model:open="showAttributeDialog">
-      <DialogContent
-        size="2xl"
-        class="max-h-[min(90vh,48rem)] flex flex-col gap-0 p-0 overflow-hidden"
-      >
-        <DialogHeader variant="bar">
-          <DialogTitle>
-            {{ editingAttribute ? $t("pages.storeAttributesPage.dialog.editTitle") : $t("pages.storeAttributesPage.dialog.newTitle") }}
-          </DialogTitle>
-          <DialogDescription>
-            {{ $t("pages.storeAttributesPage.dialog.description") }}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="flex-1 overflow-y-auto px-6 py-5">
-          <FieldGroup class="gap-6">
-            <section class="space-y-4">
-              <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionBasic") }}</h3>
-              <div class="grid gap-4 sm:grid-cols-2">
-                <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.nameLabel')" label-for="store-attr-name">
+    <div class="flex w-full max-w-xl flex-col">
+      <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
+        <Dialog v-model:open="showCreateDialog">
+          <DialogTrigger as-child>
+            <Button>
+              <Plus class="size-4 mr-2" />
+              {{ $t("pages.storeAttributesPage.header.addButton") }}
+            </Button>
+          </DialogTrigger>
+          <DialogContent
+            size="md"
+            class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+          >
+            <DialogHeader variant="bar">
+              <DialogTitle>{{
+                $t("pages.storeAttributesPage.dialog.newTitle")
+              }}</DialogTitle>
+              <DialogDescription>
+                {{ $t("pages.storeAttributesPage.dialog.description") }}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              id="new-store-attribute-form"
+              class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+              @submit.prevent="handleCreateAttribute"
+            >
+              <FieldGroup class="gap-5">
+                <SettingsFormField
+                  :label="$t('pages.storeAttributesPage.dialog.nameLabel')"
+                  label-for="new-store-attr-name"
+                >
                   <Input
-                    id="store-attr-name"
-                    v-model="attributeForm.name"
-                    :placeholder="$t('pages.storeAttributesPage.dialog.namePlaceholder')"
+                    id="new-store-attr-name"
+                    v-model="newAttributeName"
+                    :placeholder="
+                      $t('pages.storeAttributesPage.dialog.namePlaceholder')
+                    "
                     :maxlength="FIELD_LIMITS.attributeName"
-                    @input="!editingAttribute && generateKey()"
+                    @input="onCreateNameInput"
                   />
                 </SettingsFormField>
-                <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.keyLabel')" label-for="store-attr-key">
-                  <template #description>{{ $t("pages.storeAttributesPage.dialog.keyDescription") }}</template>
+                <SettingsFormField
+                  :label="$t('pages.storeAttributesPage.dialog.keyLabel')"
+                  label-for="new-store-attr-key"
+                >
+                  <template #description>{{
+                    $t("pages.storeAttributesPage.dialog.keyDescription")
+                  }}</template>
                   <Input
-                    id="store-attr-key"
-                    v-model="attributeForm.key"
+                    id="new-store-attr-key"
+                    v-model="newAttributeKey"
                     placeholder="brand, country, sku"
                     class="font-mono text-sm"
                     :maxlength="FIELD_LIMITS.attributeKey"
                   />
                 </SettingsFormField>
-              </div>
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.typeLabel')" label-for="store-attr-type">
-                <Select v-model="attributeForm.type">
-                  <SelectTrigger id="store-attr-type" class="w-full">
-                    <SelectValue :placeholder="attributeTypeLabel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="typeInfo in ATTRIBUTE_TYPE_OPTIONS"
-                      :key="typeInfo.value"
-                      :value="typeInfo.value"
-                    >
-                      {{ typeInfo.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingsFormField>
-            </section>
-
-            <section v-if="showOptionsField" class="space-y-3">
-              <div class="flex items-center justify-between gap-3">
-                <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionOptions") }}</h3>
-                <div class="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    :disabled="!editingOptionsCount"
-                    @click="exportAttributeOptions"
-                  >
-                    <Download class="size-3.5 mr-1.5" />
-                    {{ $t("pages.storeAttributesPage.dialog.exportButton") }}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    @click="triggerOptionsImport"
-                  >
-                    <Upload class="size-3.5 mr-1.5" />
-                    {{ $t("pages.storeAttributesPage.dialog.importButton") }}
-                  </Button>
-                </div>
-              </div>
-              <input
-                ref="optionsFileInput"
-                type="file"
-                accept=".json,.csv,.txt,application/json,text/plain,text/csv"
-                class="hidden"
-                @change="handleOptionsImport"
-              />
-
-              <div
-                v-if="hasLargeOptions"
-                class="flex items-center justify-between gap-4 rounded-lg border px-4 py-3"
+                <SettingsFormField
+                  :label="$t('pages.storeAttributesPage.dialog.typeLabel')"
+                  label-for="new-store-attr-type"
+                >
+                  <Select v-model="newAttributeType">
+                    <SelectTrigger id="new-store-attr-type" class="w-full">
+                      <SelectValue :placeholder="createTypeLabel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="typeValue in STORE_ATTRIBUTE_TYPE_VALUES"
+                        :key="typeValue"
+                        :value="typeValue"
+                      >
+                        {{ getAttributeTypeLabel(typeValue) }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingsFormField>
+              </FieldGroup>
+            </form>
+            <DialogFooter variant="bar">
+              <DialogClose as-child>
+                <Button type="button" variant="outline">{{
+                  $t("common.cancel")
+                }}</Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                form="new-store-attribute-form"
+                :disabled="isCreating"
               >
-                <div class="min-w-0">
-                  <p class="text-sm">
-                    <span class="font-medium tabular-nums">
-                      {{ editingOptionsCount.toLocaleString() }}
-                    </span>
-                    <span class="text-muted-foreground"> {{ $t("pages.storeAttributesPage.dialog.optionsCountSuffix") }}</span>
-                  </p>
-                  <p class="text-xs text-muted-foreground mt-0.5">
-                    {{ $t("pages.storeAttributesPage.dialog.optionsStoredHint") }}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="shrink-0"
-                  @click="clearAttributeOptions"
-                >
-                  <Trash2 class="size-3.5 mr-1.5" />
-                  {{ $t("pages.storeAttributesPage.dialog.clearButton") }}
-                </Button>
-              </div>
-              <Textarea
-                v-else
-                v-model="attributeForm.options"
-                :placeholder="$t('pages.storeAttributesPage.dialog.optionsPlaceholder')"
-                class="min-h-24 resize-none font-mono text-sm"
-                @input="onOptionsTextInput"
-              />
-              <p class="text-xs text-muted-foreground">
-                {{ $t("pages.storeAttributesPage.dialog.optionsTextareaHint") }}
-              </p>
-            </section>
+                <Spinner v-if="isCreating" class="mr-2" />
+                {{ $t("common.create") }}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-            <section class="space-y-4">
-              <h3 class="text-sm font-medium">{{ $t("pages.storeAttributesPage.dialog.sectionAdditional") }}</h3>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.defaultValueLabel')" label-for="store-attr-default">
-                <div
-                  v-if="attributeForm.type === 2"
-                  class="flex items-center gap-2 h-9"
-                >
-                  <Switch
-                    id="store-attr-default"
-                    :model-value="attributeForm.defaultValue === 'true'"
-                    @update:model-value="attributeForm.defaultValue = $event ? 'true' : 'false'"
-                  />
-                  <span class="text-sm text-muted-foreground">
-                    {{ attributeForm.defaultValue === "true" ? $t("common.yes") : $t("common.no") }}
-                  </span>
-                </div>
-                <div
-                  v-else-if="attributeForm.type === 3 && editingOptionsCount"
-                  class="space-y-1.5"
-                >
-                  <SearchableSelect
-                    :model-value="attributeForm.defaultValue"
-                    @update:model-value="attributeForm.defaultValue = $event"
-                    :options="defaultValueSelectOptions"
-                    :disabled="isLoadingDefaultValueOptions"
-                    :placeholder="$t('pages.storeAttributesPage.dialog.notSelectedPlaceholder')"
-                    class="w-full"
-                    @open="loadDefaultValueOptionsIfNeeded"
-                  />
-                  <p
-                    v-if="hasLargeOptions && !defaultValueOptionsReady"
-                    class="text-xs text-muted-foreground"
-                  >
-                    {{ $t("pages.storeAttributesPage.dialog.optionsWillLoadHint") }}
-                  </p>
-                </div>
-                <Input
-                  v-else
-                  id="store-attr-default"
-                  v-model="attributeForm.defaultValue"
-                  :placeholder="attributeForm.type === 4 ? $t('pages.storeAttributesPage.dialog.multiValuePlaceholder') : $t('pages.storeAttributesPage.dialog.optionalPlaceholder')"
-                  :type="attributeForm.type === 1 ? 'number' : 'text'"
-                  :maxlength="FIELD_LIMITS.attributeDefault"
-                />
-                <template
-                  v-if="attributeForm.type === 4 && editingOptionsCount"
-                  #description
-                >
-                  {{ $t("pages.storeAttributesPage.dialog.multiValueHint") }}
-                </template>
-              </SettingsFormField>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.descriptionLabel')" label-for="store-attr-description">
-                <Textarea
-                  id="store-attr-description"
-                  v-model="attributeForm.description"
-                  :placeholder="$t('pages.storeAttributesPage.dialog.descriptionPlaceholder')"
-                  class="min-h-20 resize-none"
-                  :maxlength="FIELD_LIMITS.attributeDescription"
-                />
-              </SettingsFormField>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.descriptionInTooltipLabel')">
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="store-attr-description-tooltip"
-                    :model-value="attributeForm.descriptionInTooltip"
-                    @update:model-value="attributeForm.descriptionInTooltip = $event"
-                  />
-                  <Label for="store-attr-description-tooltip" class="font-normal text-muted-foreground">
-                    {{ $t("pages.storeAttributesPage.dialog.descriptionInTooltipHint") }}
-                  </Label>
-                </div>
-              </SettingsFormField>
-
-              <SettingsFormField
-                v-if="isTextAttributeType"
-                :label="$t('pages.storeAttributesPage.dialog.multilineLabel')"
-              >
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="store-attr-multiline"
-                    :model-value="attributeForm.isMultiline"
-                    @update:model-value="attributeForm.isMultiline = $event"
-                  />
-                  <Label for="store-attr-multiline" class="font-normal text-muted-foreground">
-                    {{ $t("pages.storeAttributesPage.dialog.multilineHint") }}
-                  </Label>
-                </div>
-              </SettingsFormField>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.showOnProductPageLabel')">
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="store-attr-visible"
-                    :model-value="attributeForm.isRequired || attributeForm.showOnProductPage"
-                    :disabled="attributeForm.isRequired"
-                    @update:model-value="setShowOnProductPage"
-                  />
-                  <Label for="store-attr-visible" class="font-normal text-muted-foreground">
-                    {{
-                      attributeForm.isRequired
-                        ? $t("pages.storeAttributesPage.dialog.showOnProductPageRequiredHint")
-                        : $t("pages.storeAttributesPage.dialog.showOnProductPageHint")
-                    }}
-                  </Label>
-                </div>
-              </SettingsFormField>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.requiredFieldLabel')">
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="store-attr-required"
-                    :model-value="attributeForm.isRequired"
-                    @update:model-value="setAttributeRequired"
-                  />
-                  <Label for="store-attr-required" class="font-normal text-muted-foreground">
-                    {{ $t("pages.storeAttributesPage.dialog.requiredFieldHint") }}
-                  </Label>
-                </div>
-              </SettingsFormField>
-
-              <SettingsFormField :label="$t('pages.storeAttributesPage.dialog.uniqueFieldLabel')">
-                <div class="flex items-center gap-2 h-9">
-                  <Switch
-                    id="store-attr-unique"
-                    :model-value="attributeForm.isUnique"
-                    @update:model-value="attributeForm.isUnique = $event"
-                  />
-                  <Label for="store-attr-unique" class="font-normal text-muted-foreground">
-                    {{ $t("pages.storeAttributesPage.dialog.uniqueFieldHint") }}
-                  </Label>
-                </div>
-              </SettingsFormField>
-            </section>
-          </FieldGroup>
-        </div>
-
-        <DialogFooter variant="bar">
-          <DialogClose as-child>
-            <Button variant="outline">{{ $t("common.cancel") }}</Button>
-          </DialogClose>
-          <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
-            <Spinner v-if="isAddingAttribute" class="mr-2" />
-            {{ editingAttribute ? $t("common.save") : $t("common.add") }}
+      <PageSection
+        :loading="isLoading"
+        :empty="attributes.length === 0"
+        :empty-icon="emptyListIcon"
+        :empty-title="$t('pages.storeAttributesPage.empty.title')"
+        :empty-description="$t('pages.storeAttributesPage.empty.description')"
+      >
+        <template #empty-action>
+          <Button @click="showCreateDialog = true">
+            <Plus class="size-4 mr-2" />
+            {{ $t("pages.storeAttributesPage.header.addButton") }}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </template>
+
+        <InsetGroup>
+          <draggable
+            v-model="attributes"
+            item-key="id"
+            handle=".drag-handle"
+            ghost-class="opacity-50"
+            class="flex flex-col gap-0.5"
+            tag="div"
+            @end="handleReorder"
+          >
+            <template #item="{ element: attribute }">
+              <div>
+                <InsetGroupItem
+                  show-chevron
+                  @click="openAttribute(attribute.id)"
+                >
+                  <template #leading>
+                    <span
+                      class="drag-handle pointer-events-auto flex size-8 cursor-grab items-center justify-center active:cursor-grabbing"
+                      @click.stop
+                    >
+                      <GripVertical class="size-4 text-muted-foreground/70" />
+                    </span>
+                  </template>
+                  <p class="truncate">
+                    {{ attribute.name }}
+                    <span
+                      v-if="attribute.isRequired"
+                      class="text-destructive"
+                      :title="
+                        $t(
+                          'pages.storeAttributesPage.dialog.requiredFieldLabel',
+                        )
+                      "
+                      >*</span
+                    >
+                    <span
+                      v-if="attribute.isUnique"
+                      class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                      :title="
+                        $t('pages.storeAttributesPage.dialog.uniqueFieldLabel')
+                      "
+                      >{{
+                        $t("pages.storeAttributesPage.dialog.uniqueBadge")
+                      }}</span
+                    >
+                  </p>
+                  <p
+                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+                  >
+                    {{ attributeRowCaption(attribute) }}
+                  </p>
+                  <template #trailing>
+                    <ConfirmDialog
+                      :title="
+                        $t('pages.storeAttributesPage.deleteDialog.title')
+                      "
+                      :description="
+                        $t(
+                          'pages.storeAttributesPage.deleteDialog.description',
+                          {
+                            name: attribute.name,
+                          },
+                        )
+                      "
+                      :confirm-label="$t('common.delete')"
+                      :loading="isDeleting"
+                      @confirm="handleDeleteAttribute(attribute.id)"
+                    >
+                      <template #trigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          :aria-label="$t('common.delete')"
+                          @click.stop
+                        >
+                          <Trash2 class="size-4" />
+                        </Button>
+                      </template>
+                    </ConfirmDialog>
+                  </template>
+                </InsetGroupItem>
+              </div>
+            </template>
+          </draggable>
+        </InsetGroup>
+      </PageSection>
+    </div>
   </AppPageChrome>
 </template>

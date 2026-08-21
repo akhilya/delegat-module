@@ -167,6 +167,8 @@ describe("canShowNavLink", () => {
     assert.equal(canShowNavLink(me(VIEWER), "/barcodes"), false);
     assert.equal(canShowNavLink(me(VIEWER), "/notes"), false);
     assert.equal(canShowNavLink(me(VIEWER), "/store-attributes"), false);
+    assert.equal(canAccessPath(me(VIEWER), "/store-attributes/1/edit"), false);
+    assert.equal(canAccessPath(me(OPERATOR), "/store-attributes/1/edit"), true);
   });
 
   it("shows catalog write pages to operators", () => {
@@ -191,6 +193,31 @@ describe("canShowNavLink", () => {
   it("matches route gates for setup", () => {
     assert.equal(canAccessPath(me(STORE_MANAGER), "/setup"), false);
     assert.equal(canAccessPath(me([PERMS.StoresCreate]), "/setup"), true);
+  });
+
+  it("gates Try Public API like API keys", () => {
+    assert.equal(
+      canAccessPath(
+        me(OWNER, { publicApiEnabled: true }),
+        "/tools/public-api-try",
+      ),
+      true,
+    );
+    assert.equal(
+      canAccessPath(
+        me(OWNER, { publicApiEnabled: false }),
+        "/tools/public-api-try",
+      ),
+      false,
+    );
+    assert.equal(canAccessPath(me(OPERATOR), "/tools/public-api-try"), false);
+    assert.equal(
+      canAccessPath(
+        me([PERMS.ApiAccess], { publicApiEnabled: true }),
+        "/tools",
+      ),
+      true,
+    );
   });
 });
 

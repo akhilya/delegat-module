@@ -64,7 +64,6 @@ export default {
     ApiRequestLogSheet,
     LogSelectCheckbox,
     LogSortHeader,
-    ScrollText,
   },
   props: {
     apiKeys: { type: Array, default: () => [] },
@@ -74,7 +73,7 @@ export default {
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
     loadMemberships();
-    return { storeTimezone: timezone, LOG_FILTER_ALL };
+    return { storeTimezone: timezone, LOG_FILTER_ALL, ScrollText };
   },
   data() {
     return {
@@ -115,10 +114,16 @@ export default {
       return this.items.map((r) => r.id ?? r.Id).filter((id) => id != null);
     },
     allPageSelected() {
-      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+      return (
+        this.pageIds.length > 0 &&
+        this.pageIds.every((id) => this.selectedIds.includes(id))
+      );
     },
     somePageSelected() {
-      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+      return (
+        !this.allPageSelected &&
+        this.pageIds.some((id) => this.selectedIds.includes(id))
+      );
     },
     detailMeta() {
       if (!this.detail) return [];
@@ -129,7 +134,9 @@ export default {
         },
         {
           label: this.$t("pages.apiPage.logs.metaDuration"),
-          value: this.$t("components.logs.durationMs", { ms: this.detail.durationMs }),
+          value: this.$t("components.logs.durationMs", {
+            ms: this.detail.durationMs,
+          }),
         },
         {
           label: this.$t("pages.apiPage.logs.metaKey"),
@@ -157,7 +164,8 @@ export default {
 
     toggleSelect(id, checked) {
       if (checked === true) {
-        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+        if (!this.selectedIds.includes(id))
+          this.selectedIds = [...this.selectedIds, id];
       } else {
         this.selectedIds = this.selectedIds.filter((x) => x !== id);
       }
@@ -179,7 +187,8 @@ export default {
       return {
         apiKeyId: f.apiKeyId === LOG_FILTER_ALL ? undefined : f.apiKeyId,
         method: f.method === LOG_FILTER_ALL ? undefined : f.method,
-        statusClass: f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
+        statusClass:
+          f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
         q: f.q || undefined,
         sortBy: this.sortBy,
         sortDir: this.sortDir,
@@ -207,7 +216,11 @@ export default {
           params: this.buildParams(),
           cache: false,
         });
-        const data = extractResponseData(response, {}) || response.data?.value || response.data || {};
+        const data =
+          extractResponseData(response, {}) ||
+          response.data?.value ||
+          response.data ||
+          {};
         const items = data.items || [];
         this.total = data.total ?? 0;
         this.errorCount = data.errorCount ?? 0;
@@ -244,8 +257,13 @@ export default {
       this.detail = null;
       this.isDetailLoading = true;
       try {
-        const response = await http.get(`/api-keys/logs/${this.rowId(row)}`, { cache: false });
-        this.detail = extractResponseData(response, null) || response.data?.value || response.data;
+        const response = await http.get(`/api-keys/logs/${this.rowId(row)}`, {
+          cache: false,
+        });
+        this.detail =
+          extractResponseData(response, null) ||
+          response.data?.value ||
+          response.data;
       } catch (error) {
         displaySonnerError(error);
         this.detailOpen = false;
@@ -260,8 +278,14 @@ export default {
       try {
         const details = await mapPool(this.selectedIds, async (id) => {
           try {
-            const response = await http.get(`/api-keys/logs/${id}`, { cache: false });
-            return extractResponseData(response, null) || response.data?.value || response.data;
+            const response = await http.get(`/api-keys/logs/${id}`, {
+              cache: false,
+            });
+            return (
+              extractResponseData(response, null) ||
+              response.data?.value ||
+              response.data
+            );
           } catch {
             return null;
           }
@@ -369,7 +393,9 @@ export default {
       @clear-selection="clearSelection"
     >
       <Table :contain="false" class="w-full">
-        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+        <TableHeader
+          class="sticky top-0 z-10 bg-background [&_th]:bg-background"
+        >
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10">
               <LogSelectCheckbox
@@ -453,11 +479,16 @@ export default {
               <LogPathCell :path="row.path" />
             </TableCell>
             <TableCell class="overflow-hidden text-sm">
-              <code class="block truncate text-xs text-muted-foreground" :title="row.keyDisplayHint || ''">
+              <code
+                class="block truncate text-xs text-muted-foreground"
+                :title="row.keyDisplayHint || ''"
+              >
                 {{ row.keyDisplayHint || "-" }}
               </code>
             </TableCell>
-            <TableCell class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums">
+            <TableCell
+              class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums"
+            >
               {{ $t("components.logs.durationMs", { ms: row.durationMs }) }}
             </TableCell>
             <TableCell class="overflow-hidden text-right">

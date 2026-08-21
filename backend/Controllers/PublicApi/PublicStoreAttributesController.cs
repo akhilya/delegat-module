@@ -62,7 +62,7 @@ public class PublicStoreAttributesController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
 
         if (attribute == null)
-            throw ApiException.NotFound("Attribute not found");
+            throw ApiException.NotFound("Attribute not found", code: "store_attribute_not_found");
 
         return Ok(((IMapToDTO<StoreAttribute.AttributeDTO>)attribute).MapToDTO(_sp));
     }
@@ -75,7 +75,7 @@ public class PublicStoreAttributesController : ControllerBase
         var existing = await _db.storeAttributes
             .AnyAsync(a => a.storeId == storeId && a.key == input.key, ct);
         if (existing)
-            throw ApiException.Conflict("An attribute with this key already exists");
+            throw ApiException.Conflict("An attribute with this key already exists", code: "store_attribute_key_used");
 
         var maxSort = await _db.storeAttributes
             .Where(a => a.storeId == storeId)
@@ -92,6 +92,10 @@ public class PublicStoreAttributesController : ControllerBase
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
             showOnProductPage = input.showOnProductPage,
+            options = input.options,
+            defaultValue = input.defaultValue,
+            description = input.description,
+            descriptionInTooltip = input.descriptionInTooltip,
             storeId = storeId,
             sortOrder = maxSort + 1
         });
@@ -109,7 +113,7 @@ public class PublicStoreAttributesController : ControllerBase
         var attribute = await _uow.Repository<StoreAttribute>().QueryTracking()
             .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
         if (attribute == null)
-            throw ApiException.NotFound("Attribute not found");
+            throw ApiException.NotFound("Attribute not found", code: "store_attribute_not_found");
 
         attribute.UpdateFill(input);
         await _uow.SaveChangesAsync();
@@ -124,7 +128,7 @@ public class PublicStoreAttributesController : ControllerBase
         var attribute = await _db.storeAttributes
             .FirstOrDefaultAsync(a => a.Id == attributeId && a.storeId == storeId, ct);
         if (attribute == null)
-            throw ApiException.NotFound("Attribute not found");
+            throw ApiException.NotFound("Attribute not found", code: "store_attribute_not_found");
 
         _db.storeAttributes.Remove(attribute);
         await _db.SaveChangesAsync(ct);

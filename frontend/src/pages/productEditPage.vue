@@ -1649,8 +1649,18 @@ export default {
                         @focus="selectSkuField"
                       />
                       <div
-                        class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
                       >
+                        <button
+                          type="button"
+                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
+                          :disabled="isProductLoading"
+                          @click="openSkuDialog"
+                        >
+                          {{
+                            $t("pages.productEditPage.fields.sku.changeAction")
+                          }}
+                        </button>
                         <button
                           v-if="productSKU"
                           type="button"
@@ -1663,16 +1673,6 @@ export default {
                               : $t(
                                   "pages.productEditPage.skuDialog.copyAction",
                                 )
-                          }}
-                        </button>
-                        <button
-                          type="button"
-                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
-                          :disabled="isProductLoading"
-                          @click="openSkuDialog"
-                        >
-                          {{
-                            $t("pages.productEditPage.fields.sku.changeAction")
                           }}
                         </button>
                       </div>

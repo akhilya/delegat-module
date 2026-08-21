@@ -11,8 +11,17 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Tools: Try Public API (`/tools/public-api-try`) sends GET `/me`, GET `/stores`, or a custom `/api/v1` path with a partner key and shows the response
+- Public API v1: product size variants (`GET` product includes `variants`; list/create/patch/delete under `/products/{id}/variants`)
+- Public API v1: create category accepts `hasSizes`; category list attributes include `options` and the other GET-detail fields
+- Public API v1: product list `search` matches barcode, variant SKU/barcode, and marketplace ids (same as the catalog), and items include `variantCount`
+
 ### Changed
 
+- Public API `PATCH` product now replaces `attributeValues` / `storeAttributeValues` when those arrays are sent (same as the dashboard)
+- Public API create store-attribute copies `options`, `defaultValue`, and `description`
+- Public API sync starters reject inactive connections (`400 connection_inactive`)
+- Public API error `code` values for missing products, categories, variants, store attributes, operations, and several conflicts (`sku_already_used`, `category_has_products`, …)
 - Mapping canvas zoom in/out uses the same plus and minus icons as the rest of the app
 - Changing your password (and setting one in Administration → Users) asks you to type the new password twice
 - Mapping auto-arrange uses Dagre, then stacks card fields above price fields so the two sinks no longer overlap
@@ -24,7 +33,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Menu radio/checkbox rows and select lists use a trailing check (Apple picker), not a leading radio disc
 - Product Notes tab is an inset grouped list like store notes: a row opens the bar sheet, Add note is the last row, and the tab grows with the page instead of stacked writing pads
 - Product Sizes tab is one inset group per size (label-left fields, Add size as the last row) and grows with the page instead of a nested table pane
-- Product SKU on Properties uses caption actions under the field (copy / change) instead of icon buttons beside the input
+- Product SKU on Properties uses caption actions under the field (change on the left, copy on the right) instead of icon buttons beside the input
+- Product barcode generate is a caption action under the field (same as SKU / group), not a dice icon beside the input
 - Product Adapters tab lists each connection as a spacious inset group: listing id/SKU, price, stock, and last sync sit in composed Apple rows instead of one fact per line. The tab grows with the page instead of scrolling inside a nested pane
 - Product Adapters tab: left-click on a connection card opens the actions menu at the cursor (same as right-click); mapping, marketplace link, sizes, and ⋮ keep their own actions
 - Product Images tab uses compact photo tiles with a drag handle and dashed drop trays (on the card / not on the card)
@@ -34,7 +44,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Catalog Connect keeps the local catalog as the source of truth after the first import: the tool stays open to link remaining marketplaces one at a time, and extra unlinked cards can be imported from another connection without replacing existing products
 - Form field labels, legends, and descriptions use the same small caption size as Apple group headers (not a larger heading under «Credentials»). Category import section titles (adapter category, where to import, attributes) use that same Settings caption — they no longer mix a browser legend with a group header
 - Category import no longer repeats the page title and intro above the two columns; Import sits at the bottom of the destination column
-- Categories, product groups, and their edit pages use Apple inset grouped lists and Settings form sections (attribute / add-product dialogs included)
+- Categories, product groups, global attributes, and their edit pages use Apple inset grouped lists and Settings form sections (attribute / add-product dialogs included)
 - Barcodes use the same Apple table ring and combined footer as products (selection + download in the footer). Store notes are an inset grouped list; the note sheet uses bar chrome and Settings fields (not a writing pad)
 - Adapters, connection settings / mappings, category import, and mapping preview chrome use the same Apple inset grouped lists and sheet bars as Settings (the mapping graph canvas is unchanged)
 - File manager: content type is a wider column so MIME types are not clipped; tags size to the chips instead of a fixed width
@@ -47,6 +57,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Collapsed product-group rail: hovering a variant photo opens the preview beside the tile, not in the top-left of the screen
+- Right-clicking another product closes the previous row menu (only one context menu at a time)
+- Public API `GET` category now returns a real `productsCount` (detail always showed 0 because the product collection was not loaded)
+- Public API request logs keep a full rounded hairline frame, including the “turn on Public API logs” hint (the fill-height panel had clipped outer rings)
+- Turning on “Products have sizes” on a category is kept after save (the flag was stored, then dropped from the category GET)
 - Mapping preview-product picker sits on an opaque card so the canvas grid does not show through the field
 - Product Adapters tab shows the adapter icon and name on each connection card again
 - Nested dropdown and context-menu panels (user language, adapter connection submenus) open beside the parent instead of being clipped by the frosted menu

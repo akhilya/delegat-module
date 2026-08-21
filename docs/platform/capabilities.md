@@ -48,6 +48,7 @@
 - Tools page (`/tools`) loads `GET /api/tools`: first-party page tools plus job tools from loaded adapters
 - Platform page tool: Catalog Connect (`catalog-connect` → `/tools/catalog-connect`)
 - Platform page tool: Catalog scrape (`catalog-scrape` → `/tools/catalog-scrape`) — public storefront search (Wildberries in v1), import selected cards **unlinked**
+- Platform page tool: Try Public API (`public-api-try` → `/tools/public-api-try`) — GET `/api/v1/me`, `/stores`, or a custom path with a key (permission `api.access`; hidden when Public API is off)
 - Adapter jobs: Vue form from credential-shaped `paramsSchema`, then an Operation of type `tool` (table result optional). Plugins do not ship UI.
 
 ### Multi-tenancy (within an instance)

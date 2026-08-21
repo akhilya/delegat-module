@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
@@ -25,7 +26,6 @@ public class PublicProductsController : ControllerBase
     private readonly DataContext _db;
     private readonly IUnitOfWork _uow;
     private readonly QuotaService _quota;
-    private readonly IServiceProvider _sp;
     private readonly AttributeUniquenessService _attributeUniqueness;
 
     public PublicProductsController(
@@ -33,20 +33,18 @@ public class PublicProductsController : ControllerBase
         DataContext db,
         IUnitOfWork uow,
         QuotaService quota,
-        IServiceProvider sp,
         AttributeUniquenessService attributeUniqueness)
     {
         _storeCtx = storeCtx;
         _db = db;
         _uow = uow;
         _quota = quota;
-        _sp = sp;
         _attributeUniqueness = attributeUniqueness;
     }
 
     /// <summary>Lists products. Use <c>categoryId=-1</c> for products without a category.</summary>
     /// <param name="storeId">Store id from path (membership required).</param>
-    /// <param name="search">Optional filter by name or SKU.</param>
+    /// <param name="search">Optional filter by name, SKU, barcode, product id, marketplace ids, or variant SKU/barcode.</param>
     /// <param name="categoryId">Optional category filter; <c>-1</c> = no category.</param>
     /// <param name="page">1-based page index.</param>
     /// <param name="pageSize">Page size (max 200).</param>
@@ -66,8 +64,7 @@ public class PublicProductsController : ControllerBase
         (page, pageSize) = PublicApiPaging.Normalize(page, pageSize);
 
         var q = _db.products.AsNoTracking().Where(p => p.storeId == storeId);
-        if (!string.IsNullOrWhiteSpace(search))
-            q = q.Where(p => p.name.Contains(search) || p.sku.Contains(search));
+        q = q.WhereMatchesSearch(search);
         if (categoryId == -1)
             q = q.Where(p => p.categoryId == null);
         else if (categoryId.HasValue)
@@ -92,6 +89,7 @@ public class PublicProductsController : ControllerBase
                 minPrice = p.minPrice,
                 netPrice = p.netPrice,
                 currency = p.currency,
+                variantCount = p.variants.Count,
                 createdAt = p.createdAt,
                 updatedAt = p.updatedAt
             })
@@ -100,7 +98,7 @@ public class PublicProductsController : ControllerBase
         return Ok(PublicApiResults.Page(items, page, pageSize, total));
     }
 
-    /// <summary>Gets a single product with attribute values.</summary>
+    /// <summary>Gets a single product with attribute values and size variants.</summary>
     [HttpGet("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -112,6 +110,7 @@ public class PublicProductsController : ControllerBase
             .AsNoTracking()
             .Include(p => p.attributeValues)
             .Include(p => p.storeAttributeValues)
+            .Include(p => p.variants)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
 
         if (product == null)
@@ -128,6 +127,8 @@ public class PublicProductsController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
         await _quota.EnsureProductQuotaAsync(storeId);
+        await EnsureCategoryInStoreAsync(storeId, input.categoryId, ct);
+        EnsureBarcodeValid(input.barcode);
 
         var repo = _uow.Repository<Product>();
         var existing = await repo.FindAsync(p => p.storeId == storeId && p.sku == input.sku);
@@ -182,7 +183,7 @@ public class PublicProductsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, new { id = product.Id });
     }
 
-    /// <summary>Partially updates a product.</summary>
+    /// <summary>Partially updates a product. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced.</summary>
     [HttpPatch("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -190,13 +191,61 @@ public class PublicProductsController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
 
-        // Must be tracked — Repository.FindAsync is AsNoTracking and would no-op SaveChanges.
         var product = await _uow.Repository<Product>().QueryTracking()
+            .Include(p => p.attributeValues)
+            .Include(p => p.storeAttributeValues)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (product == null)
             throw ApiException.NotFound("Product not found", code: "product_not_found");
 
+        await EnsureCategoryInStoreAsync(storeId, input.categoryId, ct);
+        if (!string.IsNullOrEmpty(input.barcode))
+            EnsureBarcodeValid(input.barcode);
+
+        await _attributeUniqueness.EnsureUniqueAsync(
+            storeId,
+            input.categoryId ?? product.categoryId,
+            input.attributeValues,
+            input.storeAttributeValues,
+            excludeProductId: productId,
+            ct: ct);
+
         product.UpdateFill(input);
+
+        if (input.attributeValues != null)
+        {
+            var attrRepo = _uow.Repository<ProductAttributeValue>();
+            attrRepo.DeleteRange(product.attributeValues.ToList());
+            foreach (var av in input.attributeValues)
+            {
+                var attrValue = new ProductAttributeValue();
+                attrValue.AddFill(new ProductAttributeValue.AddForm
+                {
+                    productId = product.Id,
+                    attributeId = av.attributeId,
+                    value = av.value
+                });
+                await attrRepo.AddWithoutSaveAsync(attrValue);
+            }
+        }
+
+        if (input.storeAttributeValues != null)
+        {
+            var storeAttrRepo = _uow.Repository<StoreProductAttributeValue>();
+            storeAttrRepo.DeleteRange(product.storeAttributeValues.ToList());
+            foreach (var sav in input.storeAttributeValues)
+            {
+                var storeAttrValue = new StoreProductAttributeValue();
+                storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
+                {
+                    productId = product.Id,
+                    storeAttributeId = sav.storeAttributeId,
+                    value = sav.value
+                });
+                await storeAttrRepo.AddWithoutSaveAsync(storeAttrValue);
+            }
+        }
+
         await _uow.SaveChangesAsync();
         return Ok(new { id = product.Id, success = true });
     }
@@ -218,6 +267,159 @@ public class PublicProductsController : ControllerBase
         product.updatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(new { success = true });
+    }
+
+    /// <summary>Lists size variants for a product (SKU, barcode, price, stock).</summary>
+    [HttpGet("{productId:int}/variants")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ListVariants(int storeId, int productId, CancellationToken ct)
+    {
+        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        await RequireProductAsync(storeId, productId, ct);
+
+        var variants = await _db.productVariants
+            .AsNoTracking()
+            .Where(v => v.productId == productId)
+            .OrderBy(v => v.sortOrder)
+            .Select(v => new
+            {
+                id = v.Id,
+                v.sku,
+                v.barcode,
+                v.size,
+                v.price,
+                v.quantity,
+                v.sortOrder,
+                v.createdAt,
+                v.updatedAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(variants);
+    }
+
+    /// <summary>Creates a size variant on a product.</summary>
+    [HttpPost("{productId:int}/variants")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CreateVariant(
+        int storeId,
+        int productId,
+        [FromBody] VariantWriteRequest input,
+        CancellationToken ct)
+    {
+        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        await RequireProductAsync(storeId, productId, ct);
+
+        var maxSortOrder = await _db.productVariants
+            .Where(v => v.productId == productId)
+            .MaxAsync(v => (int?)v.sortOrder, ct) ?? -1;
+
+        var variant = new ProductVariant();
+        variant.AddFill(new ProductVariant.AddForm
+        {
+            productId = productId,
+            sku = input.sku,
+            barcode = input.barcode,
+            size = input.size,
+            price = input.price,
+            quantity = input.quantity,
+            sortOrder = maxSortOrder + 1
+        });
+        _db.productVariants.Add(variant);
+        await _db.SaveChangesAsync(ct);
+
+        return StatusCode(StatusCodes.Status201Created, new { id = variant.Id });
+    }
+
+    /// <summary>Partially updates a size variant.</summary>
+    [HttpPatch("{productId:int}/variants/{variantId:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateVariant(
+        int storeId,
+        int productId,
+        int variantId,
+        [FromBody] VariantWriteRequest input,
+        CancellationToken ct)
+    {
+        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        await RequireProductAsync(storeId, productId, ct);
+
+        var variant = await _db.productVariants
+            .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
+        if (variant == null)
+            throw ApiException.NotFound("Variant not found", code: "variant_not_found");
+
+        variant.UpdateFill(new ProductVariant.UpdateForm
+        {
+            sku = input.sku,
+            barcode = input.barcode,
+            size = input.size,
+            price = input.price,
+            quantity = input.quantity,
+            sortOrder = input.sortOrder
+        });
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { id = variant.Id, success = true });
+    }
+
+    /// <summary>Deletes a size variant.</summary>
+    [HttpDelete("{productId:int}/variants/{variantId:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteVariant(int storeId, int productId, int variantId, CancellationToken ct)
+    {
+        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        await RequireProductAsync(storeId, productId, ct);
+
+        var variant = await _db.productVariants
+            .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
+        if (variant == null)
+            throw ApiException.NotFound("Variant not found", code: "variant_not_found");
+
+        _db.productVariants.Remove(variant);
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { success = true });
+    }
+
+    /// <summary>Body for creating or updating a product size variant.</summary>
+    public class VariantWriteRequest
+    {
+        public string? sku { get; set; }
+        public string? barcode { get; set; }
+        public string? size { get; set; }
+        public decimal? price { get; set; }
+        public int? quantity { get; set; }
+        public int? sortOrder { get; set; }
+    }
+
+    private async Task RequireProductAsync(int storeId, int productId, CancellationToken ct)
+    {
+        var exists = await _db.products.AnyAsync(p => p.Id == productId && p.storeId == storeId, ct);
+        if (!exists)
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
+    }
+
+    private async Task EnsureCategoryInStoreAsync(int storeId, int? categoryId, CancellationToken ct)
+    {
+        if (!categoryId.HasValue)
+            return;
+
+        var exists = await _db.categories.AnyAsync(c => c.Id == categoryId.Value && c.storeId == storeId, ct);
+        if (!exists)
+            throw ApiException.NotFound("Category not found", code: "category_not_found");
+    }
+
+    private static void EnsureBarcodeValid(string? barcode)
+    {
+        if (string.IsNullOrEmpty(barcode))
+            return;
+        if (!ProductController.IsValidEanBarcode(barcode))
+            throw ApiException.BadRequest(
+                "Invalid barcode. EAN-8 (8 digits) or EAN-13 (13 digits) are allowed",
+                code: "invalid_barcode");
     }
 
     private static object MapDetail(Product p) => new
@@ -247,6 +449,31 @@ public class PublicProductsController : ControllerBase
         {
             storeAttributeId = sav.storeAttributeId,
             value = sav.value
-        })
+        }),
+        variants = p.variants
+            .OrderBy(v => v.sortOrder)
+            .Select(v => MapVariant(v.Id, v.sku, v.barcode, v.size, v.price, v.quantity, v.sortOrder, v.createdAt, v.updatedAt))
+    };
+
+    private static object MapVariant(
+        int id,
+        string? sku,
+        string? barcode,
+        string? size,
+        decimal? price,
+        int? quantity,
+        int sortOrder,
+        DateTime createdAt,
+        DateTime updatedAt) => new
+    {
+        id,
+        sku,
+        barcode,
+        size,
+        price,
+        quantity,
+        sortOrder,
+        createdAt,
+        updatedAt
     };
 }

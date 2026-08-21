@@ -16,14 +16,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Dices, Download } from "lucide-vue-next";
+import { Download } from "lucide-vue-next";
 import JsBarcode from "jsbarcode";
 import { ref, computed, watch, nextTick } from "vue";
 import { t } from "@/i18n";
 
 export default {
   components: {
-    Input, Button, Dices, Download,
+    Input, Button, Download,
     Popover, PopoverContent, PopoverTrigger,
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -203,7 +203,7 @@ export default {
 </script>
 
 <template>
-  <div class="w-full min-w-0" :class="{ 'opacity-50 pointer-events-none': disabled }">
+  <div class="w-full min-w-0 space-y-1.5" :class="{ 'opacity-50 pointer-events-none': disabled }">
     <div class="flex min-w-0 items-center gap-1.5">
       <Input
         class="min-w-0 flex-1"
@@ -218,9 +218,6 @@ export default {
         :aria-label="t('components.barcodeInput.ariaLabel')"
         :class="{ 'border-destructive focus-visible:ring-destructive': modelValue && !isValid }"
       />
-      <Button type="button" variant="outline" size="icon" class="shrink-0 size-9" :title="t('components.barcodeInput.generateTitle')" :disabled="disabled" @click="generate">
-        <Dices class="size-4" />
-      </Button>
 
       <!-- Inline barcode preview - click to expand -->
       <Popover v-if="showPreview && modelValue && isValid && barcodeFormat" v-model:open="popoverOpen">
@@ -251,7 +248,16 @@ export default {
       </Popover>
     </div>
 
-    <p v-if="errorMessage" class="text-xs text-destructive mt-1">
+    <button
+      type="button"
+      class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
+      :disabled="disabled"
+      @click="generate"
+    >
+      {{ t("components.barcodeInput.generateAction") }}
+    </button>
+
+    <p v-if="errorMessage" class="text-xs text-destructive">
       {{ errorMessage }}
     </p>
 

@@ -75,7 +75,7 @@ public sealed class TestDataBuilder
         _ = asAdmin; // store-admin concept removed; kept for call-site compatibility
     }
 
-    public Category AddCategory(int storeId, string? name = null, string? description = null)
+    public Category AddCategory(int storeId, string? name = null, string? description = null, bool hasSizes = false)
     {
         var id = _categorySeq++;
         var cat = new Category
@@ -84,6 +84,7 @@ public sealed class TestDataBuilder
             storeId = storeId,
             name = name ?? $"Category {id}",
             description = description,
+            hasSizes = hasSizes,
             createdAt = DateTime.UtcNow
         };
         _db.categories.Add(cat);
@@ -142,13 +143,39 @@ public sealed class TestDataBuilder
         return attr;
     }
 
+    public ProductVariant AddVariant(
+        int productId,
+        string? size = null,
+        string? sku = null,
+        string? barcode = null,
+        decimal? price = null,
+        int? quantity = null,
+        int sortOrder = 0)
+    {
+        var variant = new ProductVariant
+        {
+            productId = productId,
+            size = size ?? "M",
+            sku = sku,
+            barcode = barcode,
+            price = price,
+            quantity = quantity,
+            sortOrder = sortOrder,
+            createdAt = DateTime.UtcNow,
+            updatedAt = DateTime.UtcNow
+        };
+        _db.productVariants.Add(variant);
+        return variant;
+    }
+
     public Product AddProduct(
         int storeId,
         string? name = null,
         string? sku = null,
         int? categoryId = null,
         decimal? price = 100m,
-        DateTime? deletedAt = null)
+        DateTime? deletedAt = null,
+        string? barcode = null)
     {
         var id = _productSeq++;
         var product = new Product
@@ -157,6 +184,7 @@ public sealed class TestDataBuilder
             storeId = storeId,
             name = name ?? $"Product {id}",
             sku = sku ?? $"SKU-{id}",
+            barcode = barcode,
             description = "",
             categoryId = categoryId,
             price = price,

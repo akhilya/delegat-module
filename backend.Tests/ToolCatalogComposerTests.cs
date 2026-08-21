@@ -22,6 +22,42 @@ public class ToolCatalogComposerTests
         Assert.Equal(ToolModes.Page, scrape.Mode);
         Assert.Equal("/tools/catalog-scrape", scrape.Path);
         Assert.True(scrape.Available);
+        Assert.DoesNotContain(entries, e => e.Id == PlatformTools.PublicApiTryId);
+    }
+
+    [Fact]
+    public void Compose_IncludesPublicApiTry_WhenUserHasApiAccess()
+    {
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.ApiAccess },
+            new HashSet<string>());
+
+        var tool = Assert.Single(entries);
+        Assert.Equal(PlatformTools.PublicApiTryId, tool.Id);
+        Assert.Equal(ToolSources.Platform, tool.Source);
+        Assert.Equal(ToolModes.Page, tool.Mode);
+        Assert.Equal("/tools/public-api-try", tool.Path);
+        Assert.Equal("Play", tool.Icon);
+    }
+
+    [Fact]
+    public void ApplyInstanceFlags_HidesPublicApiTry_WhenPublicApiDisabled()
+    {
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.ApiAccess, Permissions.MarketplaceManage },
+            new HashSet<string>());
+        Assert.Contains(entries, e => e.Id == PlatformTools.PublicApiTryId);
+
+        var hidden = ToolCatalogComposer.ApplyInstanceFlags(entries, publicApiEnabled: false);
+        Assert.DoesNotContain(hidden, e => e.Id == PlatformTools.PublicApiTryId);
+        Assert.Contains(hidden, e => e.Id == PlatformTools.CatalogConnectId);
+
+        var shown = ToolCatalogComposer.ApplyInstanceFlags(entries, publicApiEnabled: true);
+        Assert.Contains(shown, e => e.Id == PlatformTools.PublicApiTryId);
     }
 
     [Fact]
@@ -120,6 +156,7 @@ public class ToolCatalogComposerTests
     {
         Assert.False(ToolCatalogComposer.TryParseAdapterToolId("catalog-connect", out _, out _));
         Assert.False(ToolCatalogComposer.TryParseAdapterToolId("catalog-scrape", out _, out _));
+        Assert.False(ToolCatalogComposer.TryParseAdapterToolId("public-api-try", out _, out _));
         Assert.True(ToolCatalogComposer.TryParseAdapterToolId("wb.duplicate-cards", out var key, out var local));
         Assert.Equal("wb", key);
         Assert.Equal("duplicate-cards", local);

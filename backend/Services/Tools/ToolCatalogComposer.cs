@@ -53,6 +53,7 @@ public static class PlatformTools
 {
     public const string CatalogConnectId = "catalog-connect";
     public const string CatalogScrapeId = "catalog-scrape";
+    public const string PublicApiTryId = "public-api-try";
 
     public static readonly PlatformToolDefinition CatalogConnect = new()
     {
@@ -76,7 +77,19 @@ public static class PlatformTools
         Permissions = [Permissions.MarketplaceManage],
     };
 
-    public static IReadOnlyList<PlatformToolDefinition> All { get; } = [CatalogConnect, CatalogScrape];
+    public static readonly PlatformToolDefinition PublicApiTry = new()
+    {
+        Id = PublicApiTryId,
+        Mode = ToolModes.Page,
+        Path = "/tools/public-api-try",
+        TitleKey = "pages.toolsPage.publicApiTryTitle",
+        DescriptionKey = "pages.toolsPage.publicApiTryDescription",
+        Icon = "Play",
+        Permissions = [Permissions.ApiAccess],
+    };
+
+    public static IReadOnlyList<PlatformToolDefinition> All { get; } =
+        [CatalogConnect, CatalogScrape, PublicApiTry];
 }
 
 /// <summary>
@@ -191,5 +204,17 @@ public static class ToolCatalogComposer
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Hide Public API try when the instance toggle is off (same as API keys).
+    /// </summary>
+    public static IReadOnlyList<ToolCatalogEntry> ApplyInstanceFlags(
+        IReadOnlyList<ToolCatalogEntry> entries,
+        bool publicApiEnabled)
+    {
+        if (publicApiEnabled)
+            return entries;
+        return entries.Where(e => e.Id != PlatformTools.PublicApiTryId).ToList();
     }
 }

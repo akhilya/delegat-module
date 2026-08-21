@@ -19,7 +19,10 @@ describe("toolsCatalog", () => {
     };
     const t = (key) => `T:${key}`;
     assert.equal(toolTitle(entry, t), "T:pages.toolsPage.catalogConnectTitle");
-    assert.equal(toolDescription(entry, t), "T:pages.toolsPage.catalogConnectDescription");
+    assert.equal(
+      toolDescription(entry, t),
+      "T:pages.toolsPage.catalogConnectDescription",
+    );
     assert.equal(toolHref(entry), "/tools/catalog-connect");
     assert.equal(isPageTool(entry), true);
     assert.equal(isJobTool(entry), false);
@@ -36,6 +39,20 @@ describe("toolsCatalog", () => {
     const t = (key) => `T:${key}`;
     assert.equal(toolTitle(entry, t), "T:pages.toolsPage.catalogScrapeTitle");
     assert.equal(toolHref(entry), "/tools/catalog-scrape");
+    assert.equal(isPageTool(entry), true);
+  });
+
+  it("uses i18n keys for Public API try", () => {
+    const entry = {
+      id: "public-api-try",
+      mode: "page",
+      path: "/tools/public-api-try",
+      titleKey: "pages.toolsPage.publicApiTryTitle",
+      descriptionKey: "pages.toolsPage.publicApiTryDescription",
+    };
+    const t = (key) => `T:${key}`;
+    assert.equal(toolTitle(entry, t), "T:pages.toolsPage.publicApiTryTitle");
+    assert.equal(toolHref(entry), "/tools/public-api-try");
     assert.equal(isPageTool(entry), true);
   });
 

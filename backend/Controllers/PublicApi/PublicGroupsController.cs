@@ -166,7 +166,7 @@ public class PublicGroupsController : ControllerBase
         var member = await _db.productGroupMembers
             .FirstOrDefaultAsync(m => m.groupId == groupId && m.productId == productId, ct);
         if (member == null)
-            throw ApiException.NotFound("Product is not in the group");
+            throw ApiException.NotFound("Product is not in the group", code: "group_member_not_found");
 
         _db.productGroupMembers.Remove(member);
         await _db.SaveChangesAsync(ct);

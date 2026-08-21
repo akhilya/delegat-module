@@ -196,7 +196,7 @@ public class PublicConnectionsController : ControllerBase
             .FirstOrDefaultAsync(o => o.operationId == operationId && o.storeId == storeId, ct);
 
         if (op == null)
-            throw ApiException.NotFound("Operation not found");
+            throw ApiException.NotFound("Operation not found", code: "operation_not_found");
 
         var logs = await _db.operationLogEntries
             .AsNoTracking()

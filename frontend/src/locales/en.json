@@ -118,7 +118,7 @@
       "digitsCountError": "8 (EAN-8) or 13 (EAN-13) digits required",
       "invalidCheckDigitError": "Invalid check digit",
       "ariaLabel": "Barcode (EAN-8 / EAN-13)",
-      "generateTitle": "Generate",
+      "generateAction": "Generate barcode",
       "regenerateTitle": "Regenerate barcode?",
       "regenerateDescription": "The current barcode {value} will be replaced with a new random one. This action cannot be undone.",
       "replace": "Replace"
@@ -401,6 +401,7 @@
     "productCreation": "New product",
     "productEdit": "Edit product",
     "categoryEdit": "Edit category",
+    "attributeEdit": "Edit attribute",
     "connection": "Connection",
     "ai": "AI",
     "trash": "Trash",
@@ -425,6 +426,7 @@
     "setup": "Setup",
     "catalogConnect": "Connect catalogs",
     "catalogScrape": "Catalog scrape",
+    "publicApiTry": "Try Public API",
     "toolJob": "Tool"
   },
   "ai": {
@@ -2895,6 +2897,11 @@
       "uniqueBadge": "uniq"
     },
     "storeAttributesPage": {
+      "breadcrumb": "Global attributes",
+      "breadcrumbEditing": "Editing",
+      "optionsWord": "options",
+      "notFoundTitle": "Attribute not found",
+      "notFoundDescription": "This global attribute is missing, or you do not have access.",
       "types": {
         "text": "Text",
         "number": "Number",
@@ -3000,6 +3007,8 @@
       "catalogConnectDescription": "Import a marketplace catalog into the local one, then keep linking other channels. The local catalog stays the source of truth.",
       "catalogScrapeTitle": "Catalog scrape",
       "catalogScrapeDescription": "Search a marketplace storefront and copy cards into the local catalog without linking them.",
+      "publicApiTryTitle": "Try Public API",
+      "publicApiTryDescription": "Send a GET to /api/v1 with a key, the same way a partner client would, and inspect the response.",
       "emptyTitle": "No tools yet",
       "emptyDescription": "Platform and adapter tools show up here when they are available for this store.",
       "sectionPlatform": "Platform",
@@ -3103,6 +3112,29 @@
       "applyOperationTitle": "Scrape {name}",
       "applyDone": "Imported {imported}, skipped {skipped}, failed {failed}",
       "openProducts": "Open products"
+    },
+    "publicApiTry": {
+      "breadcrumb": "Try Public API",
+      "modelBody": "Calls Public API v1 with your key in Authorization, not the dashboard session cookie. Successful calls show up in Settings → API → Request logs when logging is on.",
+      "keyLabel": "API key",
+      "keyHint": "Paste the plaintext key (dk_…). It is shown only once when you create it under Settings → API.",
+      "keyPlaceholder": "dk_…",
+      "keyRequired": "Paste an API key first",
+      "endpointLabel": "Endpoint",
+      "endpoints": {
+        "me": "Current user",
+        "stores": "Accessible stores"
+      },
+      "customLabel": "Custom path",
+      "customHint": "Any GET under /api/v1, for example /stores/{id}/products",
+      "pathLabel": "Path",
+      "pathPlaceholder": "/stores/1/products",
+      "invalidPath": "Use a path under /api/v1, without a full URL",
+      "send": "Send",
+      "response": "Response",
+      "openLogs": "Open request logs",
+      "disabledTitle": "Public API is off",
+      "disabledDescription": "Turn it on under Administration before trying partner calls."
     },
     "productsPage": {
       "searchPlaceholder": "Search",
@@ -3464,6 +3496,7 @@
       "description": "Create API keys for external integrations and review Public API request activity.",
       "disabledBanner": "Public API is currently disabled. Partner /api/v1 calls return 503. Enable it under Administration.",
       "openSwagger": "Open Swagger",
+      "openTryTool": "Try Public API",
       "tabKeys": "Keys",
       "tabLogs": "Request logs",
       "keys": {

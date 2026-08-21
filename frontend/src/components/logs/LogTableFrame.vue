@@ -10,7 +10,7 @@ defineProps({
   <div
     :class="
       cn(
-        'flex min-h-0 flex-1 flex-col rounded-xl border border-border/70 bg-card',
+        'flex min-h-0 flex-1 flex-col rounded-xl bg-card p-px ring-1 ring-inset ring-border/70',
         $props.class,
       )
     "

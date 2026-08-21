@@ -1,5 +1,8 @@
 <script setup>
 import { ContextMenuRoot, useForwardPropsEmits } from "reka-ui";
+import { installContextMenuExclusive } from "@/lib/contextMenuExclusive";
+
+installContextMenuExclusive();
 
 const props = defineProps({
   pressOpenDelay: { type: Number, required: false },

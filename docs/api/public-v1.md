@@ -31,7 +31,7 @@ Authorization: Bearer dk_your_key_here
 | Any instance (incl. production) | `https://{your-instance}/swagger` | `https://{your-instance}/swagger/v1-public/swagger.json` |
 | Local API (direct) | `http://localhost:5000/swagger` | `http://localhost:5000/swagger/v1-public/swagger.json` |
 
-In the app: **Settings → API** → "Open Swagger".
+In the app: **Settings → API** → "Open Swagger", or **Tools → Try Public API** for GET `/me`, `/stores`, and a custom `/api/v1` path (uses the key, not the dashboard session).
 
 1. Open Swagger → **Authorize**
 2. Paste only `dk_…` (do **not** type `Bearer`)
@@ -89,8 +89,13 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 |------|----------------|------|
 | 401 | `unauthorized` | Missing/invalid/revoked key, inactive user |
 | 403 | `forbidden` / `access_denied_store` | User is not a member of `storeId` |
-| 404 | `not_found` | Resource missing in that store |
+| 404 | `not_found` | Resource missing in that store (prefer the semantic codes below when present) |
+| 404 | `product_not_found` / `category_not_found` / `group_not_found` / `variant_not_found` / `store_attribute_not_found` / `connection_not_found` / `operation_not_found` / `group_member_not_found` | Named resource missing |
+| 400 | `connection_inactive` | Sync starter used a paused marketplace connection |
+| 400 | `invalid_barcode` | Barcode is not a valid EAN-8 / EAN-13 |
+| 400 | `import_nothing_queued` | Import-products skipped every item (unmapped categories, blank ids) |
 | 409 | `conflict` | Quota / uniqueness / state conflict |
+| 409 | `sku_already_used` / `store_attribute_key_used` / `category_has_products` / `product_limit_reached` | Named uniqueness or state conflict |
 | 422 | `validation_error` | Invalid body (when used) |
 | 429 | `rate_limited` | Too many requests |
 | 503 | `PUBLIC_API_DISABLED` | Instance Public API toggle is off |
@@ -127,23 +132,27 @@ Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is t
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List. Query: `search`, `categoryId` (`-1` = no category), `page`, `pageSize` |
-| GET | `/{productId}` | Detail + attribute values |
-| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create |
-| PATCH | `/{productId}` | Partial update |
+| GET | `/` | List. Query: `search` (name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode), `categoryId` (`-1` = no category), `page`, `pageSize`. Items include `variantCount`. Trashed products are omitted. |
+| GET | `/{productId}` | Detail: prices, `attributeValues`, `storeAttributeValues`, and `variants` (size, SKU, barcode, price, quantity, sortOrder) |
+| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create. `categoryId` must belong to this store. Barcode must be EAN-8/13 when set. |
+| PATCH | `/{productId}` | Partial update. Sending `attributeValues` or `storeAttributeValues` **replaces** that collection (same as the dashboard). |
 | DELETE | `/{productId}` | Soft-delete (trash) |
+| GET | `/{productId}/variants` | Size variants for the product |
+| POST | `/{productId}/variants` | Create. Body: `{ sku?, barcode?, size?, price?, quantity? }` |
+| PATCH | `/{productId}/variants/{variantId}` | Partial update (same fields + `sortOrder?`) |
+| DELETE | `/{productId}/variants/{variantId}` | Delete a size variant |
 
-Respects product quotas (`409` when exceeded).
+Respects product quotas (`409 product_limit_reached` when exceeded). Duplicate SKU → `409 sku_already_used`.
 
 ### Categories (`/stores/{storeId}/categories`)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List with attributes + product counts. Attribute objects include `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, and `allowCustomValues` (typed values outside the option list; copied on category import). Category objects include `hasSizes` (local Sizes tab; not a mapping-graph field). |
-| GET | `/{categoryId}` | Detail (same attribute fields as list, including `groupIcon`) |
-| POST | `/` | Create `{ name, description? }` |
-| PATCH | `/{categoryId}` | Update |
-| DELETE | `/{categoryId}` | Delete (fails if products remain → `409`) |
+| GET | `/` | List with attributes + product counts (`productCount` and `productsCount` are the same number). Attribute objects match GET detail: `options`, `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, `allowCustomValues`, `defaultValue`, `description`, `isMultiline`, `showOnProductPage`, `sortOrder`. Category objects include `hasSizes` (local Sizes tab; not a mapping-graph field). |
+| GET | `/{categoryId}` | Detail (same attribute fields as list, including `groupIcon`). Product count field is `productsCount`. |
+| POST | `/` | Create `{ name, description?, hasSizes? }` |
+| PATCH | `/{categoryId}` | Update (`name?`, `description?`, `hasSizes?`) |
+| DELETE | `/{categoryId}` | Delete (fails if products remain → `409 category_has_products`) |
 
 ### Groups (`/stores/{storeId}/groups`)
 
@@ -161,9 +170,9 @@ Respects product quotas (`409` when exceeded).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List global attributes |
+| GET | `/` | List global attributes (same DTO as the dashboard, including `options`) |
 | GET | `/{attributeId}` | Detail |
-| POST | `/` | Create |
+| POST | `/` | Create. Body matches the dashboard (`name`, `key`, `type`, `options?`, `defaultValue?`, `description?`, …). Duplicate `key` → `409 store_attribute_key_used`. |
 | PATCH | `/{attributeId}` | Update |
 | DELETE | `/{attributeId}` | Delete |
 
@@ -188,7 +197,7 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 
 | Method | Path | Body | Notes |
 |--------|------|------|--------|
-| POST | `/export-products` | `{ productIds?: number[] }` | Empty/`omit` = all store products |
+| POST | `/export-products` | `{ productIds?: number[] }` | Empty/`omit` = all store products. Inactive connection → `400 connection_inactive` |
 | POST | `/import-products` | `{ products: [{ externalId, externalCategoryId?, productName?, targetCategoryId?, forceImportWithoutMapping? }], forceImportWithoutMapping? }` | Needs category mappings unless forced. Selling price comes from the card, or from the prices API when the card omits it. Queues at most the remaining `MAX_PRODUCTS` slots (`409 product_limit_reached` when the store is already at the cap) |
 | POST | `/export-prices` | `{ linkIds?: number[] }` | |
 | POST | `/import-prices` | `{ linkIds?: number[] }` | |

@@ -72,15 +72,9 @@ public class CategoryController : ControllerBase
             .OrderBy(c => c.name)
             .Select(c =>
             {
-                var dto = new Category.CategoryDTO
-                {
-                    id = c.Id,
-                    name = c.name,
-                    description = c.description,
-                    createdAt = c.createdAt,
-                    productsCount = productCounts.GetValueOrDefault(c.Id, 0),
-                    attributesCount = c.attributes?.Count ?? 0
-                };
+                var dto = ((IMapToDTO<Category.CategoryDTO>)c).MapToDTO(_serviceProvider);
+                dto.productsCount = productCounts.GetValueOrDefault(c.Id, 0);
+                dto.attributesCount = c.attributes?.Count ?? 0;
                 return dto;
             })
             .ToList();
@@ -112,18 +106,8 @@ public class CategoryController : ControllerBase
 
         var productsCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
 
-        var dto = new Category.CategoryDetailDTO
-        {
-            id = category.Id,
-            name = category.name,
-            description = category.description,
-            createdAt = category.createdAt,
-            attributes = category.attributes?
-                .OrderBy(a => a.sortOrder)
-                .Select(a => ((IMapToDTO<CategoryAttribute.AttributeDTO>)a).MapToDTO(_serviceProvider))
-                .ToList() ?? new List<CategoryAttribute.AttributeDTO>(),
-            productsCount = productsCount
-        };
+        var dto = ((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(_serviceProvider);
+        dto.productsCount = productsCount;
 
         return Ok(dto);
     }
@@ -155,6 +139,7 @@ public class CategoryController : ControllerBase
         {
             name = input.name,
             description = input.description,
+            hasSizes = input.hasSizes,
             storeId = selectedStoreId.Value
         });
 

@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK;
 using Delegat.Models.Marketplace;
 using Delegat.Services.Marketplace;
+using Delegat.Services;
 
 namespace Delegat.Services.Tools;
 
@@ -13,15 +14,18 @@ public class ToolCatalogService
     private readonly IMarketplaceAdapterRegistry _adapters;
     private readonly DataContext _db;
     private readonly IOperationLogger _operations;
+    private readonly IPublicApiSettingsService _publicApi;
 
     public ToolCatalogService(
         IMarketplaceAdapterRegistry adapters,
         DataContext db,
-        IOperationLogger operations)
+        IOperationLogger operations,
+        IPublicApiSettingsService publicApi)
     {
         _adapters = adapters;
         _db = db;
         _operations = operations;
+        _publicApi = publicApi;
     }
 
     public async Task<IReadOnlyList<ToolCatalogEntry>> ListAsync(
@@ -30,11 +34,12 @@ public class ToolCatalogService
         CancellationToken ct = default)
     {
         var connected = await ConnectedAdapterKeysAsync(storeId, ct);
-        return ToolCatalogComposer.Compose(
+        var entries = ToolCatalogComposer.Compose(
             PlatformTools.All,
             AdapterContributions(),
             userPermissions,
             connected);
+        return ToolCatalogComposer.ApplyInstanceFlags(entries, _publicApi.IsPublicApiEnabled);
     }
 
     public async Task<ToolCatalogEntry> GetAsync(

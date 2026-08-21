@@ -17,6 +17,7 @@ const notesPage = () => import("./pages/notesPage.vue");
 const productGroupsPage = () => import("./pages/productGroupsPage.vue");
 const productGroupEditPage = () => import("./pages/productGroupEditPage.vue");
 const storeAttributesPage = () => import("./pages/storeAttributesPage.vue");
+const storeAttributeEditPage = () => import("./pages/storeAttributeEditPage.vue");
 const storeStoragePage = () => import("./pages/storeStoragePage.vue");
 const SettingsShell = () => import("./layouts/SettingsShell.vue");
 const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
@@ -26,6 +27,7 @@ const UnavailablePage = () => import("./pages/unavailablePage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const CatalogConnectPage = () => import("./pages/tools/CatalogConnectPage.vue");
 const CatalogScrapePage = () => import("./pages/tools/CatalogScrapePage.vue");
+const PublicApiTryPage = () => import("./pages/tools/PublicApiTryPage.vue");
 const ToolJobPage = () => import("./pages/tools/ToolJobPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
@@ -56,6 +58,7 @@ export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";
 export const PAGE_STORE_ATTRIBUTES = "/store-attributes";
+export const PAGE_STORE_ATTRIBUTE_EDIT = "/store-attributes/:id/edit";
 export const PAGE_STORE_STORAGE = "/storage";
 export const PAGE_SETTINGS = "/settings";
 export const PAGE_SETTINGS_OPERATIONS = "/settings/operations";
@@ -64,6 +67,7 @@ export const PAGE_NOT_FOUND = "/:pathMatch(.*)*";
 export const PAGE_TOOLS = "/tools";
 export const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
 export const PAGE_CATALOG_SCRAPE = "/tools/catalog-scrape";
+export const PAGE_PUBLIC_API_TRY = "/tools/public-api-try";
 export const PAGE_TOOL_JOB = "/tools/:toolId";
 export const PAGE_ADMIN_STORES = "/settings/admin/stores";
 export const PAGE_ADMIN_STORE_DETAIL = "/settings/admin/stores/:id";
@@ -142,6 +146,11 @@ export const routes = [
     path: PAGE_PRODUCT_GROUP_EDIT,
     component: productGroupEditPage,
     meta: { titleKey: "routes.groupEdit", permissions: [PERMS.CatalogManage] },
+  },
+  {
+    path: PAGE_STORE_ATTRIBUTE_EDIT,
+    component: storeAttributeEditPage,
+    meta: { titleKey: "routes.attributeEdit", permissions: [PERMS.CatalogManage] },
   },
   {
     path: PAGE_STORE_ATTRIBUTES,
@@ -242,6 +251,14 @@ export const routes = [
     },
   },
   {
+    path: PAGE_PUBLIC_API_TRY,
+    component: PublicApiTryPage,
+    meta: {
+      titleKey: "routes.publicApiTry",
+      permissions: [PERMS.ApiAccess],
+    },
+  },
+  {
     path: PAGE_TOOL_JOB,
     component: ToolJobPage,
     meta: {
@@ -252,7 +269,7 @@ export const routes = [
   {
     path: PAGE_TOOLS,
     component: ToolsPage,
-    meta: { titleKey: "routes.tools", permissions: [PERMS.OperationsManage, PERMS.CatalogManage, PERMS.MarketplaceManage] },
+    meta: { titleKey: "routes.tools", permissions: [PERMS.OperationsManage, PERMS.CatalogManage, PERMS.MarketplaceManage, PERMS.ApiAccess] },
   },
   {
     path: PAGE_MARKETPLACE,

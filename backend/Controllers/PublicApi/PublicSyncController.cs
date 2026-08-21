@@ -157,18 +157,16 @@ public class PublicSyncController : ControllerBase
         await _quotaService.EnsureProductQuotaAsync(storeId);
         var remainingSlots = await _quotaService.GetRemainingProductSlotsAsync(storeId);
 
-        var mappings = await _db.categoryMappings
+        var mappingRows = await _db.categoryMappings
             .AsNoTracking()
             .Where(m => m.connectionId == connectionId)
+            .ToListAsync(ct);
+        var localCategoryByExternal = mappingRows
             .GroupBy(m => m.externalCategoryId)
-            .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+            .ToDictionary(g => g.Key, g => g.First().localCategoryId);
 
         var batchId = Guid.NewGuid().ToString("N");
         var queued = 0;
-
-        var localCategoryByExternal = mappings.ToDictionary(
-            kv => kv.Key,
-            kv => kv.Value.localCategoryId);
 
         foreach (var item in body.products)
         {
@@ -201,7 +199,7 @@ public class PublicSyncController : ControllerBase
         }
 
         if (queued == 0)
-            throw ApiException.BadRequest("No product was queued (check category mappings)");
+            throw ApiException.BadRequest("No product was queued (check category mappings)", code: "import_nothing_queued");
 
         await _db.SaveChangesAsync(ct);
 
@@ -398,6 +396,7 @@ public class PublicSyncController : ControllerBase
         if (connection == null)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");
 
+        CatalogMatchService.EnsureConnectionActive(connection);
         return connection;
     }
 }

@@ -173,6 +173,11 @@ export default {
       }
     }, { flush: "post" });
 
+    const contextMenuRow = ref(null);
+    const onRowContextMenu = (row) => {
+      contextMenuRow.value = row;
+    };
+
     onMounted(() => {
       syncHeights();
       setupObserver();
@@ -185,6 +190,7 @@ export default {
 
     // Re-setup observer when rows change (new/removed rows)
     watch(() => props.data, () => {
+      contextMenuRow.value = null;
       setupObserver();
       scheduleSyncHeights();
     }, { flush: "post" });
@@ -375,6 +381,8 @@ export default {
       getColumnSort,
       onHeaderClick,
       onRowClick,
+      contextMenuRow,
+      onRowContextMenu,
       draggedColumnId,
       dragOverColumnId,
       onDragStart,
@@ -467,46 +475,51 @@ export default {
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody
-            :class="canScrollY
-              ? '[&_tr:last-child>td]:border-0'
-              : '[&_tr:last-child]:!border-b'"
-          >
-            <template v-if="table.getRowModel().rows?.length">
-              <ContextMenu
-                v-for="row in table.getRowModel().rows"
-                :key="row.id"
+            <ContextMenu>
+              <ContextMenuTrigger
+                as-child
+                :disabled="!table.getRowModel().rows?.length"
               >
-                <ContextMenuTrigger as-child>
-                  <TableRow
-                    :data-state="row.getIsSelected() ? 'selected' : undefined"
-                    class="cursor-pointer"
-                    @click="onRowClick(row, $event)"
-                  >
-                    <TableCell
-                      v-for="cell in row.getVisibleCells()"
-                      :key="cell.id"
-                      :style="{ width: cell.column.getSize() + 'px' }"
-                      class="px-2 py-1 border-b"
+                <TableBody
+                  :class="canScrollY
+                    ? '[&_tr:last-child>td]:border-0'
+                    : '[&_tr:last-child]:!border-b'"
+                >
+                  <template v-if="table.getRowModel().rows?.length">
+                    <TableRow
+                      v-for="row in table.getRowModel().rows"
+                      :key="row.id"
+                      :data-state="row.getIsSelected() ? 'selected' : undefined"
+                      class="cursor-pointer"
+                      @click="onRowClick(row, $event)"
+                      @contextmenu="onRowContextMenu(row)"
                     >
-                      <FlexRender
-                        :render="cell.column.columnDef.cell"
-                        :props="cell.getContext()"
-                      />
+                      <TableCell
+                        v-for="cell in row.getVisibleCells()"
+                        :key="cell.id"
+                        :style="{ width: cell.column.getSize() + 'px' }"
+                        class="px-2 py-1 border-b"
+                      >
+                        <FlexRender
+                          :render="cell.column.columnDef.cell"
+                          :props="cell.getContext()"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  </template>
+                  <TableRow v-else class="hover:bg-transparent">
+                    <TableCell :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b whitespace-normal">
+                      {{ $t("products.productsTable.noResults") }}
                     </TableCell>
                   </TableRow>
-                </ContextMenuTrigger>
-                <slot name="rowContextMenu" :row="row" />
-              </ContextMenu>
-            </template>
-            <template v-else>
-              <TableRow class="hover:bg-transparent">
-                <TableCell :colspan="columns.length" class="h-32 text-center p-2 align-middle border-b whitespace-normal">
-                  {{ $t("products.productsTable.noResults") }}
-                </TableCell>
-              </TableRow>
-            </template>
-          </TableBody>
+                </TableBody>
+              </ContextMenuTrigger>
+              <slot
+                v-if="contextMenuRow"
+                name="rowContextMenu"
+                :row="contextMenuRow"
+              />
+            </ContextMenu>
         </Table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->

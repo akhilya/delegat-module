@@ -18,6 +18,7 @@ const PAGE_STORE_ATTRIBUTES = "/store-attributes";
 const PAGE_TOOLS = "/tools";
 const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
 const PAGE_CATALOG_SCRAPE = "/tools/catalog-scrape";
+const PAGE_PUBLIC_API_TRY = "/tools/public-api-try";
 const PAGE_MARKETPLACE = "/adapter";
 const PAGE_PRODUCTS = "/products";
 const PAGE_SETUP = "/setup";
@@ -50,9 +51,11 @@ const ROUTE_PERMISSIONS = {
     PERMS.OperationsManage,
     PERMS.CatalogManage,
     PERMS.MarketplaceManage,
+    PERMS.ApiAccess,
   ],
   [PAGE_CATALOG_CONNECT]: [PERMS.MarketplaceManage],
   [PAGE_CATALOG_SCRAPE]: [PERMS.MarketplaceManage],
+  [PAGE_PUBLIC_API_TRY]: [PERMS.ApiAccess],
   [PAGE_MARKETPLACE]: [PERMS.MarketplaceManage],
   [PAGE_SETUP]: [PERMS.StoresCreate],
   [PAGE_STORE_STORAGE]: [PERMS.FilesManage],
@@ -86,6 +89,7 @@ export function getRequiredPermissionsForPath(path) {
     ];
   }
   if (p.startsWith(`${PAGE_CATEGORIES}/`)) return [PERMS.CatalogManage];
+  if (p.startsWith(`${PAGE_STORE_ATTRIBUTES}/`)) return [PERMS.CatalogManage];
   if (p.startsWith(PAGE_PRODUCT_GROUPS)) return [PERMS.CatalogManage];
   if (
     p.startsWith("/products/") &&
@@ -116,6 +120,7 @@ export function canAccessPath(me, path) {
   if (p === PAGE_ADAPTER_LOGS && me?.logAdapterHttpEnabled !== true)
     return false;
   if (p === PAGE_ADMIN_API && me?.publicApiEnabled === false) return false;
+  if (p === PAGE_PUBLIC_API_TRY && me?.publicApiEnabled === false) return false;
 
   const required = getRequiredPermissionsForPath(path);
   if (!required || required.length === 0) return true;

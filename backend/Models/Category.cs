@@ -63,6 +63,7 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
     {
         name = form.name;
         description = form.description;
+        hasSizes = form.hasSizes;
         storeId = form.storeId;
         createdAt = DateTime.UtcNow;
         return true;
@@ -137,6 +138,11 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         /// Store identifier the category belongs to.
         /// </summary>
         public int storeId { get; set; }
+
+        /// <summary>
+        /// Whether products in this category support sizes.
+        /// </summary>
+        public bool hasSizes { get; set; }
     }
 
     /// <summary>
@@ -155,6 +161,11 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         /// </summary>
         [StringLength(CATEGORY_DESCRIPTION_MAX_LENGTH)]
         public string? description { get; set; }
+
+        /// <summary>
+        /// Whether products in this category support sizes.
+        /// </summary>
+        public bool hasSizes { get; set; }
     }
 
     /// <summary>

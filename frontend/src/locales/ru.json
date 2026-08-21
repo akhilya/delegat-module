@@ -118,7 +118,7 @@
       "digitsCountError": "Нужно 8 (EAN-8) или 13 (EAN-13) цифр",
       "invalidCheckDigitError": "Неверная контрольная цифра",
       "ariaLabel": "Штрихкод (EAN-8 / EAN-13)",
-      "generateTitle": "Сгенерировать",
+      "generateAction": "Сгенерировать штрихкод",
       "regenerateTitle": "Перегенерировать штрихкод?",
       "regenerateDescription": "Текущий штрихкод {value} будет заменён на новый случайный. Это действие нельзя отменить.",
       "replace": "Заменить"
@@ -401,6 +401,7 @@
     "productCreation": "Новый товар",
     "productEdit": "Редактирование товара",
     "categoryEdit": "Редактирование категории",
+    "attributeEdit": "Редактирование атрибута",
     "connection": "Подключение",
     "ai": "AI",
     "trash": "Корзина",
@@ -425,6 +426,7 @@
     "setup": "Настройка",
     "catalogConnect": "Связать каталоги",
     "catalogScrape": "Собрать с витрины",
+    "publicApiTry": "Проверить Public API",
     "toolJob": "Инструмент"
   },
   "ai": {
@@ -2895,6 +2897,11 @@
       "uniqueBadge": "уник"
     },
     "storeAttributesPage": {
+      "breadcrumb": "Глобальные атрибуты",
+      "breadcrumbEditing": "Редактирование",
+      "optionsWord": "вариантов",
+      "notFoundTitle": "Атрибут не найден",
+      "notFoundDescription": "Этого глобального атрибута нет, или нет доступа.",
       "types": {
         "text": "Текст",
         "number": "Число",
@@ -3000,6 +3007,8 @@
       "catalogConnectDescription": "Загрузите каталог площадки в локальный, затем связывайте остальные каналы. Источник истины — локальный каталог.",
       "catalogScrapeTitle": "Собрать с витрины",
       "catalogScrapeDescription": "Найдите карточки на витрине маркетплейса и скопируйте их в локальный каталог без привязки.",
+      "publicApiTryTitle": "Проверить Public API",
+      "publicApiTryDescription": "Отправьте GET на /api/v1 с ключом, как это сделал бы партнёрский клиент, и посмотрите ответ.",
       "emptyTitle": "Пока нет инструментов",
       "emptyDescription": "Здесь появляются платформенные инструменты и задания из адаптеров, доступные для этого магазина.",
       "sectionPlatform": "Платформа",
@@ -3103,6 +3112,29 @@
       "applyOperationTitle": "Витрина {name}",
       "applyDone": "Импортировано {imported}, пропущено {skipped}, ошибок {failed}",
       "openProducts": "Открыть товары"
+    },
+    "publicApiTry": {
+      "breadcrumb": "Проверить Public API",
+      "modelBody": "Вызывает Public API v1 с ключом в Authorization, без cookie сессии панели. Удачные вызовы появятся в Настройки → API → Логи запросов, если логирование включено.",
+      "keyLabel": "API-ключ",
+      "keyHint": "Вставьте полный ключ (dk_…). Он показывается один раз при создании в Настройки → API.",
+      "keyPlaceholder": "dk_…",
+      "keyRequired": "Сначала вставьте API-ключ",
+      "endpointLabel": "Эндпоинт",
+      "endpoints": {
+        "me": "Текущий пользователь",
+        "stores": "Доступные магазины"
+      },
+      "customLabel": "Свой путь",
+      "customHint": "Любой GET под /api/v1, например /stores/{id}/products",
+      "pathLabel": "Путь",
+      "pathPlaceholder": "/stores/1/products",
+      "invalidPath": "Укажите путь под /api/v1, без полного URL",
+      "send": "Отправить",
+      "response": "Ответ",
+      "openLogs": "Открыть логи запросов",
+      "disabledTitle": "Public API выключен",
+      "disabledDescription": "Включите его в разделе Администрирование, прежде чем проверять партнёрские вызовы."
     },
     "productsPage": {
       "searchPlaceholder": "Поиск",
@@ -3464,6 +3496,7 @@
       "description": "Создавайте API-ключи для внешних интеграций и просматривайте активность запросов Public API.",
       "disabledBanner": "Public API сейчас выключен. Партнёрские вызовы /api/v1 получают 503. Включить можно в разделе «Администрирование».",
       "openSwagger": "Открыть Swagger",
+      "openTryTool": "Проверить Public API",
       "tabKeys": "Ключи",
       "tabLogs": "Логи запросов",
       "keys": {

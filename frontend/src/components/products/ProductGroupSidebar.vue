@@ -181,44 +181,71 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
 
         <template v-if="group">
           <ContextMenu v-for="member in group.members" :key="member.productId">
-            <Tooltip :disabled="!compact">
-              <TooltipTrigger as-child>
-                <ContextMenuTrigger as-child>
-                  <router-link
-                    :to="getMemberRoute(member)"
-                    class="transition-colors"
-                    :class="
-                      compact
-                        ? [
-                            'mx-auto flex size-12 items-center justify-center overflow-hidden rounded-lg',
-                            member.isCurrent
-                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-card'
-                              : 'hover:ring-2 hover:ring-border',
-                          ]
-                        : [
-                            'flex items-center gap-3 rounded-lg p-2',
-                            member.isCurrent
-                              ? 'bg-primary font-medium text-primary-foreground hover:bg-primary hover:text-primary-foreground'
-                              : 'hover:bg-accent/50',
-                          ]
-                    "
-                    v-bind="member.isCurrent ? { 'data-current-member': '' } : {}"
-                    :aria-label="memberLabel(member)"
-                    :aria-current="member.isCurrent ? 'page' : undefined"
-                  >
-                    <ProductImageCell
-                      v-if="!compact"
-                      :thumbnail-url="member.imageThumbnailUrl || null"
-                      :image-url="member.imageUrl || null"
-                      :stop-events="false"
+            <!--
+              ContextMenuTrigger must wrap Tooltip, not the reverse.
+              Its MenuAnchor is a 0×0 virtual point at (0, 0) until a
+              right-click; nested inside Tooltip it steals the popper
+              and the preview opens at the top-left of the viewport.
+            -->
+            <ContextMenuTrigger as-child>
+              <div :class="compact ? 'mx-auto size-12' : 'min-w-0 w-full'">
+                <Tooltip :disabled="!compact">
+                  <TooltipTrigger as-child>
+                    <router-link
+                      :to="getMemberRoute(member)"
+                      class="transition-colors"
+                      :class="
+                        compact
+                          ? [
+                              'flex size-full items-center justify-center overflow-hidden rounded-lg',
+                              member.isCurrent
+                                ? 'ring-2 ring-primary ring-offset-2 ring-offset-card'
+                                : 'hover:ring-2 hover:ring-border',
+                            ]
+                          : [
+                              'flex items-center gap-3 rounded-lg p-2',
+                              member.isCurrent
+                                ? 'bg-primary font-medium text-primary-foreground hover:bg-primary hover:text-primary-foreground'
+                                : 'hover:bg-accent/50',
+                            ]
+                      "
+                      v-bind="member.isCurrent ? { 'data-current-member': '' } : {}"
+                      :aria-label="memberLabel(member)"
+                      :aria-current="member.isCurrent ? 'page' : undefined"
                     >
+                      <ProductImageCell
+                        v-if="!compact"
+                        :thumbnail-url="member.imageThumbnailUrl || null"
+                        :image-url="member.imageUrl || null"
+                        :stop-events="false"
+                      >
+                        <AppImage
+                          :src="memberThumbSrc(member)"
+                          :alt="member.productName"
+                          blur-backdrop
+                          spinner-size="sm"
+                          :class="[
+                            'size-14 shrink-0 rounded-md',
+                            !memberThumbSrc(member)
+                              ? 'bg-secondary flex items-center justify-center'
+                              : 'bg-muted',
+                          ]"
+                          img-class="relative z-10 size-full object-contain"
+                        >
+                          <Image
+                            class="text-secondary-foreground size-[25%]"
+                            aria-hidden="true"
+                          />
+                        </AppImage>
+                      </ProductImageCell>
                       <AppImage
+                        v-else
                         :src="memberThumbSrc(member)"
-                        :alt="member.productName"
+                        alt=""
                         blur-backdrop
-                        spinner-size="sm"
+                        spinner-size="xs"
                         :class="[
-                          'size-14 shrink-0 rounded-md',
+                          'size-full shrink-0 rounded-lg',
                           !memberThumbSrc(member)
                             ? 'bg-secondary flex items-center justify-center'
                             : 'bg-muted',
@@ -230,75 +257,60 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                           aria-hidden="true"
                         />
                       </AppImage>
-                    </ProductImageCell>
-                    <AppImage
-                      v-else
-                      :src="memberThumbSrc(member)"
-                      alt=""
-                      blur-backdrop
-                      spinner-size="xs"
-                      :class="[
-                        'size-full shrink-0 rounded-lg',
-                        !memberThumbSrc(member)
-                          ? 'bg-secondary flex items-center justify-center'
-                          : 'bg-muted',
-                      ]"
-                      img-class="relative z-10 size-full object-contain"
-                    >
-                      <Image
-                        class="text-secondary-foreground size-[25%]"
-                        aria-hidden="true"
+                      <div v-if="!compact" class="min-w-0">
+                        <p class="truncate text-sm">
+                          {{ member.productName || member.productSku }}
+                        </p>
+                        <p
+                          class="truncate text-xs"
+                          :class="
+                            member.isCurrent
+                              ? 'text-primary-foreground/70'
+                              : 'text-muted-foreground'
+                          "
+                        >
+                          {{ member.productSku }}
+                        </p>
+                      </div>
+                    </router-link>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    v-if="compact"
+                    side="right"
+                    :side-offset="8"
+                    :class="
+                      memberPreviewSrc(member)
+                        ? 'max-w-none overflow-hidden p-1.5'
+                        : 'max-w-xs'
+                    "
+                  >
+                    <div class="flex flex-col gap-1.5">
+                      <AppImage
+                        v-if="memberPreviewSrc(member)"
+                        :src="memberPreviewSrc(member)"
+                        alt=""
+                        spinner-size="default"
+                        class="flex size-64 items-center justify-center"
+                        img-class="max-h-64 max-w-64 rounded-sm object-contain"
                       />
-                    </AppImage>
-                    <div v-if="!compact" class="min-w-0">
-                      <p class="truncate text-sm">
-                        {{ member.productName || member.productSku }}
-                      </p>
-                      <p
-                        class="truncate text-xs"
-                        :class="
-                          member.isCurrent
-                            ? 'text-primary-foreground/70'
-                            : 'text-muted-foreground'
-                        "
+                      <div
+                        :class="memberPreviewSrc(member) ? 'px-0.5 pb-0.5' : undefined"
                       >
-                        {{ member.productSku }}
-                      </p>
+                        <p class="font-medium">
+                          {{ member.productName || member.productSku }}
+                        </p>
+                        <p
+                          v-if="member.productName && member.productSku"
+                          class="text-muted-foreground text-xs"
+                        >
+                          {{ member.productSku }}
+                        </p>
+                      </div>
                     </div>
-                  </router-link>
-                </ContextMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent
-                v-if="compact"
-                side="right"
-                :side-offset="8"
-                :class="
-                  memberPreviewSrc(member)
-                    ? 'max-w-none overflow-hidden p-1.5'
-                    : 'max-w-xs'
-                "
-              >
-                <div class="flex flex-col gap-1.5">
-                  <AppImage
-                    v-if="memberPreviewSrc(member)"
-                    :src="memberPreviewSrc(member)"
-                    alt=""
-                    spinner-size="default"
-                    class="flex size-64 items-center justify-center"
-                    img-class="max-h-64 max-w-64 rounded-sm object-contain"
-                  />
-                  <div :class="memberPreviewSrc(member) ? 'px-0.5 pb-0.5' : undefined">
-                    <p class="font-medium">{{ member.productName || member.productSku }}</p>
-                    <p
-                      v-if="member.productName && member.productSku"
-                      class="text-muted-foreground text-xs"
-                    >
-                      {{ member.productSku }}
-                    </p>
-                  </div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </ContextMenuTrigger>
             <ContextMenuContent v-if="getDuplicateUrl" class="w-56">
               <ContextMenuLabel class="min-w-0 overflow-hidden font-normal">
                 <div class="flex min-w-0 flex-col gap-0.5">
