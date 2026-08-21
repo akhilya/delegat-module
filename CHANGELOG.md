@@ -65,7 +65,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Mapping preview-product picker sits on an opaque card so the canvas grid does not show through the field
 - Product Adapters tab shows the adapter icon and name on each connection card again
 - Nested dropdown and context-menu panels (user language, adapter connection submenus) open beside the parent instead of being clipped by the frosted menu
-- First WooCommerce export of product sizes now sends variations (local variant id), and a later export stores the marketplace variation ids
+- First WooCommerce and OpenCart export of product sizes now sends variations (local variant id); WooCommerce later export stores the marketplace variation ids
 - Wildberries card update applies per-size prices from the Sizes tab
 - Creating a product group from product properties shows the group name in the picker instead of its id; Create group stays only in the dropdown
 - Revoking an invitation token from the invite dialog no longer closes that dialog before the confirm appears
