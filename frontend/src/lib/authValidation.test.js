@@ -41,6 +41,11 @@ describe("passwordSchema", () => {
     assert.equal(schema.safeParse("password").success, true);
     assert.equal(schema.safeParse("short").success, false);
   });
+
+  it("can lower the minimum length for sign-in", () => {
+    const schema = passwordSchema(t, { minLength: 1 });
+    assert.equal(schema.safeParse("user123").success, true);
+  });
 });
 
 describe("newPasswordFieldsIssue", () => {

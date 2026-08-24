@@ -2882,6 +2882,53 @@ namespace Delegat.Migrations
                     b.ToTable("Roles");
                 });
 
+            modelBuilder.Entity("Delegat.Models.WebAuthnCredential", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("credentialId")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("varbinary(1024)");
+
+                    b.Property<DateTimeOffset?>("lastUsedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("nickname")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<byte[]>("publicKey")
+                        .IsRequired()
+                        .HasColumnType("longblob");
+
+                    b.Property<uint>("signCount")
+                        .HasColumnType("int unsigned");
+
+                    b.Property<byte[]>("userHandle")
+                        .IsRequired()
+                        .HasColumnType("longblob");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("credentialId")
+                        .IsUnique();
+
+                    b.HasIndex("userId");
+
+                    b.ToTable("webAuthnCredentials", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<int>", b =>
                 {
                     b.Property<int>("Id")
@@ -2937,6 +2984,27 @@ namespace Delegat.Migrations
                     b.HasKey("UserId", "RoleId");
 
                     b.ToTable("UserRoles");
+                });
+
+            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LoginProvider")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("UserId", "LoginProvider", "Name");
+
+                    b.ToTable("UserTokens", (string)null);
                 });
 
             modelBuilder.Entity("StoreUser", b =>
@@ -3550,6 +3618,17 @@ namespace Delegat.Migrations
                 });
 
             modelBuilder.Entity("Delegat.Models.UserApiKey", b =>
+                {
+                    b.HasOne("Delegat.Models.User", "user")
+                        .WithMany()
+                        .HasForeignKey("userId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("user");
+                });
+
+            modelBuilder.Entity("Delegat.Models.WebAuthnCredential", b =>
                 {
                     b.HasOne("Delegat.Models.User", "user")
                         .WithMany()

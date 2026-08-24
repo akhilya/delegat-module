@@ -16,12 +16,14 @@ export function usernameSchema(t) {
 
 /**
  * @param {Function} t
- * @param {{ requirePolicy?: boolean }} [options] — digit + lowercase (sign-up / password change)
+ * @param {{ requirePolicy?: boolean, minLength?: number }} [options]
+ *   requirePolicy — digit + lowercase (sign-up / password change)
+ *   minLength — 8 by default; sign-in uses 1 so existing accounts (and demo query login) still submit
  */
-export function passwordSchema(t, { requirePolicy = false } = {}) {
+export function passwordSchema(t, { requirePolicy = false, minLength = 8 } = {}) {
   let schema = z
     .string()
-    .min(8, { message: t("auth.passwordTooShort") })
+    .min(minLength, { message: t("auth.passwordTooShort") })
     .max(FIELD_LIMITS.password, { message: t("auth.passwordTooLong") });
 
   if (requirePolicy) {

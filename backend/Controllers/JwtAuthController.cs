@@ -2,11 +2,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Fido2NetLib;
+using Fido2NetLib.Objects;
 using static Delegat.Models.User;
 
 namespace Delegat.Controllers;
@@ -25,6 +30,14 @@ public class JwtAuthController : ControllerBase
     private const string REFRESH_COOKIE = "refresh_token";
 
     private readonly IPermissionService _permissionService;
+    private readonly LoginTicketProtector _loginTickets;
+    private readonly IMemoryCache _cache;
+    private readonly DataContext _db;
+
+    private static readonly JsonSerializerOptions PasskeyJson = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
 
     public JwtAuthController(
         UserManager<User> userManager,
@@ -32,7 +45,10 @@ public class JwtAuthController : ControllerBase
         IJwtService jwtService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
-        IPermissionService permissionService)
+        IPermissionService permissionService,
+        LoginTicketProtector loginTickets,
+        IMemoryCache cache,
+        DataContext db)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -40,6 +56,9 @@ public class JwtAuthController : ControllerBase
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _permissionService = permissionService;
+        _loginTickets = loginTickets;
+        _cache = cache;
+        _db = db;
     }
 
     [HttpPost]
@@ -64,6 +83,15 @@ public class JwtAuthController : ControllerBase
         if (!result.Succeeded)
             throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
 
+        if (await _userManager.GetTwoFactorEnabledAsync(user))
+        {
+            return Ok(new
+            {
+                status = "twoFactorRequired",
+                loginTicket = _loginTickets.Protect(user.Id, input.rememberMe),
+            });
+        }
+
         await IssueTokens(user.Id, user.UserName ?? "", input.rememberMe);
 
         return Ok(new
@@ -72,6 +100,143 @@ public class JwtAuthController : ControllerBase
             next = "/products"
         });
     }
+
+    [HttpPost]
+    [Route("/auth/signIn/totp")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> PostSignInTotp([FromBody] TotpSignInForm input)
+    {
+        var user = await UserFromTicketAsync(input.loginTicket);
+        var code = TotpUri.NormalizeCode(input.code);
+        var rememberMe = input.rememberMe ?? TicketRememberMe(input.loginTicket);
+        if (string.IsNullOrEmpty(code)
+            || !await _userManager.VerifyTwoFactorTokenAsync(
+                user,
+                _userManager.Options.Tokens.AuthenticatorTokenProvider,
+                code))
+        {
+            await _userManager.AccessFailedAsync(user);
+            throw ApiException.Unauthorized("Invalid authenticator code", code: "invalid_totp");
+        }
+
+        if (!_loginTickets.TryConsume(input.loginTicket))
+            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+
+        await _userManager.ResetAccessFailedCountAsync(user);
+        return await CompletePasswordlessSignInAsync(user, rememberMe);
+    }
+
+    [HttpPost]
+    [Route("/auth/signIn/recovery")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> PostSignInRecovery([FromBody] RecoverySignInForm input)
+    {
+        var user = await UserFromTicketAsync(input.loginTicket);
+        var rememberMe = input.rememberMe ?? TicketRememberMe(input.loginTicket);
+        var code = TotpUri.NormalizeCode(input.code);
+        var redeemed = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, code);
+        if (!redeemed.Succeeded)
+        {
+            await _userManager.AccessFailedAsync(user);
+            throw ApiException.Unauthorized("Invalid recovery code", code: "invalid_recovery");
+        }
+
+        if (!_loginTickets.TryConsume(input.loginTicket))
+            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+
+        await _userManager.ResetAccessFailedCountAsync(user);
+        return await CompletePasswordlessSignInAsync(user, rememberMe);
+    }
+
+    [HttpPost]
+    [Route("/auth/signIn/passkey/options")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public IActionResult PostSignInPasskeyOptions([FromBody] PasskeySignInOptionsForm? _)
+    {
+        // Empty allowCredentials: discoverable passkeys. A username here would fill the
+        // list and also leak whether that account exists and has a passkey.
+        var fido2 = PasskeyFido2.Create(Request);
+        var options = fido2.GetAssertionOptions(new GetAssertionOptionsParams
+        {
+            AllowedCredentials = [],
+            UserVerification = UserVerificationRequirement.Preferred,
+        });
+        PasskeyFido2.SaveChallenge(HttpContext, _cache, "assertion", options.ToJson());
+        return Content(options.ToJson(), "application/json");
+    }
+
+    [HttpPost]
+    [Route("/auth/signIn/passkey")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> PostSignInPasskey([FromBody] JsonElement body)
+    {
+        var json = PasskeyFido2.TakeChallenge(HttpContext, _cache, "assertion")
+            ?? throw ApiException.Unauthorized("Passkey challenge expired", code: "challenge_expired");
+        var options = AssertionOptions.FromJson(json);
+        var assertion = JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(body.GetRawText(), PasskeyJson)
+            ?? throw ApiException.Unauthorized("Invalid passkey assertion", code: "passkey_failed");
+
+        var cred = await _db.webAuthnCredentials.FirstOrDefaultAsync(c => c.credentialId == assertion.RawId)
+            ?? throw ApiException.Unauthorized("Unknown passkey", code: "passkey_failed");
+
+        var fido2 = PasskeyFido2.Create(Request);
+        var result = await fido2.MakeAssertionAsync(new MakeAssertionParams
+        {
+            AssertionResponse = assertion,
+            OriginalOptions = options,
+            StoredPublicKey = cred.publicKey,
+            StoredSignatureCounter = cred.signCount,
+            IsUserHandleOwnerOfCredentialIdCallback = (args, _) =>
+                Task.FromResult(
+                    cred.userHandle.AsSpan().SequenceEqual(args.UserHandle)
+                    && cred.credentialId.AsSpan().SequenceEqual(args.CredentialId)),
+        });
+
+        cred.signCount = result.SignCount;
+        cred.lastUsedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var user = await _userManager.FindByIdAsync(cred.userId.ToString())
+            ?? throw ApiException.Unauthorized("Unknown passkey", code: "passkey_failed");
+        if (!user.isActive)
+            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
+        if (await _userManager.IsLockedOutAsync(user))
+            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
+
+        var rememberMe = body.TryGetProperty("rememberMe", out var rm) && rm.ValueKind == JsonValueKind.True;
+        return await CompletePasswordlessSignInAsync(user, rememberMe);
+    }
+
+    private async Task<IActionResult> CompletePasswordlessSignInAsync(User user, bool rememberMe)
+    {
+        await IssueTokens(user.Id, user.UserName ?? "", rememberMe);
+        return Ok(new
+        {
+            user = await MapAuthUserDtoAsync(user),
+            next = "/products"
+        });
+    }
+
+    private async Task<User> UserFromTicketAsync(string? ticket)
+    {
+        if (!_loginTickets.TryUnprotect(ticket, out var payload))
+            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+
+        var user = await _userManager.FindByIdAsync(payload.UserId.ToString())
+            ?? throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
+        if (!user.isActive)
+            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
+        if (await _userManager.IsLockedOutAsync(user))
+            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
+        return user;
+    }
+
+    private bool TicketRememberMe(string? ticket) =>
+        _loginTickets.TryUnprotect(ticket, out var payload) && payload.RememberMe;
 
     [HttpPost]
     [Route("/auth/signUp")]
@@ -346,6 +511,25 @@ public class JwtAuthController : ControllerBase
         public string userName { get; set; }
         public string password { get; set; }
         public bool rememberMe { get; set; }
+    }
+
+    public struct TotpSignInForm
+    {
+        public string loginTicket { get; set; }
+        public string code { get; set; }
+        public bool? rememberMe { get; set; }
+    }
+
+    public struct RecoverySignInForm
+    {
+        public string loginTicket { get; set; }
+        public string code { get; set; }
+        public bool? rememberMe { get; set; }
+    }
+
+    public struct PasskeySignInOptionsForm
+    {
+        public string? userName { get; set; }
     }
 
     public struct SignUpForm

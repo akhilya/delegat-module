@@ -125,6 +125,19 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 
 ---
 
+## Auth (TOTP + passkeys)
+
+- Password sign-in with 2FA returns `{ status: "twoFactorRequired", loginTicket }` (no JWT cookies). TOTP or a recovery code completes sign-in and sets cookies.
+- Passkey sign-in is passwordless and skips TOTP.
+- TOTP issuer is `Delegat` (`TotpUri.Issuer`). Do not use the hostname as issuer.
+- Passkeys: Fido2 4.0, discoverable (`ResidentKey = Required`; keep `RequireResidentKey = true` for Bitwarden). Do not set `AuthenticatorAttachment`. RP id is the current hostname from `Origin`, not a shared parent domain.
+- Challenge cookie `delegat.webauthn`, path `/api/auth`.
+- Identity authenticator keys persist in `UserTokens` (do not `Ignore` `IdentityUserToken`). Credentials live in `webAuthnCredentials`.
+- Frontend: `@simplewebauthn/browser` v13 (`startRegistration` / `startAuthentication` with `optionsJSON`). Conditional UI: `useBrowserAutofill: true` and `autocomplete="username webauthn"`.
+- QR codes: local `qrcode` SVG (`otpauthQrSvg`) — never Google Charts.
+
+---
+
 ## Stack pointers
 
 | Area | Where |

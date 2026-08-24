@@ -52,6 +52,7 @@ import {
   File02Icon as File02IconData,
   FileSpreadsheetIcon as FileSpreadsheetIconData,
   FilterIcon as FilterIconData,
+  FingerPrintIcon as FingerPrintIconData,
   FloppyDiskIcon as FloppyDiskIconData,
   Folder01Icon as Folder01IconData,
   FolderLibraryIcon as FolderLibraryIconData,
@@ -103,6 +104,7 @@ import {
   Settings01Icon as Settings01IconData,
   Settings02Icon as Settings02IconData,
   Share08Icon as Share08IconData,
+  Shield01Icon as Shield01IconData,
   ShoppingBag01Icon as ShoppingBag01IconData,
   SidebarLeft01Icon as SidebarLeft01IconData,
   SlidersHorizontalIcon as SlidersHorizontalIconData,
@@ -213,6 +215,7 @@ export const Files = createHugeIcon(File01IconData, "Files");
 export const FileSpreadsheet = createHugeIcon(FileSpreadsheetIconData, "FileSpreadsheet");
 export const FileText = createHugeIcon(File02IconData, "FileText");
 export const Filter = createHugeIcon(FilterIconData, "Filter");
+export const Fingerprint = createHugeIcon(FingerPrintIconData, "Fingerprint");
 export const Folder = createHugeIcon(Folder01IconData, "Folder");
 export const FolderOpen = createHugeIcon(FolderOpenIconData, "FolderOpen");
 export const FolderTree = createHugeIcon(FolderLibraryIconData, "FolderTree");
@@ -270,6 +273,7 @@ export const SearchIcon = createHugeIcon(Search01IconData, "SearchIcon");
 export const Settings = createHugeIcon(Settings01IconData, "Settings");
 export const Settings2 = createHugeIcon(Settings02IconData, "Settings2");
 export const Share2 = createHugeIcon(Share08IconData, "Share2");
+export const Shield = createHugeIcon(Shield01IconData, "Shield");
 export const ShoppingBag = createHugeIcon(ShoppingBag01IconData, "ShoppingBag");
 export const SlidersHorizontal = createHugeIcon(SlidersHorizontalIconData, "SlidersHorizontal");
 export const Sparkles = createHugeIcon(SparklesIconData, "Sparkles");

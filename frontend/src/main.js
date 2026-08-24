@@ -139,7 +139,7 @@ http.interceptors.response.use(
     // Auto-refresh on 401
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Auth endpoints return 401 for invalid credentials - don't attempt refresh
-      if (/\/auth\/(signIn|signUp|refresh)/.test(originalRequest.url || "")) {
+      if (/\/auth\/(signIn|signUp|refresh|account)/.test(originalRequest.url || "")) {
         return Promise.reject(error);
       }
 

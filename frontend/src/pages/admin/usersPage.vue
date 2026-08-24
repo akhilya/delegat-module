@@ -43,6 +43,7 @@ import { hasPermission, PERMS } from "@/lib/permissions";
 import { isOwnerRoleLocked, isUserAccessRowLocked } from "@/lib/userAccessEdit";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { newPasswordFieldsIssue } from "@/lib/authValidation";
+import { buildInviteSignUpUrl } from "@/lib/inviteSignUpUrl";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 
@@ -414,9 +415,13 @@ export default {
       this.isCreatingToken = false;
     },
 
+    inviteLink(token) {
+      return buildInviteSignUpUrl(window.location.origin, token);
+    },
+
     async copyToken(token) {
       try {
-        await navigator.clipboard.writeText(token);
+        await navigator.clipboard.writeText(this.inviteLink(token) || token);
         this.copiedToken = token;
         displaySonnerSuccess(this.$t("pages.usersPage.invite.tokenCopied"));
         setTimeout(() => {
@@ -686,7 +691,7 @@ export default {
                   <KeyRound class="size-4" />
                 </template>
                 <code class="block break-all font-mono text-xs">
-                  {{ lastCreatedToken }}
+                  {{ inviteLink(lastCreatedToken) }}
                 </code>
                 <template #trailing>
                   <Button

@@ -15,7 +15,8 @@ import { useStore } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useRouter, useRoute } from "vue-router";
 import { PAGE_SIGN_IN } from "@/router";
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
+import { readInviteTokenQuery } from "@/lib/inviteSignUpUrl";
 import {
   passwordSchema,
   translateApiFieldErrors,
@@ -63,8 +64,14 @@ export default {
     const form = useForm({
       validationSchema: formSchema,
       initialValues: {
-        invitationToken: route.query.token || "",
+        invitationToken: readInviteTokenQuery(route.query) || "",
       },
+    });
+
+    onMounted(() => {
+      const token = readInviteTokenQuery(route.query);
+      if (!token) return;
+      form.setFieldValue("invitationToken", token, false);
     });
 
     const onSubmit = form.handleSubmit(async (values) => {

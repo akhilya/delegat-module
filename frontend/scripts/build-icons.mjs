@@ -82,6 +82,8 @@ const MAP = {
   ImageDown: "ImageDownloadIcon",
   ImageOff: "ImageNotFound01Icon",
   KeyRound: "Key01Icon",
+  Fingerprint: "FingerPrintIcon",
+  Shield: "Shield01Icon",
   Languages: "LanguageCircleIcon",
   Layers: "Layers01Icon",
   LayoutGrid: "DashboardSquare01Icon",

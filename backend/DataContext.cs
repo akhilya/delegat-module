@@ -48,6 +48,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
     public DbSet<UserApiKey> userApiKeys { get; set; }
+    public DbSet<WebAuthnCredential> webAuthnCredentials { get; set; }
     /// <summary>
     /// Legacy M2M - readable until DropStoreAdministrators applies. Excluded from further schema diffs.
     /// </summary>
@@ -111,8 +112,14 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.Ignore<IdentityUserLogin<int>>();
-        builder.Ignore<IdentityUserToken<int>>();
         builder.Entity<IdentityUserRole<int>>().HasKey(r => new { r.UserId, r.RoleId });
+        builder.Entity<IdentityUserToken<int>>(e =>
+        {
+            e.ToTable("UserTokens");
+            e.HasKey(t => new { t.UserId, t.LoginProvider, t.Name });
+            e.Property(t => t.LoginProvider).HasMaxLength(128);
+            e.Property(t => t.Name).HasMaxLength(128);
+        });
 
         // Kept queryable for MigrateLegacyAccessAsync between RolesAndPermissions and DropStoreAdministrators.
         // ExcludeFromMigrations: Drop is already scaffolded; do not recreate the table on future adds.
@@ -143,6 +150,21 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .WithMany()
             .HasForeignKey(k => k.userId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<WebAuthnCredential>(e =>
+        {
+            e.ToTable("webAuthnCredentials");
+            e.Property(c => c.credentialId).IsRequired().HasMaxLength(1024);
+            e.Property(c => c.publicKey).IsRequired();
+            e.Property(c => c.userHandle).IsRequired();
+            e.Property(c => c.nickname).HasMaxLength(128);
+            e.HasIndex(c => c.credentialId).IsUnique();
+            e.HasIndex(c => c.userId);
+            e.HasOne(c => c.user)
+                .WithMany()
+                .HasForeignKey(c => c.userId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // SystemVersion unique key
         builder.Entity<SystemVersion>()

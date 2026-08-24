@@ -195,6 +195,7 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddSingleton<LoginTicketProtector>();
 builder.Services.AddScoped<Delegat.Controllers.PublicApi.PublicApiStoreContext>();
 builder.Services.AddScoped<UserApiKeyService>();
 builder.Services.AddSingleton<ApiRequestLogService>();

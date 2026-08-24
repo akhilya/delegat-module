@@ -40,10 +40,66 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async postSignInUser(ctx, { input, onSuccess, onError }) {
+    async postSignInUser(ctx, { input, onSuccess, onTwoFactor, onError }) {
       return await useAxios(
         `/auth/signIn`,
         { method: "POST", data: { ...input }, cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => {
+          const body = response.data?.value ?? response.data;
+          if (body?.status === "twoFactorRequired") {
+            onTwoFactor?.(body);
+            return;
+          }
+          resetAuthCache();
+          onSuccess(response);
+        })
+        .catch((error) => onError(error));
+    },
+
+    async postSignInTotp(ctx, { input, onSuccess, onError }) {
+      return await useAxios(
+        `/auth/signIn/totp`,
+        { method: "POST", data: { ...input }, cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => {
+          resetAuthCache();
+          onSuccess(response);
+        })
+        .catch((error) => onError(error));
+    },
+
+    async postSignInRecovery(ctx, { input, onSuccess, onError }) {
+      return await useAxios(
+        `/auth/signIn/recovery`,
+        { method: "POST", data: { ...input }, cache: false },
+        http,
+        {
+          immediate: true,
+          abortPrevious: true,
+        },
+      )
+        .then((response) => {
+          resetAuthCache();
+          onSuccess(response);
+        })
+        .catch((error) => onError(error));
+    },
+
+    async postSignInPasskey(ctx, { assertion, rememberMe, onSuccess, onError }) {
+      return await useAxios(
+        `/auth/signIn/passkey`,
+        { method: "POST", data: { ...assertion, rememberMe }, cache: false },
         http,
         {
           immediate: true,

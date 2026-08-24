@@ -107,6 +107,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     private readonly ILoggingSettingsService _loggingSettings;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _worker;
+    private int _disposed;
 
     public AdapterHttpLogService(
         IServiceScopeFactory scopeFactory,
@@ -263,7 +264,12 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             retentionDays = Math.Clamp(days, 1, 30);
 
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
-        var old = await db.adapterHttpLogs.Where(l => l.createdAt < cutoff).Take(5000).ToListAsync(ct);
+        var old = await db.adapterHttpLogs
+            .Where(l => l.createdAt < cutoff)
+            .OrderBy(l => l.createdAt)
+            .ThenBy(l => l.Id)
+            .Take(5000)
+            .ToListAsync(ct);
         if (old.Count > 0)
         {
             db.adapterHttpLogs.RemoveRange(old);
@@ -465,9 +471,20 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
 
     public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
         _channel.Writer.TryComplete();
-        try { await _worker; } catch { /* ignore */ }
+        try { await _worker.ConfigureAwait(false); } catch { /* ignore */ }
         _cts.Dispose();
     }
 }
