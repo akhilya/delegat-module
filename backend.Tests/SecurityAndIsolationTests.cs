@@ -26,18 +26,12 @@ public class SecurityHeadersMiddlewareTests
     public async Task Invoke_SetsNoindexRobotsTag()
     {
         var context = new DefaultHttpContext();
-        context.Response.Body = new MemoryStream();
-        var mw = new SecurityHeadersMiddleware(_ =>
-        {
-            context.Response.StatusCode = 204;
-            return Task.CompletedTask;
-        });
+        var mw = new SecurityHeadersMiddleware(_ => Task.CompletedTask);
 
         await mw.InvokeAsync(context);
-        await context.Response.StartAsync();
 
-        Assert.Equal("noindex, nofollow, noarchive", context.Response.Headers["X-Robots-Tag"]);
-        Assert.Equal("nosniff", context.Response.Headers["X-Content-Type-Options"]);
+        Assert.Equal("noindex, nofollow, noarchive", context.Response.Headers["X-Robots-Tag"].ToString());
+        Assert.Equal("nosniff", context.Response.Headers["X-Content-Type-Options"].ToString());
     }
 }
 

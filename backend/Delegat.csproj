@@ -36,6 +36,8 @@
 
     <!-- JWT Authentication -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.20" />
+    <!-- Fido2 pulls IdentityModel.Tokens 8.x; JwtBearer still resolved System.IdentityModel.Tokens.Jwt 7.1.2, so ValidateToken missed exp (IDX10225). -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.0" />
 
     <!-- MinIO SDK -->
     <PackageReference Include="Minio" Version="6.0.5" />
