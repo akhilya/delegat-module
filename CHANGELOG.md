@@ -84,6 +84,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Product tables on a connection, Catalog Connect / scrape result tables, adapter tool job tables, and log tables show a hairline border frame again
 - Stop on a background job takes effect in the panel immediately and cancels remaining queue work; an in-flight marketplace call for the current item may still finish. Stop is available for Catalog Connect and catalog scrape. One-shot request-scoped sync (single product, prices, stock, Excel, adapter tools) still hides Stop because that HTTP call cannot be aborted.
 
+### Security
+
+- Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
+
 ## [1.6.0] - 2026-08-18
 
 ### Added
