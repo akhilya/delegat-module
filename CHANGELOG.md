@@ -85,6 +85,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Stop on a background job takes effect in the panel immediately and cancels remaining queue work; an in-flight marketplace call for the current item may still finish. Stop is available for Catalog Connect and catalog scrape. One-shot request-scoped sync (single product, prices, stock, Excel, adapter tools) still hides Stop because that HTTP call cannot be aborted.
 - Align `System.IdentityModel.Tokens.Jwt` with Fido2's IdentityModel 8 stack so access-token validation sees `exp` again
 - Apply security headers before the rest of the pipeline so empty responses still get `X-Robots-Tag`
+- Sync `package-lock.json` with passkey/QR deps so frontend Docker `npm ci` succeeds
 
 ### Security
 
