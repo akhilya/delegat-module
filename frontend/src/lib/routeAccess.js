@@ -124,7 +124,17 @@ export function canAccessPath(me, path) {
 
   const required = getRequiredPermissionsForPath(path);
   if (!required || required.length === 0) return true;
-  return hasAnyPermission(me, required);
+  if (hasAnyPermission(me, required)) return true;
+  return canBrowsePathWithWorkspaceView(me, p);
+}
+
+function canBrowsePathWithWorkspaceView(me, p) {
+  if (!hasPermission(me, PERMS.WorkspaceView)) return false;
+  if (p === PAGE_ADMIN_PLUGINS || p.startsWith(`${PAGE_ADMIN_PLUGINS}/`))
+    return false;
+  if (p === PAGE_SETUP || p.startsWith(`${PAGE_SETUP}/`)) return false;
+  if (p === PAGE_PRODUCT_CREATION || p.includes("/create")) return false;
+  return true;
 }
 
 /**
@@ -143,7 +153,8 @@ export function fallbackPathForUser(me) {
   }
   if (
     hasPermission(me, PERMS.CatalogManage) ||
-    hasPermission(me, PERMS.ReferenceRead)
+    hasPermission(me, PERMS.ReferenceRead) ||
+    hasPermission(me, PERMS.WorkspaceView)
   )
     return PAGE_PRODUCTS;
   return PAGE_SETTINGS_USER;

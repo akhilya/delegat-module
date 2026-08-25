@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { hasPermission, PERMS } from "@/lib/permissions";
+import { hasPermission, isCabinetViewOnly, PERMS } from "@/lib/permissions";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { newPasswordFieldsIssue } from "@/lib/authValidation";
 import { otpauthQrSvg } from "@/lib/totpQr";
@@ -85,6 +85,8 @@ const hasProfileChanges = computed(
 const canManageOperations = computed(() =>
   hasPermission(me.value, PERMS.OperationsManage),
 );
+
+const accountFrozen = computed(() => isCabinetViewOnly(me.value));
 
 const autoOpenOperationsPanel = computed({
   get: () => store.state.operations.autoOpenPanel !== false,
@@ -322,6 +324,12 @@ onMounted(() => {
   <div class="flex w-full max-w-xl flex-col gap-8 pb-10">
     <PageSection :loading="isLoading">
       <div class="flex flex-col gap-8">
+      <p
+        v-if="accountFrozen"
+        class="px-1 text-xs text-muted-foreground"
+      >
+        {{ $t("pages.settingsUserPage.viewOnlyHint") }}
+      </p>
       <section>
         <InsetGroupLabel>{{ $t("pages.settingsUserPage.profileTitle") }}</InsetGroupLabel>
         <p class="mb-2 px-1 text-xs text-muted-foreground">
@@ -333,7 +341,7 @@ onMounted(() => {
               <Input
                 id="user-name"
                 v-model="userNameDraft"
-                :disabled="isSavingProfile"
+                :disabled="isSavingProfile || accountFrozen"
                 :maxlength="FIELD_LIMITS.userNameStored"
               />
             </SettingsFormField>
@@ -342,7 +350,7 @@ onMounted(() => {
             <Button
               type="submit"
               size="sm"
-              :disabled="isSavingProfile || !hasProfileChanges"
+              :disabled="isSavingProfile || !hasProfileChanges || accountFrozen"
             >
               <Spinner v-if="isSavingProfile" class="mr-2" />
               <Save v-else class="mr-2 size-4" />
@@ -389,7 +397,7 @@ onMounted(() => {
                 id="current-password"
                 v-model="currentPassword"
                 autocomplete="current-password"
-                :disabled="isChangingPassword"
+                :disabled="isChangingPassword || accountFrozen"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
@@ -402,7 +410,7 @@ onMounted(() => {
                 id="new-password"
                 v-model="newPassword"
                 autocomplete="new-password"
-                :disabled="isChangingPassword"
+                :disabled="isChangingPassword || accountFrozen"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
@@ -415,7 +423,7 @@ onMounted(() => {
                 id="confirm-password"
                 v-model="confirmPassword"
                 autocomplete="new-password"
-                :disabled="isChangingPassword"
+                :disabled="isChangingPassword || accountFrozen"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
@@ -424,7 +432,7 @@ onMounted(() => {
             <Button
               type="submit"
               size="sm"
-              :disabled="isChangingPassword || !canSubmitPassword"
+              :disabled="isChangingPassword || !canSubmitPassword || accountFrozen"
             >
               <Spinner v-if="isChangingPassword" class="mr-2" />
               {{ $t("pages.settingsUserPage.changePasswordButton") }}
@@ -459,13 +467,13 @@ onMounted(() => {
                 id="totp-start-password"
                 v-model="totpPassword"
                 autocomplete="current-password"
-                :disabled="totpBusy"
+                :disabled="totpBusy || accountFrozen"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
           </FieldGroup>
           <div class="flex justify-end">
-            <Button type="submit" size="sm" :disabled="totpBusy || !totpPassword">
+            <Button type="submit" size="sm" :disabled="totpBusy || !totpPassword || accountFrozen">
               <Spinner v-if="totpBusy" class="mr-2" />
               {{ $t("pages.settingsUserPage.totpStart") }}
             </Button>
@@ -495,12 +503,12 @@ onMounted(() => {
                   inputmode="numeric"
                   autocomplete="one-time-code"
                   maxlength="6"
-                  :disabled="totpBusy"
+                  :disabled="totpBusy || accountFrozen"
                 />
               </SettingsFormField>
             </FieldGroup>
             <div class="mt-2 flex justify-end">
-              <Button type="submit" size="sm" :disabled="totpBusy || totpCode.length !== 6">
+              <Button type="submit" size="sm" :disabled="totpBusy || totpCode.length !== 6 || accountFrozen">
                 <Spinner v-if="totpBusy" class="mr-2" />
                 {{ $t("pages.settingsUserPage.totpConfirm") }}
               </Button>
@@ -520,7 +528,7 @@ onMounted(() => {
           </Button>
         </div>
         <div v-if="totpEnabled" class="mt-3">
-          <Button type="button" variant="destructive" size="sm" @click="disableOpen = true">
+          <Button type="button" variant="destructive" size="sm" :disabled="accountFrozen" @click="disableOpen = true">
             {{ $t("pages.settingsUserPage.totpDisable") }}
           </Button>
         </div>
@@ -558,7 +566,7 @@ onMounted(() => {
                 type="button"
                 variant="outline"
                 size="sm"
-                :disabled="passkeyBusy"
+                :disabled="passkeyBusy || accountFrozen"
                 @click="deletePasskeyId = item.id; deleteOpen = true"
               >
                 {{ $t("pages.settingsUserPage.passkeyDelete") }}
@@ -581,7 +589,7 @@ onMounted(() => {
                 :placeholder="$t('pages.settingsUserPage.passkeyNicknamePlaceholder')"
                 autocomplete="off"
                 maxlength="128"
-                :disabled="passkeyBusy"
+                :disabled="passkeyBusy || accountFrozen"
               />
             </SettingsFormField>
             <SettingsFormField
@@ -592,13 +600,13 @@ onMounted(() => {
                 id="passkey-password"
                 v-model="passkeyPassword"
                 autocomplete="current-password"
-                :disabled="passkeyBusy"
+                :disabled="passkeyBusy || accountFrozen"
                 :maxlength="FIELD_LIMITS.password"
               />
             </SettingsFormField>
           </FieldGroup>
           <div class="flex justify-end">
-            <Button type="submit" size="sm" :disabled="passkeyBusy || !passkeyPassword">
+            <Button type="submit" size="sm" :disabled="passkeyBusy || !passkeyPassword || accountFrozen">
               <Spinner v-if="passkeyBusy" class="mr-2" />
               <Fingerprint v-else class="mr-2 size-4" />
               {{ $t("pages.settingsUserPage.passkeyAdd") }}
@@ -626,13 +634,13 @@ onMounted(() => {
               id="totp-disable-password"
               v-model="disablePassword"
               autocomplete="current-password"
-              :disabled="totpBusy"
+              :disabled="totpBusy || accountFrozen"
               :maxlength="FIELD_LIMITS.password"
             />
           </SettingsFormField>
           <AlertDialogFooter>
             <AlertDialogCancel type="button">{{ $t("common.cancel") }}</AlertDialogCancel>
-            <Button type="submit" variant="destructive" :disabled="totpBusy || !disablePassword">
+            <Button type="submit" variant="destructive" :disabled="totpBusy || !disablePassword || accountFrozen">
               <Spinner v-if="totpBusy" class="mr-2" />
               {{ $t("pages.settingsUserPage.totpDisable") }}
             </Button>
@@ -658,13 +666,13 @@ onMounted(() => {
               id="passkey-delete-password"
               v-model="deletePassword"
               autocomplete="current-password"
-              :disabled="passkeyBusy"
+              :disabled="passkeyBusy || accountFrozen"
               :maxlength="FIELD_LIMITS.password"
             />
           </SettingsFormField>
           <AlertDialogFooter>
             <AlertDialogCancel type="button">{{ $t("common.cancel") }}</AlertDialogCancel>
-            <Button type="submit" variant="destructive" :disabled="passkeyBusy || !deletePassword">
+            <Button type="submit" variant="destructive" :disabled="passkeyBusy || !deletePassword || accountFrozen">
               <Spinner v-if="passkeyBusy" class="mr-2" />
               {{ $t("pages.settingsUserPage.passkeyDelete") }}
             </Button>

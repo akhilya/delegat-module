@@ -140,7 +140,7 @@ public static class ToolCatalogComposer
         {
             if (!usedIds.Add(tool.Id))
                 continue;
-            var allowed = tool.Permissions.Any(userPermissions.Contains);
+            var allowed = Permissions.UserMayReadAny(userPermissions, tool.Permissions);
             if (!allowed)
                 continue;
             entries.Add(new ToolCatalogEntry
@@ -171,7 +171,7 @@ public static class ToolCatalogComposer
                     continue;
 
                 var permissions = new[] { Permissions.MarketplaceManage };
-                if (!permissions.Any(userPermissions.Contains))
+                if (!Permissions.UserMayReadAny(userPermissions, permissions))
                     continue;
 
                 var needsConnection = tool.RequiresConnection;

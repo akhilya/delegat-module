@@ -9,14 +9,15 @@ import { resolveSettingsBreadcrumb } from "@/config/settingsNav";
 import { PAGE_ADMIN_API, PAGE_SETTINGS, PAGE_SETTINGS_USER } from "@/router";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
-import { hasPermission, PERMS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 const route = useRoute();
 const router = useRouter();
 const me = ref(getCachedMe() ?? null);
 
-const canPlatformSettings = computed(() => hasPermission(me.value, PERMS.SettingsPlatform));
+const canPlatformSettings = computed(() =>
+  canAccessPath(me.value, PAGE_SETTINGS),
+);
 const fillHeight = computed(() => route.meta.fillHeight === true);
 const isApiPage = computed(() => route.path === PAGE_ADMIN_API);
 

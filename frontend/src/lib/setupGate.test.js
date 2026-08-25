@@ -26,6 +26,13 @@ describe("canEnterSetupWizard", () => {
       canEnterSetupWizard({ isAdmin: false, permissions: ["catalog.manage"] }),
       false,
     );
+    assert.equal(
+      canEnterSetupWizard({
+        isAdmin: false,
+        permissions: ["reference.read", "workspace.view"],
+      }),
+      false,
+    );
   });
 });
 

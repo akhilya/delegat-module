@@ -41,6 +41,7 @@ import { fetchSetupState } from "./lib/setupStoreCount";
 import { loadBranding } from "./brand";
 import "./theme";
 import { resolveApiBaseUrl } from "./utils/apiBaseUrl";
+import { shouldBlockCabinetViewOnlyRequest } from "./lib/cabinetHttpGuard";
 
 export { getCachedMe, primeMeCache } from "./lib/meCache";
 export { clearSetupStoreCountCache } from "./lib/setupStoreCount";
@@ -65,6 +66,14 @@ export const http = setupCache(
 http.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers["X-UI-Locale"] = getLocale();
+  if (shouldBlockCabinetViewOnlyRequest(getCachedMe(), config)) {
+    toast.error(t("errors.cabinet_view_only"));
+    config.__cabinetViewOnlyToast = true;
+    const error = new Error("cabinet_view_only");
+    error.response = { status: 403, data: { code: "cabinet_view_only" } };
+    error.config = config;
+    return Promise.reject(error);
+  }
   return config;
 });
 
@@ -173,6 +182,14 @@ http.interceptors.response.use(
 
     if (error.response?.status === 409) {
       toast.error(resolveApiErrorMessage(error.response.data, "errors.resourceLimit"));
+    }
+
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === "cabinet_view_only" &&
+      !originalRequest?.__cabinetViewOnlyToast
+    ) {
+      toast.error(t("errors.cabinet_view_only"));
     }
 
     if (error.response?.status === 429) {

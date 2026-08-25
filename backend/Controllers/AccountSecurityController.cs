@@ -62,6 +62,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/totp/start")]
     public async Task<IActionResult> PostStartTotp([FromBody] PasswordConfirmForm input)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         if (await _users.GetTwoFactorEnabledAsync(user))
             throw ApiException.Conflict("Authenticator is already enabled", code: "totp_already_enabled");
@@ -82,6 +83,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/totp/confirm")]
     public async Task<IActionResult> PostConfirmTotp([FromBody] TotpCodeForm input)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequireUserAsync();
         if (await _users.GetTwoFactorEnabledAsync(user))
             throw ApiException.Conflict("Authenticator is already enabled", code: "totp_already_enabled");
@@ -109,6 +111,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/totp/disable")]
     public async Task<IActionResult> PostDisableTotp([FromBody] PasswordConfirmForm input)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         await _users.SetTwoFactorEnabledAsync(user, false);
         await _users.ResetAuthenticatorKeyAsync(user);
@@ -119,6 +122,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/passkeys/options")]
     public async Task<IActionResult> PostPasskeyOptions([FromBody] PasswordConfirmForm input)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         var existing = await _db.webAuthnCredentials.AsNoTracking()
             .Where(c => c.userId == user.Id)
@@ -147,6 +151,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/passkeys")]
     public async Task<IActionResult> PostRegisterPasskey([FromBody] JsonElement body)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequireUserAsync();
         var password = body.TryGetProperty("password", out var passwordEl) ? passwordEl.GetString() : null;
         if (string.IsNullOrWhiteSpace(password) || !await _users.CheckPasswordAsync(user, password))
@@ -189,6 +194,7 @@ public class AccountSecurityController : ControllerBase
     [Route("/auth/account/passkeys/{id:int}")]
     public async Task<IActionResult> DeletePasskey(int id, [FromBody] PasswordConfirmForm input)
     {
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         var row = await _db.webAuthnCredentials.FirstOrDefaultAsync(c => c.Id == id && c.userId == user.Id)
             ?? throw ApiException.NotFound("Passkey not found", code: "passkey_not_found");

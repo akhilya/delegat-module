@@ -122,6 +122,118 @@ public class PermissionAuthorizationHandlerTests
     }
 
     [Fact]
+    public async Task WorkspaceView_AllowsSafeGet_WithoutExactPermission()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/users";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: 1);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.UsersManage, requireStoreMembership: false)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task WorkspaceView_DoesNotAllowPost()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Post;
+        http.Request.Path = "/users";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: 1);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.UsersManage, requireStoreMembership: false)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task WorkspaceView_DoesNotAllowPluginsGet()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/plugins";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: 1);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.PluginsManage, requireStoreMembership: false)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task WorkspaceView_StoreScopedGet_RequiresMembership()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var alice = data.AddUser("alice");
+        var store = data.AddStore("S");
+        await data.SaveAsync();
+
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/products";
+        http.Request.Headers.Cookie = $"selected_store_id={store.Id}";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: alice.Id);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.CatalogManage, requireStoreMembership: true)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task WorkspaceView_StoreScopedGet_AllowsMember()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var alice = data.AddUser("alice");
+        var store = data.AddStore("S", members: alice);
+        await data.SaveAsync();
+
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/products";
+        http.Request.Headers.Cookie = $"selected_store_id={store.Id}";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: alice.Id);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.CatalogManage, requireStoreMembership: true)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
     public async Task StoreScoped_AllowsMemberViaSelectedStoreCookie()
     {
         await using var db = TestDbFactory.CreateDb();

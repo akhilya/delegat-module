@@ -377,6 +377,7 @@
     "invalid_token": "Invalid token",
     "unauthorized": "Unauthorized",
     "forbidden": "Forbidden",
+    "cabinet_view_only": "This account can browse the cabinet but cannot change data.",
     "not_found": "Resource not found",
     "conflict": "Conflict",
     "bad_request": "Bad request",
@@ -3378,6 +3379,7 @@
       "description": "Personal settings for the current account",
       "profileTitle": "Profile",
       "profileDescription": "Display name for this account",
+      "viewOnlyHint": "This demo account can view settings but cannot change the profile, password, authenticator, or passkeys.",
       "passwordTitle": "Password",
       "passwordDescription": "Change the password you use to sign in",
       "operationsTitle": "Background jobs",
@@ -3526,6 +3528,9 @@
         },
         "reference": {
           "read": "Read reference catalog"
+        },
+        "workspace": {
+          "view": "Browse the cabinet (read-only)"
         },
         "store": {
           "members": {

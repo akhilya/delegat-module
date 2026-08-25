@@ -96,6 +96,48 @@ public class AccountSecurityTotpTests
     }
 
     [Fact]
+    public async Task MutatingAccountSecurity_CabinetViewOnly_ThrowsForbidden()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        using var users = CreateUserManager(db);
+
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser("demo");
+        user.PasswordHash = new PasswordHasher<User>().HashPassword(user, Password);
+        await data.SaveAsync();
+        db.ChangeTracker.Clear();
+
+        var controller = CreateController(
+            db,
+            users,
+            user.Id,
+            Permissions.WorkspaceView,
+            Permissions.ReferenceRead);
+        var password = new AccountSecurityController.PasswordConfirmForm { password = Password };
+
+        var start = await Assert.ThrowsAsync<ApiException>(() => controller.PostStartTotp(password));
+        Assert.Equal(403, start.StatusCode);
+        Assert.Equal("cabinet_view_only", start.Code);
+
+        var confirm = await Assert.ThrowsAsync<ApiException>(() =>
+            controller.PostConfirmTotp(new AccountSecurityController.TotpCodeForm { code = "123456" }));
+        Assert.Equal("cabinet_view_only", confirm.Code);
+
+        var disable = await Assert.ThrowsAsync<ApiException>(() => controller.PostDisableTotp(password));
+        Assert.Equal("cabinet_view_only", disable.Code);
+
+        var options = await Assert.ThrowsAsync<ApiException>(() => controller.PostPasskeyOptions(password));
+        Assert.Equal("cabinet_view_only", options.Code);
+
+        var register = await Assert.ThrowsAsync<ApiException>(() =>
+            controller.PostRegisterPasskey(System.Text.Json.JsonDocument.Parse("{}").RootElement));
+        Assert.Equal("cabinet_view_only", register.Code);
+
+        var delete = await Assert.ThrowsAsync<ApiException>(() => controller.DeletePasskey(1, password));
+        Assert.Equal("cabinet_view_only", delete.Code);
+    }
+
+    [Fact]
     public async Task PostPasskeyOptions_WithoutPassword_ThrowsUnauthorized()
     {
         await using var db = TestDbFactory.CreateDb();
@@ -116,16 +158,23 @@ public class AccountSecurityTotpTests
         Assert.Equal(401, ex.StatusCode);
     }
 
-    private static AccountSecurityController CreateController(DataContext db, UserManager<User> users, int userId)
+    private static AccountSecurityController CreateController(
+        DataContext db,
+        UserManager<User> users,
+        int userId,
+        params string[] permissions)
     {
+        var claims = new List<Claim> { new("userId", userId.ToString()) };
+        foreach (var permission in permissions)
+            claims.Add(new Claim(Permissions.ClaimType, permission));
         var http = new DefaultHttpContext
         {
-            User = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim("userId", userId.ToString())],
-                authenticationType: "test")),
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "test")),
         };
         var current = new CurrentUserService(new HttpContextAccessor { HttpContext = http }, users, db);
-        return new AccountSecurityController(users, current, db, new MemoryCache(new MemoryCacheOptions()));
+        var controller = new AccountSecurityController(users, current, db, new MemoryCache(new MemoryCacheOptions()));
+        controller.ControllerContext = new ControllerContext { HttpContext = http };
+        return controller;
     }
 
     private static UserManager<User> CreateUserManager(DataContext db)

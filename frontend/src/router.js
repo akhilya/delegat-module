@@ -331,13 +331,6 @@ function currentPageTitleDetail(route) {
 
 /** Used by main.js permission guard. */
 export function routeAllowsAccess(me, to) {
-  const fromMeta = to.matched
-    .map((r) => r.meta?.permissions)
-    .filter((p) => Array.isArray(p) && p.length > 0);
-  if (fromMeta.length > 0) {
-    const required = fromMeta[fromMeta.length - 1];
-    return required.some((p) => (me?.permissions || []).includes(p));
-  }
   return canAccessPath(me, to.path);
 }
 

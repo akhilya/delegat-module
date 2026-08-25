@@ -29,7 +29,7 @@ import {
 } from "lucide-vue-next";
 import { getSettingsSidebarSubItems } from "./settingsNav";
 import { getLocale, t, toBcp47 } from "@/i18n";
-import { hasPermission, PERMS } from "@/lib/permissions";
+import { canBrowse, hasPermission, PERMS } from "@/lib/permissions";
 import { canShowNavLink, uniqueByNavTarget } from "@/lib/navAccess";
 import { adapterIconComponent } from "@/lib/adapterIcons";
 
@@ -146,7 +146,7 @@ const SIDEBAR_GROUPS = [
     icon: ShoppingBag,
     defaultOpen: true,
     visible: (ctx) =>
-      Boolean(ctx.hasStore) && can(ctx, PERMS.MarketplaceManage),
+      Boolean(ctx.hasStore) && canBrowseNav(ctx, PERMS.MarketplaceManage),
     items: (ctx) => {
       const activeConnections = (ctx.connections || [])
         .filter(isConnectionActive)
@@ -209,7 +209,7 @@ const SIDEBAR_GROUPS = [
         type: "action",
         action: "toggleOps",
         icon: Activity,
-        visible: (ctx) => can(ctx, PERMS.OperationsManage),
+        visible: (ctx) => canBrowseNav(ctx, PERMS.OperationsManage),
       },
       {
         id: "tools",
@@ -250,6 +250,10 @@ function can(ctx, permission) {
   if (typeof ctx.hasPermission === "function")
     return ctx.hasPermission(permission);
   return hasPermission(ctx.me, permission);
+}
+
+function canBrowseNav(ctx, permission) {
+  return canBrowse(ctx.me, permission);
 }
 function resolveLabel(item) {
   if (item.labelKey) return t(item.labelKey);

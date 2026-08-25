@@ -209,6 +209,8 @@ public class UserController : ControllerBase
         if (currentUser == null)
             throw ApiException.Unauthorized();
 
+        CabinetViewOnlyGuard.ThrowIfRestricted(User);
+
         var user = await _userManager.FindByIdAsync(currentUser.Id.ToString());
         if (user == null)
             throw ApiException.Unauthorized();

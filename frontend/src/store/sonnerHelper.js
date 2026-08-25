@@ -49,6 +49,7 @@ export function displaySonnerError(error) {
 
   const status = error?.response?.status;
   if (status === 409 || status === 429) return;
+  if (status === 403 && apiErrorCode(error) === "cabinet_view_only") return;
 
   const payload = error?.response?.data;
   if (!payload) {

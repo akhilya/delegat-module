@@ -15,6 +15,8 @@ public static class Permissions
     public const string SettingsPlatform = "settings.platform";
     public const string StoresCreate = "stores.create";
     public const string ReferenceRead = "reference.read";
+    /// <summary>Browse the cabinet without mutating. Does not cover plugins.</summary>
+    public const string WorkspaceView = "workspace.view";
     /// <summary>Create/manage Public API keys and view API request logs.</summary>
     public const string ApiAccess = "api.access";
 
@@ -35,6 +37,7 @@ public static class Permissions
         SettingsPlatform,
         StoresCreate,
         ReferenceRead,
+        WorkspaceView,
         ApiAccess,
         StoreMembersManage,
         StoreSettingsManage,
@@ -63,6 +66,7 @@ public static class Permissions
         SettingsPlatform,
         StoresCreate,
         ReferenceRead,
+        WorkspaceView,
         ApiAccess,
     ];
 
@@ -85,4 +89,43 @@ public static class Permissions
 
     public static bool IsKnown(string permission) =>
         All.Contains(permission);
+
+    public static bool IsSafeHttpMethod(string? method)
+    {
+        if (string.IsNullOrEmpty(method)) return false;
+        return HttpMethods.IsGet(method)
+            || HttpMethods.IsHead(method)
+            || HttpMethods.IsOptions(method);
+    }
+
+    public static bool AllowsWorkspaceViewRead(string requiredPermission) =>
+        !string.Equals(requiredPermission, PluginsManage, StringComparison.OrdinalIgnoreCase);
+
+    public static bool UserMayRead(IReadOnlySet<string> userPermissions, string requiredPermission)
+    {
+        if (userPermissions.Contains(requiredPermission))
+            return true;
+        return userPermissions.Contains(WorkspaceView)
+            && AllowsWorkspaceViewRead(requiredPermission);
+    }
+
+    public static bool UserMayReadAny(IReadOnlySet<string> userPermissions, IEnumerable<string> requiredPermissions)
+    {
+        foreach (var required in requiredPermissions)
+        {
+            if (UserMayRead(userPermissions, required))
+                return true;
+        }
+        return false;
+    }
+
+    public static bool IsCabinetViewOnly(IEnumerable<string>? permissions)
+    {
+        if (permissions is null) return false;
+        var set = new HashSet<string>(permissions, StringComparer.OrdinalIgnoreCase);
+        if (!set.Contains(WorkspaceView)) return false;
+        set.Remove(WorkspaceView);
+        set.Remove(ReferenceRead);
+        return set.Count == 0;
+    }
 }

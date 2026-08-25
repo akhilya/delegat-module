@@ -99,6 +99,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 ---
 
 - Theme no longer jumps from light Setup to dark Products: color scheme boots once (`theme.js`, light default) instead of applying system dark only when the account menu mounts.
+- **`workspace.view`:** assignable extra grant (not on Viewer). Combined with Viewer + store membership it is a cabinet-view-only demo account: GET/HEAD/OPTIONS succeed in place of other permissions except `plugins.manage`; mutations still need the original grant. Own profile/password/TOTP/passkeys stay frozen (`cabinet_view_only`). SPA browse matches that rule; axios blocks other POSTs except store select, refresh, and sign-out.
 - Products table shows loading from first paint (was empty while categories/attributes loaded before the products request).
 - Instance owners cannot `PUT /users/{id}/access` on themselves (`cannot_change_own_access`); Owner role cannot be removed while `isAdmin` is set and is restored on permission hydrate if missing.
 
@@ -125,7 +126,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 
 ---
 
-## Auth (TOTP + passkeys)
+## Auth (TOTP + passkeys + workspace.view)
 
 - Password sign-in with 2FA returns `{ status: "twoFactorRequired", loginTicket }` (no JWT cookies). TOTP or a recovery code completes sign-in and sets cookies.
 - Passkey sign-in is passwordless and skips TOTP.
@@ -135,6 +136,7 @@ Layout extras (`mr-2`, `text-muted-foreground`) go in `class`. Do not use raw `L
 - Identity authenticator keys persist in `UserTokens` (do not `Ignore` `IdentityUserToken`). Credentials live in `webAuthnCredentials`.
 - Frontend: `@simplewebauthn/browser` v13 (`startRegistration` / `startAuthentication` with `optionsJSON`). Conditional UI: `useBrowserAutofill: true` and `autocomplete="username webauthn"`.
 - QR codes: local `qrcode` SVG (`otpauthQrSvg`) — never Google Charts.
+- **Demo cabinet:** grant `workspace.view` on a Viewer who is a member of the demo store. Do not put it on the Viewer role template. Plugins stay closed. Owner picks the claim up on role re-seed via `Permissions.Assignable`.
 
 ---
 

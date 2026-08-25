@@ -16,6 +16,7 @@ export const PERMS = {
   SettingsPlatform: "settings.platform",
   StoresCreate: "stores.create",
   ReferenceRead: "reference.read",
+  WorkspaceView: "workspace.view",
   ApiAccess: "api.access",
   StoreMembersManage: "store.members.manage",
   StoreSettingsManage: "store.settings.manage",
@@ -25,3 +26,20 @@ export const PERMS = {
   OperationsManage: "operations.manage",
   AiUse: "ai.use",
 };
+
+/** Browse a surface without the write grant. Never covers plugins or AI. */
+export function canBrowse(me, permission) {
+  if (hasPermission(me, permission)) return true;
+  if (permission === PERMS.PluginsManage || permission === PERMS.AiUse)
+    return false;
+  return hasPermission(me, PERMS.WorkspaceView);
+}
+
+export function isCabinetViewOnly(me) {
+  if (!me || !Array.isArray(me.permissions)) return false;
+  if (!me.permissions.includes(PERMS.WorkspaceView)) return false;
+  return me.permissions.every(
+    (permission) =>
+      permission === PERMS.WorkspaceView || permission === PERMS.ReferenceRead,
+  );
+}

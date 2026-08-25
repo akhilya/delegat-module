@@ -61,6 +61,20 @@ public class ToolCatalogComposerTests
     }
 
     [Fact]
+    public void Compose_IncludesBrowseableTools_WhenUserHasWorkspaceView()
+    {
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.WorkspaceView },
+            new HashSet<string>());
+
+        Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.CatalogScrapeId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.PublicApiTryId);
+    }
+
+    [Fact]
     public void Compose_HidesCatalogConnect_WithoutMarketplacePermission()
     {
         var entries = ToolCatalogComposer.Compose(

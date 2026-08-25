@@ -12,6 +12,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 
 - Sign-in: TOTP second factor after password, recovery codes, and passwordless passkeys (Bitwarden / 1Password / Windows Hello)
+- Extra permission `workspace.view`: browse the cabinet without changing data (plugins stay closed). Assign on a Viewer who is a store member for a demo account.
 - User settings: authenticator app (QR + recovery codes) and passkey register/remove
 - Instance dashboard asks search engines not to index it (`robots.txt`, HTML `noindex`, `X-Robots-Tag` on the SPA and API)
 - Tools: Try Public API (`/tools/public-api-try`) sends GET `/me`, GET `/stores`, or a custom `/api/v1` path with a partner key and shows the response

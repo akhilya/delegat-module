@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PERMS } from "./permissions.js";
-import { canAccessPath } from "./routeAccess.js";
+import { canAccessPath, fallbackPathForUser } from "./routeAccess.js";
 import { canShowNavLink, uniqueByNavTarget } from "./navAccess.js";
 import { visibleSettingsNavIds } from "./settingsNavCatalog.js";
 
@@ -42,6 +42,7 @@ const OPERATOR = [
 ];
 
 const VIEWER = [PERMS.ReferenceRead];
+const VIEW_ONLY = [PERMS.ReferenceRead, PERMS.WorkspaceView];
 
 function me(permissions, extra = {}) {
   return { permissions, ...extra };
@@ -120,6 +121,21 @@ describe("visibleSettingsNavIds", () => {
         }),
       ),
       ["user", "overview", "stores", "users"],
+    );
+  });
+
+  it("shows settings except plugins for workspace.view", () => {
+    assert.deepEqual(
+      visibleSettingsNavIds(
+        me(VIEW_ONLY, {
+          aiEnabled: true,
+          pluginsEnabled: true,
+          logErrorsEnabled: true,
+          logAdapterHttpEnabled: true,
+          publicApiEnabled: true,
+        }),
+      ),
+      ["user", "overview", "stores", "users", "api", "logs", "adapter-logs", "ai"],
     );
   });
 });
@@ -219,6 +235,25 @@ describe("canShowNavLink", () => {
       true,
     );
   });
+
+  it("lets workspace.view browse the cabinet except plugins, create, and setup", () => {
+    const demo = me(VIEW_ONLY, {
+      aiEnabled: true,
+      pluginsEnabled: true,
+      logErrorsEnabled: true,
+      logAdapterHttpEnabled: true,
+      publicApiEnabled: true,
+    });
+    assert.equal(canAccessPath(demo, "/settings"), true);
+    assert.equal(canAccessPath(demo, "/settings/admin/users"), true);
+    assert.equal(canAccessPath(demo, "/adapter"), true);
+    assert.equal(canAccessPath(demo, "/storage"), true);
+    assert.equal(canAccessPath(demo, "/products/1/edit"), true);
+    assert.equal(canAccessPath(demo, "/products/create"), false);
+    assert.equal(canAccessPath(demo, "/setup"), false);
+    assert.equal(canAccessPath(demo, "/settings/admin/plugins"), false);
+    assert.equal(fallbackPathForUser(demo), "/products");
+  });
 });
 
 describe("sidebar path matrix by role", () => {
@@ -228,6 +263,38 @@ describe("sidebar path matrix by role", () => {
       "/products?trash=1",
       "/settings/user",
     ]);
+  });
+
+  it("workspace.view: cabinet browse without create or plugins", () => {
+    assert.deepEqual(
+      visibleSidebarPaths(VIEW_ONLY, {
+        aiEnabled: true,
+        pluginsEnabled: true,
+        logErrorsEnabled: true,
+        logAdapterHttpEnabled: true,
+        publicApiEnabled: true,
+      }),
+      [
+        "/products",
+        "/products?trash=1",
+        "/product-groups",
+        "/categories",
+        "/barcodes",
+        "/notes",
+        "/storage",
+        "/adapter",
+        "/tools",
+        "/store-attributes",
+        "/settings/user",
+        "/settings",
+        "/settings/admin/stores",
+        "/settings/admin/users",
+        "/settings/admin/api",
+        "/settings/admin/error-logs",
+        "/settings/adapter-logs",
+        "/settings/admin/ai",
+      ],
+    );
   });
 
   it("operator: catalog + storage + adapters + tools, no Stores", () => {

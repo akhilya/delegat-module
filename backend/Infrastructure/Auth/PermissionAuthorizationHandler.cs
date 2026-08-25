@@ -26,8 +26,16 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
         if (user?.Identity?.IsAuthenticated != true)
             return;
 
-        if (!user.HasClaim(Permissions.ClaimType, requirement.Permission))
-            return;
+        var http = _httpContextAccessor.HttpContext;
+        var hasExact = user.HasClaim(Permissions.ClaimType, requirement.Permission);
+        if (!hasExact)
+        {
+            var workspaceRead = user.HasClaim(Permissions.ClaimType, Permissions.WorkspaceView)
+                && Permissions.AllowsWorkspaceViewRead(requirement.Permission)
+                && Permissions.IsSafeHttpMethod(http?.Request.Method);
+            if (!workspaceRead)
+                return;
+        }
 
         if (!requirement.RequireStoreMembership)
         {
@@ -44,7 +52,6 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
             return;
         }
 
-        var http = _httpContextAccessor.HttpContext;
         if (http == null)
             return;
 

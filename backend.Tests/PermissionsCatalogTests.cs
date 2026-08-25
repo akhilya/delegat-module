@@ -32,6 +32,37 @@ public class PermissionsCatalogTests
         var viewer = AppRoles.RolePermissions[AppRoles.Viewer];
         Assert.Contains(Permissions.ReferenceRead, viewer);
         Assert.DoesNotContain(Permissions.CatalogManage, viewer);
+        Assert.DoesNotContain(Permissions.WorkspaceView, viewer);
+    }
+
+    [Fact]
+    public void WorkspaceView_IsAssignableAndNotOnViewer()
+    {
+        Assert.Contains(Permissions.WorkspaceView, Permissions.Assignable);
+        Assert.Contains(Permissions.WorkspaceView, Permissions.Platform);
+        Assert.Contains(Permissions.WorkspaceView, AppRoles.RolePermissions[AppRoles.Owner]);
+        Assert.False(Permissions.IsStoreScoped(Permissions.WorkspaceView));
+    }
+
+    [Fact]
+    public void IsCabinetViewOnly_RequiresViewAndNoWriteClaims()
+    {
+        Assert.True(Permissions.IsCabinetViewOnly(
+            [Permissions.WorkspaceView, Permissions.ReferenceRead]));
+        Assert.True(Permissions.IsCabinetViewOnly([Permissions.WorkspaceView]));
+        Assert.False(Permissions.IsCabinetViewOnly([Permissions.ReferenceRead]));
+        Assert.False(Permissions.IsCabinetViewOnly(
+            [Permissions.WorkspaceView, Permissions.CatalogManage]));
+        Assert.False(Permissions.IsCabinetViewOnly(
+            AppRoles.RolePermissions[AppRoles.Owner]));
+    }
+
+    [Fact]
+    public void AllowsWorkspaceViewRead_BlocksPluginsOnly()
+    {
+        Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.CatalogManage));
+        Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.UsersManage));
+        Assert.False(Permissions.AllowsWorkspaceViewRead(Permissions.PluginsManage));
     }
 
     [Fact]
