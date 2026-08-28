@@ -312,12 +312,24 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasDefaultValue(false);
 
         builder.Entity<StoreAttribute>()
+            .Property(a => a.allowCustomValues)
+            .HasDefaultValue(false);
+
+        builder.Entity<StoreAttribute>()
             .Property(a => a.showOnProductPage)
             .HasDefaultValue(true);
 
         builder.Entity<StoreAttribute>()
             .Property(a => a.descriptionInTooltip)
             .HasDefaultValue(false);
+
+        builder.Entity<StoreAttribute>()
+            .Property(a => a.minValue)
+            .HasPrecision(18, 6);
+
+        builder.Entity<StoreAttribute>()
+            .Property(a => a.maxValue)
+            .HasPrecision(18, 6);
 
         builder.Entity<ProductAttributeValue>()
             .HasIndex(pav => pav.productId);

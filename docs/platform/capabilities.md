@@ -19,7 +19,7 @@
 ### Product Management
 - Full CRUD with auto-save
 - Categories with typed attributes (Text, Number, Boolean, Select, MultiSelect, Barcode)
-- Global store attributes (StoreAttribute)
+- Global store attributes (StoreAttribute) with the same operator-facing value constraints as category attributes (`allowCustomValues`, `maxValues`, `maxLength`, `minValue` / `maxValue`, `validationPattern`). Group / group icon stays on category attributes (product-page grouping)
 - Product variants with per-variant SKU, barcode, price, and stock. The Sizes tab is a local category flag (`hasSizes`), not a mapping-graph field. Export injects `_variants` (`id`, `sku`, `techSize`, barcode, price, stock). Wildberries, WooCommerce, and OpenCart consume that bag. Ozon and Yandex Market ignore `_variants`; clothing size is a mapped category attribute (`is_aspect` / distinctive). Plugin meta `_hasSizes` is stripped on category import and never appears on the canvas.
 - Images (ImageReference) + files (File) stored in MinIO
 - Product groups (ProductGroup) with sidebar navigation
@@ -64,7 +64,7 @@
 - ASP.NET Identity with account lockout (5 attempts, 15 min lockout)
 - **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies
 - `User.isAdmin` is an **instance owner marker** only (break-glass / assign owner); API access is not granted by the flag alone
-- `roles.manage` is **admin-only**: effective solely for `isAdmin`, never assignable via roles or grants
+- `roles.manage` and `settings.dump` are **admin-only**: effective solely for `isAdmin`, never assignable via roles or grants. `GET /settings/database/dump` requires `settings.dump` (a full MySQL dump of users, password hashes, API keys, and marketplace credentials). `workspace.view` does not substitute for it.
 - Instance owners cannot change their **own** roles or extra permissions, and cannot drop the Owner role from a user who still has `isAdmin` (prevents locking themselves out of Administration → Users). `isAdmin` always keeps the Owner role; a missing Owner role on an owner is restored on the next permission hydrate.
 - `api.access` gates Public API key management UI/API and authenticating with API keys
 - Effective permissions = union of role claims + per-user grants; hydrated on each JWT validation from DB
@@ -165,7 +165,7 @@
 - **Current:** Tools catalog → Catalog scrape (`/tools/catalog-scrape`, platform tool id `catalog-scrape`). Searches the public storefront (Wildberries in v1: unofficial `search.wb.ru` / `card.wb.ru` / basket `card.json`), not the seller cabinet. Selected cards are copied into the local catalog without `ProductMarketplaceLink`. Category import still uses the seller connection dictionaries; apply waits for that mapping, then assigns the local category and copies mapped attributes (storefront options matched by characteristic name). Photos queue as usual; product quota stops the rest of the batch. Not on Public API. Ozon / Yandex / Woo / OpenCart do not expose this capability.
 
 #### Backup & Recovery
-- **Current:** Manual MySQL dump for administrators via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.
+- **Current:** Manual MySQL dump for the instance owner (`isAdmin` / `settings.dump`) via Settings → Overview (`GET /settings/database/dump`). Docker volumes have no automated backups; MinIO/object storage is not included in the dump.
 - **Needed:** Automated MySQL backups (mysqldump on a schedule) + MinIO data. Cron job or sidecar container.
 
 ---

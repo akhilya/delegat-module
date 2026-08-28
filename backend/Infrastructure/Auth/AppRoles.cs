@@ -21,7 +21,7 @@ public static class AppRoles
     public static IReadOnlyDictionary<string, IReadOnlyList<string>> RolePermissions { get; } =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
-            // roles.manage is injected only for User.isAdmin - never via role templates.
+            // Admin-only claims (roles.manage, settings.dump) are injected only for User.isAdmin.
             [Owner] = Permissions.Assignable,
             [Operator] =
             [

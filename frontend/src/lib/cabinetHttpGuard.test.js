@@ -54,6 +54,13 @@ describe("shouldBlockCabinetViewOnlyRequest", () => {
       }),
       true,
     );
+    assert.equal(
+      shouldBlockCabinetViewOnlyRequest(viewOnly, {
+        method: "get",
+        url: "/settings/database/dump",
+      }),
+      true,
+    );
   });
 
   it("does not block owners who also have workspace.view", () => {

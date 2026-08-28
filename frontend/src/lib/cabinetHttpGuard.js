@@ -9,9 +9,10 @@ const SAFE_METHODS = new Set(["get", "head", "options"]);
  */
 export function isAllowedCabinetViewOnlyRequest(url = "", method = "get") {
   const verb = String(method || "get").toLowerCase();
+  const path = String(url).split("?")[0];
+  if (/\/settings\/database\/dump\/?$/.test(path)) return false;
   if (SAFE_METHODS.has(verb)) return true;
   if (verb !== "post") return false;
-  const path = String(url).split("?")[0];
   return (
     /\/auth\/refresh\/?$/.test(path) ||
     /\/auth\/logOut\/?$/.test(path) ||

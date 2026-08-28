@@ -31,11 +31,12 @@ import {
   emptyStoreAttributeForm,
   formatAttributeOptionsList,
   formFromStoreAttribute,
+  isNumberAttributeType,
   isOptionsAttributeType,
   isTextAttributeType,
   parseAttributeOptions,
   resolveStoreAttributeTypeValue,
-  serializeAttributeOptions,
+  storeAttributeSavePayload,
 } from "@/lib/storeAttributeUi";
 
 export default {
@@ -111,6 +112,9 @@ export default {
     },
     isTextType() {
       return isTextAttributeType(this.typeValue);
+    },
+    isNumberType() {
+      return isNumberAttributeType(this.typeValue);
     },
     hasLargeOptions() {
       return this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD;
@@ -244,15 +248,6 @@ export default {
         this.defaultValueOptionsReady = true;
         this.isLoadingDefaultValueOptions = false;
       }, 0);
-    },
-
-    resolveOptionsForSave() {
-      if (this.attributeOptionsJson) return this.attributeOptionsJson;
-      if (this.attributeForm.options?.trim()) {
-        return serializeAttributeOptions(this.attributeForm.options);
-      }
-      if (this.attribute?.options) return this.attribute.options;
-      return null;
     },
 
     applyImportedOptions(parsed) {
@@ -421,25 +416,10 @@ export default {
       }
 
       this.isSaving = true;
-      const type = resolveStoreAttributeTypeValue(this.attributeForm.type);
-      const attributeData = {
-        name: this.attributeForm.name.trim(),
-        key: this.attributeForm.key.trim(),
-        type,
-        isRequired: this.attributeForm.isRequired,
-        isUnique: this.attributeForm.isUnique,
-        isMultiline: isTextAttributeType(type)
-          ? this.attributeForm.isMultiline
-          : false,
-        showOnProductPage:
-          this.attributeForm.isRequired || this.attributeForm.showOnProductPage,
-        options: isOptionsAttributeType(type)
-          ? this.resolveOptionsForSave()
-          : null,
-        defaultValue: this.attributeForm.defaultValue.trim() || null,
-        description: this.attributeForm.description.trim() || null,
-        descriptionInTooltip: this.attributeForm.descriptionInTooltip,
-      };
+      const attributeData = storeAttributeSavePayload(this.attributeForm, {
+        optionsJson: this.attributeOptionsJson,
+        previousOptions: this.attribute?.options || null,
+      });
 
       await this.updateStoreAttribute({
         id: this.attributeId,
@@ -613,6 +593,40 @@ export default {
           <p class="text-xs text-muted-foreground">
             {{ $t("pages.storeAttributesPage.dialog.optionsTextareaHint") }}
           </p>
+          <SettingsFormField
+            :label="
+              $t('pages.storeAttributesPage.dialog.allowCustomValuesLabel')
+            "
+            label-for="store-attr-allow-custom"
+            inline
+            :description="
+              $t('pages.storeAttributesPage.dialog.allowCustomValuesHint')
+            "
+          >
+            <Switch
+              id="store-attr-allow-custom"
+              :model-value="attributeForm.allowCustomValues"
+              @update:model-value="attributeForm.allowCustomValues = $event"
+            />
+          </SettingsFormField>
+          <SettingsFormField
+            :label="$t('pages.storeAttributesPage.dialog.maxValuesLabel')"
+            label-for="store-attr-max-values"
+          >
+            <Input
+              id="store-attr-max-values"
+              v-model="attributeForm.maxValues"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              :placeholder="
+                $t('pages.storeAttributesPage.dialog.maxValuesPlaceholder')
+              "
+            />
+            <template #description>
+              {{ $t("pages.storeAttributesPage.dialog.maxValuesHint") }}
+            </template>
+          </SettingsFormField>
         </SettingsFormSection>
 
         <SettingsFormSection
@@ -650,6 +664,7 @@ export default {
                 :placeholder="
                   $t('pages.storeAttributesPage.dialog.notSelectedPlaceholder')
                 "
+                :allow-create="!!attributeForm.allowCustomValues"
                 class="w-full"
                 @update:model-value="attributeForm.defaultValue = $event"
                 @open="loadDefaultValueOptionsIfNeeded"
@@ -725,6 +740,79 @@ export default {
               :model-value="attributeForm.isMultiline"
               @update:model-value="attributeForm.isMultiline = $event"
             />
+          </SettingsFormField>
+
+          <SettingsFormField
+            v-if="!isNumberType"
+            :label="$t('pages.storeAttributesPage.dialog.valueMaxLengthLabel')"
+            label-for="store-attr-max-length"
+          >
+            <Input
+              id="store-attr-max-length"
+              v-model="attributeForm.maxLength"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              :placeholder="
+                $t('pages.storeAttributesPage.dialog.valueMaxLengthPlaceholder')
+              "
+            />
+            <template #description>
+              {{ $t("pages.storeAttributesPage.dialog.valueMaxLengthHint") }}
+            </template>
+          </SettingsFormField>
+
+          <template v-if="isNumberType">
+            <SettingsFormField
+              :label="$t('pages.storeAttributesPage.dialog.minValueLabel')"
+              label-for="store-attr-min-value"
+            >
+              <Input
+                id="store-attr-min-value"
+                v-model="attributeForm.minValue"
+                type="text"
+                inputmode="decimal"
+                :placeholder="
+                  $t('pages.storeAttributesPage.dialog.minValuePlaceholder')
+                "
+              />
+            </SettingsFormField>
+            <SettingsFormField
+              :label="$t('pages.storeAttributesPage.dialog.maxValueLabel')"
+              label-for="store-attr-max-value"
+            >
+              <Input
+                id="store-attr-max-value"
+                v-model="attributeForm.maxValue"
+                type="text"
+                inputmode="decimal"
+                :placeholder="
+                  $t('pages.storeAttributesPage.dialog.maxValuePlaceholder')
+                "
+              />
+            </SettingsFormField>
+          </template>
+
+          <SettingsFormField
+            v-if="isTextType"
+            :label="
+              $t('pages.storeAttributesPage.dialog.validationPatternLabel')
+            "
+            label-for="store-attr-pattern"
+          >
+            <Input
+              id="store-attr-pattern"
+              v-model="attributeForm.validationPattern"
+              :placeholder="
+                $t(
+                  'pages.storeAttributesPage.dialog.validationPatternPlaceholder',
+                )
+              "
+              :maxlength="500"
+            />
+            <template #description>
+              {{ $t("pages.storeAttributesPage.dialog.validationPatternHint") }}
+            </template>
           </SettingsFormField>
 
           <SettingsFormField

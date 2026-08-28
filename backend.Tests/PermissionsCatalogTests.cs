@@ -11,7 +11,7 @@ public class PermissionsCatalogTests
         foreach (var perm in Permissions.Assignable)
             Assert.Contains(perm, owner);
 
-        // roles.manage is instance-owner (isAdmin) only - injected at runtime, not on the role template.
+        // Admin-only claims are instance-owner (isAdmin) only - injected at runtime, not on the role template.
         foreach (var perm in Permissions.AdminOnly)
             Assert.DoesNotContain(perm, owner);
     }
@@ -58,11 +58,23 @@ public class PermissionsCatalogTests
     }
 
     [Fact]
-    public void AllowsWorkspaceViewRead_BlocksPluginsOnly()
+    public void AllowsWorkspaceViewRead_BlocksPluginsAndDatabaseDump()
     {
         Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.CatalogManage));
         Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.UsersManage));
+        Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.SettingsPlatform));
+        Assert.True(Permissions.AllowsWorkspaceViewRead(Permissions.RolesManage));
         Assert.False(Permissions.AllowsWorkspaceViewRead(Permissions.PluginsManage));
+        Assert.False(Permissions.AllowsWorkspaceViewRead(Permissions.SettingsDump));
+    }
+
+    [Fact]
+    public void SettingsDump_IsAdminOnly()
+    {
+        Assert.Contains(Permissions.SettingsDump, Permissions.AdminOnly);
+        Assert.DoesNotContain(Permissions.SettingsDump, Permissions.Assignable);
+        Assert.Contains(Permissions.SettingsDump, Permissions.Platform);
+        Assert.DoesNotContain(Permissions.SettingsDump, AppRoles.RolePermissions[AppRoles.Owner]);
     }
 
     [Fact]

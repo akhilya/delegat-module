@@ -27,12 +27,14 @@ describe("isCabinetViewOnly", () => {
 });
 
 describe("canBrowse", () => {
-  it("treats workspace.view as read access except plugins", () => {
+  it("treats workspace.view as read access except plugins and the database dump", () => {
     const me = { permissions: VIEW_ONLY };
     assert.equal(canBrowse(me, PERMS.UsersManage), true);
     assert.equal(canBrowse(me, PERMS.MarketplaceManage), true);
     assert.equal(canBrowse(me, PERMS.OperationsManage), true);
+    assert.equal(canBrowse(me, PERMS.SettingsPlatform), true);
     assert.equal(canBrowse(me, PERMS.PluginsManage), false);
+    assert.equal(canBrowse(me, PERMS.SettingsDump), false);
     assert.equal(hasPermission(me, PERMS.AiUse), false);
     assert.equal(canBrowse(me, PERMS.AiUse), false);
   });
@@ -40,5 +42,9 @@ describe("canBrowse", () => {
   it("still honors an exact grant", () => {
     const me = { permissions: [PERMS.PluginsManage] };
     assert.equal(canBrowse(me, PERMS.PluginsManage), true);
+    assert.equal(
+      canBrowse({ permissions: [PERMS.SettingsDump] }, PERMS.SettingsDump),
+      true,
+    );
   });
 });

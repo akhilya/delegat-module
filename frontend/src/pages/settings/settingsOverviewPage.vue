@@ -11,6 +11,7 @@ import {
 import QuotaUsagePanel from "@/components/settings/QuotaUsagePanel.vue";
 import { http, invalidateMeCache, loadMe } from "@/main";
 import { notifyMeUpdated } from "@/lib/meCache";
+import { hasPermission, PERMS } from "@/lib/permissions";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   AlertTriangle,
@@ -23,6 +24,8 @@ import {
 import { t } from "@/i18n";
 
 const isDumping = ref(false);
+const me = ref(null);
+const canDownloadDump = computed(() => hasPermission(me.value, PERMS.SettingsDump));
 const loggingLoading = ref(true);
 const loggingSaving = ref(false);
 const publicApiLoading = ref(true);
@@ -128,7 +131,7 @@ async function normalizeBlobError(error) {
 }
 
 async function downloadDatabaseDump() {
-  if (isDumping.value) return;
+  if (!canDownloadDump.value || isDumping.value) return;
   isDumping.value = true;
   displaySonnerSuccess(t("pages.settingsOverviewPage.dumpStarted"));
   try {
@@ -160,14 +163,16 @@ async function downloadDatabaseDump() {
 
 async function refreshMe() {
   invalidateMeCache();
-  const me = await loadMe();
-  notifyMeUpdated(me);
+  const account = await loadMe();
+  me.value = account;
+  notifyMeUpdated(account);
 }
 
 async function loadPlanFlags() {
   try {
-    const me = await loadMe();
-    apiUsageEnabled.value = me?.apiUsageEnabled !== false;
+    const account = await loadMe();
+    me.value = account;
+    apiUsageEnabled.value = account?.apiUsageEnabled !== false;
   } catch {
     apiUsageEnabled.value = true;
   }
@@ -412,7 +417,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section>
+    <section v-if="canDownloadDump">
       <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.databaseBackupTitle") }}</InsetGroupLabel>
       <InsetGroup>
         <InsetGroupItem

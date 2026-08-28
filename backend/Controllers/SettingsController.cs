@@ -44,7 +44,7 @@ public class SettingsController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/settings/database/dump")]
-    [RequiresPermission(Permissions.SettingsPlatform)]
+    [RequiresPermission(Permissions.SettingsDump)]
     public async Task<IActionResult> DownloadDatabaseDump(CancellationToken ct)
     {
         var handle = await _databaseDumpService.CreateDumpAsync(ct);

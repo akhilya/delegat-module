@@ -13,6 +13,8 @@ public static class Permissions
     public const string RolesManage = "roles.manage";
     public const string PluginsManage = "plugins.manage";
     public const string SettingsPlatform = "settings.platform";
+    /// <summary>Download a full MySQL dump. Instance owner (isAdmin) only - never stored as a grant.</summary>
+    public const string SettingsDump = "settings.dump";
     public const string StoresCreate = "stores.create";
     public const string ReferenceRead = "reference.read";
     /// <summary>Browse the cabinet without mutating. Does not cover plugins.</summary>
@@ -35,6 +37,7 @@ public static class Permissions
         RolesManage,
         PluginsManage,
         SettingsPlatform,
+        SettingsDump,
         StoresCreate,
         ReferenceRead,
         WorkspaceView,
@@ -52,6 +55,7 @@ public static class Permissions
     public static IReadOnlyList<string> AdminOnly { get; } =
     [
         RolesManage,
+        SettingsDump,
     ];
 
     /// <summary>Permissions that may appear on role templates or user grants.</summary>
@@ -64,6 +68,7 @@ public static class Permissions
         RolesManage,
         PluginsManage,
         SettingsPlatform,
+        SettingsDump,
         StoresCreate,
         ReferenceRead,
         WorkspaceView,
@@ -99,7 +104,8 @@ public static class Permissions
     }
 
     public static bool AllowsWorkspaceViewRead(string requiredPermission) =>
-        !string.Equals(requiredPermission, PluginsManage, StringComparison.OrdinalIgnoreCase);
+        !string.Equals(requiredPermission, PluginsManage, StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(requiredPermission, SettingsDump, StringComparison.OrdinalIgnoreCase);
 
     public static bool UserMayRead(IReadOnlySet<string> userPermissions, string requiredPermission)
     {

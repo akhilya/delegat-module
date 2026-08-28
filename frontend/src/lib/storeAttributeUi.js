@@ -50,6 +50,33 @@ export function isTextAttributeType(type) {
 }
 
 /**
+ * @param {unknown} type
+ */
+export function isNumberAttributeType(type) {
+  return resolveStoreAttributeTypeValue(type) === 1;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+export function parseOptionalPositiveInt(value) {
+  const n = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+export function parseOptionalDecimal(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Snake_case key from a display name. Cyrillic is transliterated.
  * @param {string} name
  * @returns {string}
@@ -214,11 +241,17 @@ export function emptyStoreAttributeForm() {
     isRequired: false,
     isUnique: false,
     isMultiline: false,
+    allowCustomValues: false,
     showOnProductPage: true,
     options: "",
     defaultValue: "",
     description: "",
     descriptionInTooltip: false,
+    maxLength: "",
+    maxValues: "",
+    minValue: "",
+    maxValue: "",
+    validationPattern: "",
   };
 }
 
@@ -238,14 +271,66 @@ export function formFromStoreAttribute(attribute) {
       isRequired: !!attribute?.isRequired,
       isUnique: attribute?.isUnique === true,
       isMultiline: attribute?.isMultiline ?? false,
+      allowCustomValues: attribute?.allowCustomValues === true,
       showOnProductPage:
         !!attribute?.isRequired || attribute?.showOnProductPage !== false,
       options: large ? "" : formatAttributeOptionsForEdit(optionsRaw),
       defaultValue: attribute?.defaultValue || "",
       description: attribute?.description || "",
       descriptionInTooltip: attribute?.descriptionInTooltip === true,
+      maxLength:
+        attribute?.maxLength != null ? String(attribute.maxLength) : "",
+      maxValues:
+        attribute?.maxValues != null ? String(attribute.maxValues) : "",
+      minValue: attribute?.minValue != null ? String(attribute.minValue) : "",
+      maxValue: attribute?.maxValue != null ? String(attribute.maxValue) : "",
+      validationPattern: attribute?.validationPattern || "",
     },
     optionsJson: large && optionsRaw ? optionsRaw : null,
     optionsCount,
+  };
+}
+
+/**
+ * Dashboard / Public API body for create and patch.
+ * @param {ReturnType<typeof emptyStoreAttributeForm>} form
+ * @param {{ optionsJson?: string|null, previousOptions?: string|null }} [extras]
+ */
+export function storeAttributeSavePayload(form, extras = {}) {
+  const type = resolveStoreAttributeTypeValue(form.type);
+  const optionsType = isOptionsAttributeType(type);
+  const textType = isTextAttributeType(type);
+  const numberType = isNumberAttributeType(type);
+
+  let options = null;
+  if (optionsType) {
+    if (extras.optionsJson) options = extras.optionsJson;
+    else if (form.options?.trim()) {
+      options = serializeAttributeOptions(form.options);
+    } else if (extras.previousOptions) {
+      options = extras.previousOptions;
+    }
+  }
+
+  return {
+    name: String(form.name ?? "").trim(),
+    key: String(form.key ?? "").trim(),
+    type,
+    isRequired: !!form.isRequired,
+    isUnique: !!form.isUnique,
+    isMultiline: textType ? !!form.isMultiline : false,
+    allowCustomValues: optionsType ? !!form.allowCustomValues : false,
+    showOnProductPage: !!form.isRequired || !!form.showOnProductPage,
+    options,
+    defaultValue: String(form.defaultValue ?? "").trim() || null,
+    description: String(form.description ?? "").trim() || null,
+    descriptionInTooltip: !!form.descriptionInTooltip,
+    maxLength: numberType ? null : parseOptionalPositiveInt(form.maxLength),
+    maxValues: optionsType ? parseOptionalPositiveInt(form.maxValues) : null,
+    minValue: numberType ? parseOptionalDecimal(form.minValue) : null,
+    maxValue: numberType ? parseOptionalDecimal(form.maxValue) : null,
+    validationPattern: textType
+      ? String(form.validationPattern ?? "").trim() || null
+      : null,
   };
 }

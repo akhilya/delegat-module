@@ -3005,6 +3005,21 @@
         "descriptionInTooltipHint": "Hide a long description behind an icon on the product page",
         "multilineLabel": "Multiline text",
         "multilineHint": "Field with line breaks on the product page",
+        "allowCustomValuesLabel": "Custom values",
+        "allowCustomValuesHint": "Allow typing a value that is not in the list",
+        "maxValuesLabel": "Max values",
+        "maxValuesPlaceholder": "No limit",
+        "maxValuesHint": "Limit how many values can be selected. Leave empty for no limit",
+        "valueMaxLengthLabel": "Max characters",
+        "valueMaxLengthPlaceholder": "No limit",
+        "valueMaxLengthHint": "Limit the stored value length. Leave empty for no limit",
+        "minValueLabel": "Minimum",
+        "minValuePlaceholder": "No minimum",
+        "maxValueLabel": "Maximum",
+        "maxValuePlaceholder": "No maximum",
+        "validationPatternLabel": "Format (regex)",
+        "validationPatternPlaceholder": "Optional",
+        "validationPatternHint": "The value must match this regular expression. Leave empty to skip",
         "showOnProductPageLabel": "On the product page",
         "showOnProductPageHint": "Show when editing a product",
         "showOnProductPageRequiredHint": "Required fields are always shown on the product page",
@@ -3521,7 +3536,8 @@
           "manage": "Manage plugins"
         },
         "settings": {
-          "platform": "Platform settings and admin tools"
+          "platform": "Platform settings and admin tools",
+          "dump": "Download the database dump"
         },
         "stores": {
           "create": "Create stores"

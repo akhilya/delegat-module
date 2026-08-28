@@ -3005,6 +3005,21 @@
         "descriptionInTooltipHint": "Скрывать длинное описание за иконкой на странице товара",
         "multilineLabel": "Многострочный текст",
         "multilineHint": "Поле с переносами строк на странице товара",
+        "allowCustomValuesLabel": "Свои значения",
+        "allowCustomValuesHint": "Можно ввести значение, которого нет в списке",
+        "maxValuesLabel": "Макс. значений",
+        "maxValuesPlaceholder": "Без ограничения",
+        "maxValuesHint": "Сколько значений можно выбрать. Пустое поле — без ограничения",
+        "valueMaxLengthLabel": "Макс. символов",
+        "valueMaxLengthPlaceholder": "Без ограничения",
+        "valueMaxLengthHint": "Ограничение длины сохранённого значения. Пустое поле — без ограничения",
+        "minValueLabel": "Минимум",
+        "minValuePlaceholder": "Без минимума",
+        "maxValueLabel": "Максимум",
+        "maxValuePlaceholder": "Без максимума",
+        "validationPatternLabel": "Формат (regex)",
+        "validationPatternPlaceholder": "Необязательно",
+        "validationPatternHint": "Значение должно совпадать с этим регулярным выражением. Пустое поле — без проверки",
         "showOnProductPageLabel": "На странице товара",
         "showOnProductPageHint": "Показывать при редактировании товара",
         "showOnProductPageRequiredHint": "Обязательные поля всегда показываются на странице товара",
@@ -3521,7 +3536,8 @@
           "manage": "Управление плагинами"
         },
         "settings": {
-          "platform": "Настройки платформы и админ-инструменты"
+          "platform": "Настройки платформы и админ-инструменты",
+          "dump": "Скачивание дампа базы данных"
         },
         "stores": {
           "create": "Создание магазинов"

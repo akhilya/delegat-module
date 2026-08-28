@@ -1,4 +1,5 @@
 using Delegat.Enums;
+using Delegat.Infrastructure.Interfaces;
 using Delegat.Models;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,61 @@ public class StoreAttributeDomainTests
         Assert.True(attribute.isMultiline);
         Assert.True(attribute.showOnProductPage);
         Assert.Equal(3, attribute.sortOrder);
+    }
+
+    [Fact]
+    public void AddFill_CopiesValueConstraints()
+    {
+        var attribute = new StoreAttribute();
+        attribute.AddFill(new StoreAttribute.AddForm
+        {
+            storeId = 1, name = "Color", key = "color", type = AttributeType.Select,
+            allowCustomValues = true, maxValues = 3, maxLength = 40,
+            minValue = 1.5m, maxValue = 10m, validationPattern = "^[A-Z]+$"
+        });
+        Assert.True(attribute.allowCustomValues);
+        Assert.Equal(3, attribute.maxValues);
+        Assert.Equal(40, attribute.maxLength);
+        Assert.Equal(1.5m, attribute.minValue);
+        Assert.Equal(10m, attribute.maxValue);
+        Assert.Equal("^[A-Z]+$", attribute.validationPattern);
+
+        var dto = ((IMapToDTO<StoreAttribute.AttributeDTO>)attribute).MapToDTO(null!);
+        Assert.True(dto.allowCustomValues);
+        Assert.Equal(3, dto.maxValues);
+        Assert.Equal(40, dto.maxLength);
+        Assert.Equal("^[A-Z]+$", dto.validationPattern);
+    }
+
+    [Fact]
+    public void UpdateFill_CopiesValueConstraints()
+    {
+        var attribute = new StoreAttribute
+        {
+            name = "Color", key = "color", type = AttributeType.Select,
+            allowCustomValues = false, maxValues = 1
+        };
+        attribute.UpdateFill(new StoreAttribute.UpdateForm
+        {
+            allowCustomValues = true, maxValues = 4, maxLength = 12,
+            minValue = 0m, maxValue = 9m, validationPattern = "x"
+        });
+        Assert.True(attribute.allowCustomValues);
+        Assert.Equal(4, attribute.maxValues);
+        Assert.Equal(12, attribute.maxLength);
+        Assert.Equal(0m, attribute.minValue);
+        Assert.Equal(9m, attribute.maxValue);
+        Assert.Equal("x", attribute.validationPattern);
+
+        attribute.UpdateFill(new StoreAttribute.UpdateForm
+        {
+            allowCustomValues = false, maxValues = null, maxLength = null,
+            minValue = null, maxValue = null, validationPattern = null
+        });
+        Assert.False(attribute.allowCustomValues);
+        Assert.Null(attribute.maxValues);
+        Assert.Null(attribute.maxLength);
+        Assert.Null(attribute.validationPattern);
     }
 
     [Fact]

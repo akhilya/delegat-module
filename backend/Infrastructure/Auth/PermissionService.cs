@@ -245,11 +245,14 @@ public sealed class PermissionService : IPermissionService
         foreach (var g in grants)
             effective.Add(g);
 
-        // roles.manage is instance-owner only - never from roles/grants.
-        if (user.isAdmin)
-            effective.Add(Permissions.RolesManage);
-        else
-            effective.Remove(Permissions.RolesManage);
+        // Admin-only claims are instance-owner only - never from roles/grants.
+        foreach (var permission in Permissions.AdminOnly)
+        {
+            if (user.isAdmin)
+                effective.Add(permission);
+            else
+                effective.Remove(permission);
+        }
 
         return new UserAccessDto
         {

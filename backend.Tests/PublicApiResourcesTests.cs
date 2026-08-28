@@ -103,6 +103,39 @@ public class PublicApiResourcesTests
     }
 
     [Fact]
+    public async Task StoreAttributeCreate_PersistsValueConstraints()
+    {
+        var (db, data, currentUser) = Create();
+        var user = data.AddUser();
+        var store = data.AddStore(members: user);
+        await data.SaveAsync();
+        currentUser.UserId = user.Id;
+
+        var created = Assert.IsType<ObjectResult>(await StoreAttributes(db, currentUser).Create(
+            store.Id,
+            new StoreAttribute.UserAddForm
+            {
+                name = "Color",
+                key = "color",
+                type = AttributeType.Select,
+                options = "[\"Red\"]",
+                allowCustomValues = true,
+                maxValues = 2,
+                maxLength = 30,
+                validationPattern = "^[A-Z]"
+            },
+            CancellationToken.None));
+        Assert.Equal(201, created.StatusCode);
+        var id = PublicApiTestJson.FromObject(created.Value).GetProperty("id").GetInt32();
+
+        var json = PublicApiTestJson.FromOk(await StoreAttributes(db, currentUser).Get(store.Id, id, CancellationToken.None));
+        Assert.True(json.GetProperty("allowCustomValues").GetBoolean());
+        Assert.Equal(2, json.GetProperty("maxValues").GetInt32());
+        Assert.Equal(30, json.GetProperty("maxLength").GetInt32());
+        Assert.Equal("^[A-Z]", json.GetProperty("validationPattern").GetString());
+    }
+
+    [Fact]
     public async Task StoreAttributeCreate_DuplicateKeyConflicts()
     {
         var (db, data, currentUser) = Create();

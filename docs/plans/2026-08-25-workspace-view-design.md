@@ -12,7 +12,7 @@ Demo-cabinet users need to browse the whole workspace without changing data. Plu
 
 ## API
 
-`PermissionAuthorizationHandler`: GET/HEAD/OPTIONS succeed with `workspace.view` in place of the required permission, except `plugins.manage`. Store-scoped routes still require store membership.
+`PermissionAuthorizationHandler`: GET/HEAD/OPTIONS succeed with `workspace.view` in place of the required permission, except `plugins.manage` and `settings.dump` (full MySQL dump is instance-owner only). Store-scoped routes still require store membership.
 
 POST/PUT/PATCH/DELETE still need the original permission.
 
@@ -30,4 +30,4 @@ They can still `POST /users/me/memberships/{id}/select` and refresh/sign-out.
 
 Sidebar uses the same rule. Create-product stays hidden. Adapters / tools / settings (except plugins) show.
 
-Axios blocks mutating requests (except store select, refresh, sign-out). User settings fields for profile, password, TOTP, and passkeys are disabled.
+Axios blocks mutating requests (except store select, refresh, sign-out) and `GET /settings/database/dump`. User settings fields for profile, password, TOTP, and passkeys are disabled.

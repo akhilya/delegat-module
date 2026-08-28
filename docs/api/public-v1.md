@@ -170,9 +170,9 @@ Respects product quotas (`409 product_limit_reached` when exceeded). Duplicate S
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List global attributes (same DTO as the dashboard, including `options`) |
+| GET | `/` | List global attributes (same DTO as the dashboard, including `options`, `allowCustomValues`, `maxLength`, `minValue`, `maxValue`, `maxValues`, `validationPattern`) |
 | GET | `/{attributeId}` | Detail |
-| POST | `/` | Create. Body matches the dashboard (`name`, `key`, `type`, `options?`, `defaultValue?`, `description?`, …). Duplicate `key` → `409 store_attribute_key_used`. |
+| POST | `/` | Create. Body matches the dashboard (`name`, `key`, `type`, `options?`, `allowCustomValues?`, `maxLength?`, `minValue?`, `maxValue?`, `maxValues?`, `validationPattern?`, `defaultValue?`, `description?`, …). Duplicate `key` → `409 store_attribute_key_used`. |
 | PATCH | `/{attributeId}` | Update |
 | DELETE | `/{attributeId}` | Delete |
 

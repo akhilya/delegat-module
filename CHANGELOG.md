@@ -13,6 +13,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - Sign-in: TOTP second factor after password, recovery codes, and passwordless passkeys (Bitwarden / 1Password / Windows Hello)
 - Extra permission `workspace.view`: browse the cabinet without changing data (plugins stay closed). Assign on a Viewer who is a store member for a demo account.
+- Global attributes: the same select/multiselect Custom values toggle, max values, max characters, numeric min/max, and regex as category attributes
 - User settings: authenticator app (QR + recovery codes) and passkey register/remove
 - Instance dashboard asks search engines not to index it (`robots.txt`, HTML `noindex`, `X-Robots-Tag` on the SPA and API)
 - Tools: Try Public API (`/tools/public-api-try`) sends GET `/me`, GET `/stores`, or a custom `/api/v1` path with a partner key and shows the response
@@ -24,7 +25,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Changed
 
 - Public API `PATCH` product now replaces `attributeValues` / `storeAttributeValues` when those arrays are sent (same as the dashboard)
-- Public API create store-attribute copies `options`, `defaultValue`, and `description`
+- Public API create store-attribute copies `options`, `defaultValue`, `description`, and the same value constraints as category attributes
 - Public API sync starters reject inactive connections (`400 connection_inactive`)
 - Public API error `code` values for missing products, categories, variants, store attributes, operations, and several conflicts (`sku_already_used`, `category_has_products`, …)
 - Mapping canvas zoom in/out uses the same plus and minus icons as the rest of the app
@@ -62,6 +63,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Database dump (`GET /settings/database/dump`) is limited to the instance owner (`settings.dump`). A demo `workspace.view` user can no longer download it.
 - Collapsed product-group rail: hovering a variant photo opens the preview beside the tile, not in the top-left of the screen
 - Right-clicking another product closes the previous row menu (only one context menu at a time)
 - Public API `GET` category now returns a real `productsCount` (detail always showed 0 because the product collection was not loaded)

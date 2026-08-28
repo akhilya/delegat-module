@@ -91,11 +91,17 @@ public class PublicStoreAttributesController : ControllerBase
             isRequired = input.isRequired,
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
+            allowCustomValues = input.allowCustomValues,
             showOnProductPage = input.showOnProductPage,
             options = input.options,
             defaultValue = input.defaultValue,
             description = input.description,
             descriptionInTooltip = input.descriptionInTooltip,
+            maxLength = input.maxLength,
+            minValue = input.minValue,
+            maxValue = input.maxValue,
+            maxValues = input.maxValues,
+            validationPattern = input.validationPattern,
             storeId = storeId,
             sortOrder = maxSort + 1
         });

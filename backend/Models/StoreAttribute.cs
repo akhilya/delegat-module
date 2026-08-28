@@ -49,6 +49,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
     public bool isMultiline { get; set; } = false;
 
     /// <summary>
+    /// For select/multiselect: the product form accepts values that are not in <see cref="options"/>.
+    /// </summary>
+    public bool allowCustomValues { get; set; } = false;
+
+    /// <summary>
     /// Whether this attribute is shown on the product edit page.
     /// </summary>
     public bool showOnProductPage { get; set; } = true;
@@ -82,6 +87,32 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
     public bool descriptionInTooltip { get; set; } = false;
 
     /// <summary>
+    /// Maximum characters for the stored value.
+    /// </summary>
+    public int? maxLength { get; set; }
+
+    /// <summary>
+    /// Minimum numeric value.
+    /// </summary>
+    public decimal? minValue { get; set; }
+
+    /// <summary>
+    /// Maximum numeric value.
+    /// </summary>
+    public decimal? maxValue { get; set; }
+
+    /// <summary>
+    /// Maximum number of selected values for select/multiselect. Null means unlimited.
+    /// </summary>
+    public int? maxValues { get; set; }
+
+    /// <summary>
+    /// Regex the stored value must match.
+    /// </summary>
+    [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+    public string? validationPattern { get; set; }
+
+    /// <summary>
     /// Timestamp when the attribute was created.
     /// </summary>
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
@@ -110,12 +141,18 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         isRequired = form.isRequired;
         isUnique = form.isUnique;
         isMultiline = form.isMultiline;
+        allowCustomValues = form.allowCustomValues;
         showOnProductPage = form.isRequired || form.showOnProductPage;
         sortOrder = form.sortOrder;
         options = form.options;
         defaultValue = form.defaultValue;
         description = form.description;
         descriptionInTooltip = form.descriptionInTooltip;
+        maxLength = form.maxLength;
+        minValue = form.minValue;
+        maxValue = form.maxValue;
+        maxValues = form.maxValues;
+        validationPattern = form.validationPattern;
         storeId = form.storeId;
         createdAt = DateTime.UtcNow;
         return true;
@@ -135,6 +172,8 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
             isUnique = form.isUnique.Value;
         if (form.isMultiline.HasValue)
             isMultiline = form.isMultiline.Value;
+        if (form.allowCustomValues.HasValue)
+            allowCustomValues = form.allowCustomValues.Value;
         if (form.showOnProductPage.HasValue)
             showOnProductPage = form.showOnProductPage.Value;
         // Required attributes must always appear on the product page.
@@ -147,6 +186,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         description = form.description;
         if (form.descriptionInTooltip.HasValue)
             descriptionInTooltip = form.descriptionInTooltip.Value;
+        maxLength = form.maxLength;
+        minValue = form.minValue;
+        maxValue = form.maxValue;
+        maxValues = form.maxValues;
+        validationPattern = form.validationPattern;
         return true;
     }
 
@@ -161,12 +205,18 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
             isRequired = isRequired,
             isUnique = isUnique,
             isMultiline = isMultiline,
+            allowCustomValues = allowCustomValues,
             showOnProductPage = isRequired || showOnProductPage,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
             description = description,
-            descriptionInTooltip = descriptionInTooltip
+            descriptionInTooltip = descriptionInTooltip,
+            maxLength = maxLength,
+            minValue = minValue,
+            maxValue = maxValue,
+            maxValues = maxValues,
+            validationPattern = validationPattern
         };
     }
 
@@ -194,6 +244,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
     /// Maximum length for attribute description.
     /// </summary>
     public const int ATTRIBUTE_DESCRIPTION_MAX_LENGTH = 2000;
+
+    /// <summary>
+    /// Maximum length for a stored validation regex.
+    /// </summary>
+    public const int ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH = 500;
 
     /// <summary>
     /// Internal form used to create a new store attribute (includes store context).
@@ -233,6 +288,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
@@ -264,6 +324,32 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// Show description in a tooltip on the product page.
         /// </summary>
         public bool descriptionInTooltip { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
 
         /// <summary>
         /// Store identifier.
@@ -309,6 +395,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
@@ -335,6 +426,32 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// Show description in a tooltip on the product page.
         /// </summary>
         public bool descriptionInTooltip { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
     }
 
     /// <summary>
@@ -375,6 +492,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         public bool? isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool? allowCustomValues { get; set; }
+
+        /// <summary>
         /// Updated product page visibility flag.
         /// </summary>
         public bool? showOnProductPage { get; set; }
@@ -406,6 +528,32 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// Updated tooltip description flag.
         /// </summary>
         public bool? descriptionInTooltip { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        [StringLength(ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH)]
+        public string? validationPattern { get; set; }
     }
 
     /// <summary>
@@ -449,6 +597,11 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         public bool isMultiline { get; set; }
 
         /// <summary>
+        /// For select/multiselect: accept values that are not in the options list.
+        /// </summary>
+        public bool allowCustomValues { get; set; }
+
+        /// <summary>
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
@@ -477,5 +630,30 @@ public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, I
         /// Show description in a tooltip on the product page.
         /// </summary>
         public bool descriptionInTooltip { get; set; }
+
+        /// <summary>
+        /// Maximum characters for the stored value.
+        /// </summary>
+        public int? maxLength { get; set; }
+
+        /// <summary>
+        /// Minimum numeric value.
+        /// </summary>
+        public decimal? minValue { get; set; }
+
+        /// <summary>
+        /// Maximum numeric value.
+        /// </summary>
+        public decimal? maxValue { get; set; }
+
+        /// <summary>
+        /// Maximum number of selected values for select/multiselect.
+        /// </summary>
+        public int? maxValues { get; set; }
+
+        /// <summary>
+        /// Regex the stored value must match.
+        /// </summary>
+        public string? validationPattern { get; set; }
     }
 }

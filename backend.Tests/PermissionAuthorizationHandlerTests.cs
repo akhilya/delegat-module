@@ -162,6 +162,26 @@ public class PermissionAuthorizationHandlerTests
     }
 
     [Fact]
+    public async Task WorkspaceView_DoesNotAllowDatabaseDumpGet()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/settings/database/dump";
+
+        var handler = CreateHandler(db, http);
+        var user = PrincipalWith(Permissions.WorkspaceView, userId: 1);
+        var context = new AuthorizationHandlerContext(
+            [new PermissionRequirement(Permissions.SettingsDump, requireStoreMembership: false)],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        Assert.False(context.HasSucceeded);
+    }
+
+    [Fact]
     public async Task WorkspaceView_DoesNotAllowPluginsGet()
     {
         await using var db = TestDbFactory.CreateDb();

@@ -164,7 +164,7 @@ public class UserController : ControllerBase
         if (user == null)
             throw ApiException.NotFound("User not found", code: "user_not_found");
 
-        // roles.manage is never assignable - only User.isAdmin receives it at hydrate time.
+        // Admin-only claims are never assignable - only User.isAdmin receives them at hydrate time.
         var roles = input.roles ?? [];
         var grants = (input.permissionGrants ?? [])
             .Where(p => !Permissions.IsAdminOnly(p))

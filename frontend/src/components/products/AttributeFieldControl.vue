@@ -32,6 +32,7 @@ export default {
   props: {
     attribute: { type: Object, required: true },
     fieldPrefix: { type: String, required: true },
+    idPrefix: { type: String, default: "attr-" },
   },
   methods: {
     isType(attrType, typeName) {
@@ -39,6 +40,9 @@ export default {
     },
     fieldName() {
       return `${this.fieldPrefix}.${this.attribute.id}`;
+    },
+    fieldId() {
+      return `${this.idPrefix}${this.attribute.id}`;
     },
     getSelectOptions() {
       return parseAttributeOptions(this.attribute.options);
@@ -87,7 +91,7 @@ export default {
     <FormItem class="gap-0">
       <SettingsFormField
         :label="attribute.name"
-        :label-for="'attr-' + attribute.id"
+        :label-for="fieldId()"
         :description="attribute.description"
         :description-in-tooltip="attribute.descriptionInTooltip === true"
         :required="attribute.isRequired"
@@ -97,7 +101,7 @@ export default {
       >
         <Switch
           v-if="isType(attribute.type, 'boolean')"
-          :id="'attr-' + attribute.id"
+          :id="fieldId()"
           :model-value="value === 'true'"
           @update:model-value="setValue($event ? 'true' : 'false')"
         />
@@ -105,7 +109,7 @@ export default {
           v-else-if="isType(attribute.type, 'text') && attribute.isMultiline"
         >
           <Textarea
-            :id="'attr-' + attribute.id"
+            :id="fieldId()"
             v-bind="componentField"
             :placeholder="attribute.defaultValue || ''"
             :maxlength="valueMaxLength()"
@@ -114,7 +118,7 @@ export default {
         </FormControl>
         <FormControl v-else-if="isType(attribute.type, 'text')">
           <Input
-            :id="'attr-' + attribute.id"
+            :id="fieldId()"
             type="text"
             v-bind="componentField"
             :placeholder="attribute.defaultValue || ''"
@@ -123,7 +127,7 @@ export default {
         </FormControl>
         <FormControl v-else-if="isType(attribute.type, 'number')">
           <Input
-            :id="'attr-' + attribute.id"
+            :id="fieldId()"
             type="text"
             inputmode="decimal"
             v-bind="componentField"

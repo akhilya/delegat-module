@@ -14,6 +14,7 @@ export const PERMS = {
   RolesManage: "roles.manage",
   PluginsManage: "plugins.manage",
   SettingsPlatform: "settings.platform",
+  SettingsDump: "settings.dump",
   StoresCreate: "stores.create",
   ReferenceRead: "reference.read",
   WorkspaceView: "workspace.view",
@@ -27,10 +28,14 @@ export const PERMS = {
   AiUse: "ai.use",
 };
 
-/** Browse a surface without the write grant. Never covers plugins or AI. */
+/** Browse a surface without the write grant. Never covers plugins, AI, or the DB dump. */
 export function canBrowse(me, permission) {
   if (hasPermission(me, permission)) return true;
-  if (permission === PERMS.PluginsManage || permission === PERMS.AiUse)
+  if (
+    permission === PERMS.PluginsManage
+    || permission === PERMS.AiUse
+    || permission === PERMS.SettingsDump
+  )
     return false;
   return hasPermission(me, PERMS.WorkspaceView);
 }

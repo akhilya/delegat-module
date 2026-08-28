@@ -712,6 +712,7 @@ async function handleSubmit() {
                         :options="getSelectOptions(attr)"
                         :placeholder="attr.name"
                         :disabled="!enabledStoreAttributes[attr.id]"
+                        :allow-create="!!attr.allowCustomValues"
                       />
                       <MultiSelectDropdown
                         v-else-if="isType(attr.type, 'multiselect')"
@@ -724,6 +725,7 @@ async function handleSubmit() {
                         "
                         :placeholder="attr.name"
                         :disabled="!enabledStoreAttributes[attr.id]"
+                        :allow-create="!!attr.allowCustomValues"
                         :max-selections="maxSelections(attr)"
                       />
                       <Textarea

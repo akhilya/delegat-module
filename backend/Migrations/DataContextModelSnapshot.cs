@@ -2316,6 +2316,11 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("allowCustomValues")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
@@ -2348,6 +2353,20 @@ namespace Delegat.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<int?>("maxLength")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("maxValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<int?>("maxValues")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("minValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2370,6 +2389,10 @@ namespace Delegat.Migrations
 
                     b.Property<int>("type")
                         .HasColumnType("int");
+
+                    b.Property<string>("validationPattern")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.HasKey("Id");
 
