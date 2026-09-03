@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./shadcn-vue-utilities.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -92,6 +93,21 @@
   --duration-drawer-out: 210ms;
 }
 
+/* Region wait: spinner and the first paint of page body fade in.
+   Opacity only. Not route choreography and not a delayed entrance. */
+@keyframes page-region-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-region-in {
+  animation: page-region-in var(--duration-overlay) var(--ease-out-quart) both;
+}
+
 button {
   cursor: pointer;
 }
@@ -104,9 +120,15 @@ button {
   }
 }
 
-/* Control Plane button lift: short white top sheen + hairline drop shadow.
-   Link stays flat. Ghost is shadow-only. Grouped segments share one plane. */
-[data-slot="button"]:not([data-variant="link"]) {
+/* Control Plane button lift: short white top sheen + hairline drop shadow
+   on default / outline / secondary / destructive. Ghost and link stay flat.
+   Grouped segments share one plane. */
+[data-slot="button"]:not([data-variant]),
+[data-slot="button"][data-variant=""],
+[data-slot="button"][data-variant="default"],
+[data-slot="button"][data-variant="outline"],
+[data-slot="button"][data-variant="secondary"],
+[data-slot="button"][data-variant="destructive"] {
   box-shadow: 0 1px 2px oklch(0 0 0 / 0.1);
 }
 
@@ -130,8 +152,36 @@ button {
 }
 
 [data-slot="button"][data-variant="ghost"] {
-  box-shadow: 0 1px 1px oklch(0 0 0 / 0.05);
+  box-shadow: none;
   background-image: none;
+}
+
+/* Inset sheets and the desktop sidebar: float off the page. Hairline must read without
+   a scrim (AI has no overlay). Shadow is on this node so overflow on the inner
+   clip wrapper does not hide it. The resize handle is the capsule only (no
+   full-height wash). The desktop sidebar handle sits on the panel (outside the
+   clip) so the capsule can rest on the right hairline. */
+[data-slot="sheet-content"][data-inset],
+[data-slot="sidebar-panel"][data-inset] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 18%, transparent),
+    0 10px 36px oklch(0 0 0 / 0.14),
+    0 2px 8px oklch(0 0 0 / 0.06);
+}
+
+.dark [data-slot="sheet-content"][data-inset],
+.dark [data-slot="sidebar-panel"][data-inset] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 22%, transparent),
+    0 12px 40px oklch(0 0 0 / 0.48),
+    0 2px 8px oklch(0 0 0 / 0.2);
+}
+
+/* JS sets --scroll-fade-t/b from scroll position. Kill the CSS timeline so it
+   cannot pin both edges to the static fallback. */
+[data-slot="sidebar-content"].scroll-fade {
+  animation: none !important;
+  animation-timeline: auto;
 }
 
 [data-slot="button"][data-variant="destructive"] {
@@ -142,16 +192,19 @@ button {
   );
 }
 
-[data-slot="button"]:not([data-variant="link"]):focus-visible {
+[data-slot="button"]:not([data-variant]):focus-visible,
+[data-slot="button"][data-variant=""]:focus-visible,
+[data-slot="button"][data-variant="default"]:focus-visible,
+[data-slot="button"][data-variant="outline"]:focus-visible,
+[data-slot="button"][data-variant="secondary"]:focus-visible,
+[data-slot="button"][data-variant="destructive"]:focus-visible {
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.1),
     0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 [data-slot="button"][data-variant="ghost"]:focus-visible {
-  box-shadow:
-    0 1px 1px oklch(0 0 0 / 0.05),
-    0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 [data-slot="button-group"] [data-slot="button"] {
@@ -188,10 +241,6 @@ button {
     max-[1281px]:pl-5 max-[1281px]:pr-20
     max-lg:pl-5 max-lg:pr-5
     max-sm:pl-3 max-sm:pr-3;
-}
-
-.ai-panel-open .adaptive-padding {
-  @apply px-3 sm:px-4 lg:px-5;
 }
 
 @theme inline {

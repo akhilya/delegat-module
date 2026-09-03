@@ -19,7 +19,8 @@ const props = defineProps({
   size: { type: String, default: "default" },
   /**
    * When false, omit border/radius — use inside an already-framed parent
-   * (tab panels, side sheets, cards).
+   * (tab panels, side sheets, cards). Region loaders never frame: a bordered
+   * box around a spinner reads as a card, not a page wait.
    */
   framed: { type: Boolean, default: true },
   class: { type: null, required: false },
@@ -33,7 +34,8 @@ const attrs = useAttrs();
 const frameClass = computed(() =>
   cn(
     "flex w-full min-h-0 flex-1 flex-col items-center justify-center",
-    props.framed && "rounded-lg border",
+    props.framed && !props.loading && "rounded-lg border",
+    props.loading && "page-region-in",
     props.size === "sm" ? "gap-3 p-4 md:p-6" : "gap-4 p-6 md:p-12",
     props.class,
   ),
@@ -43,6 +45,7 @@ const frameClass = computed(() =>
 <template>
   <div
     v-if="loading"
+    data-slot="empty-state-loading"
     :class="frameClass"
     v-bind="attrs"
     aria-busy="true"

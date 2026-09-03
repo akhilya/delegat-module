@@ -4,6 +4,7 @@ import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
 import { PAGE_SETUP } from "@/lib/setupGate";
+import { isOrderBucket, orderBucketById } from "@/lib/ordersUi";
 
 const signUpPage = () => import("./pages/signUpPage.vue");
 const signInPage = () => import("./pages/signInPage.vue");
@@ -42,6 +43,7 @@ const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
 const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
 const SetupWizardPage = () => import("./pages/setup/SetupWizardPage.vue");
+const OrdersPage = () => import("./pages/orders/OrdersPage.vue");
 
 export const PAGE_SIGN_UP = "/signUp";
 export const PAGE_SIGN_IN = "/signIn";
@@ -54,6 +56,8 @@ export const PAGE_CATEGORIES = "/categories";
 export const PAGE_CATEGORY_EDIT = "/categories/:id/edit";
 export const PAGE_BARCODES = "/barcodes";
 export const PAGE_NOTES = "/notes";
+export const PAGE_ORDERS = "/orders";
+export const PAGE_ORDERS_BUCKET = "/orders/:bucket";
 export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";
@@ -102,6 +106,20 @@ export const routes = [
   },
   { path: "/", component: productsPage, meta: { titleKey: "routes.products" } },
   { path: PAGE_PRODUCTS, component: productsPage, meta: { titleKey: "routes.products" } },
+  { path: PAGE_ORDERS, redirect: "/orders/new" },
+  {
+    path: PAGE_ORDERS_BUCKET,
+    component: OrdersPage,
+    meta: { titleKey: "routes.orders", permissions: [PERMS.MarketplaceManage] },
+    beforeEnter(to) {
+      if (!isOrderBucket(to.params.bucket)) {
+        return { path: "/orders/new", query: to.query };
+      }
+      const bucket = orderBucketById(to.params.bucket);
+      if (bucket?.titleKey) to.meta.titleKey = bucket.titleKey;
+      return true;
+    },
+  },
   {
     path: PAGE_PRODUCT_CREATION,
     component: productCreationPage,
@@ -203,12 +221,12 @@ export const routes = [
       {
         path: "admin/api",
         component: AdminApiPage,
-        meta: { titleKey: "routes.api", permissions: [PERMS.ApiAccess], fillHeight: true },
+        meta: { titleKey: "routes.api", permissions: [PERMS.ApiAccess] },
       },
       {
         path: "admin/error-logs",
         component: AdminErrorLogsPage,
-        meta: { titleKey: "routes.errorLogs", permissions: [PERMS.SettingsPlatform], fillHeight: true },
+        meta: { titleKey: "routes.errorLogs", permissions: [PERMS.SettingsPlatform] },
       },
       {
         path: "admin/plugins",
@@ -227,7 +245,7 @@ export const routes = [
       {
         path: "adapter-logs",
         component: AdapterLogsPage,
-        meta: { titleKey: "routes.adapterLogs", permissions: [PERMS.SettingsPlatform], fillHeight: true },
+        meta: { titleKey: "routes.adapterLogs", permissions: [PERMS.SettingsPlatform] },
       },
     ],
   },

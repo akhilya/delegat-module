@@ -1,6 +1,7 @@
 using Delegat.Infrastructure.Auth;
 using Delegat.Marketplace.SDK;
 using Delegat.Services.Tools;
+using HostCaps = Delegat.Services.Marketplace.MarketplaceCapabilities;
 
 namespace Delegat.Tests;
 
@@ -15,12 +16,16 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string>());
 
-        Assert.Equal(2, entries.Count);
-        Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId);
+        Assert.Equal(4, entries.Count);
+        Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId && e.Stage == ToolStages.Stable);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ExportAllPricesId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ClearPromotionProductsId);
         var scrape = Assert.Single(entries, e => e.Id == PlatformTools.CatalogScrapeId);
         Assert.Equal(ToolSources.Platform, scrape.Source);
         Assert.Equal(ToolModes.Page, scrape.Mode);
         Assert.Equal("/tools/catalog-scrape", scrape.Path);
+        Assert.Equal(ToolGroups.Catalog, scrape.Group);
+        Assert.Equal(ToolStages.Experimental, scrape.Stage);
         Assert.True(scrape.Available);
         Assert.DoesNotContain(entries, e => e.Id == PlatformTools.PublicApiTryId);
     }
@@ -40,6 +45,8 @@ public class ToolCatalogComposerTests
         Assert.Equal(ToolModes.Page, tool.Mode);
         Assert.Equal("/tools/public-api-try", tool.Path);
         Assert.Equal("Play", tool.Icon);
+        Assert.Equal(ToolGroups.Api, tool.Group);
+        Assert.Equal(ToolStages.Stable, tool.Stage);
     }
 
     [Fact]
@@ -71,6 +78,8 @@ public class ToolCatalogComposerTests
 
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogScrapeId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ExportAllPricesId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ClearPromotionProductsId);
         Assert.Contains(entries, e => e.Id == PlatformTools.PublicApiTryId);
     }
 
@@ -109,11 +118,12 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string>());
 
-        Assert.Equal(3, entries.Count);
+        Assert.Equal(5, entries.Count);
         var job = entries.Single(e => e.Source == ToolSources.Adapter);
         Assert.Equal("wildberries.duplicate-cards", job.Id);
         Assert.Equal("/tools/wildberries.duplicate-cards", job.Path);
         Assert.Equal(ToolModes.Job, job.Mode);
+        Assert.Equal(ToolStages.Stable, job.Stage);
         Assert.False(job.Available);
         Assert.Equal("connection_required", job.UnavailableReason);
     }
@@ -157,11 +167,12 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string> { "wildberries" });
 
-        Assert.Equal(4, entries.Count);
+        Assert.Equal(6, entries.Count);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId && e.Source == ToolSources.Platform);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogScrapeId && e.Source == ToolSources.Platform);
         Assert.Contains(entries, e => e.Id == "wildberries.catalog-connect");
         Assert.Contains(entries, e => e.Id == "wildberries.ok-tool");
+        Assert.Equal(ToolGroups.Adapters, Assert.Single(entries, e => e.Id == "wildberries.ok-tool").Group);
         Assert.DoesNotContain(entries, e => e.Id.Contains("Bad", StringComparison.Ordinal));
     }
 
@@ -171,8 +182,77 @@ public class ToolCatalogComposerTests
         Assert.False(ToolCatalogComposer.TryParseAdapterToolId("catalog-connect", out _, out _));
         Assert.False(ToolCatalogComposer.TryParseAdapterToolId("catalog-scrape", out _, out _));
         Assert.False(ToolCatalogComposer.TryParseAdapterToolId("public-api-try", out _, out _));
+        Assert.False(ToolCatalogComposer.TryParseAdapterToolId("export-all-prices", out _, out _));
+        Assert.False(ToolCatalogComposer.TryParseAdapterToolId("clear-promotion-products", out _, out _));
         Assert.True(ToolCatalogComposer.TryParseAdapterToolId("wb.duplicate-cards", out var key, out var local));
         Assert.Equal("wb", key);
         Assert.Equal("duplicate-cards", local);
+    }
+
+    [Fact]
+    public void Compose_PlatformJobTools_AreUnavailableWithoutActiveCapability()
+    {
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.MarketplaceManage },
+            new HashSet<string>());
+
+        var prices = Assert.Single(entries, e => e.Id == PlatformTools.ExportAllPricesId);
+        Assert.Equal(ToolModes.Job, prices.Mode);
+        Assert.True(prices.QuickRun);
+        Assert.Equal(ToolGroups.Prices, prices.Group);
+        Assert.Equal(ToolStages.Experimental, prices.Stage);
+        Assert.False(prices.Available);
+        Assert.Equal("connection_required", prices.UnavailableReason);
+        Assert.Equal("ExportPrices", prices.RequiredCapability);
+
+        var promos = Assert.Single(entries, e => e.Id == PlatformTools.ClearPromotionProductsId);
+        Assert.True(promos.Destructive);
+        Assert.True(promos.QuickRun);
+        Assert.Equal(ToolGroups.Promotions, promos.Group);
+        Assert.Equal(ToolStages.Experimental, promos.Stage);
+        Assert.False(promos.Available);
+        Assert.Equal("UpdatePromotions", promos.RequiredCapability);
+    }
+
+    [Fact]
+    public void Compose_PlatformJobTools_AvailableWhenActiveAdapterHasFlags()
+    {
+        var caps = new Dictionary<string, HostCaps>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ozon"] = HostCaps.ExportPrices
+                | HostCaps.GetPromotions
+                | HostCaps.UpdatePromotions
+        };
+
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.MarketplaceManage },
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ozon" },
+            caps);
+
+        Assert.True(Assert.Single(entries, e => e.Id == PlatformTools.ExportAllPricesId).Available);
+        Assert.True(Assert.Single(entries, e => e.Id == PlatformTools.ClearPromotionProductsId).Available);
+    }
+
+    [Fact]
+    public void Compose_ClearPromotions_RequiresBothPromotionFlags()
+    {
+        var caps = new Dictionary<string, HostCaps>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ozon"] = HostCaps.GetPromotions
+        };
+
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.MarketplaceManage },
+            new HashSet<string> { "ozon" },
+            caps);
+
+        Assert.False(Assert.Single(entries, e => e.Id == PlatformTools.ClearPromotionProductsId).Available);
+        Assert.False(Assert.Single(entries, e => e.Id == PlatformTools.ExportAllPricesId).Available);
     }
 }

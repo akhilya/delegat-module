@@ -8,6 +8,7 @@ import {
   SheetHeaderClose,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 
 defineProps({
   open: { type: Boolean, default: false },
@@ -24,8 +25,12 @@ defineEmits(["update:open"]);
   <Sheet :open="open" @update:open="$emit('update:open', $event)">
     <SheetContent
       side="right"
+      inset
+      resizable
       :show-close="false"
-      class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      class="flex w-full flex-col gap-0 p-0"
+      :default-width="SHEET_WIDTH_DEFAULTS.logs"
+      :storage-key="SHEET_WIDTH_STORAGE.logs"
       :aria-label="ariaLabel || title || undefined"
     >
       <SheetHeader variant="bar">

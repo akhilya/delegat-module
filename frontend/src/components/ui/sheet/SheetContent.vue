@@ -1,10 +1,18 @@
 <script setup>
+import { computed, toRef, useAttrs } from "vue";
 import { reactiveOmit } from "@vueuse/core";
 import { DialogContent, DialogPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
 import { isConfirmOverlayActive } from "@/composables/useConfirm";
+import {
+  SHEET_RESIZE_MAX,
+  SHEET_RESIZE_MIN,
+  SHEET_WIDTH_DEFAULTS,
+  useSheetResize,
+} from "@/composables/useSheetResize";
 import DialogCloseButton from "@/components/ui/dialog/DialogCloseButton.vue";
 import SheetOverlay from "./SheetOverlay.vue";
+import SheetResizeHandle from "./SheetResizeHandle.vue";
 
 defineOptions({
   inheritAttrs: false,
@@ -19,6 +27,31 @@ const props = defineProps({
   as: { type: null, required: false },
   /** False when the header already has an in-flow close (bar sheets). */
   showClose: { type: Boolean, default: true },
+  /**
+   * Float the panel slightly off the viewport (8px) with rounded corners.
+   * Implied when `resizable`.
+   */
+  inset: { type: Boolean, default: false },
+  /**
+   * Capsule drag handle on the free edge; width is stored per `storageKey`
+   * or controlled via `width` / `update:width`.
+   */
+  resizable: { type: Boolean, default: false },
+  width: { type: Number, required: false },
+  defaultWidth: { type: Number, default: SHEET_WIDTH_DEFAULTS.ai },
+  storageKey: { type: String, required: false, default: undefined },
+  minWidth: { type: Number, default: SHEET_RESIZE_MIN },
+  maxWidth: { type: Number, default: SHEET_RESIZE_MAX },
+  /**
+   * Platform overlay scrim (`bg-black/50` + blur). Off for a companion sheet
+   * that must leave the page usable (AI chat).
+   */
+  overlay: { type: Boolean, default: true },
+  /**
+   * Dismiss when the pointer/focus leaves the panel. Off for AI so catalog
+   * work can continue with the assistant open.
+   */
+  closeOnOutside: { type: Boolean, default: true },
 });
 const emits = defineEmits([
   "escapeKeyDown",
@@ -27,9 +60,51 @@ const emits = defineEmits([
   "interactOutside",
   "openAutoFocus",
   "closeAutoFocus",
+  "update:width",
 ]);
 
-const delegatedProps = reactiveOmit(props, "class", "side", "showClose");
+const attrs = useAttrs();
+const isInset = computed(() => props.inset || props.resizable);
+
+const { width: liveWidth, isResizing, startResize } = useSheetResize({
+  enabled: toRef(props, "resizable"),
+  width: toRef(props, "width"),
+  setWidth: (w) => emits("update:width", w),
+  storageKey: props.storageKey,
+  defaultWidth: props.defaultWidth,
+  minWidth: props.minWidth,
+  maxWidth: props.maxWidth,
+  side: toRef(props, "side"),
+});
+
+const mergedStyle = computed(() => {
+  const fromAttrs = attrs.style;
+  if (!props.resizable) return fromAttrs;
+  const resize = {
+    width: `${liveWidth.value}px`,
+    maxWidth: "calc(100vw - 1rem)",
+  };
+  if (!fromAttrs) return resize;
+  if (typeof fromAttrs === "string") return [resize, fromAttrs];
+  return { ...fromAttrs, ...resize };
+});
+
+const delegatedProps = reactiveOmit(
+  props,
+  "class",
+  "side",
+  "showClose",
+  "inset",
+  "resizable",
+  "width",
+  "defaultWidth",
+  "storageKey",
+  "minWidth",
+  "maxWidth",
+  "overlay",
+  "closeOnOutside",
+  "disableOutsidePointerEvents",
+);
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
 
@@ -51,17 +126,19 @@ function onEscapeKeyDown(event) {
   if (isConfirmOverlayActive()) event.preventDefault();
 }
 
+function shouldIgnoreOutside(event) {
+  if (isConfirmOverlayActive() || !props.closeOnOutside) return true;
+  const target = event.detail?.originalEvent?.target ?? event.target;
+  return isPortaledOverlayTarget(target);
+}
+
 function onPointerDownOutside(event) {
-  if (isConfirmOverlayActive()) {
+  if (shouldIgnoreOutside(event)) {
     event.preventDefault();
     return;
   }
   const originalEvent = event.detail?.originalEvent;
   const target = originalEvent?.target ?? event.target;
-  if (isPortaledOverlayTarget(target)) {
-    event.preventDefault();
-    return;
-  }
   if (originalEvent && target instanceof HTMLElement) {
     if (
       originalEvent.offsetX > target.clientWidth ||
@@ -73,59 +150,97 @@ function onPointerDownOutside(event) {
 }
 
 function onFocusOutside(event) {
-  if (isConfirmOverlayActive()) {
-    event.preventDefault();
-    return;
-  }
-  const target = event.detail?.originalEvent?.target ?? event.target;
-  if (isPortaledOverlayTarget(target)) {
-    event.preventDefault();
-  }
+  if (shouldIgnoreOutside(event)) event.preventDefault();
 }
 
 function onInteractOutside(event) {
-  if (isConfirmOverlayActive()) {
-    event.preventDefault();
-    return;
+  if (shouldIgnoreOutside(event)) event.preventDefault();
+}
+
+function insetSideClass() {
+  if (props.resizable) {
+    if (props.side === "right") {
+      return "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right top-2 right-2 bottom-2 h-auto !left-auto";
+    }
+    if (props.side === "left") {
+      return "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left top-2 left-2 bottom-2 h-auto !right-auto";
+    }
   }
-  const target = event.detail?.originalEvent?.target ?? event.target;
-  if (isPortaledOverlayTarget(target)) {
-    event.preventDefault();
+  if (props.side === "right") {
+    return "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right top-2 right-2 bottom-2 left-2 h-auto w-auto sm:left-auto sm:w-3/4 sm:max-w-sm";
   }
+  if (props.side === "left") {
+    return "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left top-2 left-2 bottom-2 right-2 h-auto w-auto sm:right-auto sm:w-3/4 sm:max-w-sm";
+  }
+  return "";
 }
 </script>
 
 <template>
   <DialogPortal>
-    <SheetOverlay />
+    <SheetOverlay v-if="overlay" />
     <DialogContent
       data-slot="sheet-content"
+      :data-inset="isInset ? '' : undefined"
+      :data-resizable="resizable ? '' : undefined"
+      :data-resizing="resizable && isResizing ? '' : undefined"
       :class="
         cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[var(--z-modal)] flex flex-col gap-4 shadow-none ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[var(--z-modal)] flex flex-col gap-4 ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
+          resizable &&
+            (isResizing
+              ? 'transition-none will-change-[width]'
+              : 'transition-[width] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]'),
+          isInset
+            ? 'min-h-0 rounded-xl border-0'
+            : 'shadow-none',
           side === 'right' &&
-            'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
+            (isInset
+              ? insetSideClass()
+              : 'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm'),
           side === 'left' &&
-            'data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm',
+            (isInset
+              ? insetSideClass()
+              : 'data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm'),
           side === 'top' &&
-            'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b',
+            (isInset
+              ? 'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top left-2 right-2 top-2 h-auto'
+              : 'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b'),
           side === 'bottom' &&
-            'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t',
+            (isInset
+              ? 'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom left-2 right-2 bottom-2 h-auto'
+              : 'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t'),
           props.class,
         )
       "
       v-bind="{ ...$attrs, ...forwarded }"
+      :style="mergedStyle"
+      :disable-outside-pointer-events="closeOnOutside"
       @escape-key-down="onEscapeKeyDown"
       @pointer-down-outside="onPointerDownOutside"
       @focus-outside="onFocusOutside"
       @interact-outside="onInteractOutside"
     >
-      <slot />
+      <div
+        :class="
+          isInset
+            ? 'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl'
+            : 'contents'
+        "
+      >
+        <SheetResizeHandle
+          v-if="resizable"
+          :side="side"
+          :resizing="isResizing"
+          @pointerdown="startResize"
+        />
+        <slot />
 
-      <DialogCloseButton
-        v-if="showClose"
-        class="top-4 right-6 size-8 rounded-md"
-      />
+        <DialogCloseButton
+          v-if="showClose"
+          class="top-4 right-6 size-8 rounded-md"
+        />
+      </div>
     </DialogContent>
   </DialogPortal>
 </template>

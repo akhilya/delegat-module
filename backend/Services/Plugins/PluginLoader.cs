@@ -122,6 +122,10 @@ public static class PluginLoader
         if (!fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             return false;
 
+        if (fileName.Contains(".Tests.", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith("Tests.dll", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         return !fileName.Equals("Delegat.Marketplace.SDK.dll", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -139,7 +143,7 @@ public static class PluginLoader
 
     private static bool IsMarketplacePluginType(Type type)
     {
-        if (type.IsInterface || type.IsAbstract)
+        if (type.IsInterface || type.IsAbstract || type.IsNested)
             return false;
 
         if (typeof(IMarketplacePlugin).IsAssignableFrom(type))

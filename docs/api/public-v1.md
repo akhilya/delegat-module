@@ -91,7 +91,10 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 403 | `forbidden` / `access_denied_store` | User is not a member of `storeId` |
 | 404 | `not_found` | Resource missing in that store (prefer the semantic codes below when present) |
 | 404 | `product_not_found` / `category_not_found` / `group_not_found` / `variant_not_found` / `store_attribute_not_found` / `connection_not_found` / `operation_not_found` / `group_member_not_found` | Named resource missing |
-| 400 | `connection_inactive` | Sync starter used a paused marketplace connection |
+| 400 | `connection_inactive` | Sync starter or live commerce used a paused marketplace connection |
+| 400 | `adapter_capability_missing` | Connection adapter does not support the requested commerce action |
+| 400 | `order_status_failed` / `order_label_failed` / `promotion_update_failed` | Marketplace rejected the order status, label download, or promotion product update |
+| 404 | `order_not_found` / `promotion_not_found` | Live marketplace order or promotion id was not found |
 | 400 | `invalid_barcode` | Barcode is not a valid EAN-8 / EAN-13 |
 | 400 | `import_nothing_queued` | Import-products skipped every item (unmapped categories, blank ids) |
 | 409 | `conflict` | Quota / uniqueness / state conflict |
@@ -204,6 +207,23 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 | POST | `/export-stocks` | `{ linkIds?: number[] }` | |
 | POST | `/import-stocks` | _(empty)_ | Adapter must support import stocks |
 
+### Marketplace commerce (live, not stored)
+
+Base: `/stores/{storeId}/connections/{connectionId}/…`
+
+These calls go to the marketplace cabinet and return immediately. They do **not** create an Operation and do **not** persist orders or promotions in Delegat. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`.
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|--------|
+| GET | `/prices` | ImportPrices | Query `ids` = comma-separated marketplace product ids (omit = page what the adapter can list). Includes discounts / sale / marketing price when the marketplace sends them. |
+| GET | `/orders` | GetOrders | Query: `page`, `pageSize`, `cursor`, `status`, `from`, `to`, `channel` (`fbs` / `fbo` / `shop`), `search`. Response is the usual page plus `nextCursor` and `hasMore` when the marketplace is cursor-based. Normalized `status`: `new`, `confirmed`, `awaiting_pack`, `awaiting_deliver`, `delivering`, `delivered`, `cancelled`, `returned`, `unpaid`, `unknown`. Cabinet New (`new` / `unpaid`) is the accept queue (Ozon `awaiting_approve`). Wildberries FBS has no accept step: new assembly tasks (`supplierStatus=new`, `GET /api/v3/orders/new`) are `awaiting_pack`; in a supply (`confirm`) is `awaiting_deliver`; handed to WB (`complete`) is `delivering` until `wbStatus=sold`. List payloads have no statuses — the adapter loads them from `POST /api/v3/orders/status`. Each item may include `imageUrl` (Wildberries basket CDN, Ozon Seller API primary photo, or the local linked product photo). |
+| GET | `/orders/{orderId}` | GetOrders | Missing → `404 order_not_found` |
+| GET | `/orders/{orderId}/label` | GetOrderLabels | Packing label / barcode sticker. Body: `{ contentType, fileName, contentBase64, format, barcode?, extra? }`. `format` is `pdf`, `png`, or `svg`. Ozon FBS PDF (`/v2/posting/fbs/package-label`), Wildberries PNG sticker (`/api/v3/orders/stickers`), Yandex Market PDF (`/v2/campaigns/…/orders/…/delivery/labels`). WooCommerce and OpenCart → `400 adapter_capability_missing`. Failure → `400 order_label_failed` (order not packed yet, FBO, marketplace error). |
+| POST | `/orders/{orderId}/status` | UpdateOrderStatus | Body `{ action, reason?, trackingNumber?, deliveryService?, extra? }`. `action`: `confirm`, `pack`, `ship`, `deliver`, `complete`, `cancel`. Failure → `400 order_status_failed`. |
+| GET | `/promotions` | GetPromotions | Query: `page`, `pageSize`, `cursor`, `status`, `type`. Marketplace actions, calendar campaigns, or shop coupons. |
+| GET | `/promotions/{promotionId}` | GetPromotions | Missing → `404 promotion_not_found` |
+| POST | `/promotions/{promotionId}/products` | UpdatePromotions | Body `{ add: [{ externalProductId, actionPrice? }], removeExternalProductIds: [] }`. Failure → `400 promotion_update_failed`. |
+
 ---
 
 ## Examples
@@ -223,13 +243,18 @@ curl -X POST -H "Authorization: Bearer dk_..." \
   -d '{"linkIds":[10,11]}' \
   "https://instance.example/api/v1/stores/1/connections/3/export-prices"
 
+# List orders (live marketplace cabinet)
 curl -H "Authorization: Bearer dk_..." \
-  "https://instance.example/api/v1/stores/1/operations/{operationId}"
+  "https://instance.example/api/v1/stores/1/connections/3/orders?page=1&pageSize=50"
+
+# Packing label (Base64 file; Ozon / Wildberries / Yandex Market)
+curl -H "Authorization: Bearer dk_..." \
+  "https://instance.example/api/v1/stores/1/connections/3/orders/1234-0001/label"
 ```
 
 ## Out of scope (v1)
 
-Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys.
+Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys. Orders and promotions are not stored in Delegat (no local order tables).
 
 ## Related
 

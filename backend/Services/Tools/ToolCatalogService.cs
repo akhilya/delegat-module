@@ -6,6 +6,7 @@ using Delegat.Marketplace.SDK;
 using Delegat.Models.Marketplace;
 using Delegat.Services.Marketplace;
 using Delegat.Services;
+using HostCaps = Delegat.Services.Marketplace.MarketplaceCapabilities;
 
 namespace Delegat.Services.Tools;
 
@@ -15,17 +16,23 @@ public class ToolCatalogService
     private readonly DataContext _db;
     private readonly IOperationLogger _operations;
     private readonly IPublicApiSettingsService _publicApi;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ToolCatalogService> _logger;
 
     public ToolCatalogService(
         IMarketplaceAdapterRegistry adapters,
         DataContext db,
         IOperationLogger operations,
-        IPublicApiSettingsService publicApi)
+        IPublicApiSettingsService publicApi,
+        IServiceScopeFactory scopeFactory,
+        ILogger<ToolCatalogService> logger)
     {
         _adapters = adapters;
         _db = db;
         _operations = operations;
         _publicApi = publicApi;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<ToolCatalogEntry>> ListAsync(
@@ -34,11 +41,13 @@ public class ToolCatalogService
         CancellationToken ct = default)
     {
         var connected = await ConnectedAdapterKeysAsync(storeId, ct);
+        var activeCaps = await ActiveAdapterCapabilitiesAsync(storeId, ct);
         var entries = ToolCatalogComposer.Compose(
             PlatformTools.All,
             AdapterContributions(),
             userPermissions,
-            connected);
+            connected,
+            activeCaps);
         return ToolCatalogComposer.ApplyInstanceFlags(entries, _publicApi.IsPublicApiEnabled);
     }
 
@@ -71,6 +80,9 @@ public class ToolCatalogService
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
         if (!entry.Available)
             throw ApiException.BadRequest("Tool is not available", code: "tool_unavailable");
+
+        if (entry.Source == ToolSources.Platform && PlatformTools.IsPlatformJob(id))
+            return await StartPlatformJobAsync(entry, connectionId, userId, storeId.Value, ct);
 
         MarketplaceConnection? connection = null;
         IMarketplaceAdapter? adapter = null;
@@ -157,6 +169,87 @@ public class ToolCatalogService
         }
     }
 
+    private async Task<ToolRunResult> StartPlatformJobAsync(
+        ToolCatalogEntry entry,
+        int? connectionId,
+        int userId,
+        int storeId,
+        CancellationToken ct)
+    {
+        MarketplaceConnection? connection = null;
+        if (connectionId != null)
+        {
+            connection = await _db.marketplaceConnections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    c => c.Id == connectionId.Value && c.storeId == storeId,
+                    ct)
+                ?? throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            CatalogMatchService.EnsureConnectionActive(connection);
+        }
+
+        var operationId = Guid.NewGuid().ToString("N");
+        var title = PlatformJobTitle(entry);
+        await _operations.StartAsync(
+            operationId,
+            storeId,
+            userId,
+            "tool",
+            title,
+            connectionId: connection?.Id,
+            connectionName: connection?.name,
+            batchId: operationId,
+            batchType: "tool");
+
+        var capturedOpId = operationId;
+        var capturedStoreId = storeId;
+        var capturedEntry = entry;
+        var capturedConnectionId = connection?.Id;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+                var jobs = scope.ServiceProvider.GetRequiredService<PlatformToolJobService>();
+                MarketplaceConnection? scopedConnection = null;
+                if (capturedConnectionId is int cid)
+                {
+                    scopedConnection = await db.marketplaceConnections
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(c => c.Id == cid && c.storeId == capturedStoreId);
+                    if (scopedConnection == null)
+                        throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+                }
+
+                await jobs.RunAsync(capturedEntry, scopedConnection, capturedStoreId, capturedOpId, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Platform tool {ToolId} failed {OperationId}", capturedEntry.Id, capturedOpId);
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var logger = scope.ServiceProvider.GetRequiredService<IOperationLogger>();
+                    await logger.LogAsync(capturedOpId, capturedStoreId, "error", ex.Message);
+                    await logger.FinishAsync(capturedOpId, capturedStoreId, "failed", ex.Message);
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+        });
+
+        return new ToolRunResult
+        {
+            OperationId = operationId,
+            Success = true,
+            Message = "Started — watch Operations.",
+        };
+    }
+
     private List<(string AdapterKey, IReadOnlyList<AdapterToolDescriptor> Tools)> AdapterContributions()
     {
         var list = new List<(string, IReadOnlyList<AdapterToolDescriptor>)>();
@@ -190,6 +283,42 @@ public class ToolCatalogService
             .Distinct()
             .ToListAsync(ct);
         return keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<Dictionary<string, HostCaps>> ActiveAdapterCapabilitiesAsync(
+        int? storeId,
+        CancellationToken ct)
+    {
+        if (storeId == null)
+            return new Dictionary<string, HostCaps>(StringComparer.OrdinalIgnoreCase);
+
+        var keys = await _db.marketplaceConnections.AsNoTracking()
+            .Where(c => c.storeId == storeId.Value && c.isActive)
+            .Select(c => c.adapterKey)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var caps = new Dictionary<string, HostCaps>(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in keys)
+        {
+            var adapter = _adapters.GetByKey(key);
+            if (adapter == null)
+                continue;
+            caps[key] = adapter.Capabilities;
+        }
+
+        return caps;
+    }
+
+    private static string PlatformJobTitle(ToolCatalogEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Title))
+            return entry.Title;
+        if (string.Equals(entry.Id, PlatformTools.ExportAllPricesId, StringComparison.OrdinalIgnoreCase))
+            return "Update all prices";
+        if (string.Equals(entry.Id, PlatformTools.ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase))
+            return "Remove products from promotions";
+        return entry.Id;
     }
 }
 

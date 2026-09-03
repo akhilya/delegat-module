@@ -274,6 +274,75 @@ public interface IMarketplaceAdapter
 
     #endregion
 
+    #region Orders & promotions
+
+    /// <summary>
+    /// List orders from the connected cabinet (pass-through; not stored locally).
+    /// </summary>
+    Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalOrder>> GetOrdersAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.OrderQuery? query = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetOrders is not supported");
+
+    /// <summary>
+    /// Get one order by marketplace id.
+    /// </summary>
+    Task<Delegat.Marketplace.SDK.DTOs.ExternalOrder?> GetOrderAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetOrders is not supported");
+
+    /// <summary>
+    /// Confirm, pack, ship, complete, or cancel an order on the marketplace.
+    /// </summary>
+    Task<Delegat.Marketplace.SDK.DTOs.OrderStatusUpdateResult> UpdateOrderStatusAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        Delegat.Marketplace.SDK.DTOs.OrderStatusUpdate update,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("UpdateOrderStatus is not supported");
+
+    /// <summary>
+    /// Download the packing label / barcode sticker for one order (pass-through; not stored).
+    /// </summary>
+    Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetOrderLabelAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetOrderLabels is not supported");
+
+    /// <summary>
+    /// List promotions, calendar campaigns, coupons, or auto-actions.
+    /// </summary>
+    Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalPromotion>> GetPromotionsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.PromotionQuery? query = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetPromotions is not supported");
+
+    /// <summary>
+    /// Get one promotion, optionally including enrolled product ids.
+    /// </summary>
+    Task<Delegat.Marketplace.SDK.DTOs.ExternalPromotion?> GetPromotionAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetPromotions is not supported");
+
+    /// <summary>
+    /// Add or remove products from a promotion.
+    /// </summary>
+    Task<Delegat.Marketplace.SDK.DTOs.PromotionProductsResult> UpdatePromotionProductsAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        Delegat.Marketplace.SDK.DTOs.PromotionProductsUpdate update,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("UpdatePromotions is not supported");
+
+    #endregion
+
     #region Product Grouping
 
     /// <summary>

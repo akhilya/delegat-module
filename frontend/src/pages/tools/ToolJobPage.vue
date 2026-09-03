@@ -22,13 +22,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import { Wand2 } from "lucide-vue-next";
 import { mapActions } from "vuex";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import { PAGE_TOOLS } from "@/router";
-import { toolDescription, toolTitle } from "@/lib/toolsCatalog";
+import {
+  isQuickRunTool,
+  toolConfirmTitleKey,
+  toolJobConfirmDescriptionKey,
+  toolDescription,
+  toolStageClass,
+  toolStageLabelKey,
+  toolTitle,
+} from "@/lib/toolsCatalog";
+import { adapterHasCapability } from "@/lib/adapterCapabilities";
+import { getCachedMe } from "@/lib/meCache";
+import { hasPermission, PERMS } from "@/lib/permissions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default {
   components: {
@@ -51,8 +71,15 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    AdapterIcon,
     Wand2,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
   },
   data() {
     return {
@@ -60,9 +87,11 @@ export default {
       running: false,
       entry: null,
       connections: [],
+      adapters: [],
       connectionId: null,
       paramValues: {},
       table: null,
+      confirmOpen: false,
     };
   },
   computed: {
@@ -74,14 +103,23 @@ export default {
     },
     matchingConnections() {
       const key = this.entry?.adapterKey;
-      if (!key) return this.connections;
-      return this.connections.filter((c) => c.adapterKey === key);
+      const cap = this.entry?.requiredCapability;
+      let rows = this.connections.filter((c) => c.isActive !== false);
+      if (key) rows = rows.filter((c) => c.adapterKey === key);
+      if (cap) {
+        rows = rows.filter((c) => {
+          const adapter = this.adapters.find((a) => a.key === c.adapterKey);
+          return adapterHasCapability(adapter, cap);
+        });
+      }
+      return rows;
     },
     paramFields() {
       return this.entry?.paramsSchema || [];
     },
     canRun() {
       if (!this.entry || this.entry.mode !== "job" || this.entry.available === false) return false;
+      if (!hasPermission(getCachedMe(), PERMS.MarketplaceManage)) return false;
       if (this.entry.requiresConnection && !this.connectionId) return false;
       for (const field of this.paramFields) {
         if (!field.isRequired) continue;
@@ -89,6 +127,20 @@ export default {
         if (value == null || String(value).trim() === "") return false;
       }
       return true;
+    },
+    confirmTitle() {
+      const key = toolConfirmTitleKey(this.entry);
+      return key ? this.$t(key) : this.$t("pages.toolJob.run");
+    },
+    confirmDescription() {
+      const key = toolJobConfirmDescriptionKey(this.entry);
+      return key ? this.$t(key) : "";
+    },
+    stageLabelKey() {
+      return toolStageLabelKey(this.entry);
+    },
+    stageClass() {
+      return toolStageClass(this.entry);
     },
   },
   watch: {
@@ -100,7 +152,7 @@ export default {
     await this.load();
   },
   methods: {
-    ...mapActions(["getConnections"]),
+    ...mapActions(["getConnections", "getAvailableAdapters"]),
     toolTitle,
     toolDescription,
     goTools() {
@@ -126,6 +178,7 @@ export default {
           return;
         }
         await this.loadConnections();
+        await this.loadAdapters();
         this.seedParams();
       } catch (error) {
         displaySonnerError(error);
@@ -158,6 +211,29 @@ export default {
           },
         });
       });
+    },
+    loadAdapters() {
+      return new Promise((resolve) => {
+        this.getAvailableAdapters({
+          onSuccess: (response) => {
+            this.adapters = this.unwrapList(response);
+            resolve();
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+            this.adapters = [];
+            resolve();
+          },
+        });
+      });
+    },
+    requestRun() {
+      if (!this.canRun || this.running || !this.entry) return;
+      if (isQuickRunTool(this.entry)) {
+        this.confirmOpen = true;
+        return;
+      }
+      this.run();
     },
     async run() {
       if (!this.canRun || this.running || !this.entry) return;
@@ -206,18 +282,17 @@ export default {
         {{ $t("pages.toolsPage.breadcrumb") }}
       </Button>
     </EmptyState>
-    <div v-else class="flex w-full max-w-xl flex-col">
-      <div class="mb-6 flex items-start gap-3">
-        <AdapterIcon
-          v-if="entry.adapterKey"
-          :adapter-key="entry.adapterKey"
-          class="mt-0.5 size-5"
-        />
-        <Wand2 v-else class="text-muted-foreground mt-0.5 size-5" />
-        <p class="text-sm text-muted-foreground">
-          {{ toolDescription(entry, $t) }}
-        </p>
-      </div>
+    <div v-else class="page-region-in flex w-full max-w-xl flex-col">
+      <p
+        v-if="stageLabelKey"
+        class="mb-2 text-xs font-medium"
+        :class="stageClass"
+      >
+        {{ $t(stageLabelKey) }}
+      </p>
+      <p class="mb-6 text-sm text-muted-foreground">
+        {{ toolDescription(entry, $t) }}
+      </p>
 
       <FieldGroup class="gap-4">
         <SettingsFormField
@@ -277,14 +352,14 @@ export default {
         </SettingsFormField>
       </FieldGroup>
 
-      <Button class="mt-6 self-start" :disabled="!canRun || running" @click="run">
+      <Button class="mt-6 self-start" :disabled="!canRun || running" @click="requestRun">
         <Spinner v-if="running" />
         {{ $t("pages.toolJob.run") }}
       </Button>
 
       <div
         v-if="table"
-        class="mt-8 overflow-hidden rounded-xl border border-border/70 bg-card"
+        class="mt-8"
       >
         <Table>
           <TableHeader>
@@ -312,5 +387,26 @@ export default {
         </Table>
       </div>
     </div>
+    <AlertDialog v-model:open="confirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ confirmTitle }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ confirmDescription }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogAction
+            :variant="entry?.destructive ? 'destructive' : 'default'"
+            :disabled="running"
+            @click="run"
+          >
+            <Spinner v-if="running" class="mr-2" />
+            {{ $t("pages.toolsPage.quickRunConfirm") }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </AppPageChrome>
 </template>

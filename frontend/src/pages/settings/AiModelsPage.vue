@@ -16,9 +16,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -131,10 +136,17 @@ export default {
     const form = ref(defaultForm());
     const modelOptions = ref([]);
     const isDiscovering = ref(false);
-    const confirmDialog = ref({ open: false, title: "", message: "", resolve: null });
+    const confirmDialog = ref({
+      open: false,
+      title: "",
+      message: "",
+      resolve: null,
+    });
 
     function showConfirm(title, message) {
-      return new Promise((r) => { confirmDialog.value = { open: true, title, message, resolve: r }; });
+      return new Promise((r) => {
+        confirmDialog.value = { open: true, title, message, resolve: r };
+      });
     }
 
     async function discoverModels() {
@@ -155,13 +167,21 @@ export default {
           onSuccess: (r) => {
             const list = r.data.value?.models ?? [];
             if (list.length === 0) {
-              displaySonnerError(new Error(r.data.value?.error || t("pages.aiModelsPage.modelsNotFoundError")));
+              displaySonnerError(
+                new Error(
+                  r.data.value?.error ||
+                    t("pages.aiModelsPage.modelsNotFoundError"),
+                ),
+              );
               return;
             }
             modelOptions.value = list;
-            if (!list.includes(form.value.modelId)) form.value.modelId = list[0];
+            if (!list.includes(form.value.modelId))
+              form.value.modelId = list[0];
           },
-          onError: (e) => { displaySonnerError(e); },
+          onError: (e) => {
+            displaySonnerError(e);
+          },
         });
       } finally {
         isDiscovering.value = false;
@@ -172,8 +192,12 @@ export default {
       isLoading.value = true;
       try {
         await store.dispatch("aiModels/getAiModels", {
-          onSuccess: (r) => { models.value = r.data.value ?? []; },
-          onError: (e) => { displaySonnerError(e); },
+          onSuccess: (r) => {
+            models.value = r.data.value ?? [];
+          },
+          onError: (e) => {
+            displaySonnerError(e);
+          },
         });
       } finally {
         isLoading.value = false;
@@ -194,8 +218,12 @@ export default {
       try {
         await store.dispatch("aiModels/saveStoreSettings", {
           data: settingsForm.value,
-          onSuccess: () => { displaySonnerSuccess(t("pages.aiModelsPage.settingsSaved")); },
-          onError: (e) => { throw e; },
+          onSuccess: () => {
+            displaySonnerSuccess(t("pages.aiModelsPage.settingsSaved"));
+          },
+          onError: (e) => {
+            throw e;
+          },
         });
         return true;
       } catch (e) {
@@ -225,7 +253,8 @@ export default {
 
     // Backend serializes the enum as a string ("Anthropic"/"OpenAiCompatible"),
     // older records may come as numbers - normalize to the select values "0"/"1"
-    const providerToSelect = (p) => (p === 0 || p === "0" || p === "Anthropic" ? "0" : "1");
+    const providerToSelect = (p) =>
+      p === 0 || p === "0" || p === "Anthropic" ? "0" : "1";
     const isAnthropic = (p) => providerToSelect(p) === "0";
 
     function openEdit(model) {
@@ -255,15 +284,23 @@ export default {
       if (
         fieldLimitIssue(form.value.name, FIELD_LIMITS.aiModelName) === "tooLong"
       ) {
-        displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.aiModelName }));
+        displaySonnerError(
+          t("common.tooLong", { max: FIELD_LIMITS.aiModelName }),
+        );
         return;
       }
       if (
-        fieldLimitIssue(form.value.apiUrl, FIELD_LIMITS.aiModelUrl) === "tooLong" ||
-        fieldLimitIssue(form.value.proxyUrl, FIELD_LIMITS.aiModelUrl, { required: false }) === "tooLong" ||
-        fieldLimitIssue(form.value.modelId, FIELD_LIMITS.aiModelId) === "tooLong"
+        fieldLimitIssue(form.value.apiUrl, FIELD_LIMITS.aiModelUrl) ===
+          "tooLong" ||
+        fieldLimitIssue(form.value.proxyUrl, FIELD_LIMITS.aiModelUrl, {
+          required: false,
+        }) === "tooLong" ||
+        fieldLimitIssue(form.value.modelId, FIELD_LIMITS.aiModelId) ===
+          "tooLong"
       ) {
-        displaySonnerError(t("common.tooLong", { max: FIELD_LIMITS.aiModelUrl }));
+        displaySonnerError(
+          t("common.tooLong", { max: FIELD_LIMITS.aiModelUrl }),
+        );
         return;
       }
       if (!editingModel.value && !form.value.apiKey) {
@@ -283,16 +320,24 @@ export default {
             id: editingModel.value.id,
             data,
             onSuccess: () => {},
-            onError: (e) => { throw e; },
+            onError: (e) => {
+              throw e;
+            },
           });
         } else {
           await store.dispatch("aiModels/createAiModel", {
             data,
             onSuccess: () => {},
-            onError: (e) => { throw e; },
+            onError: (e) => {
+              throw e;
+            },
           });
         }
-        displaySonnerSuccess(editingModel.value ? t("pages.aiModelsPage.modelUpdated") : t("pages.aiModelsPage.modelAdded"));
+        displaySonnerSuccess(
+          editingModel.value
+            ? t("pages.aiModelsPage.modelUpdated")
+            : t("pages.aiModelsPage.modelAdded"),
+        );
         closeDialog();
         await load();
       } catch (e) {
@@ -310,7 +355,10 @@ export default {
       if (!confirmed) return;
       await store.dispatch("aiModels/deleteAiModel", {
         id: model.id,
-        onSuccess: () => { displaySonnerSuccess(t("pages.aiModelsPage.modelDeleted")); load(); },
+        onSuccess: () => {
+          displaySonnerSuccess(t("pages.aiModelsPage.modelDeleted"));
+          load();
+        },
         onError: displaySonnerError,
       });
     }
@@ -318,7 +366,10 @@ export default {
     async function setDefault(model) {
       await store.dispatch("aiModels/setDefaultAiModel", {
         id: model.id,
-        onSuccess: () => { displaySonnerSuccess(t("pages.aiModelsPage.defaultModelChanged")); load(); },
+        onSuccess: () => {
+          displaySonnerSuccess(t("pages.aiModelsPage.defaultModelChanged"));
+          load();
+        },
         onError: displaySonnerError,
       });
     }
@@ -330,7 +381,10 @@ export default {
       try {
         await store.dispatch("aiModels/toggleAiModelEnabled", { id: model.id });
         await load();
-        store.dispatch("aiModels/getPickerModels", { force: true, onError: () => {} });
+        store.dispatch("aiModels/getPickerModels", {
+          force: true,
+          onError: () => {},
+        });
       } catch {
         model.isEnabled = prev;
         displaySonnerError(t("pages.aiModelsPage.toggleEnabledError"));
@@ -338,7 +392,7 @@ export default {
     }
 
     const defaultModelId = computed(() =>
-      String(models.value.find((m) => m.isDefault)?.id ?? "")
+      String(models.value.find((m) => m.isDefault)?.id ?? ""),
     );
 
     async function onDefaultModelChange(val) {
@@ -352,21 +406,51 @@ export default {
         id: model.id,
         onSuccess: (r) => {
           if (r.data.value?.success) displaySonnerSuccess(r.data.value.message);
-          else displaySonnerError(new Error(r.data.value?.message ?? t("pages.aiModelsPage.connectionError")));
+          else
+            displaySonnerError(
+              new Error(
+                r.data.value?.message ??
+                  t("pages.aiModelsPage.connectionError"),
+              ),
+            );
         },
         onError: displaySonnerError,
       });
       testingId.value = null;
     }
 
-    onMounted(() => { load(); loadSettings(); });
+    onMounted(() => {
+      load();
+      loadSettings();
+    });
 
     return {
-      models, isLoading, isDialogOpen, isPersonalSettingsOpen, editingModel, isSaving, testingId, form,
-      openCreate, openEdit, closeDialog, save, deleteModel, setDefault, testModel,
-      setModelEnabled, defaultModelId, onDefaultModelChange,
-      settingsForm, isSettingsSaving, savePersonalSettings, openPersonalSettings,
-      modelOptions, isDiscovering, discoverModels, isAnthropic,
+      models,
+      isLoading,
+      isDialogOpen,
+      isPersonalSettingsOpen,
+      editingModel,
+      isSaving,
+      testingId,
+      form,
+      openCreate,
+      openEdit,
+      closeDialog,
+      save,
+      deleteModel,
+      setDefault,
+      testModel,
+      setModelEnabled,
+      defaultModelId,
+      onDefaultModelChange,
+      settingsForm,
+      isSettingsSaving,
+      savePersonalSettings,
+      openPersonalSettings,
+      modelOptions,
+      isDiscovering,
+      discoverModels,
+      isAnthropic,
       confirmDialog,
       FIELD_LIMITS,
     };
@@ -401,100 +485,136 @@ export default {
         </Button>
       </template>
 
-      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
-        <div class="overflow-x-auto">
-          <Table class="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-28">{{ $t("common.status") }}</TableHead>
-                <TableHead class="w-[18%]">{{ $t("common.name") }}</TableHead>
-                <TableHead class="w-36">{{ $t("pages.aiModelsPage.providerLabel") }}</TableHead>
-                <TableHead class="w-[18%]">Model ID</TableHead>
-                <TableHead>API URL</TableHead>
-                <TableHead class="w-36"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="model in models" :key="model.id">
-                <TableCell>
-                  <Switch
-                    :model-value="model.isEnabled"
-                    class="scale-[0.8]"
-                    @update:model-value="(v) => setModelEnabled(model, v)"
+      <div class="overflow-x-auto">
+        <Table class="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-28">{{ $t("common.status") }}</TableHead>
+              <TableHead class="w-[18%]">{{ $t("common.name") }}</TableHead>
+              <TableHead class="w-36">{{
+                $t("pages.aiModelsPage.providerLabel")
+              }}</TableHead>
+              <TableHead class="w-[18%]">Model ID</TableHead>
+              <TableHead>API URL</TableHead>
+              <TableHead class="w-36"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="model in models" :key="model.id">
+              <TableCell>
+                <Switch
+                  :model-value="model.isEnabled"
+                  class="scale-[0.8]"
+                  @update:model-value="(v) => setModelEnabled(model, v)"
+                />
+              </TableCell>
+              <TableCell class="max-w-0">
+                <div class="truncate font-medium" :title="model.name">
+                  {{ model.name }}
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary">
+                  {{
+                    isAnthropic(model.provider)
+                      ? "Anthropic"
+                      : "OpenAI-compatible"
+                  }}
+                </Badge>
+              </TableCell>
+              <TableCell class="max-w-0">
+                <code
+                  class="block truncate rounded bg-muted px-1.5 py-0.5 text-xs"
+                  :title="model.modelId"
+                >
+                  {{ model.modelId }}
+                </code>
+              </TableCell>
+              <TableCell class="max-w-0 text-muted-foreground text-sm">
+                <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                  <span class="truncate" :title="model.apiUrl">{{
+                    model.apiUrl
+                  }}</span>
+                  <Network
+                    v-if="model.proxyUrl"
+                    class="size-3 shrink-0 text-primary/70"
+                    :title="
+                      $t('pages.aiModelsPage.proxyTitle', {
+                        url: model.proxyUrl,
+                      })
+                    "
                   />
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <div class="truncate font-medium" :title="model.name">{{ model.name }}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {{ isAnthropic(model.provider) ? "Anthropic" : "OpenAI-compatible" }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="max-w-0">
-                  <code class="block truncate rounded bg-muted px-1.5 py-0.5 text-xs" :title="model.modelId">
-                    {{ model.modelId }}
-                  </code>
-                </TableCell>
-                <TableCell class="max-w-0 text-muted-foreground text-sm">
-                  <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                    <span class="truncate" :title="model.apiUrl">{{ model.apiUrl }}</span>
-                    <Network
-                      v-if="model.proxyUrl"
-                      class="size-3 shrink-0 text-primary/70"
-                      :title="$t('pages.aiModelsPage.proxyTitle', { url: model.proxyUrl })"
+                </div>
+              </TableCell>
+              <TableCell>
+                <div class="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    :disabled="testingId === model.id"
+                    @click="testModel(model)"
+                  >
+                    <Spinner
+                      v-if="testingId === model.id"
+                      size="xs"
+                      class="mr-1"
                     />
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div class="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      :disabled="testingId === model.id"
-                      @click="testModel(model)"
-                    >
-                      <Spinner v-if="testingId === model.id" size="xs" class="mr-1" />
-                      <Zap v-else class="mr-1 size-3" />
-                      {{ $t("pages.aiModelsPage.testButton") }}
-                    </Button>
-                    <Button variant="ghost" size="icon" @click="openEdit(model)">
-                      <Pencil class="size-4" />
-                      <span class="sr-only">{{ $t("common.edit") }}</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      @click="deleteModel(model)"
-                    >
-                      <Trash2 class="size-4" />
-                      <span class="sr-only">{{ $t("common.delete") }}</span>
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+                    <Zap v-else class="mr-1 size-3" />
+                    {{ $t("pages.aiModelsPage.testButton") }}
+                  </Button>
+                  <Button variant="ghost" size="icon" @click="openEdit(model)">
+                    <Pencil class="size-4" />
+                    <span class="sr-only">{{ $t("common.edit") }}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    @click="deleteModel(model)"
+                  >
+                    <Trash2 class="size-4" />
+                    <span class="sr-only">{{ $t("common.delete") }}</span>
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
     </PageSection>
 
     <AlertDialog
       :open="confirmDialog.open"
-      @update:open="(v) => { if (!v) confirmDialog.resolve?.(false); confirmDialog.open = v; }"
+      @update:open="
+        (v) => {
+          if (!v) confirmDialog.resolve?.(false);
+          confirmDialog.open = v;
+        }
+      "
     >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
-          <AlertDialogDescription>{{ confirmDialog.message }}</AlertDialogDescription>
+          <AlertDialogDescription>{{
+            confirmDialog.message
+          }}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel @click="confirmDialog.resolve(false); confirmDialog.open = false">{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogCancel
+            @click="
+              confirmDialog.resolve(false);
+              confirmDialog.open = false;
+            "
+            >{{ $t("common.cancel") }}</AlertDialogCancel
+          >
           <AlertDialogAction
             variant="destructive"
-            @click="confirmDialog.resolve(true); confirmDialog.open = false"
-          >{{ $t("common.delete") }}</AlertDialogAction>
+            @click="
+              confirmDialog.resolve(true);
+              confirmDialog.open = false;
+            "
+            >{{ $t("common.delete") }}</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -505,7 +625,9 @@ export default {
         class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader variant="bar">
-          <DialogTitle>{{ $t("pages.aiModelsPage.personalSectionTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            $t("pages.aiModelsPage.personalSectionTitle")
+          }}</DialogTitle>
           <DialogDescription>
             {{ $t("pages.aiModelsPage.personalSectionDescription") }}
           </DialogDescription>
@@ -513,15 +635,32 @@ export default {
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <FieldGroup class="gap-5">
-            <SettingsFormField :label="$t('pages.aiModelsPage.defaultModelLabel')">
-              <Select :model-value="defaultModelId" @update:model-value="onDefaultModelChange">
+            <SettingsFormField
+              :label="$t('pages.aiModelsPage.defaultModelLabel')"
+            >
+              <Select
+                :model-value="defaultModelId"
+                @update:model-value="onDefaultModelChange"
+              >
                 <SelectTrigger class="w-full">
-                  <SelectValue :placeholder="$t('pages.aiModelsPage.chooseModelPlaceholder')" />
+                  <SelectValue
+                    :placeholder="
+                      $t('pages.aiModelsPage.chooseModelPlaceholder')
+                    "
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem v-for="m in models" :key="m.id" :value="String(m.id)" :text-value="m.name">
+                  <SelectItem
+                    v-for="m in models"
+                    :key="m.id"
+                    :value="String(m.id)"
+                    :text-value="m.name"
+                  >
                     {{ m.name }}
-                    <span class="ml-2 text-xs text-muted-foreground/60 font-mono">{{ m.modelId }}</span>
+                    <span
+                      class="ml-2 text-xs text-muted-foreground/60 font-mono"
+                      >{{ m.modelId }}</span
+                    >
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -530,10 +669,14 @@ export default {
               </template>
             </SettingsFormField>
 
-            <SettingsFormField :label="$t('pages.aiModelsPage.storeDescriptionLabel')">
+            <SettingsFormField
+              :label="$t('pages.aiModelsPage.storeDescriptionLabel')"
+            >
               <Textarea
                 v-model="settingsForm.storeDescription"
-                :placeholder="$t('pages.aiModelsPage.storeDescriptionPlaceholder')"
+                :placeholder="
+                  $t('pages.aiModelsPage.storeDescriptionPlaceholder')
+                "
                 class="min-h-[80px] resize-none"
               />
               <template #description>
@@ -542,41 +685,65 @@ export default {
             </SettingsFormField>
 
             <div class="grid gap-5 sm:grid-cols-3">
-              <SettingsFormField :label="$t('pages.aiModelsPage.communicationStyleLabel')">
+              <SettingsFormField
+                :label="$t('pages.aiModelsPage.communicationStyleLabel')"
+              >
                 <Select v-model="settingsForm.communicationStyle">
                   <SelectTrigger class="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="professional">{{ $t("pages.aiModelsPage.communicationStyleProfessional") }}</SelectItem>
-                    <SelectItem value="friendly">{{ $t("pages.aiModelsPage.communicationStyleFriendly") }}</SelectItem>
-                    <SelectItem value="expert">{{ $t("pages.aiModelsPage.communicationStyleExpert") }}</SelectItem>
+                    <SelectItem value="professional">{{
+                      $t("pages.aiModelsPage.communicationStyleProfessional")
+                    }}</SelectItem>
+                    <SelectItem value="friendly">{{
+                      $t("pages.aiModelsPage.communicationStyleFriendly")
+                    }}</SelectItem>
+                    <SelectItem value="expert">{{
+                      $t("pages.aiModelsPage.communicationStyleExpert")
+                    }}</SelectItem>
                   </SelectContent>
                 </Select>
               </SettingsFormField>
 
-              <SettingsFormField :label="$t('pages.aiModelsPage.responseBrevityLabel')">
+              <SettingsFormField
+                :label="$t('pages.aiModelsPage.responseBrevityLabel')"
+              >
                 <Select v-model="settingsForm.responseBrevity">
                   <SelectTrigger class="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="brief">{{ $t("pages.aiModelsPage.responseBrevityBrief") }}</SelectItem>
-                    <SelectItem value="balanced">{{ $t("pages.aiModelsPage.responseBrevityBalanced") }}</SelectItem>
-                    <SelectItem value="detailed">{{ $t("pages.aiModelsPage.responseBrevityDetailed") }}</SelectItem>
+                    <SelectItem value="brief">{{
+                      $t("pages.aiModelsPage.responseBrevityBrief")
+                    }}</SelectItem>
+                    <SelectItem value="balanced">{{
+                      $t("pages.aiModelsPage.responseBrevityBalanced")
+                    }}</SelectItem>
+                    <SelectItem value="detailed">{{
+                      $t("pages.aiModelsPage.responseBrevityDetailed")
+                    }}</SelectItem>
                   </SelectContent>
                 </Select>
               </SettingsFormField>
 
-              <SettingsFormField :label="$t('pages.aiModelsPage.emojiUsageLabel')">
+              <SettingsFormField
+                :label="$t('pages.aiModelsPage.emojiUsageLabel')"
+              >
                 <Select v-model="settingsForm.emojiUsage">
                   <SelectTrigger class="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">{{ $t("pages.aiModelsPage.emojiUsageNone") }}</SelectItem>
-                    <SelectItem value="minimal">{{ $t("pages.aiModelsPage.emojiUsageMinimal") }}</SelectItem>
-                    <SelectItem value="standard">{{ $t("pages.aiModelsPage.emojiUsageStandard") }}</SelectItem>
+                    <SelectItem value="none">{{
+                      $t("pages.aiModelsPage.emojiUsageNone")
+                    }}</SelectItem>
+                    <SelectItem value="minimal">{{
+                      $t("pages.aiModelsPage.emojiUsageMinimal")
+                    }}</SelectItem>
+                    <SelectItem value="standard">{{
+                      $t("pages.aiModelsPage.emojiUsageStandard")
+                    }}</SelectItem>
                   </SelectContent>
                 </Select>
               </SettingsFormField>
@@ -585,13 +752,21 @@ export default {
         </div>
 
         <DialogFooter variant="bar">
-          <Button variant="outline" :disabled="isSettingsSaving" @click="isPersonalSettingsOpen = false">
+          <Button
+            variant="outline"
+            :disabled="isSettingsSaving"
+            @click="isPersonalSettingsOpen = false"
+          >
             {{ $t("common.cancel") }}
           </Button>
           <Button :disabled="isSettingsSaving" @click="savePersonalSettings">
             <Spinner v-if="isSettingsSaving" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
-            {{ isSettingsSaving ? $t("pages.aiModelsPage.saving") : $t("common.save") }}
+            {{
+              isSettingsSaving
+                ? $t("pages.aiModelsPage.saving")
+                : $t("common.save")
+            }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -603,9 +778,17 @@ export default {
         class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader variant="bar">
-          <DialogTitle>{{ editingModel ? $t("pages.aiModelsPage.editModelTitle") : $t("pages.aiModelsPage.addModelDialogTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            editingModel
+              ? $t("pages.aiModelsPage.editModelTitle")
+              : $t("pages.aiModelsPage.addModelDialogTitle")
+          }}</DialogTitle>
           <DialogDescription>
-            {{ editingModel ? $t("pages.aiModelsPage.editModelDescription") : $t("pages.aiModelsPage.addModelDescription") }}
+            {{
+              editingModel
+                ? $t("pages.aiModelsPage.editModelDescription")
+                : $t("pages.aiModelsPage.addModelDescription")
+            }}
           </DialogDescription>
         </DialogHeader>
 
@@ -614,89 +797,123 @@ export default {
           class="min-h-0 flex-1 overflow-y-auto px-6 py-5"
           @submit.prevent="save"
         >
-        <FieldGroup class="gap-5">
-          <SettingsFormField :label="$t('common.name')">
-            <Input v-model="form.name" :maxlength="FIELD_LIMITS.aiModelName" />
-          </SettingsFormField>
+          <FieldGroup class="gap-5">
+            <SettingsFormField :label="$t('common.name')">
+              <Input
+                v-model="form.name"
+                :maxlength="FIELD_LIMITS.aiModelName"
+              />
+            </SettingsFormField>
 
-          <SettingsFormField :label="$t('pages.aiModelsPage.providerLabel')">
-            <Select v-model="form.provider">
-              <SelectTrigger class="w-full">
-                <SelectValue :placeholder="$t('pages.aiModelsPage.chooseProviderPlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Anthropic</SelectItem>
-                <SelectItem value="1">OpenAI-compatible</SelectItem>
-              </SelectContent>
-            </Select>
-          </SettingsFormField>
-
-          <SettingsFormField label="API URL">
-            <Input
-              v-model="form.apiUrl"
-              :maxlength="FIELD_LIMITS.aiModelUrl"
-              :placeholder="form.provider === '0'
-                ? 'https://api.anthropic.com/v1/messages'
-                : $t('pages.aiModelsPage.apiUrlPlaceholderOpenAi')"
-            />
-            <template v-if="form.provider === '1'" #description>
-              {{ $t("pages.aiModelsPage.baseUrlOnlyPrefix") }} <code>/v1/chat/completions</code> {{ $t("pages.aiModelsPage.baseUrlOnlySuffix") }}
-            </template>
-          </SettingsFormField>
-
-          <SettingsFormField :label="`${$t('pages.aiModelsPage.proxyLabel')} ${$t('pages.aiModelsPage.optionalSuffix')}`">
-            <PasswordInput
-              v-model="form.proxyUrl"
-              :placeholder="$t('pages.aiModelsPage.proxyPlaceholder')"
-              autocomplete="off"
-              :maxlength="FIELD_LIMITS.aiModelUrl"
-            />
-            <template #description>
-              {{ $t("pages.aiModelsPage.proxyHint") }}
-            </template>
-          </SettingsFormField>
-
-          <SettingsFormField
-            v-if="!editingModel"
-            :label="$t('pages.aiModelsPage.apiKeyLabel')"
-          >
-            <PasswordInput v-model="form.apiKey" autocomplete="off" />
-          </SettingsFormField>
-
-          <SettingsFormField label="Model ID">
-            <div class="space-y-2">
-              <div class="flex justify-end">
-                <Button variant="ghost" size="sm" class="h-6 px-2 text-xs" :disabled="isDiscovering" @click="discoverModels">
-                  <Spinner v-if="isDiscovering" size="xs" class="mr-1" />
-                  <RefreshCw v-else class="mr-1 size-3" />
-                  {{ $t("pages.aiModelsPage.fetchListButton") }}
-                </Button>
-              </div>
-              <Select v-if="modelOptions.length" v-model="form.modelId">
+            <SettingsFormField :label="$t('pages.aiModelsPage.providerLabel')">
+              <Select v-model="form.provider">
                 <SelectTrigger class="w-full">
-                  <SelectValue :placeholder="$t('pages.aiModelsPage.chooseModelPlaceholder')" />
+                  <SelectValue
+                    :placeholder="
+                      $t('pages.aiModelsPage.chooseProviderPlaceholder')
+                    "
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem v-for="id in modelOptions" :key="id" :value="id">{{ id }}</SelectItem>
+                  <SelectItem value="0">Anthropic</SelectItem>
+                  <SelectItem value="1">OpenAI-compatible</SelectItem>
                 </SelectContent>
               </Select>
-              <Input v-else v-model="form.modelId" :maxlength="FIELD_LIMITS.aiModelId" />
-              <Button
-                v-if="modelOptions.length"
-                type="button"
-                variant="link"
-                class="h-auto w-fit p-0 text-xs text-muted-foreground"
-                @click="modelOptions = []"
-              >
-                {{ $t("pages.aiModelsPage.enterManuallyButton") }}
-              </Button>
-            </div>
-          </SettingsFormField>
-        </FieldGroup>
+            </SettingsFormField>
+
+            <SettingsFormField label="API URL">
+              <Input
+                v-model="form.apiUrl"
+                :maxlength="FIELD_LIMITS.aiModelUrl"
+                :placeholder="
+                  form.provider === '0'
+                    ? 'https://api.anthropic.com/v1/messages'
+                    : $t('pages.aiModelsPage.apiUrlPlaceholderOpenAi')
+                "
+              />
+              <template v-if="form.provider === '1'" #description>
+                {{ $t("pages.aiModelsPage.baseUrlOnlyPrefix") }}
+                <code>/v1/chat/completions</code>
+                {{ $t("pages.aiModelsPage.baseUrlOnlySuffix") }}
+              </template>
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="`${$t('pages.aiModelsPage.proxyLabel')} ${$t('pages.aiModelsPage.optionalSuffix')}`"
+            >
+              <PasswordInput
+                v-model="form.proxyUrl"
+                :placeholder="$t('pages.aiModelsPage.proxyPlaceholder')"
+                autocomplete="off"
+                :maxlength="FIELD_LIMITS.aiModelUrl"
+              />
+              <template #description>
+                {{ $t("pages.aiModelsPage.proxyHint") }}
+              </template>
+            </SettingsFormField>
+
+            <SettingsFormField
+              v-if="!editingModel"
+              :label="$t('pages.aiModelsPage.apiKeyLabel')"
+            >
+              <PasswordInput v-model="form.apiKey" autocomplete="off" />
+            </SettingsFormField>
+
+            <SettingsFormField label="Model ID">
+              <div class="space-y-2">
+                <div class="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-6 px-2 text-xs"
+                    :disabled="isDiscovering"
+                    @click="discoverModels"
+                  >
+                    <Spinner v-if="isDiscovering" size="xs" class="mr-1" />
+                    <RefreshCw v-else class="mr-1 size-3" />
+                    {{ $t("pages.aiModelsPage.fetchListButton") }}
+                  </Button>
+                </div>
+                <Select v-if="modelOptions.length" v-model="form.modelId">
+                  <SelectTrigger class="w-full">
+                    <SelectValue
+                      :placeholder="
+                        $t('pages.aiModelsPage.chooseModelPlaceholder')
+                      "
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="id in modelOptions"
+                      :key="id"
+                      :value="id"
+                      >{{ id }}</SelectItem
+                    >
+                  </SelectContent>
+                </Select>
+                <Input
+                  v-else
+                  v-model="form.modelId"
+                  :maxlength="FIELD_LIMITS.aiModelId"
+                />
+                <Button
+                  v-if="modelOptions.length"
+                  type="button"
+                  variant="link"
+                  class="h-auto w-fit p-0 text-xs text-muted-foreground"
+                  @click="modelOptions = []"
+                >
+                  {{ $t("pages.aiModelsPage.enterManuallyButton") }}
+                </Button>
+              </div>
+            </SettingsFormField>
+          </FieldGroup>
         </form>
 
         <DialogFooter variant="bar">
-          <Button type="button" variant="outline" @click="closeDialog">{{ $t("common.cancel") }}</Button>
+          <Button type="button" variant="outline" @click="closeDialog">{{
+            $t("common.cancel")
+          }}</Button>
           <Button type="submit" form="ai-model-form" :disabled="isSaving">
             <Spinner v-if="isSaving" class="mr-2" />
             <Save v-else class="mr-2 size-4" />

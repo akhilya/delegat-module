@@ -1,13 +1,15 @@
 <script>
-
 import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
-
 
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
 import { mapActions } from "vuex";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
 import {
   Plus,
   Puzzle,
@@ -55,7 +57,8 @@ import {
 
 export default {
   setup() {
-    const { formatDateTime: formatStoreDateTime, loadMemberships } = useStoreDateTime();
+    const { formatDateTime: formatStoreDateTime, loadMemberships } =
+      useStoreDateTime();
     loadMemberships();
     return { formatStoreDateTime };
   },
@@ -97,7 +100,7 @@ export default {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger
+    AlertDialogTrigger,
   },
   data() {
     return {
@@ -203,7 +206,9 @@ export default {
       await this.uploadPlugin({
         formData,
         onSuccess: () => {
-          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginUploaded"));
+          displaySonnerSuccess(
+            this.$t("marketplace.pluginsPage.pluginUploaded"),
+          );
           this.showUploadDialog = false;
           this.fetchData();
         },
@@ -221,7 +226,9 @@ export default {
       await this.deletePlugin({
         pluginKey,
         onSuccess: () => {
-          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginDeleted"));
+          displaySonnerSuccess(
+            this.$t("marketplace.pluginsPage.pluginDeleted"),
+          );
           this.fetchData();
         },
         onError: (error) => {
@@ -238,7 +245,9 @@ export default {
       await this.reloadPlugin({
         pluginKey,
         onSuccess: () => {
-          displaySonnerSuccess(this.$t("marketplace.pluginsPage.pluginReloaded"));
+          displaySonnerSuccess(
+            this.$t("marketplace.pluginsPage.pluginReloaded"),
+          );
           this.fetchData();
         },
         onError: (error) => {
@@ -335,7 +344,9 @@ export default {
               <p class="text-sm font-medium text-foreground">
                 {{ $t("marketplace.pluginsPage.dropzoneTitle") }}
               </p>
-              <p class="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+              <p
+                class="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground"
+              >
                 {{ $t("marketplace.pluginsPage.dropzoneHint") }}
               </p>
               <span
@@ -352,7 +363,9 @@ export default {
                   <FileCode2 class="size-4" />
                 </template>
                 <p class="truncate">{{ selectedFile.name }}</p>
-                <p class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground">
+                <p
+                  class="mt-0.5 text-xs font-normal tabular-nums text-muted-foreground"
+                >
                   .dll · {{ selectedFileSizeLabel }}
                 </p>
                 <template #trailing>
@@ -387,7 +400,8 @@ export default {
               {{ $t("marketplace.pluginsPage.sdkInterfaceHintBefore") }}
               <code
                 class="rounded-sm bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground"
-              >IMarketplacePlugin</code>
+                >IMarketplacePlugin</code
+              >
               {{ $t("marketplace.pluginsPage.sdkInterfaceHintAfter") }}
             </p>
           </div>
@@ -415,33 +429,42 @@ export default {
       </Dialog>
     </div>
 
-    <section
-      v-if="availableFromRegistry.length"
-      class="mb-8"
-    >
-      <InsetGroupLabel>{{ $t("marketplace.pluginsPage.registryTitle") }}</InsetGroupLabel>
+    <section v-if="availableFromRegistry.length" class="mb-8">
+      <InsetGroupLabel>{{
+        $t("marketplace.pluginsPage.registryTitle")
+      }}</InsetGroupLabel>
       <p class="mb-2 px-1 text-xs text-muted-foreground">
         {{ $t("marketplace.pluginsPage.registryDescription") }}
       </p>
-      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
-        <div class="overflow-x-auto">
-          <Table>
+      <div class="overflow-x-auto">
+        <Table>
           <TableHeader>
             <TableRow class="hover:bg-transparent">
-              <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
-              <TableHead class="w-40 px-3">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
-              <TableHead class="w-24 px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
+              <TableHead class="px-3">{{
+                $t("marketplace.pluginsPage.plugin")
+              }}</TableHead>
+              <TableHead class="w-40 px-3">{{
+                $t("marketplace.pluginsPage.key")
+              }}</TableHead>
+              <TableHead class="w-24 px-3">{{
+                $t("marketplace.pluginsPage.version")
+              }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="plugin in availableFromRegistry" :key="plugin.key">
               <TableCell class="max-w-0 px-3 font-medium">
                 <div class="flex min-w-0 items-center gap-2">
-                  <AdapterIcon :adapter-key="plugin.key" class="size-4 shrink-0" />
+                  <AdapterIcon
+                    :adapter-key="plugin.key"
+                    class="size-4 shrink-0"
+                  />
                   <span class="truncate">{{ plugin.displayName }}</span>
                 </div>
               </TableCell>
-              <TableCell class="text-muted-foreground max-w-0 px-3 font-mono text-xs">
+              <TableCell
+                class="text-muted-foreground max-w-0 px-3 font-mono text-xs"
+              >
                 <span class="block truncate">{{ plugin.key }}</span>
               </TableCell>
               <TableCell class="px-3">
@@ -452,7 +475,6 @@ export default {
             </TableRow>
           </TableBody>
         </Table>
-        </div>
       </div>
     </section>
 
@@ -470,118 +492,158 @@ export default {
         </Button>
       </template>
 
-      <div class="overflow-hidden rounded-xl border border-border/70 bg-card">
-        <div class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="hover:bg-transparent">
-                <TableHead class="px-3">{{ $t("marketplace.pluginsPage.plugin") }}</TableHead>
-                <TableHead class="hidden w-40 px-3 md:table-cell">{{ $t("marketplace.pluginsPage.key") }}</TableHead>
-                <TableHead class="w-24 px-3">{{ $t("marketplace.pluginsPage.version") }}</TableHead>
-                <TableHead class="w-32 px-3">{{ $t("common.status") }}</TableHead>
-                <TableHead class="hidden w-40 px-3 lg:table-cell">{{ $t("marketplace.pluginsPage.file") }}</TableHead>
-                <TableHead class="hidden w-40 px-3 xl:table-cell">{{ $t("marketplace.pluginsPage.loaded") }}</TableHead>
-                <TableHead class="w-28 px-3">{{ $t("marketplace.pluginsPage.type") }}</TableHead>
-                <TableHead class="w-24 px-2" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="plugin in plugins"
-                :key="plugin.key"
-                class="group"
-              >
-                <TableCell class="max-w-0 px-3 align-top">
-                  <div class="flex min-w-0 items-start gap-2.5">
-                    <AdapterIcon :adapter-key="plugin.key" class="mt-0.5 size-4 shrink-0" />
-                    <div class="min-w-0">
-                      <div class="truncate font-medium" :title="plugin.displayName">{{ plugin.displayName }}</div>
-                      <div
-                        v-if="plugin.description"
-                        class="text-xs text-muted-foreground mt-0.5 line-clamp-2"
-                      >
-                        {{ plugin.description }}
-                      </div>
-                      <code class="text-xs text-muted-foreground font-mono mt-1 block md:hidden">
-                        {{ plugin.key }}
-                      </code>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell class="text-muted-foreground hidden max-w-0 px-3 align-top font-mono text-xs md:table-cell">
-                  <span class="block truncate">{{ plugin.key }}</span>
-                </TableCell>
-                <TableCell class="px-3 align-top">
-                  <Badge variant="outline" class="text-xs tabular-nums">
-                    v{{ plugin.version }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="px-3 align-top">
-                  <Badge :variant="stabilityVariant(plugin.stability)" class="text-xs">
-                    {{ stabilityLabel(plugin.stability) }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate">
-                  {{ plugin.filePath || "-" }}
-                </TableCell>
-                <TableCell class="hidden xl:table-cell px-3 align-top text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                  {{ formatLoadedAt(plugin.loadedAt) }}
-                </TableCell>
-                <TableCell class="px-3 align-top">
-                  <Badge :variant="plugin.isSystem ? 'secondary' : 'outline'">
-                    {{ plugin.isSystem ? $t("marketplace.pluginsPage.systemType") : $t("marketplace.pluginsPage.userType") }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="px-2 align-top">
-                  <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="size-8"
-                      @click="handleReload(plugin.key)"
-                      :disabled="isReloading === plugin.key"
-                      :title="$t('marketplace.pluginsPage.reload')"
+      <div class="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow class="hover:bg-transparent">
+              <TableHead class="px-3">{{
+                $t("marketplace.pluginsPage.plugin")
+              }}</TableHead>
+              <TableHead class="hidden w-40 px-3 md:table-cell">{{
+                $t("marketplace.pluginsPage.key")
+              }}</TableHead>
+              <TableHead class="w-24 px-3">{{
+                $t("marketplace.pluginsPage.version")
+              }}</TableHead>
+              <TableHead class="w-32 px-3">{{ $t("common.status") }}</TableHead>
+              <TableHead class="hidden w-40 px-3 lg:table-cell">{{
+                $t("marketplace.pluginsPage.file")
+              }}</TableHead>
+              <TableHead class="hidden w-40 px-3 xl:table-cell">{{
+                $t("marketplace.pluginsPage.loaded")
+              }}</TableHead>
+              <TableHead class="w-28 px-3">{{
+                $t("marketplace.pluginsPage.type")
+              }}</TableHead>
+              <TableHead class="w-24 px-2" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="plugin in plugins" :key="plugin.key" class="group">
+              <TableCell class="max-w-0 px-3 align-top">
+                <div class="flex min-w-0 items-start gap-2.5">
+                  <AdapterIcon
+                    :adapter-key="plugin.key"
+                    class="mt-0.5 size-4 shrink-0"
+                  />
+                  <div class="min-w-0">
+                    <div
+                      class="truncate font-medium"
+                      :title="plugin.displayName"
                     >
-                      <Spinner v-if="isReloading === plugin.key" />
-                      <RefreshCw v-else class="size-4" />
-                    </Button>
-                    <AlertDialog v-if="!plugin.isSystem">
-                      <AlertDialogTrigger as-child>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          :title="$t('common.delete')"
-                        >
-                          <Trash2 class="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{{ $t("marketplace.pluginsPage.deletePluginTitle") }}</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {{ $t("marketplace.pluginsPage.deletePluginDescription", { name: plugin.displayName }) }}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-                          <AlertDialogAction
-                            variant="destructive"
-                            @click="handleDelete(plugin.key)"
-                            :disabled="isDeleting"
-                          >
-                            <Spinner v-if="isDeleting" class="mr-2" />
-                            {{ $t("common.delete") }}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      {{ plugin.displayName }}
+                    </div>
+                    <div
+                      v-if="plugin.description"
+                      class="text-xs text-muted-foreground mt-0.5 line-clamp-2"
+                    >
+                      {{ plugin.description }}
+                    </div>
+                    <code
+                      class="text-xs text-muted-foreground font-mono mt-1 block md:hidden"
+                    >
+                      {{ plugin.key }}
+                    </code>
                   </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+                </div>
+              </TableCell>
+              <TableCell
+                class="text-muted-foreground hidden max-w-0 px-3 align-top font-mono text-xs md:table-cell"
+              >
+                <span class="block truncate">{{ plugin.key }}</span>
+              </TableCell>
+              <TableCell class="px-3 align-top">
+                <Badge variant="outline" class="text-xs tabular-nums">
+                  v{{ plugin.version }}
+                </Badge>
+              </TableCell>
+              <TableCell class="px-3 align-top">
+                <Badge
+                  :variant="stabilityVariant(plugin.stability)"
+                  class="text-xs"
+                >
+                  {{ stabilityLabel(plugin.stability) }}
+                </Badge>
+              </TableCell>
+              <TableCell
+                class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate"
+              >
+                {{ plugin.filePath || "-" }}
+              </TableCell>
+              <TableCell
+                class="hidden xl:table-cell px-3 align-top text-xs text-muted-foreground tabular-nums whitespace-nowrap"
+              >
+                {{ formatLoadedAt(plugin.loadedAt) }}
+              </TableCell>
+              <TableCell class="px-3 align-top">
+                <Badge :variant="plugin.isSystem ? 'secondary' : 'outline'">
+                  {{
+                    plugin.isSystem
+                      ? $t("marketplace.pluginsPage.systemType")
+                      : $t("marketplace.pluginsPage.userType")
+                  }}
+                </Badge>
+              </TableCell>
+              <TableCell class="px-2 align-top">
+                <div
+                  class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8"
+                    @click="handleReload(plugin.key)"
+                    :disabled="isReloading === plugin.key"
+                    :title="$t('marketplace.pluginsPage.reload')"
+                  >
+                    <Spinner v-if="isReloading === plugin.key" />
+                    <RefreshCw v-else class="size-4" />
+                  </Button>
+                  <AlertDialog v-if="!plugin.isSystem">
+                    <AlertDialogTrigger as-child>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        :title="$t('common.delete')"
+                      >
+                        <Trash2 class="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{{
+                          $t("marketplace.pluginsPage.deletePluginTitle")
+                        }}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {{
+                            $t(
+                              "marketplace.pluginsPage.deletePluginDescription",
+                              { name: plugin.displayName },
+                            )
+                          }}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{{
+                          $t("common.cancel")
+                        }}</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          @click="handleDelete(plugin.key)"
+                          :disabled="isDeleting"
+                        >
+                          <Spinner v-if="isDeleting" class="mr-2" />
+                          {{ $t("common.delete") }}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
     </PageSection>
   </div>

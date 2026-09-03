@@ -40,6 +40,8 @@ REST-style URLs:
 - `POST /products/bulk`
 - `POST /prices/bulk`
 - `POST /stocks/bulk`
+- `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/status` (bridge **≥ 1.1.0**). No packing labels / barcode stickers (`GetOrderLabels` is off).
+- `GET /promotions`, `GET /promotions/{id}`, `POST /promotions/{id}/products` (`removeAll` disables the coupon — bridge **≥ 1.1.1**)
 
 OpenCart query-route URLs receive equivalent `action` names:
 
@@ -51,6 +53,8 @@ OpenCart query-route URLs receive equivalent `action` names:
 - `products.bulk`
 - `prices.bulk`
 - `stocks.bulk`
+- `orders`, `order`, `orders.status`
+- `promotions`, `promotion`, `promotions.products`
 
 ## Product payload
 
@@ -65,6 +69,7 @@ OpenCart query-route URLs receive equivalent `action` names:
   "description": "HTML or plain text",
   "meta_title": "Product name",
   "price": 1000,
+  "special_price": 890,
   "quantity": 5,
   "category_ids": ["20"],
   "image_urls": ["https://.../image.jpg"],
@@ -100,3 +105,4 @@ Each result should include `local_product_id`, `success`, and `product_id` or `e
 - Keys starting with `attr:` or `attribute:` are sent to `attributes`.
 - Keys starting with `option:` are sent to `options`.
 - Other unknown mapped keys are preserved in `raw_fields`, so the bridge can support custom OpenCart extensions without changing the plugin.
+- Product list includes `special_price` when an OpenCart special is active. Coupons map to promotions (`coupon` / `coupon_product` tables). Order status updates look up `order_status` by name.

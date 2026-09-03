@@ -27,6 +27,57 @@ public class CatalogScrapeController : ControllerBase
     }
 
     /// <summary>
+    /// Search the public storefront for a loaded adapter. Seller credentials
+    /// are not required; a store connection is used only when one already exists.
+    /// Query may be a URL, product id, several ids, or text.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/catalog-scrape/{adapterKey}/search")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> SearchByAdapter(
+        string adapterKey,
+        [FromBody] CatalogScrapeSearchInput? input,
+        CancellationToken ct)
+    {
+        var storeId = await RequireStoreIdAsync();
+        var result = await _catalogScrape.SearchAsync(
+            storeId,
+            adapterKey,
+            input?.query,
+            input?.pageSize ?? CatalogScrapeService.DefaultPageSize,
+            input?.cursor,
+            ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Copy selected public cards into the local catalog without marketplace links.
+    /// A store connection is optional: without one, cards copy with no category mapping.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/catalog-scrape/{adapterKey}/apply")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ApplyByAdapter(
+        string adapterKey,
+        [FromBody] CatalogScrapeApplyInput input,
+        CancellationToken ct)
+    {
+        if (input.publicIds == null || input.publicIds.Count == 0)
+            throw ApiException.BadRequest("No public product ids to import", code: "required_fields_missing");
+
+        var storeId = await RequireStoreIdAsync();
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var result = await _catalogScrape.ApplyAsync(
+            storeId,
+            adapterKey,
+            input.publicIds,
+            userId,
+            ct,
+            input.operationId);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Search the public storefront for this connection's adapter.
     /// Query may be a URL, product id, several ids, or text.
     /// </summary>
@@ -73,14 +124,19 @@ public class CatalogScrapeController : ControllerBase
         return Ok(result);
     }
 
-    private async Task<MarketplaceConnection> GetConnectionAsync(int connectionId)
+    private async Task<int> RequireStoreIdAsync()
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+        return selectedStoreId.Value;
+    }
 
+    private async Task<MarketplaceConnection> GetConnectionAsync(int connectionId)
+    {
+        var storeId = await RequireStoreIdAsync();
         var connection = await _unitOfWork.Repository<MarketplaceConnection>().FindAsync(
-            c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
+            c => c.Id == connectionId && c.storeId == storeId);
 
         if (connection == null)
             throw ApiException.NotFound("Connection not found", code: "connection_not_found");

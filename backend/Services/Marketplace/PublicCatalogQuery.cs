@@ -57,13 +57,32 @@ public sealed class PublicCatalogQuery
         if (IsDigits(token))
             return token;
 
+        // Prefer explicit query ids (WB nm, Yandex sku/offer) over path digits.
+        var queryId = Regex.Match(token, @"[?&](?:nm|sku|offerid|offerId|product_id)=(\d+)", RegexOptions.IgnoreCase);
+        if (queryId.Success)
+            return queryId.Groups[1].Value;
+
         var catalog = Regex.Match(token, @"/catalog/(\d+)(?:/|$|\?|#)", RegexOptions.IgnoreCase);
         if (catalog.Success)
             return catalog.Groups[1].Value;
 
-        var nm = Regex.Match(token, @"[?&]nm=(\d+)", RegexOptions.IgnoreCase);
-        if (nm.Success)
-            return nm.Groups[1].Value;
+        var yandexCard = Regex.Match(
+            token,
+            @"/(?:card/[^/]+|product--[^/]+)/(\d+)(?:/|$|\?|#)",
+            RegexOptions.IgnoreCase);
+        if (yandexCard.Success)
+            return yandexCard.Groups[1].Value;
+
+        var ozonProduct = Regex.Match(
+            token,
+            @"/product/(?:[^/?#]*-)?(\d+)(?:/|$|\?|#)",
+            RegexOptions.IgnoreCase);
+        if (ozonProduct.Success)
+            return ozonProduct.Groups[1].Value;
+
+        var ozonLegacy = Regex.Match(token, @"/detail/id/(\d+)(?:/|$|\?|#)", RegexOptions.IgnoreCase);
+        if (ozonLegacy.Success)
+            return ozonLegacy.Groups[1].Value;
 
         return null;
     }

@@ -9,7 +9,6 @@ import BulkEditDialog from "@/components/products/bulkEditDialog.vue";
 import BulkAdapterDialog from "@/components/products/BulkAdapterDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
 import ProductTransferDialog from "@/components/products/ProductTransferDialog.vue";
-import { Card } from "@/components/ui/card";
 import {
   columns as baseProductColumns,
   defaultVisibleColumns,
@@ -116,7 +115,6 @@ export default {
     BulkAdapterDialog,
     ImportExcelDialog,
     ProductTransferDialog,
-    Card,
     Button,
     Search,
     ChevronLeft,
@@ -928,7 +926,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <template #nav-center>
         <div class="flex items-center gap-2 w-full">
           <TooltipProvider :delay-duration="400">
@@ -1004,9 +1002,7 @@ export default {
         </div>
     </template>
 
-    <Card
-      class="p-0 gap-0 w-full flex-1 min-h-0 mb-4 relative overflow-hidden"
-    >
+    <div class="flex w-full flex-col">
       <ProductsTable
         :data="isTrashMode ? trashProducts : products"
         :columns="productColumns"
@@ -1025,7 +1021,6 @@ export default {
         @sort="toggleSort"
         @row-click="onRowClick"
         @adapters-changed="onAdaptersChanged"
-        class="flex-1 min-h-0"
       >
         <template #headerActions>
           <ColumnSelector
@@ -1174,7 +1169,7 @@ export default {
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
 
     <!-- Bulk Edit Dialog -->
     <BulkEditDialog

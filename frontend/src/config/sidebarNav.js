@@ -26,12 +26,30 @@ import {
   Wand2,
   Globe,
   Settings2,
+  ClipboardList,
+  Inbox,
+  Package,
+  Truck,
+  MapPin,
+  CheckCircle,
+  XCircle,
 } from "lucide-vue-next";
 import { getSettingsSidebarSubItems } from "./settingsNav";
 import { getLocale, t, toBcp47 } from "@/i18n";
 import { canBrowse, hasPermission, PERMS } from "@/lib/permissions";
 import { canShowNavLink, uniqueByNavTarget } from "@/lib/navAccess";
 import { adapterIconComponent } from "@/lib/adapterIcons";
+import { adapterCanGetOrders } from "@/lib/adapterCapabilities";
+import { ORDER_BUCKETS, orderBucketPath } from "@/lib/ordersUi";
+
+const ORDER_BUCKET_ICONS = {
+  Inbox,
+  Package,
+  Truck,
+  MapPin,
+  CheckCircle,
+  XCircle,
+};
 
 /**
  * @typedef {'link'|'action'} NavItemType
@@ -52,6 +70,18 @@ function isConnectionActive(connection) {
   return active !== false;
 }
 
+function hasGetOrdersConnection(ctx) {
+  const adapters = ctx.adapters || [];
+  return (ctx.connections || []).some((connection) => {
+    if (!isConnectionActive(connection)) return false;
+    const adapterKey = connection.adapterKey ?? connection.AdapterKey;
+    const adapter = adapters.find(
+      (item) => (item.key ?? item.Key) === adapterKey,
+    );
+    return adapterCanGetOrders(adapter);
+  });
+}
+
 function getConnectionNavLabel(connection, adapters, activeConnections) {
   const displayName = getAdapterDisplayName(connection.adapterKey, adapters);
   const sameAdapterCount = activeConnections.filter(
@@ -65,6 +95,23 @@ function getConnectionNavLabel(connection, adapters, activeConnections) {
 
 /** @type {NavGroup[]} */
 const SIDEBAR_GROUPS = [
+  {
+    id: "orders",
+    labelKey: "nav.orders",
+    icon: ClipboardList,
+    defaultOpen: true,
+    visible: (ctx) =>
+      Boolean(ctx.hasStore) &&
+      canBrowseNav(ctx, PERMS.MarketplaceManage) &&
+      hasGetOrdersConnection(ctx),
+    items: ORDER_BUCKETS.map((bucket) => ({
+      id: `orders-${bucket.id}`,
+      labelKey: bucket.labelKey,
+      type: "link",
+      to: orderBucketPath(bucket.id),
+      icon: ORDER_BUCKET_ICONS[bucket.icon] || ClipboardList,
+    })),
+  },
   {
     id: "products",
     labelKey: "nav.products",

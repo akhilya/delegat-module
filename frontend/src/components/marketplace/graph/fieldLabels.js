@@ -22,3 +22,22 @@ export function localizeExternalFieldDescription(key, fallback) {
   const path = `marketplace.externalFieldDescriptions.${key}`;
   return i18n.global.te(path) ? i18n.global.t(path) : fallback || null;
 }
+
+export function localizeExternalFieldOptionLabel(value, fallback) {
+  if (!value) return fallback || "";
+  const path = `marketplace.externalFieldOptionLabels.${value}`;
+  return i18n.global.te(path) ? i18n.global.t(path) : fallback || value;
+}
+
+export function localizeExternalFieldOptions(options) {
+  if (!options?.length) return options || [];
+  return options.map((o) => {
+    const value = o.value ?? o.Value ?? "";
+    const fallback = o.label ?? o.Label ?? value;
+    return {
+      ...o,
+      value,
+      label: localizeExternalFieldOptionLabel(value, fallback),
+    };
+  });
+}

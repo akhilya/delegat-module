@@ -32,7 +32,7 @@ const props = defineProps({
     />
     <EmptyState
       v-else-if="empty"
-      class="min-h-0 flex-1"
+      class="min-h-0 flex-1 page-region-in"
       :title="emptyTitle"
       :description="emptyDescription"
     >
@@ -41,6 +41,8 @@ const props = defineProps({
       </template>
       <slot name="empty-action" />
     </EmptyState>
-    <slot v-else />
+    <div v-else class="page-region-in flex min-h-0 w-full flex-1 flex-col">
+      <slot />
+    </div>
   </section>
 </template>

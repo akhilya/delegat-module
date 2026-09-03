@@ -17,6 +17,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
     private readonly IAdapterHttpLogger? _httpLogger;
     private readonly IMarketplaceMetadataCache? _metadataCache;
     private readonly IMediaBlobReader? _mediaBlobReader;
+    private readonly IStorefrontPageLoader? _pageLoader;
     private readonly Dictionary<string, PluginAdapterWrapper> _wrapperCache = new();
     private readonly object _cacheLock = new();
 
@@ -26,7 +27,8 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
         EncryptionService? encryptionService = null,
         IAdapterHttpLogger? httpLogger = null,
         IMarketplaceMetadataCache? metadataCache = null,
-        IMediaBlobReader? mediaBlobReader = null)
+        IMediaBlobReader? mediaBlobReader = null,
+        IStorefrontPageLoader? pageLoader = null)
     {
         _pluginManager = pluginManager;
         _loggerFactory = loggerFactory;
@@ -34,6 +36,7 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
         _httpLogger = httpLogger;
         _metadataCache = metadataCache;
         _mediaBlobReader = mediaBlobReader;
+        _pageLoader = pageLoader;
     }
 
     public IReadOnlyList<IMarketplaceAdapter> GetAll()
@@ -102,7 +105,13 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
             }
 
             var wrapper = new PluginAdapterWrapper(
-                currentPlugin, _loggerFactory, _encryptionService, _httpLogger, _metadataCache, _mediaBlobReader);
+                currentPlugin,
+                _loggerFactory,
+                _encryptionService,
+                _httpLogger,
+                _metadataCache,
+                _mediaBlobReader,
+                _pageLoader);
             _wrapperCache[key] = wrapper;
             return wrapper;
         }

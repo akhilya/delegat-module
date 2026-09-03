@@ -81,86 +81,100 @@ function isExcludedRow(key) {
 
     <!-- Single product -->
     <template v-if="isSingleItem && items.length === 1">
-      <p class="text-xs text-muted-foreground">{{ $t("fieldChangesTable.diffHint") }}</p>
-      <div class="overflow-hidden rounded-md border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow class="hover:bg-transparent border-border bg-muted/40">
-              <TableHead
-                v-if="selectable"
-                class="w-10 px-3 py-2.5"
-              >
-                <Checkbox
-                  :model-value="allIncluded"
-                  @update:model-value="toggleAll"
-                />
-              </TableHead>
-              <TableHead
-                class="px-3 py-2.5 text-xs font-medium tracking-tight"
-                :class="selectable ? 'w-[8.5rem]' : 'w-[9.5rem]'"
-              >
-                {{ $t("fieldChangesTable.fieldHeader") }}
-              </TableHead>
-              <TableHead class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight">
-                <span class="inline-flex items-center gap-1.5">
-                  <span class="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden="true" />
-                  {{ $t("fieldChangesTable.currentHeader") }}
-                </span>
-              </TableHead>
-              <TableHead class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight">
-                <span class="inline-flex items-center gap-1.5">
-                  <span class="size-1.5 rounded-full bg-success" aria-hidden="true" />
-                  {{ $t("fieldChangesTable.newHeader") }}
-                </span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="field in items[0].fields"
-              :key="field.key"
-              class="border-border last:border-b-0"
-              :class="isExcludedRow(field.key) ? 'opacity-45' : ''"
+      <p class="text-xs text-muted-foreground">
+        {{ $t("fieldChangesTable.diffHint") }}
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow class="hover:bg-transparent">
+            <TableHead v-if="selectable" class="w-10 px-3 py-2.5">
+              <Checkbox
+                :model-value="allIncluded"
+                @update:model-value="toggleAll"
+              />
+            </TableHead>
+            <TableHead
+              class="px-3 py-2.5 text-xs font-medium tracking-tight"
+              :class="selectable ? 'w-[8.5rem]' : 'w-[9.5rem]'"
             >
-              <TableCell v-if="selectable" class="px-3 py-3 align-top whitespace-normal">
-                <Checkbox
-                  :model-value="isIncluded(field.key)"
-                  @update:model-value="toggleField(field.key)"
+              {{ $t("fieldChangesTable.fieldHeader") }}
+            </TableHead>
+            <TableHead
+              class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight"
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <span
+                  class="size-1.5 rounded-full bg-muted-foreground/50"
+                  aria-hidden="true"
                 />
-              </TableCell>
-              <TableCell class="px-3 py-3 align-top whitespace-normal">
-                <div class="flex items-start gap-1.5">
-                  <span class="text-sm font-medium leading-snug text-foreground">
-                    {{ field.label }}
-                  </span>
-                  <span
-                    v-if="isIrreversible(field.key)"
-                    class="mt-0.5 inline-flex text-warning-foreground"
-                    :title="$t('fieldChangesTable.irreversibleModifiers')"
-                  >
-                    <AlertTriangle class="size-3.5" />
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top">
-                <FieldDiffValue
-                  side="old"
-                  :old-value="field.oldValue"
-                  :new-value="field.newValue"
-                  show-whitespace-note
+                {{ $t("fieldChangesTable.currentHeader") }}
+              </span>
+            </TableHead>
+            <TableHead
+              class="min-w-0 px-3 py-2.5 text-xs font-medium tracking-tight"
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <span
+                  class="size-1.5 rounded-full bg-success"
+                  aria-hidden="true"
                 />
-              </TableCell>
-              <TableCell class="whitespace-normal border-l border-border px-3 py-3 align-top">
-                <FieldDiffValue
-                  side="new"
-                  :old-value="field.oldValue"
-                  :new-value="field.newValue"
-                />
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
+                {{ $t("fieldChangesTable.newHeader") }}
+              </span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="field in items[0].fields"
+            :key="field.key"
+            class="border-border last:border-b-0"
+            :class="isExcludedRow(field.key) ? 'opacity-45' : ''"
+          >
+            <TableCell
+              v-if="selectable"
+              class="px-3 py-3 align-top whitespace-normal"
+            >
+              <Checkbox
+                :model-value="isIncluded(field.key)"
+                @update:model-value="toggleField(field.key)"
+              />
+            </TableCell>
+            <TableCell class="px-3 py-3 align-top whitespace-normal">
+              <div class="flex items-start gap-1.5">
+                <span class="text-sm font-medium leading-snug text-foreground">
+                  {{ field.label }}
+                </span>
+                <span
+                  v-if="isIrreversible(field.key)"
+                  class="mt-0.5 inline-flex text-warning-foreground"
+                  :title="$t('fieldChangesTable.irreversibleModifiers')"
+                >
+                  <AlertTriangle class="size-3.5" />
+                </span>
+              </div>
+            </TableCell>
+            <TableCell
+              class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top"
+            >
+              <FieldDiffValue
+                side="old"
+                :old-value="field.oldValue"
+                :new-value="field.newValue"
+                show-whitespace-note
+              />
+            </TableCell>
+            <TableCell
+              class="whitespace-normal border-l border-border px-3 py-3 align-top"
+            >
+              <FieldDiffValue
+                side="new"
+                :old-value="field.oldValue"
+                :new-value="field.newValue"
+              />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </template>
 
     <!-- Multi product -->
@@ -168,14 +182,10 @@ function isExcludedRow(key) {
       <p v-if="items.length > 0" class="text-xs text-muted-foreground">
         {{ $t("fieldChangesTable.diffHint") }}
       </p>
-      <div
-        v-for="(item, idx) in items"
-        :key="idx"
-        class="overflow-hidden rounded-md border border-border"
-      >
+      <div v-for="(item, idx) in items" :key="idx">
         <div
           v-if="item.label"
-          class="border-b border-border bg-muted/40 px-3 py-2 text-sm font-medium tracking-tight text-foreground"
+          class="border-b px-1 py-2 text-sm font-medium tracking-tight text-foreground"
         >
           {{ item.label }}
         </div>
@@ -187,13 +197,19 @@ function isExcludedRow(key) {
               </TableHead>
               <TableHead class="min-w-0 px-3 py-2 text-xs font-medium">
                 <span class="inline-flex items-center gap-1.5">
-                  <span class="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+                  <span
+                    class="size-1.5 rounded-full bg-muted-foreground/50"
+                    aria-hidden="true"
+                  />
                   {{ $t("fieldChangesTable.currentHeader") }}
                 </span>
               </TableHead>
               <TableHead class="min-w-0 px-3 py-2 text-xs font-medium">
                 <span class="inline-flex items-center gap-1.5">
-                  <span class="size-1.5 rounded-full bg-success" aria-hidden="true" />
+                  <span
+                    class="size-1.5 rounded-full bg-success"
+                    aria-hidden="true"
+                  />
                   {{ $t("fieldChangesTable.newHeader") }}
                 </span>
               </TableHead>
@@ -205,10 +221,14 @@ function isExcludedRow(key) {
               :key="field.key"
               class="border-border last:border-b-0"
             >
-              <TableCell class="px-3 py-3 align-top text-sm text-muted-foreground whitespace-normal">
+              <TableCell
+                class="px-3 py-3 align-top text-sm text-muted-foreground whitespace-normal"
+              >
                 {{ field.label }}
               </TableCell>
-              <TableCell class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top">
+              <TableCell
+                class="whitespace-normal border-l border-border bg-muted/20 px-3 py-3 align-top"
+              >
                 <FieldDiffValue
                   side="old"
                   :old-value="field.oldValue"
@@ -216,7 +236,9 @@ function isExcludedRow(key) {
                   show-whitespace-note
                 />
               </TableCell>
-              <TableCell class="whitespace-normal border-l border-border px-3 py-3 align-top">
+              <TableCell
+                class="whitespace-normal border-l border-border px-3 py-3 align-top"
+              >
                 <FieldDiffValue
                   side="new"
                   :old-value="field.oldValue"

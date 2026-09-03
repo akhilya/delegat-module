@@ -520,6 +520,12 @@ export default {
         updateOrderStatus: this.$t(
           "marketplace.connectionPage.capabilities.updateOrderStatus",
         ),
+        getPromotions: this.$t(
+          "marketplace.connectionPage.capabilities.getPromotions",
+        ),
+        updatePromotions: this.$t(
+          "marketplace.connectionPage.capabilities.updatePromotions",
+        ),
         fieldBasedGrouping: this.$t(
           "marketplace.connectionPage.capabilities.fieldBasedGrouping",
         ),
@@ -3140,7 +3146,6 @@ export default {
 
 <template>
   <AppPageChrome
-    :fill-viewport="activeTab === 'products'"
     :breadcrumb-items="breadcrumbs"
     :has-nav-center="true"
   >
@@ -3162,19 +3167,13 @@ export default {
 
     <PageSection
       :loading="isLoading"
-      class="!min-h-0 flex flex-col"
-      :class="
-        activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden mb-4' : ''
-      "
+      class="flex flex-col"
     >
       <div
         v-if="connection"
         class="flex flex-col gap-4"
-        :class="
-          activeTab === 'products' ? 'flex-1 min-h-0 overflow-hidden' : ''
-        "
       >
-        <Tabs v-model="activeTab" class="w-full flex-1 flex flex-col min-h-0">
+        <Tabs v-model="activeTab" class="w-full flex flex-col">
           <TabsContent value="settings" class="mt-0">
             <div class="max-w-2xl">
               <SettingsFormSection
@@ -4295,7 +4294,7 @@ export default {
           <!-- Products Tab -->
           <TabsContent
             value="products"
-            class="flex flex-1 flex-col mt-0 min-h-0 gap-3 overflow-hidden data-[state=inactive]:hidden"
+            class="mt-0 flex flex-col gap-3 data-[state=inactive]:hidden"
           >
             <div class="flex flex-wrap items-center gap-2 shrink-0">
               <Tabs
@@ -4353,7 +4352,7 @@ export default {
               </div>
             </div>
 
-            <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div class="flex flex-col">
               <!-- ==================== EXTERNAL VIEW ==================== -->
               <template v-if="productsViewMode === 'external'">
                 <!-- Loading state -->
@@ -4401,12 +4400,12 @@ export default {
                   </template>
                 </EmptyState>
 
-                <!-- Products table (border only around data, not EmptyState) -->
+                <!-- Products table (scroll pane, not EmptyState) -->
                 <div
                   v-else
-                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card"
+                  class="flex flex-col"
                 >
-                  <div class="min-h-0 flex-1 overflow-auto">
+                  <div class="overflow-x-auto">
                     <Table :contain="false" class="w-full">
                       <TableHeader
                         class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"
@@ -4878,12 +4877,12 @@ export default {
                   </template>
                 </EmptyState>
 
-                <!-- Local products table (border only around data, not EmptyState) -->
+                <!-- Local products table (scroll pane, not EmptyState) -->
                 <div
                   v-else
-                  class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card"
+                  class="flex flex-col"
                 >
-                  <div class="min-h-0 flex-1 overflow-auto">
+                  <div class="overflow-x-auto">
                     <Table :contain="false" class="w-full">
                       <TableHeader
                         class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"

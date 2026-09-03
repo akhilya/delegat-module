@@ -31,6 +31,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 import { t } from "@/i18n";
+import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 import { notePreviewTitle } from "@/lib/notesUi";
 
 const props = defineProps({
@@ -226,8 +227,12 @@ function onOpenChange(value) {
   <Sheet :open="open" @update:open="onOpenChange">
     <SheetContent
       side="right"
+      inset
+      resizable
       :show-close="false"
-      class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+      class="flex w-full flex-col gap-0 p-0"
+      :default-width="SHEET_WIDTH_DEFAULTS.notes"
+      :storage-key="SHEET_WIDTH_STORAGE.notes"
     >
       <SheetHeader variant="bar">
         <div class="flex min-h-8 items-center gap-2">

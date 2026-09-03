@@ -216,10 +216,7 @@ export default {
 </script>
 
 <template>
-  <div
-    class="flex min-h-0 flex-col pb-4"
-    :class="showLogs && logsEnabled ? 'min-h-0 flex-1 overflow-hidden' : ''"
-  >
+  <div class="flex flex-col pb-4">
     <div v-if="!publicApiEnabled" class="mb-6 max-w-xl">
       <InsetGroup>
         <InsetGroupItem as="div">
@@ -404,8 +401,6 @@ export default {
       v-else-if="logsEnabled"
       v-show="showLogs"
       ref="logsPanel"
-      class="min-h-0 flex-1"
-      :class="showLogs ? '' : '!hidden'"
       :api-keys="apiKeys"
     />
   </div>

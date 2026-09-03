@@ -69,9 +69,6 @@ export default {
     isSwitchingStore() {
       return this.$store.state.isSwitchingStore;
     },
-    isAiPanelOpen() {
-      return this.aiEnabled && this.$store.state.aiChat?.isOpen;
-    },
     hasActiveUploads() {
       return this.$store.getters["operations/hasLocalActiveUploads"];
     },
@@ -136,24 +133,17 @@ export default {
   </RouterView>
   <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
     <AppSidebar />
-    <div class="flex min-h-0 min-w-0 flex-1">
-      <SidebarInset
-        :class="[
-          'min-h-0 flex-1 overflow-y-auto',
-          { 'ai-panel-open': isAiPanelOpen },
-        ]"
-      >
-        <RouterView v-slot="{ Component, route }">
-          <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
-        </RouterView>
-      </SidebarInset>
-      <AiChatPanel v-if="aiEnabled" :key="appKey" />
-    </div>
+    <SidebarInset class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <RouterView v-slot="{ Component, route }">
+        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+      </RouterView>
+    </SidebarInset>
   </SidebarProvider>
   <Toaster />
   <ConfirmDialogHost />
   <template v-if="!isBareLayout">
     <OperationsPanel />
+    <AiChatPanel v-if="aiEnabled" :key="appKey" />
     <FabGroup :ai-enabled="aiEnabled" />
   </template>
 

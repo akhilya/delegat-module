@@ -15,12 +15,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { confirm } from "@/composables/useConfirm";
 import { loadMe, invalidateMeCache } from "@/main";
 import { PAGE_ADMIN_STORES } from "@/router";
-import {
-  UserPlus,
-  UserMinus,
-  Users,
-  Trash2,
-} from "lucide-vue-next";
+import { UserPlus, UserMinus, Users, Trash2 } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -84,7 +79,7 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    EmptyState
+    EmptyState,
   },
   data() {
     return {
@@ -119,7 +114,13 @@ export default {
     },
   },
   methods: {
-    ...mapActions(["getStoreDetail", "getAllUsers", "addMember", "removeMember", "deleteStore"]),
+    ...mapActions([
+      "getStoreDetail",
+      "getAllUsers",
+      "addMember",
+      "removeMember",
+      "deleteStore",
+    ]),
 
     async fetchMe() {
       try {
@@ -183,7 +184,9 @@ export default {
       const ok = await confirm({
         title: this.$t("pages.storeDetailPage.removeMemberTitle"),
         description: member
-          ? this.$t("pages.storeDetailPage.removeMemberDescriptionNamed", { name: member.userName })
+          ? this.$t("pages.storeDetailPage.removeMemberDescriptionNamed", {
+              name: member.userName,
+            })
           : this.$t("pages.storeDetailPage.removeMemberDescription"),
       });
       if (!ok) return;
@@ -254,7 +257,9 @@ export default {
         </DialogTrigger>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>{{ $t("pages.storeDetailPage.addMember") }}</DialogTitle>
+            <DialogTitle>{{
+              $t("pages.storeDetailPage.addMember")
+            }}</DialogTitle>
             <DialogDescription>
               {{ $t("pages.storeDetailPage.addMemberDialogDescription") }}
             </DialogDescription>
@@ -263,7 +268,11 @@ export default {
             <SettingsFormField :label="$t('pages.storeDetailPage.usersLabel')">
               <Select v-model="selectedUserId">
                 <SelectTrigger>
-                  <SelectValue :placeholder="$t('pages.storeDetailPage.selectUserPlaceholder')" />
+                  <SelectValue
+                    :placeholder="
+                      $t('pages.storeDetailPage.selectUserPlaceholder')
+                    "
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -283,7 +292,10 @@ export default {
             <DialogClose as-child>
               <Button variant="outline">{{ $t("common.cancel") }}</Button>
             </DialogClose>
-            <Button @click="handleAddMember" :disabled="isAddingMember || !selectedUserId">
+            <Button
+              @click="handleAddMember"
+              :disabled="isAddingMember || !selectedUserId"
+            >
               <Spinner v-if="isAddingMember" class="mr-2" />
               {{ $t("common.add") }}
             </Button>
@@ -304,13 +316,14 @@ export default {
           </template>
         </EmptyState>
 
-        <div v-else class="overflow-hidden rounded-xl border border-border/70 bg-card">
-          <div class="overflow-x-auto">
+        <div v-else class="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead class="w-16">ID</TableHead>
-                <TableHead>{{ $t("pages.storeDetailPage.columnUserName") }}</TableHead>
+                <TableHead>{{
+                  $t("pages.storeDetailPage.columnUserName")
+                }}</TableHead>
                 <TableHead class="w-24"></TableHead>
               </TableRow>
             </TableHeader>
@@ -337,7 +350,6 @@ export default {
               </TableRow>
             </TableBody>
           </Table>
-          </div>
         </div>
       </div>
     </PageSection>
@@ -351,7 +363,9 @@ export default {
           <template #leading>
             <Trash2 class="size-4 text-destructive" />
           </template>
-          <p class="text-destructive">{{ $t("pages.storeDetailPage.deleteStoreButton") }}</p>
+          <p class="text-destructive">
+            {{ $t("pages.storeDetailPage.deleteStoreButton") }}
+          </p>
           <p class="mt-0.5 text-xs font-normal text-muted-foreground">
             {{ $t("pages.storeDetailPage.dangerZoneDescription") }}
           </p>
@@ -361,20 +375,28 @@ export default {
       <Dialog v-model:open="showDeleteDialog">
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>{{ $t("pages.storeDetailPage.deleteDialogTitle") }}</DialogTitle>
+            <DialogTitle>{{
+              $t("pages.storeDetailPage.deleteDialogTitle")
+            }}</DialogTitle>
             <DialogDescription>
               {{ $t("pages.storeDetailPage.deleteDialogDescription") }}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <SettingsFormField
-              :label="$t('pages.storeDetailPage.deleteConfirmLabel', { name: store.name })"
+              :label="
+                $t('pages.storeDetailPage.deleteConfirmLabel', {
+                  name: store.name,
+                })
+              "
               label-for="store-delete-confirm"
             >
               <Input
                 id="store-delete-confirm"
                 v-model="deleteConfirmName"
-                :placeholder="$t('pages.storeDetailPage.deleteConfirmPlaceholder')"
+                :placeholder="
+                  $t('pages.storeDetailPage.deleteConfirmPlaceholder')
+                "
                 autocomplete="off"
                 @keydown.enter="handleDeleteStore"
               />
@@ -382,7 +404,9 @@ export default {
           </FieldGroup>
           <DialogFooter>
             <DialogClose as-child>
-              <Button variant="outline" :disabled="isDeleting">{{ $t("common.cancel") }}</Button>
+              <Button variant="outline" :disabled="isDeleting">{{
+                $t("common.cancel")
+              }}</Button>
             </DialogClose>
             <Button
               variant="destructive"

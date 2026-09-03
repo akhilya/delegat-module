@@ -40,7 +40,7 @@
 | `backend/Models/Ai/AiModelConfig.cs` | Сущность модели (apiUrl, apiKey, proxyUrl, ...) |
 | `backend/Models/Ai/AiConversation.cs` | Сущность диалога (storeId, userId, sessionId) |
 | `backend/Models/Ai/AiConversationMessage.cs` | Сообщение диалога |
-| `frontend/src/components/ai/AiChatPanel.vue` | Chat UI: три вида - чат / история / инструменты |
+| `frontend/src/components/ai/AiChatPanel.vue` | Chat UI: chat and history views in an inset sheet |
 | `frontend/src/components/ai/AiPlanCard.vue` | Карточка подтверждения плана |
 | `frontend/src/components/ai/AiErrorExplainer.vue` | Объяснение ошибок синхронизации |
 | `frontend/src/store/modules/aiChatModule.js` | Vuex: состояние чата, SSE-парсер |
@@ -492,17 +492,17 @@ AI-ассистент намеренно не имеет доступа к:
 
 ### 13.1 Панель чата (AiChatPanel.vue)
 
-Три вида, переключаемых кнопками в заголовке:
+Два вида, переключаемых из шапки sheet:
 
 | Вид | Активируется | Содержимое |
 |-----|-------------|-----------|
-| `chat` | по умолчанию | Сообщения, поле ввода |
-| `history` | иконка History | Список диалогов с датировкой |
-| `tools` | иконка Wrench | 11 категорий инструментов с chip-тегами |
+| `chat` | по умолчанию | Сообщения (shadcn Message / Bubble / Marker) и InputGroup |
+| `history` | иконка History | Список диалогов inset-группами |
 
 **Особенности:**
-- Resize handle - ширина 300-660px, сохраняется в localStorage
-- Escape: из history/tools → возврат в chat; из chat → закрытие
+- Inset `Sheet` as Operations (8px from the edge). Companion: no overlay, `modal=false`, does not close on outside click so the catalog stays usable. Left-edge capsule handle resizes width; inset sheets use a stronger hairline and drop shadow
+- Resize handle слева — ширина 300–1000px, сохраняется в localStorage
+- Escape: из history → возврат в chat; из chat → закрытие
 - Удаление диалога через AlertDialog с подтверждением
 - `<AiChatPanel :key="appKey" />` - полный remount при смене магазина
 
@@ -510,7 +510,7 @@ AI-ассистент намеренно не имеет доступа к:
 
 | Место | Функциональность |
 |-------|----------------|
-| `app.vue` | Floating AI кнопка + `<AiChatPanel />` на всех не-публичных страницах |
+| `app.vue` | Floating AI кнопка + `<AiChatPanel />` inset sheet на всех не-публичных страницах |
 | `fieldMappingPage.vue` | "✦ AI: улучшить маппинг" → `POST /api/ai/mapping-suggest/{id}` |
 | `connectionPage.vue` | "✦ Объяснить ошибку" при ошибке подключения |
 | `AiModelsPage.vue` | Админ-страница управления моделями с proxy-полем |
@@ -528,4 +528,3 @@ AI-ассистент намеренно не имеет доступа к:
 1. Обновить список инструментов в `AiPrompts.ChatSystem` (`AiPrompts.cs`)
 2. Обновить таблицу Tool Coverage в `docs/architecture/ai-assistant.md`
 3. Обновить раздел 7 этого документа
-4. Обновить `toolCategories` в `AiChatPanel.vue` (вид "Инструменты")

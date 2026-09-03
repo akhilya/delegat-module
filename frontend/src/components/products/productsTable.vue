@@ -98,18 +98,14 @@ export default {
     // Scroll shadow - show inset shadow on actions column when content is scrollable
     const scrollContainerEl = ref(null);
     const canScrollRight = ref(false);
-    const canScrollY = ref(false);
 
     function checkScroll() {
       const el = scrollContainerEl.value;
       if (!el) {
         canScrollRight.value = false;
-        canScrollY.value = false;
         return;
       }
       canScrollRight.value = el.scrollWidth - el.scrollLeft - el.clientWidth > 1;
-      // Slack so adding a 1px last-row rule does not toggle overflow.
-      canScrollY.value = el.scrollHeight > el.clientHeight + 8;
     }
 
     let scrollResizeObserver = null;
@@ -169,7 +165,6 @@ export default {
         checkScroll();
       } else {
         canScrollRight.value = false;
-        canScrollY.value = false;
       }
     }, { flush: "post" });
 
@@ -394,21 +389,20 @@ export default {
       rowHeights,
       scrollContainerEl,
       canScrollRight,
-      canScrollY,
     };
   },
 };
 </script>
 
 <template>
-  <div class="flex flex-col flex-1 min-h-0">
+  <div class="flex w-full flex-col">
     <EmptyState
       v-if="isLoading"
       loading
       :framed="false"
-      class="min-h-[12rem] flex-1"
+      class="min-h-[12rem]"
     />
-    <div v-else ref="scrollContainerEl" class="flex-1 min-h-0 overflow-auto">
+    <div v-else ref="scrollContainerEl" class="overflow-x-auto">
       <div class="flex h-max min-w-full w-max items-start">
         <!-- Data table -->
         <Table
@@ -480,17 +474,13 @@ export default {
                 as-child
                 :disabled="!table.getRowModel().rows?.length"
               >
-                <TableBody
-                  :class="canScrollY
-                    ? '[&_tr:last-child>td]:border-0'
-                    : '[&_tr:last-child]:!border-b'"
-                >
+                <TableBody class="[&_tr:last-child]:border-b-0 [&_tr:last-child>td]:border-b-0">
                   <template v-if="table.getRowModel().rows?.length">
                     <TableRow
                       v-for="row in table.getRowModel().rows"
                       :key="row.id"
                       :data-state="row.getIsSelected() ? 'selected' : undefined"
-                      class="cursor-pointer"
+                      class="h-[4.25rem] cursor-pointer"
                       @click="onRowClick(row, $event)"
                       @contextmenu="onRowContextMenu(row)"
                     >
@@ -498,7 +488,7 @@ export default {
                         v-for="cell in row.getVisibleCells()"
                         :key="cell.id"
                         :style="{ width: cell.column.getSize() + 'px' }"
-                        class="px-2 py-1 border-b"
+                        class="h-[4.25rem] overflow-hidden px-3 py-0 align-middle border-b"
                       >
                         <FlexRender
                           :render="cell.column.columnDef.cell"
@@ -536,7 +526,7 @@ export default {
               :style="{ height: rowHeights[i] != null ? rowHeights[i] + 'px' : 'auto' }"
               class="box-border shrink-0"
               :class="[
-                (canScrollY && i === table.getRowModel().rows.length - 1) ? '' : 'border-b',
+                i === table.getRowModel().rows.length - 1 ? '' : 'border-b',
                 row.getIsSelected() ? 'bg-muted' : '',
               ]"
             >

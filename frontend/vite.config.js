@@ -117,6 +117,23 @@ function docsRuntimeConfigPlugin() {
   };
 }
 
+function apiProxy(extra = {}) {
+  return {
+    target: "http://localhost:5000",
+    changeOrigin: true,
+    configure(proxy) {
+      proxy.on("error", (err, _req, res) => {
+        if (err?.code !== "ECONNREFUSED") return;
+        if (res && !res.headersSent && typeof res.writeHead === "function") {
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "api_unavailable" }));
+        }
+      });
+    },
+    ...extra,
+  };
+}
+
 export default defineConfig(({ command }) => {
   normalizeInheritedApiServer({ command });
 
@@ -142,21 +159,12 @@ export default defineConfig(({ command }) => {
       host: "0.0.0.0",
       port: 5173,
       proxy: {
-        "/api": {
-          target: "http://localhost:5000",
-          changeOrigin: true,
+        "/api": apiProxy({
           timeout: 60 * 60 * 1000,
           proxyTimeout: 60 * 60 * 1000,
-        },
-        "/hubs": {
-          target: "http://localhost:5000",
-          changeOrigin: true,
-          ws: true,
-        },
-        "/swagger": {
-          target: "http://localhost:5000",
-          changeOrigin: true,
-        },
+        }),
+        "/hubs": apiProxy({ ws: true }),
+        "/swagger": apiProxy(),
       },
     },
   };

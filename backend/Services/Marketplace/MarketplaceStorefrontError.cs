@@ -6,7 +6,7 @@ using Delegat.Infrastructure.Middleware;
 namespace Delegat.Services.Marketplace;
 
 /// <summary>
-/// Maps unofficial storefront HTTP failures (especially 429) to SPA ApiException
+/// Maps unofficial storefront HTTP failures (429 and antibot 403) to SPA ApiException
 /// so they are not logged as unhandled 500s.
 /// </summary>
 internal static class MarketplaceStorefrontError
@@ -14,23 +14,14 @@ internal static class MarketplaceStorefrontError
     public const string RateLimitedMessage =
         "The marketplace storefront is rate-limiting requests. Wait a few seconds and try again.";
 
-    public static bool IsRateLimited(Exception ex)
-    {
-        for (var e = ex; e != null; e = e.InnerException)
-        {
-            if (e is ApiException api && api.StatusCode == StatusCodes.Status429TooManyRequests)
-                return true;
-            if (e is HttpRequestException http && http.StatusCode == HttpStatusCode.TooManyRequests)
-                return true;
-            var status = e.GetType().GetProperty("StatusCode")?.GetValue(e);
-            if (status is int code && code == 429)
-                return true;
-            if (status is HttpStatusCode httpCode && httpCode == HttpStatusCode.TooManyRequests)
-                return true;
-        }
+    public const string BlockedMessage =
+        "The marketplace storefront blocked the request (antibot or captcha). Try again later.";
 
-        return false;
-    }
+    public static bool IsRateLimited(Exception ex)
+        => HasStatus(ex, 429, HttpStatusCode.TooManyRequests);
+
+    public static bool IsBlocked(Exception ex)
+        => HasStatus(ex, 403, HttpStatusCode.Forbidden);
 
     public static Exception Map(Exception ex)
     {
@@ -38,6 +29,8 @@ internal static class MarketplaceStorefrontError
             return ex;
         if (IsRateLimited(ex))
             return ApiException.TooManyRequests(RateLimitedMessage);
+        if (IsBlocked(ex))
+            return ApiException.Forbidden(BlockedMessage, "storefront_blocked");
         return ex;
     }
 
@@ -54,5 +47,23 @@ internal static class MarketplaceStorefrontError
                 throw;
             throw mapped;
         }
+    }
+
+    private static bool HasStatus(Exception ex, int code, HttpStatusCode httpCode)
+    {
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            if (e is ApiException api && api.StatusCode == code)
+                return true;
+            if (e is HttpRequestException http && http.StatusCode == httpCode)
+                return true;
+            var status = e.GetType().GetProperty("StatusCode")?.GetValue(e);
+            if (status is int n && n == code)
+                return true;
+            if (status is HttpStatusCode named && named == httpCode)
+                return true;
+        }
+
+        return false;
     }
 }

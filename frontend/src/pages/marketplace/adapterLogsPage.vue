@@ -331,7 +331,7 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col overflow-hidden pb-4">
+  <div class="flex flex-col pb-4">
     <LogToolbar class="mb-3 shrink-0">
       <LogFilterSelect
         :model-value="filters.connectionId"
@@ -379,7 +379,6 @@ export default {
     </LogToolbar>
 
     <LogListPanel
-      class="min-h-0 flex-1"
       :loading="isLoading && items.length === 0"
       :empty="!isLoading && items.length === 0"
       :empty-icon="ScrollText"

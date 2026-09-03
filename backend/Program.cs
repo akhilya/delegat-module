@@ -249,6 +249,10 @@ builder.Services.AddSingleton<PluginManager>();
 // Host storage reader for marketplace plugins (Woo ZIP images, etc.)
 builder.Services.AddSingleton<IMediaBlobReader, StorageMediaBlobReader>();
 
+builder.Services.AddSingleton(CatalogScrapePlaywrightOptions.FromEnvironment());
+builder.Services.AddSingleton<StorefrontPlaywrightLoader>();
+builder.Services.AddSingleton<IStorefrontPageLoader>(sp => sp.GetRequiredService<StorefrontPlaywrightLoader>());
+
 // Plugin Adapter Registry (implements IMarketplaceAdapterRegistry using plugins)
 builder.Services.AddSingleton<PluginAdapterRegistry>();
 builder.Services.AddSingleton<IMarketplaceAdapterRegistry>(sp => sp.GetRequiredService<PluginAdapterRegistry>());
@@ -321,8 +325,10 @@ builder.Services.AddScoped<CatalogMatchService>();
 builder.Services.AddScoped<CatalogConnectJobService>();
 builder.Services.AddScoped<CatalogScrapeService>();
 builder.Services.AddScoped<ToolCatalogService>();
+builder.Services.AddScoped<PlatformToolJobService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
+builder.Services.AddScoped<MarketplaceCommerceService>();
 builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<IStoreDeletionService, StoreDeletionService>();
 builder.Services.AddScoped<PluginVersionSyncService>();

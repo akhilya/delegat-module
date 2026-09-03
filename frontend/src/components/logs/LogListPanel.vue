@@ -10,8 +10,8 @@ defineProps({
   emptyIcon: { type: [Object, Function], default: undefined },
   emptyTitle: { type: String, default: "" },
   emptyDescription: { type: String, default: "" },
-  /** Fill remaining page height; scroll inside the table body */
-  fill: { type: Boolean, default: true },
+  /** Stretch to the remaining page height (rare; tables are content-height by default). */
+  fill: { type: Boolean, default: false },
   /** Show footer when there are rows */
   showFooter: { type: Boolean, default: false },
   footerCount: { type: Number, default: 0 },
@@ -37,7 +37,7 @@ defineEmits(["load-more", "download", "delete", "clear-selection"]);
     :empty-title="emptyTitle"
     :empty-description="emptyDescription"
     :class="[
-      fill ? '!min-h-0 mb-0 flex min-h-0 flex-1 flex-col p-px' : '',
+      fill ? '!min-h-0 mb-0 flex min-h-0 flex-1 flex-col' : '',
       $props.class,
     ]"
   >

@@ -142,6 +142,12 @@ describe("visibleSettingsNavIds", () => {
 
 /** Destinations the sidebar can offer (settings + catalog + store surfaces). */
 const SIDEBAR_PATHS = [
+  "/orders/new",
+  "/orders/pack",
+  "/orders/ship",
+  "/orders/delivery",
+  "/orders/done",
+  "/orders/closed",
   "/products",
   "/products?trash=1",
   "/products/create",
@@ -196,6 +202,13 @@ describe("canShowNavLink", () => {
   it("hides storage without files.manage", () => {
     assert.equal(canShowNavLink(me(VIEWER), "/storage"), false);
     assert.equal(canShowNavLink(me([PERMS.CatalogManage]), "/storage"), false);
+  });
+
+  it("hides orders without marketplace.manage", () => {
+    assert.equal(canShowNavLink(me([PERMS.CatalogManage]), "/orders/new"), false);
+    assert.equal(canShowNavLink(me(VIEWER), "/orders/new"), false);
+    assert.equal(canShowNavLink(me(OPERATOR), "/orders/new"), true);
+    assert.equal(canShowNavLink(me(VIEW_ONLY), "/orders/pack"), true);
   });
 
   it("hides adapters without marketplace.manage", () => {
@@ -275,6 +288,12 @@ describe("sidebar path matrix by role", () => {
         publicApiEnabled: true,
       }),
       [
+        "/orders/new",
+        "/orders/pack",
+        "/orders/ship",
+        "/orders/delivery",
+        "/orders/done",
+        "/orders/closed",
         "/products",
         "/products?trash=1",
         "/product-groups",
@@ -299,6 +318,12 @@ describe("sidebar path matrix by role", () => {
 
   it("operator: catalog + storage + adapters + tools, no Stores", () => {
     assert.deepEqual(visibleSidebarPaths(OPERATOR), [
+      "/orders/new",
+      "/orders/pack",
+      "/orders/ship",
+      "/orders/delivery",
+      "/orders/done",
+      "/orders/closed",
       "/products",
       "/products?trash=1",
       "/products/create",
@@ -321,6 +346,12 @@ describe("sidebar path matrix by role", () => {
       ["/settings/admin/stores"],
     );
     assert.deepEqual(paths, [
+      "/orders/new",
+      "/orders/pack",
+      "/orders/ship",
+      "/orders/delivery",
+      "/orders/done",
+      "/orders/closed",
       "/products",
       "/products?trash=1",
       "/products/create",

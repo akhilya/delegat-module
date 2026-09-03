@@ -1,14 +1,25 @@
 <script setup>
 import { computed, ref } from "vue";
-import { defaultDocument, useEventListener, useMediaQuery, useVModel } from "@vueuse/core";
+import {
+  defaultDocument,
+  useEventListener,
+  useMediaQuery,
+  useVModel,
+} from "@vueuse/core";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import {
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+  SIDEBAR_RESIZE_MAX,
+  SIDEBAR_RESIZE_MIN,
+  useSheetResize,
+} from "@/composables/useSheetResize";
 import {
   provideSidebarContext,
   SIDEBAR_COOKIE_MAX_AGE,
   SIDEBAR_COOKIE_NAME,
   SIDEBAR_KEYBOARD_SHORTCUT,
-  SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_ICON,
 } from "./utils";
 
@@ -41,17 +52,30 @@ function setOpenMobile(value) {
 }
 
 function toggleSidebar() {
-  return isMobile.value ? setOpenMobile(!openMobile.value) : setOpen(!open.value);
+  return isMobile.value
+    ? setOpenMobile(!openMobile.value)
+    : setOpen(!open.value);
 }
 
 useEventListener("keydown", (event) => {
-  if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+  if (
+    event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
+    (event.metaKey || event.ctrlKey)
+  ) {
     event.preventDefault();
     toggleSidebar();
   }
 });
 
 const state = computed(() => (open.value ? "expanded" : "collapsed"));
+
+const { width, isResizing, startResize } = useSheetResize({
+  storageKey: SHEET_WIDTH_STORAGE.sidebar,
+  defaultWidth: SHEET_WIDTH_DEFAULTS.sidebar,
+  minWidth: SIDEBAR_RESIZE_MIN,
+  maxWidth: SIDEBAR_RESIZE_MAX,
+  side: "left",
+});
 
 provideSidebarContext({
   state,
@@ -61,6 +85,9 @@ provideSidebarContext({
   openMobile,
   setOpenMobile,
   toggleSidebar,
+  width,
+  isResizing,
+  startResize,
 });
 </script>
 
@@ -69,10 +96,15 @@ provideSidebarContext({
     <div
       data-slot="sidebar-wrapper"
       :style="{
-        '--sidebar-width': SIDEBAR_WIDTH,
+        '--sidebar-width': `${width}px`,
         '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
       }"
-      :class="cn('group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full', props.class)"
+      :class="
+        cn(
+          'group/sidebar-wrapper bg-background flex min-h-svh w-full',
+          props.class,
+        )
+      "
       v-bind="$attrs"
     >
       <slot />

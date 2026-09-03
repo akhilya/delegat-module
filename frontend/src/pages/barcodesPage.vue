@@ -272,7 +272,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+  <AppPageChrome :breadcrumb-items="breadcrumbs">
     <template #nav-center>
       <div class="relative h-9 w-full">
         <Input
@@ -293,7 +293,6 @@ export default {
     </template>
 
     <PageSection
-      class="flex min-h-0 flex-1 flex-col !mb-0"
       :loading="isLoading"
       :empty="!isLoading && items.length === 0"
       :empty-icon="Barcode"

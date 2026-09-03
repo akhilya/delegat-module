@@ -25,8 +25,10 @@ import {
   InsetGroup,
   InsetGroupItem,
 } from "@/components/ui/inset-group";
+import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
+import { localizeExternalFieldOptions } from "@/components/marketplace/graph/fieldLabels.js";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +94,8 @@ export default {
   },
   data() {
     return {
+      mappingSheetWidth: SHEET_WIDTH_DEFAULTS.mappingPreview,
+      mappingSheetKey: SHEET_WIDTH_STORAGE.mappingPreview,
       viewMode: "graph",
       connectionId: null,
       mappingId: null,
@@ -375,7 +379,7 @@ export default {
             defsMap[f.key] = {
               name: f.name,
               type: f.type,
-              options: f.options || [],
+              options: localizeExternalFieldOptions(f.options || []),
               description: f.description || null,
               unit: f.unit || null,
               minValue: f.minValue ?? null,
@@ -406,7 +410,7 @@ export default {
             defsMap[f.key] = {
               name: f.name,
               type: f.type,
-              options: f.options || [],
+              options: localizeExternalFieldOptions(f.options || []),
               description: f.description,
             };
             mappings.push({
@@ -1166,8 +1170,12 @@ export default {
     <Sheet v-model:open="showPreviewSheet">
       <SheetContent
         side="right"
+        inset
+        resizable
         :show-close="false"
-        class="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        class="flex w-full flex-col gap-0 p-0"
+        :default-width="mappingSheetWidth"
+        :storage-key="mappingSheetKey"
       >
         <SheetHeader variant="bar">
           <div class="flex min-h-8 items-center gap-2">

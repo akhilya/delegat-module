@@ -261,6 +261,71 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         throw new NotImplementedException($"ExportStocksAsync not implemented for {Key}");
     }
 
+    public virtual Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalOrder>> GetOrdersAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.OrderQuery? query = null,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetOrders);
+        throw new NotImplementedException($"GetOrdersAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ExternalOrder?> GetOrderAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetOrders);
+        throw new NotImplementedException($"GetOrderAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.OrderStatusUpdateResult> UpdateOrderStatusAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        Delegat.Marketplace.SDK.DTOs.OrderStatusUpdate update,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.UpdateOrderStatus);
+        throw new NotImplementedException($"UpdateOrderStatusAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetOrderLabelAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetOrderLabels);
+        throw new NotImplementedException($"GetOrderLabelAsync not implemented for {Key}");
+    }
+
+    public virtual Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalPromotion>> GetPromotionsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.PromotionQuery? query = null,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetPromotions);
+        throw new NotImplementedException($"GetPromotionsAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ExternalPromotion?> GetPromotionAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetPromotions);
+        throw new NotImplementedException($"GetPromotionAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.PromotionProductsResult> UpdatePromotionProductsAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        Delegat.Marketplace.SDK.DTOs.PromotionProductsUpdate update,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.UpdatePromotions);
+        throw new NotImplementedException($"UpdatePromotionProductsAsync not implemented for {Key}");
+    }
+
     #endregion
 
     #region Product Grouping

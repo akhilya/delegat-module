@@ -3,7 +3,11 @@ import { computed, ref } from "vue";
 import { cn } from "@/lib/utils";
 
 const props = defineProps({
-  class: { type: null, required: false },
+  class: {
+    type: [Boolean, null, String, Object, Array],
+    required: false,
+    skipCheck: true,
+  },
   /**
    * When true (default), wrap the table in an overflow scroller.
    * Set false when an ancestor already owns scroll (sticky headers);
@@ -36,11 +40,7 @@ defineExpose({ $el: rootEl });
     :data-slot="contain ? 'table-container' : 'table'"
     :class="contain ? 'relative w-full overflow-auto' : tableClass"
   >
-    <table
-      v-if="contain"
-      data-slot="table"
-      :class="tableClass"
-    >
+    <table v-if="contain" data-slot="table" :class="tableClass">
       <slot />
     </table>
     <slot v-else />

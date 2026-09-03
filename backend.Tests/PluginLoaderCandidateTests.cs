@@ -14,6 +14,8 @@ public class PluginLoaderCandidateTests
     [InlineData("Legacy.Something.dll", false)]
     [InlineData("Other.Marketplace.Plugin.dll", false)]
     [InlineData("Delegat.Marketplace.Ozon.exe", false)]
+    [InlineData("Delegat.Marketplace.WooCommerce.Tests.dll", false)]
+    [InlineData("Delegat.Marketplace.Ozon.Tests.dll", false)]
     [InlineData("", false)]
     public void IsCandidatePluginAssemblyFileName_FiltersLegacyAndSdk(string fileName, bool expected)
     {

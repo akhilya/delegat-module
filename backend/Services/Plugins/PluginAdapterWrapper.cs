@@ -21,6 +21,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
     private readonly IAdapterHttpLogger? _httpLogger;
     private readonly IMarketplaceMetadataCache? _metadataCache;
     private readonly IMediaBlobReader? _mediaBlobReader;
+    private readonly IStorefrontPageLoader? _pageLoader;
 
     public PluginAdapterWrapper(
         IMarketplacePlugin plugin,
@@ -28,7 +29,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         EncryptionService? encryptionService = null,
         IAdapterHttpLogger? httpLogger = null,
         IMarketplaceMetadataCache? metadataCache = null,
-        IMediaBlobReader? mediaBlobReader = null)
+        IMediaBlobReader? mediaBlobReader = null,
+        IStorefrontPageLoader? pageLoader = null)
     {
         _plugin = plugin;
         _logger = loggerFactory.CreateLogger($"Plugin.{plugin.Key}");
@@ -36,6 +38,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         _httpLogger = httpLogger;
         _metadataCache = metadataCache;
         _mediaBlobReader = mediaBlobReader;
+        _pageLoader = pageLoader;
     }
 
     #region Metadata
@@ -596,6 +599,64 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         );
     }
 
+    public async Task<Models.Marketplace.DTOs.PagedResult<ExternalOrder>> GetOrdersAsync(
+        MarketplaceConnection connection,
+        OrderQuery? query = null,
+        CancellationToken ct = default)
+    {
+        var result = await _plugin.GetOrdersAsync(CreateContext(connection), query, ct);
+        return new Models.Marketplace.DTOs.PagedResult<ExternalOrder>(
+            result.Items ?? [],
+            result.HasMore,
+            result.NextCursor,
+            result.TotalCount);
+    }
+
+    public Task<ExternalOrder?> GetOrderAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+        => _plugin.GetOrderAsync(CreateContext(connection), externalOrderId, ct);
+
+    public Task<OrderStatusUpdateResult> UpdateOrderStatusAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        OrderStatusUpdate update,
+        CancellationToken ct = default)
+        => _plugin.UpdateOrderStatusAsync(CreateContext(connection), externalOrderId, update, ct);
+
+    public Task<OrderLabelResult> GetOrderLabelAsync(
+        MarketplaceConnection connection,
+        string externalOrderId,
+        CancellationToken ct = default)
+        => _plugin.GetOrderLabelAsync(CreateContext(connection), externalOrderId, ct);
+
+    public async Task<Models.Marketplace.DTOs.PagedResult<ExternalPromotion>> GetPromotionsAsync(
+        MarketplaceConnection connection,
+        PromotionQuery? query = null,
+        CancellationToken ct = default)
+    {
+        var result = await _plugin.GetPromotionsAsync(CreateContext(connection), query, ct);
+        return new Models.Marketplace.DTOs.PagedResult<ExternalPromotion>(
+            result.Items ?? [],
+            result.HasMore,
+            result.NextCursor,
+            result.TotalCount);
+    }
+
+    public Task<ExternalPromotion?> GetPromotionAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        CancellationToken ct = default)
+        => _plugin.GetPromotionAsync(CreateContext(connection), externalPromotionId, ct);
+
+    public Task<PromotionProductsResult> UpdatePromotionProductsAsync(
+        MarketplaceConnection connection,
+        string externalPromotionId,
+        PromotionProductsUpdate update,
+        CancellationToken ct = default)
+        => _plugin.UpdatePromotionProductsAsync(CreateContext(connection), externalPromotionId, update, ct);
+
     #endregion
 
     #region Product Grouping
@@ -779,7 +840,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             Logger = _logger,
             HttpLogger = _httpLogger,
             MetadataCache = _metadataCache,
-            MediaBlobReader = _mediaBlobReader
+            MediaBlobReader = _mediaBlobReader,
+            PageLoader = _pageLoader
         };
     }
 

@@ -57,7 +57,7 @@ export default {
       loading: true,
       connections: [],
       adapters: [],
-      connectionId: null,
+      adapterKey: null,
       query: "",
       results: [],
       nextCursor: null,
@@ -76,13 +76,19 @@ export default {
         { label: this.$t("pages.catalogScrape.breadcrumb") },
       ];
     },
-    scrapeCapable() {
-      return this.connections.filter((conn) =>
-        adapterCanSearchPublicCatalog(this.adapterFor(conn)),
-      );
+    scrapeAdapters() {
+      return this.adapters
+        .filter((adapter) => adapterCanSearchPublicCatalog(adapter))
+        .slice()
+        .sort((a, b) =>
+          String(a.displayName || a.key).localeCompare(String(b.displayName || b.key)),
+        );
     },
-    selectedConnection() {
-      return this.connections.find((c) => c.id === this.connectionId) || null;
+    selectedAdapter() {
+      return this.scrapeAdapters.find((a) => a.key === this.adapterKey) || null;
+    },
+    preferredConnection() {
+      return this.connectionFor(this.adapterKey);
     },
     selectedIds() {
       return this.results
@@ -127,17 +133,29 @@ export default {
       const data = extractResponseData(response, {});
       return data?.value && typeof data.value === "object" ? data.value : data;
     },
-    adapterFor(conn) {
-      return this.adapters.find((a) => a.key === conn.adapterKey) || conn;
+    adapterSubtitle(adapter) {
+      const conn = this.connectionFor(adapter.key);
+      return conn?.name || this.$t("pages.catalogScrape.notConnected");
     },
-    adapterName(conn) {
-      return this.adapterFor(conn)?.displayName || conn.adapterKey;
+    connectionFor(adapterKey) {
+      const list = this.connections.filter((c) => c.adapterKey === adapterKey);
+      if (!list.length) return null;
+      return [...list].sort((a, b) => {
+        if (Boolean(a.isActive) !== Boolean(b.isActive)) return a.isActive ? -1 : 1;
+        return (a.id ?? 0) - (b.id ?? 0);
+      })[0];
     },
-    pickConnection(conn) {
-      this.connectionId = conn.id;
+    pickAdapter(adapter) {
+      if (this.adapterKey === adapter.key) return;
+      this.adapterKey = adapter.key;
+      this.results = [];
+      this.selected = {};
+      this.nextCursor = null;
+      this.hasMore = false;
+      this.lastApply = null;
       this.$router.replace({
         path: this.$route.path,
-        query: { connectionId: String(conn.id) },
+        query: { adapter: adapter.key },
       });
     },
     toggleSelectAll(checked) {
@@ -181,16 +199,26 @@ export default {
           });
         }),
       ]);
-      const requested = Number(this.$route.query.connectionId);
-      if (requested && this.scrapeCapable.some((c) => c.id === requested)) {
-        this.connectionId = requested;
-      } else if (this.scrapeCapable.length === 1) {
-        this.connectionId = this.scrapeCapable[0].id;
+      const requestedAdapter = String(this.$route.query.adapter || "").trim().toLowerCase();
+      const requestedConn = Number(this.$route.query.connectionId);
+      const fromQuery = this.scrapeAdapters.find((a) => a.key === requestedAdapter);
+      const fromConnection = requestedConn
+        ? this.connections.find((c) => c.id === requestedConn)
+        : null;
+      const adapterFromConnection = fromConnection
+        ? this.scrapeAdapters.find((a) => a.key === fromConnection.adapterKey)
+        : null;
+      if (fromQuery) {
+        this.adapterKey = fromQuery.key;
+      } else if (adapterFromConnection) {
+        this.adapterKey = adapterFromConnection.key;
+      } else if (this.scrapeAdapters.length > 0) {
+        this.adapterKey = this.scrapeAdapters[0].key;
       }
       this.loading = false;
     },
     async runSearch({ append = false } = {}) {
-      if (!this.connectionId || this.searchBusy) return;
+      if (!this.adapterKey || this.searchBusy) return;
       const q = this.query.trim();
       if (!q && !append) {
         this.results = [];
@@ -200,7 +228,7 @@ export default {
       }
       this.searchBusy = true;
       await this.searchCatalogScrape({
-        connectionId: this.connectionId,
+        adapterKey: this.adapterKey,
         query: q,
         pageSize: 50,
         cursor: append ? this.nextCursor : null,
@@ -219,7 +247,7 @@ export default {
       this.searchBusy = false;
     },
     async confirmImport() {
-      if (!this.connectionId || this.applyBusy || this.selectedIds.length === 0) return;
+      if (!this.adapterKey || this.applyBusy || this.selectedIds.length === 0) return;
       const operationId = randomUuidCompact();
       this.applyOperationId = operationId;
       this.applyBusy = true;
@@ -228,14 +256,18 @@ export default {
           id: operationId,
           type: "catalog-scrape",
           title: this.$t("pages.catalogScrape.applyOperationTitle", {
-            name: this.selectedConnection?.name || this.adapterName(this.selectedConnection),
+            name:
+              this.preferredConnection?.name
+              || this.selectedAdapter?.displayName
+              || this.adapterKey,
           }),
-          connectionId: this.connectionId,
-          connectionName: this.selectedConnection?.name,
+          connectionId: this.preferredConnection?.id ?? null,
+          connectionName: this.preferredConnection?.name
+            || this.selectedAdapter?.displayName,
           batchType: "catalog-scrape",
         });
         await this.applyCatalogScrape({
-          connectionId: this.connectionId,
+          adapterKey: this.adapterKey,
           publicIds: this.selectedIds,
           operationId,
           onSuccess: (response) => {
@@ -276,23 +308,17 @@ export default {
 
     <div
       v-else
-      class="flex w-full max-w-3xl flex-col"
+      class="page-region-in flex w-full max-w-3xl flex-col"
     >
+      <p class="mb-2 text-xs font-medium text-warning">
+        {{ $t("pages.toolsPage.stageExperimental") }}
+      </p>
       <p class="mb-6 text-sm text-muted-foreground">
         {{ $t("pages.catalogScrape.modelBody") }}
       </p>
 
       <EmptyState
-        v-if="connections.length === 0"
-        framed
-        :title="$t('pages.catalogScrape.noConnections')"
-      >
-        <template #icon>
-          <Search />
-        </template>
-      </EmptyState>
-      <EmptyState
-        v-else-if="scrapeCapable.length === 0"
+        v-if="scrapeAdapters.length === 0"
         framed
         :title="$t('pages.catalogScrape.noScrapeAdapters')"
       >
@@ -305,25 +331,38 @@ export default {
         <InsetGroup
           class="mb-6"
           role="radiogroup"
-          :aria-label="$t('pages.catalogScrape.connectionListLabel')"
+          :aria-label="$t('pages.catalogScrape.marketplaceListLabel')"
         >
           <InsetGroupItem
-            v-for="conn in scrapeCapable"
-            :key="conn.id"
+            v-for="adapter in scrapeAdapters"
+            :key="adapter.key"
             role="radio"
-            :aria-checked="connectionId === conn.id"
-            :selected="connectionId === conn.id"
-            @click="pickConnection(conn)"
+            :aria-checked="adapterKey === adapter.key"
+            :selected="adapterKey === adapter.key"
+            @click="pickAdapter(adapter)"
           >
             <template #leading>
-              <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
+              <AdapterIcon :adapter-key="adapter.key" class="size-4" />
             </template>
-            <p class="truncate">{{ conn.name }}</p>
+            <p class="truncate">{{ adapter.displayName || adapter.key }}</p>
             <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
-              {{ adapterName(conn) }}
+              {{ adapterSubtitle(adapter) }}
             </p>
           </InsetGroupItem>
         </InsetGroup>
+
+        <p
+          v-if="adapterKey && !preferredConnection"
+          class="text-muted-foreground mb-6 text-xs leading-relaxed"
+        >
+          {{ $t("pages.catalogScrape.noConnectionHint") }}
+        </p>
+        <p
+          v-else-if="preferredConnection"
+          class="text-muted-foreground mb-6 text-xs leading-relaxed"
+        >
+          {{ $t("pages.catalogScrape.usesConnectionHint", { name: preferredConnection.name }) }}
+        </p>
 
         <form
           class="flex flex-col gap-6"
@@ -340,13 +379,13 @@ export default {
                 v-model="query"
                 type="search"
                 autocomplete="off"
-                :disabled="!connectionId || applyBusy"
+                :disabled="!adapterKey || applyBusy"
                 :placeholder="$t('pages.catalogScrape.queryPlaceholder')"
               />
             </SettingsFormField>
           </FieldGroup>
           <div class="flex flex-wrap items-center gap-2">
-            <Button type="submit" :disabled="!connectionId || searchBusy || applyBusy || !query.trim()">
+            <Button type="submit" :disabled="!adapterKey || searchBusy || applyBusy || !query.trim()">
               <Spinner v-if="searchBusy" />
               {{ $t("pages.catalogScrape.searchAction") }}
             </Button>
@@ -370,7 +409,7 @@ export default {
 
         <div
           v-else-if="results.length > 0"
-          class="mt-8 overflow-hidden rounded-xl border border-border/70 bg-card"
+          class="mt-8"
         >
           <Table>
             <TableHeader>

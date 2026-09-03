@@ -173,7 +173,7 @@ Dark theme swaps the same roles via `.dark` in `frontend/src/style.css` (ink↔p
 Surfaces stay flat: depth is tonal (sidebar vs paper, muted fills) and 1px borders — not stacked card shadows. Buttons are the exception (same as Control Plane): a short white top sheen and a 1px drop shadow. Dialogs/sheets rely on overlay scrim + surface tokens, not dramatic drop shadows. The scrim fades; the panel fades and zooms.
 
 ### Shadow Vocabulary
-- **Button lift** (`0 1px 2px oklch(0 0 0 / 0.1)` on `[data-slot="button"]`): Hairline drop shadow. Ghost uses `0 1px 1px / 0.05`. Link has none. Grouped segments (`ButtonGroup`) share one plane — no per-segment shadow.
+- **Button lift** (`0 1px 2px oklch(0 0 0 / 0.1)`): Hairline drop shadow on `default`, `outline`, `secondary`, and `destructive`. Ghost and link have none. Grouped segments (`ButtonGroup`) share one plane — no per-segment shadow.
 - **Button sheen:** `linear-gradient(180deg, white 8%, transparent ~40%)` on default, outline, secondary, destructive. Not a page-wash and not hue. Ghost / link have no sheen.
 - **No ambient card stack:** Cards are bordered/tonal, not floated marketing tiles.
 
@@ -187,7 +187,7 @@ One language for the whole instance. Motion shows state (open, press, toggle), n
 
 - **Curve:** `--ease-out-quart` (`cubic-bezier(0.25, 1, 0.5, 1)`). No bounce, no elastic.
 - **Press:** `--duration-press` 120ms. `Button` scales to 0.98 on `:active` (not `link`).
-- **UI chrome:** `--duration-ui` 150ms. Menus, tooltips, tab content fade, switch thumb, inset row hover, chevrons.
+- **UI chrome:** `--duration-ui` 150ms. Menus, tooltips, tab content fade, tab list pill (slides to the active trigger), sidebar nav pill (slides to the current page in a group), nav group open/close, switch thumb, inset row hover, chevrons.
 - **Overlays:** `--duration-overlay` 200ms in, `--duration-overlay-out` 150ms out. Dialog, confirm, scrim: fade + zoom.
 - **Drawers:** `--duration-drawer` 280ms in, `--duration-drawer-out` 210ms out. Sheets slide from the edge (was 500ms; too slow for catalog work).
 - **Do not** stagger catalog pages, tables, or route changes. Honor `prefers-reduced-motion` (already global in `style.css`).
@@ -200,10 +200,10 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
 - **Shape:** Larger radius (`rounded-md` / `rounded-lg`, tied to `--radius` **1rem**)
 - **Primary:** Ink fill + primary-foreground; hover at 90% primary; short white top sheen + hairline drop shadow (Control Plane, in `style.css`)
 - **Secondary / Outline:** Same sheen (slightly stronger white) + the same drop shadow
-- **Ghost:** Lighter drop shadow, no sheen. **Link:** flat (no sheen, no shadow)
-- **Destructive:** Same sheen as primary
+- **Ghost:** Flat (no sheen, no shadow). **Link:** flat (no sheen, no shadow)
+- **Destructive:** Same sheen and drop shadow as primary
 - **Sizes:** default `h-9`, sm `h-8`, lg `h-10`, compact `xs` / icon sizes
-- **Focus:** `focus-visible` keeps the 3px ring **and** the drop shadow (composite `box-shadow` in `style.css`)
+- **Focus:** `focus-visible` keeps the 3px ring; lift variants also keep the drop shadow (composite `box-shadow` in `style.css`)
 - **Touch:** On coarse pointers, `[data-slot="button"]` min-height 2.75rem
 - **Press:** `:active` scale 0.98 at `--duration-press` (not on `link`)
 - **Do not** restyle sheen/shadow at call sites; change `style.css`
@@ -221,7 +221,8 @@ Primitives live under `frontend/src/components/ui` (shadcn-vue new-york, Lucide)
   - **Default** — inside padded content (`DialogContent` `p-6`): bare `DialogHeader` / `DialogFooter`
   - **Bar** — `variant="bar"` when content is `p-0` / `gap-0`: header `border-b px-6 py-4`, footer `border-t px-6 py-4` (built into primitives)
   - **Confirm** — `AlertDialogContent`: `p-8` / `gap-8` / `sm:max-w-md` / `rounded-xl` / `ring-1 ring-foreground/5`. Copy centered. Two actions: equal-width Cancel / Confirm (`size` `lg`, `AlertDialogFooter` `layout="split"`). Three actions: full-width stack (`layout="stack"`) — preferred, then alternative, then Cancel — never three columns
-- **Overlay:** Dialog, Sheet, confirm alerts, and the product photo lightbox share `bg-black/50` + `backdrop-blur-xs`. Overlay fades; the dialog/confirm panel also zooms. Do not override at call sites. Lightbox close / prev / next / index sit on paper chips (`outline` + `bg-background`), not ghost ink on the photo.
+- **Overlay:** Dialog, Sheet, confirm alerts, and the product photo lightbox share `bg-black/50` + `backdrop-blur-xs`. Overlay fades; the dialog/confirm panel also zooms. Do not override at call sites. Lightbox close / prev / next / index sit on paper chips (`outline` + `bg-background`), not ghost ink on the photo. **Exception — AI chat:** no overlay, not modal, does not dismiss on outside click (companion while working in the catalog). Close from the sheet header, Escape, or the FAB.
+- **Inset chrome (cabinet sheets):** float 8px off the viewport (`top/right/bottom/left-2`, `sm:left-auto` on a right sheet), `rounded-xl`, 1px hairline at ~18% foreground plus a drop shadow. Operations, AI, orders, notes, logs, and mapping preview use `SheetContent inset` with `resizable` (capsule drag handle on the free edge). The **desktop sidebar** is the same inset panel + handle (width persisted). The handle is the capsule only (no full-height wash). The mobile sidebar sheet is inset, not resizable. AI has no overlay; other inset sheets keep the platform scrim.
 - Do not invent per-form-dialog title sizes or ad-hoc `px-6 py-5` / `pt-6 pb-4` header chrome
 - Icons stay in buttons, menus, empty states, and inline status — not the modal chrome header
 
@@ -244,7 +245,7 @@ Floating lists (dropdown, context menu, select, searchable select, combobox, pop
 - **Forms:** every labeled stack = `FieldGroup` + `Field` (prefer `SettingsFormField`); validated fields wrap with vee-validate `FormField`. No raw `Label`+`Input` / `FormItem` alone without Field. `SettingsFormSection` already supplies FieldSet + FieldGroup. Same-rank section titles (two columns, picker + form) use `SettingsFormSection` / `InsetGroupLabel` — muted `text-xs` with `px-1`, not a `text-sm` heading and not a browser `<legend>` next to that caption. `FieldLegend` must match `InsetGroupLabel`. Stacked field labels are the same `text-xs` caption (not a heading under the section title). Inline / horizontal field labels stay `text-sm`.
 
 ### Navigation
-- **Sidebar:** `{colors.sidebar}` mist surface. Nav groups are inset grouped lists (paper fill, one shared hairline ring, equal-height rows). The current page is a primary (ink) pill with semibold label — hover on other rows stays tonal. Quiet borders; no second nested outline.
+- **Sidebar:** `{colors.sidebar}` mist surface, floated 8px off the viewport (`rounded-xl`, same hairline + drop shadow as inset sheets) with the capsule resize handle on the free edge. Nav groups are inset grouped lists (paper fill, one shared hairline ring, equal-height rows). The current page is a primary (ink) pill with semibold label; inside a group the pill slides at `--duration-ui`. Hover on other rows stays tonal. Quiet borders; no second nested outline.
 - **App page chrome:** Catalog and settings shells use `AppPageChrome` (`Page` + `adaptive-padding` + sticky `NavigationBar` + `Breadcrumbs`). Page titles come from breadcrumbs, not `PageHeader`. Do not nest a second `Page` inside settings route children; do not override breadcrumb `mb-4` locally. Page gutters: **8vw** on viewports wider than 2000px (right at least FAB clearance); tighter fixed gutters at Full HD and below. AI / background-job FABs are bottom-right from `lg` up (page padding keeps a right gutter). Below `lg` they are compact icons in the navbar — do not keep the FAB gutter.
 - **Auth shell:** Full-viewport canvas (`AuthLayout`), same family as first-run Setup: large title, no card, language switcher in the corner; no marketing hero
 
@@ -254,7 +255,7 @@ iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive
 - **Shell:** `rounded-xl bg-card p-1` and one hairline ring (`ring-sidebar-border` on mist/sidebar; `ring-border/70` on paper pages). Space **between** groups, not between rows inside a group.
 - **Rows:** equal padding, inner `rounded-lg`, hover tonal. A hairline gap (`gap-0.5`) inside the group keeps those inner corners visible so adjacent rows do not fuse. Do not give each row its own card, border, or nested outline. Leading icon sits in the row (no bordered tile). Navigation rows use a trailing chevron; the whole row is the control.
 - **Current / selected:** primary ink fill + semibold only for a **single** current item (sidebar page, tools picker). Multi-select (roles, permission grants, store members) stays quiet paper + a trailing check — do not paint every chosen row primary.
-- **Use:** tools catalog, connection pickers, settings-style choice lists, Administration and Settings pages (user, stores, users, API, plugins, logs, AI), quiet summaries. Match/review tables stay `Table` inside the same rounded ring (no `p-1`). **Barcodes** stay that table. **Store notes** and the product **Notes** tab use the same inset grouped list (row opens a bar sheet). Importance is a quiet trailing status word — semantic color only for High / Critical / Emergency. Product **Sizes** is one inset group per size (label-left fields, Add size as the last group) and grows with the page. Product **Adapters** connection cards: left-click (and right-click) on the card body opens the actions menu at the cursor; mapping / marketplace / sizes rows keep their own actions.
+- **Use:** tools catalog, connection pickers, settings-style choice lists, Administration and Settings pages (user, stores, users, API, plugins, logs, AI), quiet summaries. Match/review **tables** stay flush `Table` (hairline rows, square corners, no card ring) and as tall as their rows — footer under the last row, page scroll, not a viewport-stretched body. **Barcodes** stay that table. **Order mailboxes** are the same flush table plus a bar sheet. Product cells are equal-height: a reserved overlapping photo stack and two truncated lines (name, then the rest / SKU / count) — not a wrapping comma list. **Store notes** and the product **Notes** tab use the same inset grouped list (row opens a bar sheet). Importance is a quiet trailing status word — semantic color only for High / Critical / Emergency. Product **Sizes** is one inset group per size (label-left fields, Add size as the last group) and grows with the page. Product **Adapters** connection cards: left-click (and right-click) on the card body opens the actions menu at the cursor; mapping / marketplace / sizes rows keep their own actions.
 - **Do not** present a catalog of tools or settings as a grid of identical icon + title + CTA cards.
 
 **The Inset Grouped List Rule.** Settings, tools, and pickers use inset grouped lists: mist or paper page, one paper group, one shared hairline ring, equal-height rows. Not a grid of separate cards and not a nested outline on children.
@@ -274,7 +275,7 @@ iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive
 - **Component:** only `Spinner` (`frontend/src/components/ui/spinner`) — Hugeicons `Loading03`, default stroke
 - **Size prop (formal scale):** `xs` 12 · `sm` 14 · `default` 16 · `lg` 20 · `xl` 24 · `2xl` 32
 - **Default:** actions (buttons, menus, forms) use `default` (omit prop)
-- **Region loading:** EmptyState / full pane / products table → `2xl`; overlays / mid-block (dialogs) → `xl`; panel chrome (sidebars, sheets) → `lg`; actions → default
+- **Region loading:** EmptyState / full pane / products table → `2xl`; the loading EmptyState has **no** card ring. Spinner and first paint of the page body fade in at `--duration-overlay` (`.page-region-in`). Overlays / mid-block (dialogs) → `xl`; panel chrome (sidebars, sheets) → `lg`; actions → default
 - **Do not** invent parallel loaders with raw `Loader2` + ad-hoc `size-*` (except dynamic status *icon* slots that need a Lucide-compatible component export)
 
 ## 6. Do's and Don'ts

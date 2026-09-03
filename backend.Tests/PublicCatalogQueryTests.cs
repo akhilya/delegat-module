@@ -58,4 +58,49 @@ public class PublicCatalogQueryTests
             "555",
             PublicCatalogQuery.ExtractProductId("https://www.wildberries.ru/catalog?nm=555"));
     }
+
+    [Fact]
+    public void Parse_OzonProductUrl_IsProductId()
+    {
+        var parsed = PublicCatalogQuery.Parse(
+            "https://www.ozon.ru/product/naushniki-apple-airpods-165204773/?at=x");
+
+        Assert.Equal(PublicCatalogQueryKind.ProductIds, parsed.Kind);
+        Assert.Equal(["165204773"], parsed.ProductIds);
+    }
+
+    [Fact]
+    public void Parse_OzonNumericProductPath_IsProductId()
+    {
+        var parsed = PublicCatalogQuery.Parse("https://ozon.ru/product/165204773/");
+        Assert.Equal(["165204773"], parsed.ProductIds);
+    }
+
+    [Fact]
+    public void Parse_YandexCardUrl_IsProductId()
+    {
+        var parsed = PublicCatalogQuery.Parse(
+            "https://market.yandex.ru/card/apple-iphone-15/12345678?sku=999");
+
+        Assert.Equal(PublicCatalogQueryKind.ProductIds, parsed.Kind);
+        Assert.Equal(["999"], parsed.ProductIds);
+    }
+
+    [Fact]
+    public void Parse_YandexProductSlugUrl_IsProductId()
+    {
+        var parsed = PublicCatalogQuery.Parse(
+            "https://market.yandex.ru/product--apple-iphone-15/12345678");
+
+        Assert.Equal(["12345678"], parsed.ProductIds);
+    }
+
+    [Fact]
+    public void Parse_MixedMarketplaceUrls_AreProductIds()
+    {
+        var parsed = PublicCatalogQuery.Parse(
+            "https://www.ozon.ru/product/slug-1/\nhttps://www.wildberries.ru/catalog/2/detail.aspx");
+
+        Assert.Equal(["1", "2"], parsed.ProductIds);
+    }
 }

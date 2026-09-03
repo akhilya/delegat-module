@@ -400,7 +400,7 @@ See also: `docs/architecture/ai-system.md` - comprehensive reference including a
 
 | Location | Feature |
 |----------|---------|
-| `app.vue` | Floating AI button + `<AiChatPanel :key="appKey" />` (all non-public pages; remounts on store switch) |
+| `app.vue` | FAB + `<AiChatPanel :key="appKey" />` inset companion sheet (all non-public pages; remounts on store switch). No overlay; does not close on outside click. Left-edge capsule handle resizes width. |
 | `fieldMappingPage.vue` | "✦ AI: улучшить маппинг" button → `POST /api/ai/mapping-suggest/{id}` |
 | `connectionPage.vue` | "✦ Объяснить ошибку" inline on test connection failure |
 | `settingsOverviewPage.vue` | "AI Модели" link → `/settings/admin/ai` |

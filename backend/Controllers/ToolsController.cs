@@ -91,6 +91,11 @@ public class ToolsController : ControllerBase
             available = entry.Available,
             unavailableReason = entry.UnavailableReason,
             requiresConnection = entry.RequiresConnection,
+            requiredCapability = entry.RequiredCapability,
+            quickRun = entry.QuickRun,
+            destructive = entry.Destructive,
+            group = entry.Group,
+            stage = entry.Stage,
             paramsSchema = entry.Params.Select(MapParam),
             resultKind = entry.ResultKind,
         };

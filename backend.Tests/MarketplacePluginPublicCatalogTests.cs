@@ -32,6 +32,31 @@ public class MarketplacePluginPublicCatalogTests
         Assert.False(MarketplaceCapabilities.FullProducts.HasFlag(flag));
     }
 
+    [Fact]
+    public void GetPromotions_Flag_IsDistinctFromGetOrders()
+    {
+        Assert.Equal(1 << 22, (int)MarketplaceCapabilities.GetPromotions);
+        Assert.Equal(1 << 23, (int)MarketplaceCapabilities.UpdatePromotions);
+        Assert.False(MarketplaceCapabilities.GetPromotions.HasFlag(MarketplaceCapabilities.GetOrders));
+        Assert.False(MarketplaceCapabilities.FullProducts.HasFlag(MarketplaceCapabilities.GetPromotions));
+    }
+
+    [Fact]
+    public void GetOrderLabels_Flag_IsDistinctFromGetOrders()
+    {
+        Assert.Equal(1 << 24, (int)MarketplaceCapabilities.GetOrderLabels);
+        Assert.False(MarketplaceCapabilities.GetOrderLabels.HasFlag(MarketplaceCapabilities.GetOrders));
+        Assert.False(MarketplaceCapabilities.FullProducts.HasFlag(MarketplaceCapabilities.GetOrderLabels));
+    }
+
+    [Fact]
+    public async Task GetOrderLabel_Default_ThrowsNotSupported()
+    {
+        var plugin = new StubPlugin();
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.GetOrderLabelAsync(new ConnectionContext(), "1"));
+    }
+
     private sealed class StubPlugin : MarketplacePluginBase
     {
         public override string Key => "stub";

@@ -5,7 +5,11 @@ import TableCell from "./TableCell.vue";
 import TableRow from "./TableRow.vue";
 
 const props = defineProps({
-  class: { type: null, required: false },
+  class: {
+    type: [Boolean, null, String, Object, Array],
+    required: false,
+    skipCheck: true,
+  },
   colspan: { type: Number, required: false, default: 1 },
 });
 

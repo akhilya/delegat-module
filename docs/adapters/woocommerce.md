@@ -10,7 +10,7 @@ Bridge source:
 plugins/Delegat.Marketplace.WooCommerce/wordpress-plugin/delegat-bridge
 ```
 
-Requires **bridge ≥ 1.2.1** for archive image transfer (`images.import_archive`) with zip-bomb guards.
+Requires **bridge ≥ 1.3.0** for live prices, orders, and coupons (`GET /prices`, `/orders`, `/promotions`). `removeAll` on coupon products needs **bridge ≥ 1.3.1** (disables the coupon instead of emptying `product_ids`, which would apply store-wide). Archive image transfer (`images.import_archive`) with zip-bomb guards needs **bridge ≥ 1.2.1**.
 
 ## Connection credentials
 
@@ -38,17 +38,19 @@ For diagnosing failed bulk exports, enable **Adapter HTTP logs** in Settings. Ma
 
 Headers: `X-Delegat-Api-Key` and `Authorization: Bearer <key>`.
 
-## Capabilities (MVP)
+## Capabilities
 
 - Categories list / create
 - Category fields
 - Export product (simple + variable) and bulk
-- Export prices / stocks
+- Import / export prices (sale price is the discount)
+- Export stocks
 - Archive image import (`images.import_archive`)
+- Live orders (list, get, status via Woo `update_status`)
+- Coupons as promotions (list, get, add/remove `product_ids`; `removeAll` disables the coupon — bridge **≥ 1.3.1**)
+- No packing labels / barcode stickers (Woo has no marketplace label API; `GetOrderLabels` is off)
 
 Variable products come from the host `_variants` bag (Sizes tab), not from mapping-graph fields. Each local size is keyed by Delegat variant id (`_delegat_variant_id`).
-
-No import from Woo, no orders.
 
 ## Bridge endpoints
 
@@ -62,5 +64,8 @@ No import from Woo, no orders.
 - `POST /stocks/bulk`
 - `POST /images/drain` (legacy URL queue)
 - `POST /images/import-archive` (multipart field `archive`)
+- `GET /prices`
+- `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/status`
+- `GET /promotions`, `GET /promotions/{id}`, `POST /promotions/{id}/products`
 
 Idempotency meta on Woo products: `_delegat_product_id`, `_delegat_variant_id`.

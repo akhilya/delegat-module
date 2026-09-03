@@ -1,5 +1,6 @@
 using Delegat.Infrastructure.Auth;
 using Delegat.Marketplace.SDK;
+using HostCaps = Delegat.Services.Marketplace.MarketplaceCapabilities;
 
 namespace Delegat.Services.Tools;
 
@@ -15,6 +16,23 @@ public static class ToolSources
     public const string Adapter = "adapter";
 }
 
+public static class ToolGroups
+{
+    public const string Catalog = "catalog";
+    public const string Prices = "prices";
+    public const string Promotions = "promotions";
+    public const string Api = "api";
+    public const string Adapters = "adapters";
+}
+
+public static class ToolStages
+{
+    public const string Stable = "stable";
+    public const string Experimental = "experimental";
+    public const string Beta = "beta";
+    public const string Deprecated = "deprecated";
+}
+
 public sealed class PlatformToolDefinition
 {
     public required string Id { get; init; }
@@ -24,6 +42,13 @@ public sealed class PlatformToolDefinition
     public required string DescriptionKey { get; init; }
     public required string Icon { get; init; }
     public required IReadOnlyList<string> Permissions { get; init; }
+    public bool RequiresConnection { get; init; }
+    public HostCaps? RequiredCapability { get; init; }
+    public string? RequiredCapabilityName { get; init; }
+    public bool QuickRun { get; init; }
+    public bool Destructive { get; init; }
+    public string Group { get; init; } = ToolGroups.Catalog;
+    public string Stage { get; init; } = ToolStages.Stable;
 }
 
 public sealed class ToolCatalogEntry
@@ -42,18 +67,25 @@ public sealed class ToolCatalogEntry
     public bool Available { get; init; }
     public string? UnavailableReason { get; init; }
     public bool RequiresConnection { get; init; }
+    public string? RequiredCapability { get; init; }
+    public bool QuickRun { get; init; }
+    public bool Destructive { get; init; }
+    public string? Group { get; init; }
+    public string Stage { get; init; } = ToolStages.Stable;
     public IReadOnlyList<CredentialField> Params { get; init; } = [];
     public string? ResultKind { get; init; }
 }
 
 /// <summary>
-/// First-party tools shipped in this instance (custom Vue pages).
+/// First-party tools shipped in this instance (custom Vue pages and platform jobs).
 /// </summary>
 public static class PlatformTools
 {
     public const string CatalogConnectId = "catalog-connect";
     public const string CatalogScrapeId = "catalog-scrape";
     public const string PublicApiTryId = "public-api-try";
+    public const string ExportAllPricesId = "export-all-prices";
+    public const string ClearPromotionProductsId = "clear-promotion-products";
 
     public static readonly PlatformToolDefinition CatalogConnect = new()
     {
@@ -64,6 +96,7 @@ public static class PlatformTools
         DescriptionKey = "pages.toolsPage.catalogConnectDescription",
         Icon = "Cable",
         Permissions = [Permissions.MarketplaceManage],
+        Group = ToolGroups.Catalog,
     };
 
     public static readonly PlatformToolDefinition CatalogScrape = new()
@@ -75,6 +108,8 @@ public static class PlatformTools
         DescriptionKey = "pages.toolsPage.catalogScrapeDescription",
         Icon = "Search",
         Permissions = [Permissions.MarketplaceManage],
+        Group = ToolGroups.Catalog,
+        Stage = ToolStages.Experimental,
     };
 
     public static readonly PlatformToolDefinition PublicApiTry = new()
@@ -86,10 +121,59 @@ public static class PlatformTools
         DescriptionKey = "pages.toolsPage.publicApiTryDescription",
         Icon = "Play",
         Permissions = [Permissions.ApiAccess],
+        Group = ToolGroups.Api,
+    };
+
+    public static readonly PlatformToolDefinition ExportAllPrices = new()
+    {
+        Id = ExportAllPricesId,
+        Mode = ToolModes.Job,
+        Path = "/tools/export-all-prices",
+        TitleKey = "pages.toolsPage.exportAllPricesTitle",
+        DescriptionKey = "pages.toolsPage.exportAllPricesDescription",
+        Icon = "DollarSign",
+        Permissions = [Permissions.MarketplaceManage],
+        RequiresConnection = true,
+        RequiredCapability = HostCaps.ExportPrices,
+        RequiredCapabilityName = nameof(HostCaps.ExportPrices),
+        QuickRun = true,
+        Group = ToolGroups.Prices,
+        Stage = ToolStages.Experimental,
+    };
+
+    public static readonly PlatformToolDefinition ClearPromotionProducts = new()
+    {
+        Id = ClearPromotionProductsId,
+        Mode = ToolModes.Job,
+        Path = "/tools/clear-promotion-products",
+        TitleKey = "pages.toolsPage.clearPromotionProductsTitle",
+        DescriptionKey = "pages.toolsPage.clearPromotionProductsDescription",
+        Icon = "Tag",
+        Permissions = [Permissions.MarketplaceManage],
+        RequiresConnection = true,
+        RequiredCapability = HostCaps.GetPromotions | HostCaps.UpdatePromotions,
+        RequiredCapabilityName = nameof(HostCaps.UpdatePromotions),
+        QuickRun = true,
+        Destructive = true,
+        Group = ToolGroups.Promotions,
+        Stage = ToolStages.Experimental,
     };
 
     public static IReadOnlyList<PlatformToolDefinition> All { get; } =
-        [CatalogConnect, CatalogScrape, PublicApiTry];
+        [CatalogConnect, CatalogScrape, ExportAllPrices, ClearPromotionProducts, PublicApiTry];
+
+    public static HostCaps? RequiredCapabilityFor(string id)
+    {
+        if (string.Equals(id, ExportAllPricesId, StringComparison.OrdinalIgnoreCase))
+            return HostCaps.ExportPrices;
+        if (string.Equals(id, ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase))
+            return HostCaps.GetPromotions | HostCaps.UpdatePromotions;
+        return null;
+    }
+
+    public static bool IsPlatformJob(string id)
+        => string.Equals(id, ExportAllPricesId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(id, ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -131,7 +215,8 @@ public static class ToolCatalogComposer
         IReadOnlyList<PlatformToolDefinition> platform,
         IReadOnlyList<(string AdapterKey, IReadOnlyList<AdapterToolDescriptor> Tools)> adapters,
         IReadOnlySet<string> userPermissions,
-        IReadOnlySet<string> connectedAdapterKeys)
+        IReadOnlySet<string> connectedAdapterKeys,
+        IReadOnlyDictionary<string, HostCaps>? activeAdapterCapabilities = null)
     {
         var entries = new List<ToolCatalogEntry>();
         var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -143,6 +228,21 @@ public static class ToolCatalogComposer
             var allowed = Permissions.UserMayReadAny(userPermissions, tool.Permissions);
             if (!allowed)
                 continue;
+
+            var requiresConnection = tool.RequiresConnection || tool.RequiredCapability != null;
+            var available = true;
+            string? unavailable = null;
+            if (tool.RequiredCapability is { } cap)
+            {
+                var has = activeAdapterCapabilities != null
+                    && activeAdapterCapabilities.Values.Any(c => c.HasFlag(cap));
+                if (!has)
+                {
+                    available = false;
+                    unavailable = "connection_required";
+                }
+            }
+
             entries.Add(new ToolCatalogEntry
             {
                 Id = tool.Id,
@@ -153,8 +253,15 @@ public static class ToolCatalogComposer
                 DescriptionKey = tool.DescriptionKey,
                 Icon = tool.Icon,
                 Permissions = tool.Permissions,
-                Available = true,
-                RequiresConnection = false,
+                Available = available,
+                UnavailableReason = unavailable,
+                RequiresConnection = requiresConnection,
+                RequiredCapability = tool.RequiredCapabilityName,
+                QuickRun = tool.QuickRun,
+                Destructive = tool.Destructive,
+                Group = tool.Group,
+                Stage = string.IsNullOrWhiteSpace(tool.Stage) ? ToolStages.Stable : tool.Stage,
+                ResultKind = tool.Mode == ToolModes.Job ? "none" : null,
             });
         }
 
@@ -199,6 +306,8 @@ public static class ToolCatalogComposer
                     RequiresConnection = needsConnection,
                     Params = tool.Params ?? [],
                     ResultKind = tool.ResultKind.ToString().ToLowerInvariant(),
+                    Group = ToolGroups.Adapters,
+                    Stage = ToolStages.Stable,
                 });
             }
         }

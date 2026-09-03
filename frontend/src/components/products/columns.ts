@@ -6,6 +6,7 @@ import { h } from "vue";
 
 import { t } from "@/i18n";
 import ProductImageCell from "./ProductImageCell.vue";
+import ProductIdentityCell from "./ProductIdentityCell.vue";
 import BarcodeCell from "./BarcodeCell.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -29,11 +30,17 @@ function createCopyIconEl(size = 12): SVGElement {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   const rect = document.createElementNS(ns, "rect");
-  rect.setAttribute("x", "9"); rect.setAttribute("y", "9");
-  rect.setAttribute("width", "13"); rect.setAttribute("height", "13");
-  rect.setAttribute("rx", "2"); rect.setAttribute("ry", "2");
+  rect.setAttribute("x", "9");
+  rect.setAttribute("y", "9");
+  rect.setAttribute("width", "13");
+  rect.setAttribute("height", "13");
+  rect.setAttribute("rx", "2");
+  rect.setAttribute("ry", "2");
   const path = document.createElementNS(ns, "path");
-  path.setAttribute("d", "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1");
+  path.setAttribute(
+    "d",
+    "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+  );
   svg.appendChild(rect);
   svg.appendChild(path);
   return svg;
@@ -59,46 +66,130 @@ function createCheckIconEl(size = 12): SVGElement {
 
 /** Renders a copy icon (Lucide copy) via h(). */
 function renderCopyIcon(size = 12) {
-  return h("svg", {
-    xmlns: "http://www.w3.org/2000/svg", width: String(size), height: String(size),
-    viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
-    "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round",
-  }, [
-    h("rect", { x: "9", y: "9", width: "13", height: "13", rx: "2", ry: "2" }),
-    h("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }),
-  ]);
+  return h(
+    "svg",
+    {
+      xmlns: "http://www.w3.org/2000/svg",
+      width: String(size),
+      height: String(size),
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+    },
+    [
+      h("rect", {
+        x: "9",
+        y: "9",
+        width: "13",
+        height: "13",
+        rx: "2",
+        ry: "2",
+      }),
+      h("path", {
+        d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+      }),
+    ],
+  );
+}
+
+/** Compact SKU for the identity-cell subtitle (copy still works). */
+function renderCaptionSku(sku: string) {
+  return renderCopyableSku(
+    sku,
+    "!px-0 !py-0 !text-xs text-muted-foreground group-hover:bg-transparent",
+  );
+}
+
+function renderIdentityCell(
+  row: Product,
+  options: { image?: boolean; sku?: boolean; category?: boolean } = {},
+) {
+  const showImage = options.image !== false;
+  const showSku = options.sku === true;
+  const showCategory = options.category === true;
+  const category = showCategory ? row.categoryName?.trim() : "";
+  const caption = !showSku && category ? category : "";
+
+  const slots: Record<string, () => unknown> = {};
+  if (showSku) {
+    slots.caption = () => {
+      if (!category) return renderCaptionSku(row.sku);
+      return h(
+        "span",
+        { class: "inline-flex min-w-0 max-w-full items-center gap-1.5" },
+        [
+          renderCaptionSku(row.sku),
+          h("span", { class: "shrink-0 text-muted-foreground/50" }, "·"),
+          h("span", { class: "min-w-0 truncate" }, category),
+        ],
+      );
+    };
+  }
+
+  return h(
+    ProductIdentityCell,
+    {
+      name: row.name,
+      caption,
+      thumbnailUrl: row.primaryImageThumbnail ?? null,
+      imageUrl: row.primaryImage ?? null,
+      showImage,
+    },
+    Object.keys(slots).length ? slots : undefined,
+  );
 }
 
 /** Renders a clickable SKU badge that copies to clipboard with visual feedback. */
 function renderCopyableSku(sku: string, extraClass = "") {
-  const baseClass = "font-mono text-sm group-hover:bg-muted rounded-md px-2 py-0.5 cursor-pointer transition-colors inline-flex items-center gap-1.5";
-  return h("span", {
-    class: `${baseClass} ${extraClass}`.trim(),
-    onClick: (e: MouseEvent) => {
-      e.stopPropagation();
-      navigator.clipboard.writeText(sku);
-      const el = e.currentTarget as HTMLElement;
-      const iconEl = el.querySelector(".sku-copy-icon") as HTMLElement;
-      if (iconEl) {
-        // Swap to check icon
-        iconEl.replaceChildren(createCheckIconEl());
-        iconEl.classList.remove("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
-        iconEl.classList.add("opacity-100", "text-success-foreground");
-        setTimeout(() => {
-          // Restore copy icon
-          iconEl.replaceChildren(createCopyIconEl());
-          iconEl.classList.add("opacity-0", "group-hover:opacity-50", "text-muted-foreground");
-          iconEl.classList.remove("opacity-100", "text-success-foreground");
-        }, 800);
-      }
+  const baseClass =
+    "font-mono text-sm group-hover:bg-muted rounded-md px-2 py-0.5 cursor-pointer transition-colors inline-flex items-center gap-1.5";
+  return h(
+    "span",
+    {
+      class: `${baseClass} ${extraClass}`.trim(),
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(sku);
+        const el = e.currentTarget as HTMLElement;
+        const iconEl = el.querySelector(".sku-copy-icon") as HTMLElement;
+        if (iconEl) {
+          // Swap to check icon
+          iconEl.replaceChildren(createCheckIconEl());
+          iconEl.classList.remove(
+            "opacity-0",
+            "group-hover:opacity-50",
+            "text-muted-foreground",
+          );
+          iconEl.classList.add("opacity-100", "text-success-foreground");
+          setTimeout(() => {
+            // Restore copy icon
+            iconEl.replaceChildren(createCopyIconEl());
+            iconEl.classList.add(
+              "opacity-0",
+              "group-hover:opacity-50",
+              "text-muted-foreground",
+            );
+            iconEl.classList.remove("opacity-100", "text-success-foreground");
+          }, 800);
+        }
+      },
+      title: t("products.columns.copySkuTooltip"),
     },
-    title: t("products.columns.copySkuTooltip"),
-  }, [
-    sku,
-    h("span", {
-      class: "sku-copy-icon opacity-0 group-hover:opacity-50 transition-opacity shrink-0 text-muted-foreground",
-    }, [renderCopyIcon()]),
-  ]);
+    [
+      sku,
+      h(
+        "span",
+        {
+          class:
+            "sku-copy-icon opacity-0 group-hover:opacity-50 transition-opacity shrink-0 text-muted-foreground",
+        },
+        [renderCopyIcon()],
+      ),
+    ],
+  );
 }
 
 /** Renders a date value as two lines: date on top, time below in muted text. */
@@ -202,7 +293,7 @@ export const columns: ProductColumnDef[] = [
     header: "",
     cell: ({ row }) => {
       return h(ProductImageCell, {
-        imageClass: "size-32",
+        imageClass: "size-11 shrink-0 rounded-lg shadow-sm",
         thumbnailUrl: row.original.primaryImageThumbnail ?? null,
         imageUrl: row.original.primaryImage ?? null,
       });
@@ -279,13 +370,11 @@ export const columns: ProductColumnDef[] = [
     accessorKey: "name",
     header: t("common.name"),
     cell: ({ row }) => {
-      return h("div", { class: "flex flex-col overflow-hidden" }, [
-        h(
-          "p",
-          { class: "break-words font-medium" },
-          row.getValue("name"),
-        ),
-      ]);
+      return h(
+        "p",
+        { class: "truncate text-sm font-medium tracking-tight leading-none" },
+        row.getValue("name"),
+      );
     },
   },
   {
@@ -403,11 +492,7 @@ export function getDefaultVisibilityWithStoreAttributes(
 
 /** Identifier for a combined column preset (merges multiple columns into one). */
 export type CombinedColumnPreset =
-  | "none"
-  | "product"
-  | "product_sku"
-  | "name_sku"
-  | "name_cat_sku";
+  "none" | "product" | "product_sku" | "name_sku" | "name_cat_sku";
 
 /** Configuration for a combined column preset. */
 export interface CombinedColumnConfig {
@@ -461,29 +546,8 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     hideable: false,
     header: t("products.columns.presets.product.label"),
     size: 320,
-    cell: ({ row }) => {
-      return h("div", { class: "flex gap-3 items-start py-1" }, [
-        h(ProductImageCell, {
-          imageClass: "size-14 shrink-0 rounded",
-          thumbnailUrl: row.original.primaryImageThumbnail ?? null,
-          imageUrl: row.original.primaryImage ?? null,
-        }),
-        h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
-          h(
-            "p",
-            { class: "font-medium text-sm leading-tight break-words" },
-            row.original.name,
-          ),
-          row.original.categoryName
-            ? h(
-                "span",
-                { class: "text-xs text-muted-foreground break-words" },
-                row.original.categoryName,
-              )
-            : null,
-        ]),
-      ]);
-    },
+    cell: ({ row }) =>
+      renderIdentityCell(row.original, { image: true, category: true }),
   },
 
   product_sku: {
@@ -492,30 +556,12 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     hideable: false,
     header: t("products.columns.presets.product.label"),
     size: 360,
-    cell: ({ row }) => {
-      return h("div", { class: "flex gap-3 items-start py-1" }, [
-        h(ProductImageCell, {
-          imageClass: "size-14 shrink-0 rounded",
-          thumbnailUrl: row.original.primaryImageThumbnail ?? null,
-          imageUrl: row.original.primaryImage ?? null,
-        }),
-        h("div", { class: "flex flex-col min-w-0 gap-0.5 overflow-hidden" }, [
-          h(
-            "p",
-            { class: "font-medium text-sm leading-tight break-words" },
-            row.original.name,
-          ),
-          renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
-          row.original.categoryName
-            ? h(
-                "span",
-                { class: "text-xs text-muted-foreground break-words" },
-                row.original.categoryName,
-              )
-            : null,
-        ]),
-      ]);
-    },
+    cell: ({ row }) =>
+      renderIdentityCell(row.original, {
+        image: true,
+        sku: true,
+        category: true,
+      }),
   },
 
   name_sku: {
@@ -524,16 +570,8 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     hideable: false,
     header: t("common.name"),
     size: 300,
-    cell: ({ row }) => {
-      return h("div", { class: "flex flex-col gap-0.5 overflow-hidden" }, [
-        h(
-          "p",
-          { class: "font-medium text-sm leading-tight break-words" },
-          row.original.name,
-        ),
-        renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
-      ]);
-    },
+    cell: ({ row }) =>
+      renderIdentityCell(row.original, { image: false, sku: true }),
   },
 
   name_cat_sku: {
@@ -542,27 +580,19 @@ const combinedColumns: Record<CombinedColumnPreset, ProductColumnDef | null> = {
     hideable: false,
     header: t("products.columns.presets.product.label"),
     size: 320,
-    cell: ({ row }) => {
-      return h("div", { class: "flex flex-col gap-0.5 overflow-hidden" }, [
-        h(
-          "p",
-          { class: "font-medium text-sm leading-tight break-words" },
-          row.original.name,
-        ),
-        row.original.categoryName
-          ? h(
-              "span",
-              { class: "text-xs text-muted-foreground break-words" },
-              row.original.categoryName,
-            )
-          : null,
-        renderCopyableSku(row.original.sku, "text-xs text-muted-foreground break-all"),
-      ]);
-    },
+    cell: ({ row }) =>
+      renderIdentityCell(row.original, {
+        image: false,
+        sku: true,
+        category: true,
+      }),
   },
 };
 
-function withPriceCurrency(col: ProductColumnDef, baseCurrency?: string | null): ProductColumnDef {
+function withPriceCurrency(
+  col: ProductColumnDef,
+  baseCurrency?: string | null,
+): ProductColumnDef {
   if (col.id !== "price" || !baseCurrency) return col;
   return {
     ...col,
@@ -586,10 +616,12 @@ export function buildColumnsWithPreset(
   const combinedColumn = combinedColumns[preset];
 
   // Filter out columns that are replaced by the combined column
-  let baseColumns = columns.filter((col) => {
-    if (!presetConfig) return true;
-    return !presetConfig.hidesColumns.includes(col.id);
-  }).map((col) => withPriceCurrency(col, baseCurrency));
+  let baseColumns = columns
+    .filter((col) => {
+      if (!presetConfig) return true;
+      return !presetConfig.hidesColumns.includes(col.id);
+    })
+    .map((col) => withPriceCurrency(col, baseCurrency));
 
   // Insert combined column after 'position' if it exists
   if (combinedColumn) {

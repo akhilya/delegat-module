@@ -1733,10 +1733,13 @@ export default {
       }
     },
 
-    async searchCatalogScrape(ctx, { connectionId, query, pageSize, cursor, onSuccess, onError }) {
+    async searchCatalogScrape(ctx, { adapterKey, connectionId, query, pageSize, cursor, onSuccess, onError }) {
       try {
+        const path = adapterKey
+          ? `/marketplace/catalog-scrape/${encodeURIComponent(adapterKey)}/search`
+          : `/marketplace/connections/${connectionId}/catalog-scrape/search`;
         const response = await http.post(
-          `/marketplace/connections/${connectionId}/catalog-scrape/search`,
+          path,
           { query, pageSize, cursor },
           { cache: false, timeout: 60 * 1000 },
         );
@@ -1746,10 +1749,13 @@ export default {
       }
     },
 
-    async applyCatalogScrape(ctx, { connectionId, publicIds, operationId, onSuccess, onError }) {
+    async applyCatalogScrape(ctx, { adapterKey, connectionId, publicIds, operationId, onSuccess, onError }) {
       try {
+        const path = adapterKey
+          ? `/marketplace/catalog-scrape/${encodeURIComponent(adapterKey)}/apply`
+          : `/marketplace/connections/${connectionId}/catalog-scrape/apply`;
         const response = await http.post(
-          `/marketplace/connections/${connectionId}/catalog-scrape/apply`,
+          path,
           { publicIds, operationId },
           { cache: false, timeout: 5 * 60 * 1000 },
         );

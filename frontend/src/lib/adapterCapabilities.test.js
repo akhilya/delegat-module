@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  adapterCanGetOrderLabels,
+  adapterCanGetOrders,
   adapterCanImportAll,
   adapterCanImportCatalog,
   adapterCanLink,
   adapterCanSearchPublicCatalog,
+  adapterCanUpdateOrderStatus,
+  adapterHasCapability,
   parseCapabilityFlags,
 } from "./adapterCapabilities.js";
 
@@ -129,6 +133,50 @@ describe("adapterCanSearchPublicCatalog", () => {
     assert.equal(
       adapterCanSearchPublicCatalog({ capabilities: { searchPublicCatalog: true } }),
       true,
+    );
+  });
+});
+
+describe("adapterHasCapability", () => {
+  it("reads ExportPrices from FullProducts and boolean objects", () => {
+    assert.equal(
+      adapterHasCapability({ capabilities: "FullProducts" }, "ExportPrices"),
+      true,
+    );
+    assert.equal(
+      adapterHasCapability({ capabilities: { exportPrices: true } }, "ExportPrices"),
+      true,
+    );
+    assert.equal(
+      adapterHasCapability({ capabilities: "GetOrders" }, "UpdatePromotions"),
+      false,
+    );
+  });
+});
+
+describe("adapterCanGetOrders", () => {
+  it("reads GetOrders from enum strings and boolean objects", () => {
+    assert.equal(adapterCanGetOrders({ capabilities: "GetOrders" }), true);
+    assert.equal(
+      adapterCanGetOrders({ capabilities: { getOrders: true } }),
+      true,
+    );
+    assert.equal(adapterCanGetOrders({ capabilities: "FullProducts" }), false);
+    assert.equal(
+      adapterCanUpdateOrderStatus({ capabilities: { updateOrderStatus: true } }),
+      true,
+    );
+    assert.equal(
+      adapterCanUpdateOrderStatus({ capabilities: "GetOrders" }),
+      false,
+    );
+    assert.equal(
+      adapterCanGetOrderLabels({ capabilities: { getOrderLabels: true } }),
+      true,
+    );
+    assert.equal(
+      adapterCanGetOrderLabels({ capabilities: "GetOrders" }),
+      false,
     );
   });
 });

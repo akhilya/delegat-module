@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import OperationItem from "./OperationItem.vue";
 import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
+import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 import { OPERATION_TERMINAL_STATUSES } from "@/lib/operationsControl";
 
 const store = useStore();
@@ -89,8 +90,12 @@ function handleRemove(id) {
   <Sheet :open="panelOpen" @update:open="onOpenChange">
     <SheetContent
       side="right"
+      inset
+      resizable
       :show-close="false"
-      class="w-full gap-0 p-0 sm:max-w-2xl"
+      class="gap-0 p-0"
+      :default-width="SHEET_WIDTH_DEFAULTS.operations"
+      :storage-key="SHEET_WIDTH_STORAGE.operations"
       :aria-label="t('operations.panelTitle')"
     >
       <SheetHeader variant="bar">

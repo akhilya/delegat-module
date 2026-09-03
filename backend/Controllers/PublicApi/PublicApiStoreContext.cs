@@ -70,4 +70,20 @@ public static class PublicApiResults
         pageSize,
         total
     };
+
+    public static object Page<T>(
+        IEnumerable<T> items,
+        int page,
+        int pageSize,
+        int total,
+        string? nextCursor,
+        bool hasMore) => new
+    {
+        items,
+        page,
+        pageSize,
+        total,
+        nextCursor,
+        hasMore
+    };
 }

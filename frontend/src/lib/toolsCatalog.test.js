@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  adapterGroupLabel,
+  groupToolsCatalog,
   isJobTool,
   isPageTool,
+  isQuickRunTool,
+  toolConfirmTitleKey,
   toolDescription,
+  toolGroupId,
   toolHref,
+  toolQuickTooltipKey,
+  toolSectionBlocks,
+  toolStage,
+  toolStageClass,
+  toolStageLabelKey,
   toolTitle,
 } from "./toolsCatalog.js";
 
@@ -74,5 +84,71 @@ describe("toolsCatalog", () => {
   it("falls back to /tools/{id} when path is missing", () => {
     assert.equal(toolHref({ id: "ozon.scraper" }), "/tools/ozon.scraper");
     assert.equal(toolHref(null), "/tools");
+  });
+
+  it("marks platform job tools for catalog quick-run", () => {
+    const entry = { id: "export-all-prices", mode: "job", quickRun: true };
+    assert.equal(isQuickRunTool(entry), true);
+    assert.equal(
+      toolConfirmTitleKey(entry),
+      "pages.toolsPage.exportAllPricesConfirmTitle",
+    );
+    assert.equal(
+      toolQuickTooltipKey(entry),
+      "pages.toolsPage.exportAllPricesQuickTooltip",
+    );
+    assert.equal(isQuickRunTool({ id: "catalog-connect", mode: "page" }), false);
+  });
+
+  it("groups catalog entries into separate lists", () => {
+    const sections = groupToolsCatalog([
+      { id: "public-api-try", group: "api" },
+      { id: "wildberries.ok-tool", source: "adapter", adapterKey: "wildberries" },
+      { id: "catalog-scrape", group: "catalog" },
+      { id: "export-all-prices", group: "prices", mode: "job", quickRun: true },
+      { id: "ozon.scraper", source: "adapter", adapterKey: "ozon" },
+      { id: "catalog-connect", group: "catalog" },
+      { id: "clear-promotion-products", group: "promotions" },
+    ]);
+    assert.deepEqual(
+      sections.map((s) => s.id),
+      ["catalog", "prices", "promotions", "api", "adapter:ozon", "adapter:wildberries"],
+    );
+    assert.deepEqual(
+      sections[0].tools.map((e) => e.id),
+      ["catalog-scrape", "catalog-connect"],
+    );
+    assert.equal(sections[4].adapterKey, "ozon");
+    assert.equal(toolGroupId({ id: "export-all-prices" }), "prices");
+    assert.equal(adapterGroupLabel("yandex-market"), "Yandex Market");
+  });
+
+  it("puts each quick-run job in its own list block", () => {
+    const blocks = toolSectionBlocks([
+      { id: "catalog-connect", mode: "page" },
+      { id: "export-all-prices", mode: "job", quickRun: true },
+      { id: "catalog-scrape", mode: "page" },
+    ]);
+    assert.deepEqual(
+      blocks.map((b) => b.type),
+      ["list", "job", "list"],
+    );
+    assert.equal(blocks[0].tools[0].id, "catalog-connect");
+    assert.equal(blocks[1].entry.id, "export-all-prices");
+    assert.equal(blocks[2].tools[0].id, "catalog-scrape");
+  });
+
+  it("labels experimental tools and treats missing stage as stable", () => {
+    assert.equal(toolStage({ stage: "experimental" }), "experimental");
+    assert.equal(toolStage({ stage: "Experimental" }), "experimental");
+    assert.equal(toolStage({ id: "catalog-connect" }), "stable");
+    assert.equal(toolStage(null), "stable");
+    assert.equal(
+      toolStageLabelKey({ stage: "experimental" }),
+      "pages.toolsPage.stageExperimental",
+    );
+    assert.equal(toolStageClass({ stage: "experimental" }), "text-warning");
+    assert.equal(toolStageLabelKey({ stage: "stable" }), "");
+    assert.equal(toolStageClass({ stage: "deprecated" }), "text-destructive");
   });
 });

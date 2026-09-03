@@ -7,7 +7,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { SIDEBAR_WIDTH_MOBILE, useSidebar } from "./utils";
+import SheetResizeHandle from "@/components/ui/sheet/SheetResizeHandle.vue";
+import {
+  SIDEBAR_INSET_GUTTER,
+  SIDEBAR_WIDTH_MOBILE,
+  useSidebar,
+} from "./utils";
 
 defineOptions({
   inheritAttrs: false,
@@ -20,26 +25,38 @@ const props = defineProps({
   class: { type: null, required: false },
 });
 
-const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+const { isMobile, state, openMobile, setOpenMobile, isResizing, startResize } =
+  useSidebar();
 </script>
 
 <template>
   <div
     v-if="collapsible === 'none'"
     data-slot="sidebar"
-    :class="cn('flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground', props.class)"
+    :class="
+      cn(
+        'flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground',
+        props.class,
+      )
+    "
     v-bind="$attrs"
   >
     <slot />
   </div>
 
-  <Sheet v-else-if="isMobile" :open="openMobile" v-bind="$attrs" @update:open="setOpenMobile">
+  <Sheet
+    v-else-if="isMobile"
+    :open="openMobile"
+    v-bind="$attrs"
+    @update:open="setOpenMobile"
+  >
     <SheetContent
       data-sidebar="sidebar"
-      data-slot="sidebar"
       data-mobile="true"
+      inset
+      :show-close="false"
       :side="side"
-      class="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+      class="bg-sidebar p-0 text-sidebar-foreground"
       :style="{
         '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
       }"
@@ -62,39 +79,55 @@ const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
     :data-collapsible="state === 'collapsed' ? collapsible : ''"
     :data-variant="variant"
     :data-side="side"
+    :data-resizing="isResizing ? '' : undefined"
   >
     <div
-      :class="cn(
-        'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
-        'group-data-[collapsible=offcanvas]:w-0',
-        'group-data-[side=right]:rotate-180',
-        variant === 'floating' || variant === 'inset'
-          ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
-          : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
-      )"
+      :class="
+        cn(
+          'relative bg-transparent',
+          isResizing
+            ? 'will-change-[width]'
+            : 'transition-[width] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]',
+          'w-[calc(var(--sidebar-width)+var(--sidebar-inset-gutter,1rem))]',
+          'group-data-[collapsible=offcanvas]:w-0',
+          'group-data-[side=right]:rotate-180',
+          'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+var(--sidebar-inset-gutter,1rem))]',
+        )
+      "
+      :style="{ '--sidebar-inset-gutter': SIDEBAR_INSET_GUTTER }"
     />
     <div
-      :class="cn(
-        'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
-        side === 'left'
-          ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
-          : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
-        variant === 'floating' || variant === 'inset'
-          ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
-          : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l',
-        props.class,
-      )"
+      data-slot="sidebar-panel"
+      data-inset
+      :class="
+        cn(
+          'fixed z-10 hidden rounded-xl md:flex',
+          'top-2 bottom-2 h-auto w-(--sidebar-width)',
+          isResizing
+            ? 'will-change-[width]'
+            : 'transition-[left,right,width] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]',
+          side === 'left'
+            ? 'left-2 group-data-[collapsible=offcanvas]:left-[calc((var(--sidebar-width)+0.5rem)*-1)]'
+            : 'right-2 group-data-[collapsible=offcanvas]:right-[calc((var(--sidebar-width)+0.5rem)*-1)]',
+          'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
+          props.class,
+        )
+      "
       v-bind="$attrs"
     >
       <div
         data-sidebar="sidebar"
-        :class="cn(
-          'flex h-full w-full flex-col bg-sidebar',
-          'group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm',
-        )"
+        class="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-xl bg-sidebar"
       >
         <slot />
       </div>
+      <SheetResizeHandle
+        v-if="state === 'expanded'"
+        flush
+        :side="side"
+        :resizing="isResizing"
+        @pointerdown="startResize"
+      />
     </div>
   </div>
 </template>

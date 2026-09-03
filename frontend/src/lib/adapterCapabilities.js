@@ -30,6 +30,13 @@ export function parseCapabilityFlags(capabilities) {
     if (capabilities.exportProduct) flags.add("ExportProduct");
     if (capabilities.importProductBatch) flags.add("ImportProductBatch");
     if (capabilities.searchPublicCatalog) flags.add("SearchPublicCatalog");
+    if (capabilities.exportPrices) flags.add("ExportPrices");
+    if (capabilities.importPrices) flags.add("ImportPrices");
+    if (capabilities.getOrders) flags.add("GetOrders");
+    if (capabilities.updateOrderStatus) flags.add("UpdateOrderStatus");
+    if (capabilities.getOrderLabels) flags.add("GetOrderLabels");
+    if (capabilities.getPromotions) flags.add("GetPromotions");
+    if (capabilities.updatePromotions) flags.add("UpdatePromotions");
     expandComposites(flags);
     return flags;
   }
@@ -80,4 +87,25 @@ export function adapterCanLink(adapterOrCaps) {
 /** True when the adapter can search another seller’s public storefront. */
 export function adapterCanSearchPublicCatalog(adapterOrCaps) {
   return parseCapabilityFlags(capsOf(adapterOrCaps)).has("SearchPublicCatalog");
+}
+
+/** True when a named [Flags] capability is present (composites expanded). */
+export function adapterHasCapability(adapterOrCaps, flagName) {
+  if (!flagName) return false;
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has(flagName);
+}
+
+/** True when the adapter can list live marketplace orders. */
+export function adapterCanGetOrders(adapterOrCaps) {
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has("GetOrders");
+}
+
+/** True when the adapter can change live marketplace order status. */
+export function adapterCanUpdateOrderStatus(adapterOrCaps) {
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has("UpdateOrderStatus");
+}
+
+/** True when the adapter can download a packing label / barcode sticker. */
+export function adapterCanGetOrderLabels(adapterOrCaps) {
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has("GetOrderLabels");
 }

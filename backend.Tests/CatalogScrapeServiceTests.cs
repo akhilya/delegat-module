@@ -254,6 +254,97 @@ public class CatalogScrapeServiceTests
         Assert.DoesNotContain("does not indicate success", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Search_Storefront403_IsStorefrontBlockedApiException()
+    {
+        var (svc, _, connection, _, adapter) = Create();
+        adapter.ThrowBlocked = true;
+
+        var ex = await Assert.ThrowsAsync<Delegat.Infrastructure.Middleware.ApiException>(() =>
+            svc.SearchAsync(connection, "nike", 50, null, CancellationToken.None));
+
+        Assert.Equal(403, ex.StatusCode);
+        Assert.Equal("storefront_blocked", ex.Code);
+    }
+
+    [Fact]
+    public async Task Search_ByAdapterKey_WithoutConnection_SearchesPublicCatalog()
+    {
+        var (svc, db, store, _, adapter) = CreateWithoutConnection();
+        adapter.Add(new ExternalProduct("12345678", "SKU", "From URL", Brand: "Acme"));
+
+        var result = await svc.SearchAsync(
+            store.Id,
+            "FAKE",
+            "https://www.wildberries.ru/catalog/12345678/detail.aspx",
+            50,
+            null,
+            CancellationToken.None);
+
+        var hit = Assert.Single(result.Items);
+        Assert.Equal("12345678", hit.ExternalId);
+        Assert.Equal(1, adapter.GetPublicCalls);
+        Assert.Empty(db.marketplaceConnections);
+    }
+
+    [Fact]
+    public async Task Apply_ByAdapterKey_WithoutConnection_CopiesProduct_AndDoesNotQueueCategory()
+    {
+        var (svc, db, store, user, adapter) = CreateWithoutConnection();
+        adapter.Add(new ExternalProduct(
+            "nm-2", "S2", "Cat card", CategoryId: "42", CategoryName: "T-shirts"));
+
+        var result = await svc.ApplyAsync(
+            store.Id, "fake", ["nm-2"], user.Id, CancellationToken.None);
+
+        Assert.Equal(1, result.Imported);
+        Assert.Equal(0, result.CategoryJobs);
+        Assert.Empty(db.pendingCategoryImports);
+        Assert.Empty(db.marketplaceConnections);
+        Assert.Null(Assert.Single(db.products).categoryId);
+        Assert.Empty(db.productMarketplaceLinks);
+    }
+
+    [Fact]
+    public async Task Apply_ByAdapterKey_WithExistingConnection_QueuesCategory()
+    {
+        var (svc, db, connection, user, adapter) = Create();
+        svc.CategoryWaitTimeout = TimeSpan.Zero;
+        adapter.Add(new ExternalProduct(
+            "nm-2", "S2", "Cat card", CategoryId: "42", CategoryName: "T-shirts"));
+
+        var result = await svc.ApplyAsync(
+            connection.storeId, "fake", ["nm-2"], user.Id, CancellationToken.None);
+
+        Assert.Equal(1, result.Imported);
+        Assert.Equal(1, result.CategoryJobs);
+        Assert.Equal("42", Assert.Single(db.pendingCategoryImports).externalCategoryId);
+        Assert.Equal(connection.Id, Assert.Single(db.pendingCategoryImports).connectionId);
+    }
+
+    [Fact]
+    public async Task Search_UnknownAdapter_Throws()
+    {
+        var (svc, _, store, _, _) = CreateWithoutConnection();
+
+        var ex = await Assert.ThrowsAsync<Delegat.Infrastructure.Middleware.ApiException>(() =>
+            svc.SearchAsync(store.Id, "ozon", "nike", 50, null, CancellationToken.None));
+
+        Assert.Equal("unknown_adapter", ex.Code);
+    }
+
+    [Fact]
+    public async Task Search_AdapterWithoutPublicCatalog_Throws()
+    {
+        var woo = new ScrapeAdapter("woocommerce", MarketplaceCapabilities.ImportProduct);
+        var (svc, _, _, store, _, _) = CreateCore(withConnection: false, extraAdapters: [woo]);
+
+        var ex = await Assert.ThrowsAsync<Delegat.Infrastructure.Middleware.ApiException>(() =>
+            svc.SearchAsync(store.Id, "woocommerce", "nike", 50, null, CancellationToken.None));
+
+        Assert.Equal("capability_not_supported", ex.Code);
+    }
+
     private static (
         CatalogScrapeService svc,
         DataContext db,
@@ -261,20 +352,56 @@ public class CatalogScrapeServiceTests
         Delegat.Models.User user,
         ScrapeAdapter adapter) Create(string? existingSku = null)
     {
+        var (svc, db, connection, _, user, adapter) = CreateCore(existingSku, withConnection: true);
+        return (svc, db, connection!, user, adapter);
+    }
+
+    private static (
+        CatalogScrapeService svc,
+        DataContext db,
+        Store store,
+        Delegat.Models.User user,
+        ScrapeAdapter adapter) CreateWithoutConnection(string? existingSku = null)
+    {
+        var (svc, db, _, store, user, adapter) = CreateCore(existingSku, withConnection: false);
+        return (svc, db, store, user, adapter);
+    }
+
+    private static (
+        CatalogScrapeService svc,
+        DataContext db,
+        MarketplaceConnection? connection,
+        Store store,
+        Delegat.Models.User user,
+        ScrapeAdapter adapter) CreateCore(
+            string? existingSku = null,
+            bool withConnection = true,
+            IMarketplaceAdapter[]? extraAdapters = null)
+    {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
         var user = data.AddUser();
         var store = data.AddStore();
         if (existingSku != null)
             data.AddProduct(store.Id, "Existing", existingSku);
-        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        MarketplaceConnection? connection = null;
+        if (withConnection)
+            connection = data.AddConnection(store.Id, adapterKey: "fake");
         db.SaveChanges();
 
-        var adapter = new ScrapeAdapter();
+        var adapter = extraAdapters?.OfType<ScrapeAdapter>().FirstOrDefault(a => a.Key == "fake")
+            ?? new ScrapeAdapter();
+        var adapters = extraAdapters is { Length: > 0 }
+            ? extraAdapters.Prepend(adapter).DistinctBy(a => a.Key).ToArray()
+            : [adapter];
+        IMarketplaceAdapterRegistry registry = adapters.Length == 1
+            ? new SingleAdapterRegistry(adapter)
+            : new MultiAdapterRegistry(adapters);
+
         var quota = new QuotaService(TestDbFactory.CreateUnitOfWork(db), db);
         var productSync = new ProductSyncService(
             db,
-            new SingleAdapterRegistry(adapter),
+            registry,
             mappingService: null!,
             storageService: null!,
             NullLogger<ProductSyncService>.Instance,
@@ -282,12 +409,12 @@ public class CatalogScrapeServiceTests
             quota);
         var svc = new CatalogScrapeService(
             db,
-            new SingleAdapterRegistry(adapter),
+            registry,
             productSync,
             new CategoryImportQueueService(db),
             new NoopOperationLogger(),
             quota);
-        return (svc, db, connection, user, adapter);
+        return (svc, db, connection, store, user, adapter);
     }
 
     private static IDisposable SetEnv(string name, string? value)
@@ -300,6 +427,15 @@ public class CatalogScrapeServiceTests
     private sealed class EnvRestore(string name, string? previous) : IDisposable
     {
         public void Dispose() => Environment.SetEnvironmentVariable(name, previous);
+    }
+
+    private sealed class MultiAdapterRegistry(IReadOnlyList<IMarketplaceAdapter> adapters) : IMarketplaceAdapterRegistry
+    {
+        public IReadOnlyList<IMarketplaceAdapter> GetAll() => adapters;
+        public IMarketplaceAdapter? GetByKey(string key) =>
+            adapters.FirstOrDefault(a => a.Key == key);
+        public bool Exists(string key) => adapters.Any(a => a.Key == key);
+        public IReadOnlyList<MarketplaceInfo> GetAvailableMarketplaces() => [];
     }
 
     private sealed class SingleAdapterRegistry(IMarketplaceAdapter adapter) : IMarketplaceAdapterRegistry
@@ -331,14 +467,23 @@ public class CatalogScrapeServiceTests
         public int GetPublicCalls { get; private set; }
         public int SearchCalls { get; private set; }
         public bool ThrowRateLimit { get; set; }
+        public bool ThrowBlocked { get; set; }
 
         public void Add(ExternalProduct product) => _byId[product.ExternalId] = product;
 
-        public string Key => "fake";
-        public string DisplayName => "Fake";
+        public ScrapeAdapter(
+            string key = "fake",
+            MarketplaceCapabilities capabilities = MarketplaceCapabilities.SearchPublicCatalog)
+        {
+            Key = key;
+            Capabilities = capabilities;
+        }
+
+        public string Key { get; }
+        public string DisplayName => Key;
         public string? Description => null;
         public string? LogoUrl => null;
-        public MarketplaceCapabilities Capabilities => MarketplaceCapabilities.SearchPublicCatalog;
+        public MarketplaceCapabilities Capabilities { get; }
         public string? ProductEditUrlTemplate => null;
 
         public CredentialsSchema GetCredentialsSchema() => new();
@@ -371,6 +516,8 @@ public class CatalogScrapeServiceTests
             SearchCalls++;
             if (ThrowRateLimit)
                 throw new HttpRequestException("429", null, System.Net.HttpStatusCode.TooManyRequests);
+            if (ThrowBlocked)
+                throw new HttpRequestException("403", null, System.Net.HttpStatusCode.Forbidden);
             return Task.FromResult(new PagedResult<ExternalProduct>([], false));
         }
         public Task<ExternalProduct?> GetPublicProductAsync(MarketplaceConnection connection, string publicId, CancellationToken ct = default)

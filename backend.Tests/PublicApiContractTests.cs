@@ -79,6 +79,16 @@ public class PublicApiContractTests
         Assert.Equal(2, doc.RootElement.GetProperty("items").GetArrayLength());
     }
 
+    [Fact]
+    public void Page_WithCursor_IncludesNextCursorAndHasMore()
+    {
+        var page = PublicApiResults.Page(new[] { "a" }, 1, 50, 1, "n2", true);
+        var json = JsonSerializer.Serialize(page);
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal("n2", doc.RootElement.GetProperty("nextCursor").GetString());
+        Assert.True(doc.RootElement.GetProperty("hasMore").GetBoolean());
+    }
+
     [Theory]
     [InlineData(401, "unauthorized")]
     [InlineData(403, "forbidden")]

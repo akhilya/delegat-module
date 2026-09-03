@@ -335,7 +335,7 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-3">
+  <div class="flex flex-col gap-3">
     <LogToolbar class="shrink-0">
       <LogFilterSelect
         :model-value="filters.apiKeyId"

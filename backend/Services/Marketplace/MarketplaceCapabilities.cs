@@ -124,6 +124,21 @@ public enum MarketplaceCapabilities
     /// </summary>
     SearchPublicCatalog = 1 << 21,
 
+    /// <summary>
+    /// List marketplace promotions, calendar campaigns, coupons, or auto-actions.
+    /// </summary>
+    GetPromotions = 1 << 22,
+
+    /// <summary>
+    /// Enroll or remove products in marketplace promotions.
+    /// </summary>
+    UpdatePromotions = 1 << 23,
+
+    /// <summary>
+    /// Download a packing label / barcode sticker for one live order.
+    /// </summary>
+    GetOrderLabels = 1 << 24,
+
     #endregion
 
     /// <summary>

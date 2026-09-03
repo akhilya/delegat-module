@@ -74,6 +74,8 @@ services:
 volumes:
   mysql_data:
     name: ${MYSQL_VOLUME_NAME:-delegat-mysql-data}
+  # Reusing a volume from an older compose project (printo-dashboard_*) prints a
+  # warning and still mounts the existing data. Harmless.
   minio_data:
     name: ${MINIO_VOLUME_NAME:-delegat-minio-data}
 

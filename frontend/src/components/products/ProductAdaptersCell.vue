@@ -692,7 +692,7 @@ export default {
   </div>
   <ButtonGroup
     v-else-if="disabled"
-    class="max-w-full flex-wrap opacity-60"
+    class="max-w-full flex-nowrap overflow-hidden opacity-60"
     @click="stopRow"
   >
     <Button
@@ -709,7 +709,7 @@ export default {
       <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
     </Button>
   </ButtonGroup>
-  <ButtonGroup v-else class="max-w-full flex-wrap" @click="stopRow">
+  <ButtonGroup v-else class="max-w-full flex-nowrap overflow-hidden" @click="stopRow">
     <ProductAdapterConnectionMenu
       v-for="conn in activeConnections"
       :key="conn.id"

@@ -11,6 +11,13 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Public API v1: live marketplace prices, orders, and promotions on a connection (not stored; not a 202 operation)
+- Public API and cabinet JWT: packing labels / barcode stickers for a live order (`GET …/orders/{orderId}/label`). Ozon FBS PDF, Wildberries PNG sticker, Yandex Market PDF. WooCommerce and OpenCart do not support this. Not stored. Cabinet order sheet can download the file when the adapter supports it
+- Cabinet Orders group: live marketplace mailboxes (`/orders/:bucket`) on a selected connection (not stored). Mailbox rows use a fixed-height overlapping product-photo stack (name + count); the order sheet lists each line with its photo
+- Tools: Update all prices and Remove products from promotions (`/tools`, job ids `export-all-prices` / `clear-promotion-products`). The Tools page splits catalog, prices, promotions, Public API, and each adapter into separate lists. A job tool is its own inset group: open the row, or run from the last row (confirm). Confirm on the catalog runs every active connection that supports the job. Wildberries cannot clear calendar promotions. Not on Public API.
+- Tools catalog: each entry has a stage (`stable` / `experimental`). Catalog scrape, Update all prices, and Remove products from promotions are experimental (quiet trailing label). Connect catalogs and Try Public API stay unlabeled.
+- Ozon, Wildberries, Yandex Market, WooCommerce, and OpenCart adapters can read discounted prices, list and update orders, and manage promotions (Woo bridge ≥ 1.3.0, OpenCart bridge ≥ 1.1.0)
+- WooCommerce, OpenCart, and Ozon mapping fields that were English-only (stock, sale price, model, SEO, price-strategy options) now follow the UI language
 - Sign-in: TOTP second factor after password, recovery codes, and passwordless passkeys (Bitwarden / 1Password / Windows Hello)
 - Extra permission `workspace.view`: browse the cabinet without changing data (plugins stay closed). Assign on a Viewer who is a store member for a demo account.
 - Global attributes: the same select/multiselect Custom values toggle, max values, max characters, numeric min/max, and regex as category attributes
@@ -24,6 +31,16 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Products catalog identity cell (photo + name) is a 44px thumb and two truncated lines on a single row height. Adapter chips stay on one line so rows no longer grow. Hover preview, SKU copy, adapters, and column presets are unchanged
+- Order mailbox lists each line item (photo + name + quantity). Row height follows the number of lines; four or more collapse behind Show N more. The order sheet is unchanged
+- Wildberries FBS order mailboxes match the cabinet (Ozon-style) statuses: new assembly tasks (`supplierStatus=new`) are Assembly (`awaiting_pack`), not New; in a supply (`confirm`) is Ready to ship; `complete` is delivering until `sold`. New stays empty on WB (no accept step). The pack list uses `GET /api/v3/orders/new`; other mailboxes load `/api/v3/orders` and statuses from `/api/v3/orders/status` (the list payload has none)
+- Tabs: the active pill slides between triggers (150ms, same curve as menus). Panel content still fades. Reduced motion keeps the instant jump (global token collapse)
+- Desktop sidebar floats inset from the viewport like those sheets. The nav list hides its scrollbar; edge fades only appear while there is overflow past that edge. Nav groups ease open and closed; the current page pill in a group slides like tabs (150ms). The capsule handle sits on the right hairline with no full-height wash (width is kept). Collapse and expand use the 150ms menu curve. The mobile sidebar sheet is inset and not resizable.
+- Page region loaders (`EmptyState loading`) have no bordered box. The spinner and the first paint of the page body fade in (200ms)
+- Order sheet floats inset from the viewport like Operations; buyer, address, and items are inset groups. Action buttons have icons; every status change asks for confirmation first
+- Data tables sit flush on the page (no rounded card, no outer ring), including the products catalog. Tables are as tall as their rows: the footer sits under the last row, and the page scrolls. Horizontal overflow still scrolls inside the table. Row hairlines, sort, sticky headers, column reorder, pagination, and log footers are unchanged
+- Catalog scrape: search and copy from Ozon, Wildberries, or Yandex Market without connecting that adapter. A store connection is used only when one already exists (for category import). WooCommerce and OpenCart stay cabinet-only.
+- Catalog scrape: when Ozon or Yandex Market unofficial HTTP is blocked, the API opens the public page in Chromium (Playwright). It uses full Chrome headless (`CATALOG_SCRAPE_PLAYWRIGHT_CHANNEL=chromium`, not headless-shell), a reused session, and a User-Agent that matches the browser. Local Windows installs Chromium on first miss. Interactive captcha is still `storefront_blocked`. Optional installed Chrome (`channel=chrome`) or a proxy. Wildberries stays on `search.wb.ru`. The API Docker image includes Chromium.
 - Public API `PATCH` product now replaces `attributeValues` / `storeAttributeValues` when those arrays are sent (same as the dashboard)
 - Public API create store-attribute copies `options`, `defaultValue`, `description`, and the same value constraints as category attributes
 - Public API sync starters reject inactive connections (`400 connection_inactive`)
@@ -32,10 +49,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Changing your password (and setting one in Administration → Users) asks you to type the new password twice
 - Mapping auto-arrange uses Dagre, then stacks card fields above price fields so the two sinks no longer overlap
 - Mapping canvas toolbar is button groups: Save + more, a wider preview-product picker that can open the product, and Reset
-- Buttons use the same Control Plane lift: a short white top sheen and a hairline drop shadow (link stays flat; ghost is shadow-only)
+- Buttons use the same Control Plane lift: a short white top sheen and a hairline drop shadow on default, outline, secondary, and destructive (ghost and link stay flat)
 - Product create Properties uses the same Apple Settings sections as product edit (no Cards / heading mix)
 - Dropdowns, context menus, selects, popovers, and tooltips use the same Apple menu material (frosted paper, hairline ring, denser rows) instead of a bordered `shadow-md` panel
 - Overlays and menus share one motion curve (`ease-out-quart`): sheets open in 280ms (was 500ms), dialogs 200ms, menus 150ms; buttons press-scale; tab panels fade. Respects reduced motion
+- Operations and AI inset sheets use a stronger hairline and a drop shadow so the floating panel reads against the page. The AI companion has a visible capsule handle on the left edge to resize width
+- Operations and AI panels sit 8px off the viewport with rounded corners, not flush to the screen edges. AI chat is a resizable inset sheet (not a split pane) and no longer lists every assistant tool; it has no overlay scrim, stays open while using the rest of the app, and does not close on an outside click
 - Menu radio/checkbox rows and select lists use a trailing check (Apple picker), not a leading radio disc
 - Product Notes tab is an inset grouped list like store notes: a row opens the bar sheet, Add note is the last row, and the tab grows with the page instead of stacked writing pads
 - Product Sizes tab is one inset group per size (label-left fields, Add size as the last row) and grows with the page instead of a nested table pane
@@ -51,7 +70,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Form field labels, legends, and descriptions use the same small caption size as Apple group headers (not a larger heading under «Credentials»). Category import section titles (adapter category, where to import, attributes) use that same Settings caption — they no longer mix a browser legend with a group header
 - Category import no longer repeats the page title and intro above the two columns; Import sits at the bottom of the destination column
 - Categories, product groups, global attributes, and their edit pages use Apple inset grouped lists and Settings form sections (attribute / add-product dialogs included)
-- Barcodes use the same Apple table ring and combined footer as products (selection + download in the footer). Store notes are an inset grouped list; the note sheet uses bar chrome and Settings fields (not a writing pad)
+- Barcodes use the same flush table and combined footer as products (selection + download in the footer). Store notes are an inset grouped list; the note sheet uses bar chrome and Settings fields (not a writing pad)
 - Adapters, connection settings / mappings, category import, and mapping preview chrome use the same Apple inset grouped lists and sheet bars as Settings (the mapping graph canvas is unchanged)
 - File manager: content type is a wider column so MIME types are not clipped; tags size to the chips instead of a fixed width
 - Operations list: each job is its own inset group; status is the trailing icon only; Copy / AI / Retry / Delete after expand are compact rows
@@ -63,11 +82,15 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Ozon order lines include the product photo (`imageUrl`) from Seller API product info. The posting list does not send images; unlinked cards still get the marketplace CDN photo. Local linked photos remain the fallback.
+- Ozon order list maps cabinet statuses (`confirmed`, `awaiting_pack`, …) to Ozon posting aliases instead of sending them raw (that was a 500)
+- Plugin host no longer copies or loads adapter test assemblies (`*Tests.dll`). WooCommerce unit-test DLLs were treated as a plugin on local `pnpm dev`
+- `pnpm dev` waits for API health before starting Vite, so the proxy no longer floods `ECONNREFUSED` while `dotnet watch` is still building
 - Database dump (`GET /settings/database/dump`) is limited to the instance owner (`settings.dump`). A demo `workspace.view` user can no longer download it.
 - Collapsed product-group rail: hovering a variant photo opens the preview beside the tile, not in the top-left of the screen
 - Right-clicking another product closes the previous row menu (only one context menu at a time)
 - Public API `GET` category now returns a real `productsCount` (detail always showed 0 because the product collection was not loaded)
-- Public API request logs keep a full rounded hairline frame, including the “turn on Public API logs” hint (the fill-height panel had clipped outer rings)
+- Public API request logs fill the page height without clipping the footer or the “turn on Public API logs” hint
 - Turning on “Products have sizes” on a category is kept after save (the flag was stored, then dropped from the category GET)
 - Mapping preview-product picker sits on an opaque card so the canvas grid does not show through the field
 - Product Adapters tab shows the adapter icon and name on each connection card again
@@ -107,7 +130,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - A store may have several connections of the same adapter, but not two that point at the same marketplace shop (same Client ID, store URL, campaign, or API key)
 - Tools catalog (`GET /api/tools`): platform page tools plus job tools from loaded adapters (`{adapterKey}.{id}`); adapter jobs run with `POST /api/tools/{id}/run` (Operations type `tool`)
 - Catalog Connect tool (`/tools/catalog-connect`): import one marketplace catalog as the local source of truth, then bulk-link existing cards on other marketplaces by barcode or SKU
-- Catalog scrape tool (`/tools/catalog-scrape`): search a marketplace public storefront (Wildberries in v1), tick cards, and copy them into the local catalog without linking; a later export creates new listings instead of updating someone else’s card
+- Catalog scrape tool (`/tools/catalog-scrape`): search a public storefront on Ozon, Wildberries, or Yandex Market (HTTP JSON first, HTML JSON-LD if the site returned a page), tick cards, and copy them into the local catalog without linking; a later export creates new listings instead of updating someone else’s card. Antibot/captcha is `storefront_blocked`, not a 500. WooCommerce and OpenCart stay cabinet import only
 - Category import copies marketplace field limits (max length, min/max number, max selected values, regex) onto local category attributes; the product form enforces them
 - Category import does not create attributes for marketplace barcode / EAN / GTIN fields; the mapping graph binds them to the product barcode
 - When several adapter fields auto-bind to the same product field (e.g. `name` and `product_name`), the mapping keeps one primary binding and merges the rest as “same as another adapter field”
@@ -129,7 +152,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Product SKU change dialog matches other form dialogs (Field stack, no extra padding); current SKU can be copied
 - Administration → Users: edit-user dialog uses the same bar chrome, Field stack, and inset grouped lists as other Apple-style form dialogs; roles and extra permissions use trailing checks, not a primary fill on every selected row
 - Administration (Overview) uses inset grouped lists: plan usage is a Settings-style list, not progress cards
-- Settings pages (User, Stores, Users, API, Plugins, AI) use the same Apple inset grouped lists, Field stacks, and table rings as Administration
+- Settings pages (User, Stores, Users, API, Plugins, AI) use the same Apple inset grouped lists, Field stacks, and flush tables as Administration
 - App sidebar uses inset grouped lists (space between sections; parent and child rows share one outline and the same row height); the current page is a primary ink pill
 - Tools catalog, Catalog Connect, and adapter job tools use the same inset grouped lists (not a grid of cards); selected connection is a primary ink pill
 - Multi-select shows selected values as pills when they fit on one line, otherwise the count summary

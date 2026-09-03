@@ -128,7 +128,7 @@ export default {
   <AppPageChrome :breadcrumb-items="breadcrumbs">
     <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
 
-    <div v-else class="flex w-full max-w-3xl flex-col">
+    <div v-else class="page-region-in flex w-full max-w-3xl flex-col">
       <p class="mb-6 text-sm text-muted-foreground">
         {{ $t("pages.publicApiTry.modelBody") }}
       </p>

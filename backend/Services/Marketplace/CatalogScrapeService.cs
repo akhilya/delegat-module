@@ -80,7 +80,7 @@ public sealed class CatalogScrapeService
         string? cursor,
         CancellationToken ct)
     {
-        var adapter = RequireAdapter(connection);
+        var adapter = RequireAdapter(connection.adapterKey);
         pageSize = Math.Clamp(pageSize <= 0 ? DefaultPageSize : pageSize, 1, DefaultPageSize);
         var parsed = PublicCatalogQuery.Parse(query);
 
@@ -122,7 +122,7 @@ public sealed class CatalogScrapeService
         CancellationToken ct,
         string? operationId = null)
     {
-        var adapter = RequireAdapter(connection);
+        var adapter = RequireAdapter(connection.adapterKey);
         var ids = publicIds
             .Select(id => (id ?? "").Trim())
             .Where(id => id.Length > 0)
@@ -141,7 +141,7 @@ public sealed class CatalogScrapeService
                 userId,
                 "catalog-scrape",
                 "Copy public catalog cards",
-                connectionId: connection.Id,
+                connectionId: connection.Id > 0 ? connection.Id : null,
                 connectionName: connection.name,
                 batchId: operationId,
                 batchType: "catalog-scrape",
@@ -218,7 +218,7 @@ public sealed class CatalogScrapeService
 
                 int? targetCategoryId = null;
                 var extCat = (external.CategoryId ?? "").Trim();
-                if (extCat.Length > 0)
+                if (connection.Id > 0 && extCat.Length > 0)
                 {
                     targetCategoryId = await LookupLocalCategoryIdAsync(connection.Id, extCat, ct);
 
@@ -315,10 +315,60 @@ public sealed class CatalogScrapeService
         };
     }
 
-    private IMarketplaceAdapter RequireAdapter(MarketplaceConnection connection)
+    public async Task<CatalogScrapeSearchResult> SearchAsync(
+        int storeId,
+        string adapterKey,
+        string? query,
+        int pageSize,
+        string? cursor,
+        CancellationToken ct)
     {
-        var adapter = _adapterRegistry.GetByKey(connection.adapterKey)
-            ?? throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+        var handle = await ResolveHandleAsync(storeId, adapterKey, ct);
+        return await SearchAsync(handle, query, pageSize, cursor, ct);
+    }
+
+    public async Task<CatalogScrapeApplyResult> ApplyAsync(
+        int storeId,
+        string adapterKey,
+        IReadOnlyList<string> publicIds,
+        int userId,
+        CancellationToken ct,
+        string? operationId = null)
+    {
+        var handle = await ResolveHandleAsync(storeId, adapterKey, ct);
+        return await ApplyAsync(handle, publicIds, userId, ct, operationId);
+    }
+
+    private async Task<MarketplaceConnection> ResolveHandleAsync(
+        int storeId, string adapterKey, CancellationToken ct)
+    {
+        var key = NormalizeAdapterKey(adapterKey);
+        RequireAdapter(key);
+        var existing = await _context.marketplaceConnections
+            .AsNoTracking()
+            .Where(c => c.storeId == storeId && c.adapterKey == key)
+            .OrderByDescending(c => c.isActive)
+            .ThenBy(c => c.Id)
+            .FirstOrDefaultAsync(ct);
+        if (existing != null)
+            return existing;
+
+        var adapter = _adapterRegistry.GetByKey(key)!;
+        return new MarketplaceConnection
+        {
+            Id = 0,
+            storeId = storeId,
+            adapterKey = key,
+            name = adapter.DisplayName,
+            isActive = true,
+        };
+    }
+
+    private IMarketplaceAdapter RequireAdapter(string adapterKey)
+    {
+        var key = NormalizeAdapterKey(adapterKey);
+        var adapter = _adapterRegistry.GetByKey(key)
+            ?? throw ApiException.BadRequest($"Unknown adapter: {key}", code: "unknown_adapter");
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.SearchPublicCatalog))
         {
             throw ApiException.BadRequest(
@@ -327,6 +377,21 @@ public sealed class CatalogScrapeService
         }
 
         return adapter;
+    }
+
+    internal static string NormalizeAdapterKey(string? raw)
+    {
+        var key = (raw ?? "").Trim().ToLowerInvariant();
+        if (key.Length is < 1 or > MarketplaceConnection.ADAPTER_KEY_MAX_LENGTH)
+            throw ApiException.BadRequest("Adapter is required", code: "required_fields_missing");
+        foreach (var ch in key)
+        {
+            if (ch is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-')
+                continue;
+            throw ApiException.BadRequest("Unknown adapter", code: "unknown_adapter");
+        }
+
+        return key;
     }
 
     private Task<int?> LookupLocalCategoryIdAsync(
@@ -377,9 +442,9 @@ public sealed class CatalogScrapeService
 
     private static CatalogScrapeHitDto MapHit(ExternalProduct product)
     {
-        string? seller = null;
-        if (product.RawData != null && product.RawData.TryGetValue("supplier", out var raw) && raw != null)
-            seller = raw.ToString();
+        var seller = RawString(product.RawData, "supplier")
+            ?? RawString(product.RawData, "seller")
+            ?? RawString(product.RawData, "shop");
 
         return new CatalogScrapeHitDto
         {
@@ -391,5 +456,13 @@ public sealed class CatalogScrapeService
             ThumbnailUrl = product.ImageUrls?.FirstOrDefault(),
             CategoryName = product.CategoryName,
         };
+    }
+
+    private static string? RawString(Dictionary<string, object>? raw, string key)
+    {
+        if (raw == null || !raw.TryGetValue(key, out var value) || value == null)
+            return null;
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 }

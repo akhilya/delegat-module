@@ -1310,7 +1310,7 @@ export default {
           }}
         </p>
 
-        <div class="mb-4 overflow-hidden rounded-xl border border-border/70 bg-card">
+        <div class="mb-4">
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">

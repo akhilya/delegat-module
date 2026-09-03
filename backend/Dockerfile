@@ -37,7 +37,7 @@ RUN find backend sdk plugins -depth -type d \( -name bin -o -name obj -o -name .
 ARG APP_VERSION=
 RUN APP_VER="${APP_VERSION:-$(tr -d '[:space:]' < VERSION)}" \
  && dotnet publish backend/Delegat.csproj -a $TARGETARCH -c Release -o /app \
-      /p:InformationalVersion=$APP_VER /p:BuildPlugins=false
+      /p:InformationalVersion=$APP_VER /p:BuildPlugins=false /p:PlaywrightPlatform=linux
 
 # Build plugins and copy DLLs to app (plugins/Directory.Build.props points to top-level sdk)
 RUN dotnet publish plugins/Delegat.Marketplace.Ozon/Delegat.Marketplace.Ozon.csproj -a $TARGETARCH -c Release -o /plugins-out/ozon
@@ -52,11 +52,12 @@ RUN mkdir -p /app/plugins \
  && cp /plugins-out/yandex/Delegat.Marketplace.YandexMarket.dll /app/plugins/ \
  && cp /plugins-out/woocommerce/Delegat.Marketplace.WooCommerce.dll /app/plugins/
 
-# Stage 2: Final image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# Stage 2: Final image (Chromium for catalog scrape when unofficial HTTP is blocked)
+FROM mcr.microsoft.com/playwright/dotnet:v1.61.0-noble
 RUN apt-get update && apt-get install -y --no-install-recommends curl default-mysql-client && rm -rf /var/lib/apt/lists/*
 EXPOSE 5000
 WORKDIR /app
-COPY --from=build /app .
-USER $APP_UID
+COPY --from=build --chown=1000:1000 /app .
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+USER 1000
 ENTRYPOINT ["dotnet", "Delegat.dll"]

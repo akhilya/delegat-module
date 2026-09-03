@@ -67,6 +67,7 @@ import {
   Image01Icon as Image01IconData,
   ImageDownloadIcon as ImageDownloadIconData,
   ImageNotFound01Icon as ImageNotFound01IconData,
+  InboxIcon as InboxIconData,
   Key01Icon as Key01IconData,
   LanguageCircleIcon as LanguageCircleIconData,
   Layers01Icon as Layers01IconData,
@@ -75,6 +76,7 @@ import {
   Link01Icon as Link01IconData,
   Link02Icon as Link02IconData,
   Loading03Icon as Loading03IconData,
+  Location01Icon as Location01IconData,
   Logout01Icon as Logout01IconData,
   MagicWand01Icon as MagicWand01IconData,
   Menu01Icon as Menu01IconData,
@@ -121,6 +123,7 @@ import {
   ThumbsUpIcon as ThumbsUpIconData,
   Tick02Icon as Tick02IconData,
   ToggleOffIcon as ToggleOffIconData,
+  TruckIcon as TruckIconData,
   UnavailableIcon as UnavailableIconData,
   UndoIcon as UndoIconData,
   UnfoldMoreIcon as UnfoldMoreIconData,
@@ -194,6 +197,7 @@ export const ChevronsUpDown = createHugeIcon(UnfoldMoreIconData, "ChevronsUpDown
 export const ChevronUp = createHugeIcon(ArrowUp01IconData, "ChevronUp");
 export const Circle = createHugeIcon(CircleIconData, "Circle");
 export const CircleHelp = createHugeIcon(HelpCircleIconData, "CircleHelp");
+export const ClipboardList = createHugeIcon(CheckListIconData, "ClipboardList");
 export const Clock = createHugeIcon(Clock01IconData, "Clock");
 export const Clock3 = createHugeIcon(Clock03IconData, "Clock3");
 export const Coins = createHugeIcon(Coins01IconData, "Coins");
@@ -232,6 +236,7 @@ export const House = createHugeIcon(Home01IconData, "House");
 export const Image = createHugeIcon(Image01IconData, "Image");
 export const ImageDown = createHugeIcon(ImageDownloadIconData, "ImageDown");
 export const ImageOff = createHugeIcon(ImageNotFound01IconData, "ImageOff");
+export const Inbox = createHugeIcon(InboxIconData, "Inbox");
 export const KeyRound = createHugeIcon(Key01IconData, "KeyRound");
 export const Languages = createHugeIcon(LanguageCircleIconData, "Languages");
 export const Layers = createHugeIcon(Layers01IconData, "Layers");
@@ -243,6 +248,7 @@ export const ListChecks = createHugeIcon(CheckListIconData, "ListChecks");
 export const Loader = createHugeIcon(Loading03IconData, "Loader", { strokeWidth: null });
 export const Loader2 = createHugeIcon(Loading03IconData, "Loader2", { strokeWidth: null });
 export const LogOut = createHugeIcon(Logout01IconData, "LogOut");
+export const MapPin = createHugeIcon(Location01IconData, "MapPin");
 export const MessageSquare = createHugeIcon(Message01IconData, "MessageSquare");
 export const Minus = createHugeIcon(MinusSignIconData, "Minus");
 export const Monitor = createHugeIcon(ComputerIconData, "Monitor");
@@ -287,6 +293,7 @@ export const ThumbsDown = createHugeIcon(ThumbsDownIconData, "ThumbsDown");
 export const ThumbsUp = createHugeIcon(ThumbsUpIconData, "ThumbsUp");
 export const ToggleLeft = createHugeIcon(ToggleOffIconData, "ToggleLeft");
 export const Trash2 = createHugeIcon(Delete02IconData, "Trash2");
+export const Truck = createHugeIcon(TruckIconData, "Truck");
 export const Type = createHugeIcon(TextIconData, "Type");
 export const Undo2 = createHugeIcon(UndoIconData, "Undo2");
 export const Unlink = createHugeIcon(Unlink01IconData, "Unlink");

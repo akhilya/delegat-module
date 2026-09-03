@@ -2,7 +2,11 @@
 import { cn } from "@/lib/utils";
 
 const props = defineProps({
-  class: { type: null, required: false },
+  class: {
+    type: [Boolean, null, String, Object, Array],
+    required: false,
+    skipCheck: true,
+  },
 });
 </script>
 
@@ -11,7 +15,7 @@ const props = defineProps({
     data-slot="table-row"
     :class="
       cn(
-        'group hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors',
+        'group border-b border-border/80 transition-colors hover:bg-muted/40 data-[state=selected]:bg-muted/70',
         props.class,
       )
     "

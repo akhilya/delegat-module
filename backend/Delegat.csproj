@@ -60,6 +60,9 @@
 
     <!-- Development tools -->
     <PackageReference Include="Dumpify" Version="0.6.6" />
+
+    <!-- Catalog scrape Chromium fallback when unofficial HTTP is blocked -->
+    <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -89,15 +92,18 @@
       <PluginProjects Include="..\plugins\Delegat.Marketplace.WooCommerce\Delegat.Marketplace.WooCommerce.csproj" />
     </ItemGroup>
     <!-- SDK is already built via ProjectReference. Nested BuildProjectReferences=true races on deps.json. -->
-    <MSBuild Projects="@(PluginProjects)"
-             Targets="Build"
-             BuildInParallel="false"
-             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=false" />
+    <MSBuild Projects="@(PluginProjects)" Targets="Build" BuildInParallel="false" Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=false" />
+    <!-- Copy only the adapter projects we just built — not *Tests.dll under plugins/**/tests. -->
     <ItemGroup>
-      <PluginDlls Include="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.*.dll"
-                  Exclude="..\plugins\**\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.SDK.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.Ozon\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.Ozon.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.Wildberries\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.Wildberries.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.OpenCart\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.OpenCart.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.YandexMarket\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.YandexMarket.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.WooCommerce\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.WooCommerce.dll" />
+      <StalePluginDlls Include="$(OutputPath)plugins\*.Tests.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />
+    <Delete Files="@(StalePluginDlls)" TreatErrorsAsWarnings="true" />
   </Target>
 
 </Project>

@@ -14,6 +14,7 @@ const PAGE_PRODUCT_GROUPS = "/product-groups";
 const PAGE_CATEGORIES = "/categories";
 const PAGE_BARCODES = "/barcodes";
 const PAGE_NOTES = "/notes";
+const PAGE_ORDERS = "/orders";
 const PAGE_STORE_ATTRIBUTES = "/store-attributes";
 const PAGE_TOOLS = "/tools";
 const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
@@ -46,6 +47,7 @@ const ROUTE_PERMISSIONS = {
   [PAGE_CATEGORIES]: [PERMS.CatalogManage],
   [PAGE_BARCODES]: [PERMS.CatalogManage],
   [PAGE_NOTES]: [PERMS.CatalogManage],
+  [PAGE_ORDERS]: [PERMS.MarketplaceManage],
   [PAGE_STORE_ATTRIBUTES]: [PERMS.CatalogManage],
   [PAGE_TOOLS]: [
     PERMS.OperationsManage,
@@ -96,6 +98,10 @@ export function getRequiredPermissionsForPath(path) {
     (p.endsWith("/edit") || p.includes("/create"))
   ) {
     return [PERMS.CatalogManage];
+  }
+  if (p.startsWith(`${PAGE_NOTES}/`)) return [PERMS.CatalogManage];
+  if (p === PAGE_ORDERS || p.startsWith(`${PAGE_ORDERS}/`)) {
+    return [PERMS.MarketplaceManage];
   }
   if (p.startsWith(`${PAGE_TOOLS}/`)) {
     return [PERMS.MarketplaceManage];
