@@ -1,6 +1,7 @@
 using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Models.Marketplace;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Delegat.Services.Marketplace;
 
@@ -15,25 +16,38 @@ public sealed class OrderSyncResult
 public sealed class MarketplaceOrderSyncService
 {
     public const string InFlightIdsStatus = "__inflight_ids";
+    public const string PageCapReason = "page_cap";
+    public const int MaxPagesPerStatusPerRun = 20;
+    public const int MaxInFlightIdRefreshesPerRun = 200;
 
     private static readonly TimeSpan PageCooldown = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackgroundCooldown = TimeSpan.FromMinutes(15);
+
+    private static readonly string[] TerminalStatuses =
+    [
+        MarketplaceOrderStatuses.Delivered,
+        MarketplaceOrderStatuses.Cancelled,
+        MarketplaceOrderStatuses.Returned
+    ];
 
     private readonly DataContext _db;
     private readonly IMarketplaceAdapterRegistry _adapters;
     private readonly MarketplaceOrderSnapshotService _snapshots;
     private readonly TimeProvider _time;
+    private readonly ILogger<MarketplaceOrderSyncService> _logger;
 
     public MarketplaceOrderSyncService(
         DataContext db,
         IMarketplaceAdapterRegistry adapters,
         MarketplaceOrderSnapshotService snapshots,
-        TimeProvider time)
+        TimeProvider time,
+        ILogger<MarketplaceOrderSyncService> logger)
     {
         _db = db;
         _adapters = adapters;
         _snapshots = snapshots;
         _time = time;
+        _logger = logger;
     }
 
     public async Task<OrderSyncResult> SyncConnectionStatusesAsync(
@@ -55,34 +69,37 @@ public sealed class MarketplaceOrderSyncService
         var upserted = 0;
         var pulledCount = 0;
         var skippedCount = 0;
-        string? error = null;
+        string? resultReason = null;
+        var upsertedIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var status in statuses)
         {
-            var one = await PullStatusAsync(connection, adapter, status, reason, ct);
+            var one = await PullStatusAsync(connection, adapter, status, reason, upsertedIds, ct);
             upserted += one.Upserted;
             if (one.Pulled)
                 pulledCount++;
             if (one.Skipped)
                 skippedCount++;
-            if (!one.Pulled && !one.Skipped && one.Reason != null)
-                error ??= one.Reason;
+            resultReason = CombineReason(resultReason, one);
         }
 
         if (IsBackground(reason))
         {
-            var inflight = await RefreshInFlightByIdAsync(connection, adapter, ct);
+            var inflight = await RefreshInFlightByIdAsync(connection, adapter, upsertedIds, ct);
             upserted += inflight.Upserted;
+            resultReason = CombineReason(resultReason, inflight);
         }
 
         var pulled = pulledCount > 0;
-        var allSkipped = pulledCount == 0 && error == null && (skippedCount > 0 || statuses.Count == 0);
+        var allSkipped = pulledCount == 0 && resultReason != PageCapReason
+            && (skippedCount > 0 || statuses.Count == 0)
+            && (resultReason == null || resultReason == "cooldown");
         return new OrderSyncResult
         {
             Pulled = pulled,
-            Skipped = !pulled && error == null && allSkipped,
+            Skipped = !pulled && allSkipped,
             Upserted = upserted,
-            Reason = error
+            Reason = resultReason
         };
     }
 
@@ -101,7 +118,7 @@ public sealed class MarketplaceOrderSyncService
         var pulledCount = 0;
         var skippedCount = 0;
         var attempted = 0;
-        string? error = null;
+        string? resultReason = null;
 
         foreach (var connection in connections)
         {
@@ -119,17 +136,17 @@ public sealed class MarketplaceOrderSyncService
                 pulledCount++;
             if (one.Skipped)
                 skippedCount++;
-            if (!one.Pulled && !one.Skipped && one.Reason != null)
-                error ??= one.Reason;
+            resultReason = CombineReason(resultReason, one);
         }
 
         var pulled = pulledCount > 0;
         return new OrderSyncResult
         {
             Pulled = pulled,
-            Skipped = !pulled && error == null && (skippedCount > 0 || attempted == 0),
+            Skipped = !pulled && resultReason != PageCapReason && (skippedCount > 0 || attempted == 0)
+                && (resultReason == null || resultReason == "cooldown"),
             Upserted = upserted,
-            Reason = error
+            Reason = resultReason
         };
     }
 
@@ -138,6 +155,7 @@ public sealed class MarketplaceOrderSyncService
         IMarketplaceAdapter adapter,
         string status,
         string reason,
+        HashSet<string> upsertedIds,
         CancellationToken ct)
     {
         var state = await GetOrCreateStateAsync(connection.Id, status, ct);
@@ -154,6 +172,7 @@ public sealed class MarketplaceOrderSyncService
             string? cursor = null;
             var pagesFetched = 0;
             var terminal = MarketplaceOrderBuckets.IsTerminal(status);
+            var hitPageCap = false;
 
             while (true)
             {
@@ -171,10 +190,18 @@ public sealed class MarketplaceOrderSyncService
                 {
                     await _snapshots.UpsertAsync(connection.storeId, connection.Id, order, ct);
                     upserted++;
+                    if (!string.IsNullOrWhiteSpace(order.ExternalId))
+                        upsertedIds.Add(order.ExternalId);
                 }
 
-                if (terminal || !batch.HasMore || pagesFetched >= 20)
+                if (terminal || !batch.HasMore)
                     break;
+
+                if (pagesFetched >= MaxPagesPerStatusPerRun)
+                {
+                    hitPageCap = true;
+                    break;
+                }
 
                 if (!string.IsNullOrEmpty(batch.NextCursor))
                     cursor = batch.NextCursor;
@@ -189,12 +216,32 @@ public sealed class MarketplaceOrderSyncService
             state.lastError = null;
             await _db.SaveChangesAsync(ct);
 
+            if (hitPageCap)
+            {
+                _logger.LogWarning(
+                    "Marketplace order pull hit page cap ({PageCap}) for connection {ConnectionId} status {Status}",
+                    MaxPagesPerStatusPerRun,
+                    connection.Id,
+                    status);
+                return new OrderSyncResult { Pulled = true, Upserted = upserted, Reason = PageCapReason };
+            }
+
             return new OrderSyncResult { Pulled = true, Upserted = upserted };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Marketplace order pull failed for connection {ConnectionId} status {Status}",
+                connection.Id,
+                status);
             state.lastError = Truncate(ex.Message);
-            await _db.SaveChangesAsync(ct);
+            state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
+            await _db.SaveChangesAsync(CancellationToken.None);
             return new OrderSyncResult { Pulled = false, Upserted = upserted, Reason = state.lastError };
         }
     }
@@ -202,6 +249,7 @@ public sealed class MarketplaceOrderSyncService
     private async Task<OrderSyncResult> RefreshInFlightByIdAsync(
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
+        HashSet<string> upsertedIds,
         CancellationToken ct)
     {
         var state = await GetOrCreateStateAsync(connection.Id, InFlightIdsStatus, ct);
@@ -211,21 +259,26 @@ public sealed class MarketplaceOrderSyncService
         var upserted = 0;
         try
         {
-            var rows = await _db.marketplaceOrders
-                .Where(o => o.connectionId == connection.Id)
+            var ids = await _db.marketplaceOrders
+                .AsNoTracking()
+                .Where(o => o.connectionId == connection.Id && !TerminalStatuses.Contains(o.status))
+                .Select(o => o.marketplaceOrderId)
+                .Take(MaxInFlightIdRefreshesPerRun)
                 .ToListAsync(ct);
 
-            foreach (var row in rows)
+            foreach (var id in ids)
             {
-                if (MarketplaceOrderBuckets.IsTerminal(row.status))
+                if (upsertedIds.Contains(id))
                     continue;
 
-                var live = await adapter.GetOrderAsync(connection, row.marketplaceOrderId, ct);
+                var live = await adapter.GetOrderAsync(connection, id, ct);
                 if (live == null)
                     continue;
 
                 await _snapshots.UpsertAsync(connection.storeId, connection.Id, live, ct);
                 upserted++;
+                if (!string.IsNullOrWhiteSpace(id))
+                    upsertedIds.Add(id);
             }
 
             state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
@@ -233,10 +286,19 @@ public sealed class MarketplaceOrderSyncService
             await _db.SaveChangesAsync(ct);
             return new OrderSyncResult { Pulled = true, Upserted = upserted };
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Marketplace in-flight order refresh failed for connection {ConnectionId}",
+                connection.Id);
             state.lastError = Truncate(ex.Message);
-            await _db.SaveChangesAsync(ct);
+            state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
+            await _db.SaveChangesAsync(CancellationToken.None);
             return new OrderSyncResult { Pulled = false, Upserted = upserted, Reason = state.lastError };
         }
     }
@@ -276,6 +338,15 @@ public sealed class MarketplaceOrderSyncService
 
     private static bool IsBackground(string reason) =>
         string.Equals(reason, "background", StringComparison.OrdinalIgnoreCase);
+
+    private static string? CombineReason(string? current, OrderSyncResult one)
+    {
+        if (one.Reason == PageCapReason)
+            return current ?? PageCapReason;
+        if (!one.Pulled && !one.Skipped && one.Reason != null)
+            return current ?? one.Reason;
+        return current;
+    }
 
     private static string Truncate(string value, int max = 2000) =>
         value.Length <= max ? value : value[..max];

@@ -6,6 +6,7 @@ using Delegat.Services.Marketplace;
 using Delegat.Tests.Fakes;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
 
@@ -171,6 +172,14 @@ public class MarketplaceOrderSyncServiceTests
         var state = await db.marketplaceOrderSyncStates.SingleAsync(s =>
             s.connectionId == connection.Id && s.status == MarketplaceOrderStatuses.AwaitingPack);
         Assert.Contains("ozon 500", state.lastError);
+        Assert.NotNull(state.lastPulledAt);
+
+        var callsAfterError = adapter.GetOrdersCalls;
+        var third = await sync.SyncConnectionStatusesAsync(
+            connection, [MarketplaceOrderStatuses.AwaitingPack], "page", CancellationToken.None);
+        Assert.True(third.Skipped);
+        Assert.False(third.Pulled);
+        Assert.Equal(callsAfterError, adapter.GetOrdersCalls);
     }
 
     [Fact]
@@ -214,6 +223,113 @@ public class MarketplaceOrderSyncServiceTests
         Assert.DoesNotContain(inactive.Id, adapter.GetOrdersConnectionIds);
     }
 
+    [Fact]
+    public async Task CancelledGetOrders_Throws_DoesNotRecordLastError()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, _, connection, _, _, _) = await CreateSutAsync(db);
+        using var cts = new CancellationTokenSource();
+        adapter.CancelOnGetOrders = cts;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sync.SyncConnectionStatusesAsync(
+                connection,
+                [MarketplaceOrderStatuses.AwaitingPack],
+                "page",
+                cts.Token));
+
+        var state = await db.marketplaceOrderSyncStates.FirstOrDefaultAsync(s =>
+            s.connectionId == connection.Id && s.status == MarketplaceOrderStatuses.AwaitingPack);
+        Assert.True(state == null || state.lastError == null);
+    }
+
+    [Fact]
+    public async Task PullStatus_PageCap_StopsAtTwenty_SetsPageCapReason()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, _, connection, _, _, _) = await CreateSutAsync(db);
+        var pages = Enumerable.Range(1, MarketplaceOrderSyncService.MaxPagesPerStatusPerRun + 1)
+            .Select(i => OrdersAdapterFake.Page(
+                [MakeOrder($"p-{i}")],
+                hasMore: true,
+                nextCursor: $"{i + 1}"))
+            .ToArray();
+        adapter.EnqueuePages(MarketplaceOrderStatuses.AwaitingPack, pages);
+
+        var result = await sync.SyncConnectionStatusesAsync(
+            connection,
+            [MarketplaceOrderStatuses.AwaitingPack],
+            "page",
+            CancellationToken.None);
+
+        Assert.Equal(MarketplaceOrderSyncService.MaxPagesPerStatusPerRun, adapter.GetOrdersCalls);
+        Assert.Contains(MarketplaceOrderSyncService.PageCapReason, result.Reason);
+        Assert.True(result.Pulled);
+        Assert.Equal(MarketplaceOrderSyncService.MaxPagesPerStatusPerRun, result.Upserted);
+    }
+
+    [Fact]
+    public async Task RefreshInFlight_SkipsIdsUpsertedInThisRun()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, _, connection, snapshots, _, _) = await CreateSutAsync(db);
+        await snapshots.UpsertAsync(
+            connection.storeId,
+            connection.Id,
+            MakeOrder("stored-2", status: MarketplaceOrderStatuses.AwaitingPack),
+            CancellationToken.None);
+        adapter.EnqueuePages(
+            MarketplaceOrderStatuses.AwaitingPack,
+            OrdersAdapterFake.Page([MakeOrder("listed-1")], hasMore: false));
+        adapter.OrdersById["listed-1"] = MakeOrder("listed-1", status: MarketplaceOrderStatuses.Delivering);
+        adapter.OrdersById["stored-2"] = MakeOrder("stored-2", status: MarketplaceOrderStatuses.Delivering);
+
+        await sync.SyncConnectionStatusesAsync(
+            connection,
+            [MarketplaceOrderStatuses.AwaitingPack],
+            "background",
+            CancellationToken.None);
+
+        Assert.Equal(1, adapter.GetOrderCalls);
+        Assert.Equal(
+            MarketplaceOrderStatuses.AwaitingPack,
+            (await snapshots.FindAsync(connection.storeId, connection.Id, "listed-1", CancellationToken.None))!.status);
+        Assert.Equal(
+            MarketplaceOrderStatuses.Delivering,
+            (await snapshots.FindAsync(connection.storeId, connection.Id, "stored-2", CancellationToken.None))!.status);
+    }
+
+    [Fact]
+    public async Task RefreshInFlight_CapsIdLookupsPerRun()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, _, connection, _, _, _) = await CreateSutAsync(db);
+        for (var i = 0; i < MarketplaceOrderSyncService.MaxInFlightIdRefreshesPerRun + 1; i++)
+        {
+            db.marketplaceOrders.Add(new MarketplaceOrder
+            {
+                storeId = connection.storeId,
+                connectionId = connection.Id,
+                marketplaceOrderId = $"cap-{i}",
+                status = MarketplaceOrderStatuses.AwaitingPack,
+                channel = "fbs",
+                currency = "RUB",
+                syncedAt = DateTime.UtcNow,
+                payloadJson = "{}"
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        await sync.SyncConnectionStatusesAsync(
+            connection,
+            [MarketplaceOrderStatuses.AwaitingPack],
+            "background",
+            CancellationToken.None);
+
+        Assert.Equal(MarketplaceOrderSyncService.MaxInFlightIdRefreshesPerRun, adapter.GetOrderCalls);
+    }
+
     private static async Task<(
         MarketplaceOrderSyncService Sync,
         OrdersAdapterFake Adapter,
@@ -237,7 +353,8 @@ public class MarketplaceOrderSyncServiceTests
             db,
             new SingleAdapterRegistry(adapter),
             snapshots,
-            time);
+            time,
+            NullLogger<MarketplaceOrderSyncService>.Instance);
         return (sync, adapter, time, connection, snapshots, data, store);
     }
 

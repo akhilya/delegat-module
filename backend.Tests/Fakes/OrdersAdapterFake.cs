@@ -24,6 +24,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
     public List<int> GetOrdersConnectionIds { get; } = [];
     public List<OrderQuery?> GetOrdersQueries { get; } = [];
     public Exception? GetOrdersException { get; set; }
+    public CancellationTokenSource? CancelOnGetOrders { get; set; }
     public Dictionary<string, ExternalOrder> OrdersById { get; } = new(StringComparer.Ordinal);
 
     public void EnqueuePages(string status, params PagedResult<ExternalOrder>[] pages)
@@ -102,6 +103,8 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
         GetOrdersCalls++;
         GetOrdersConnectionIds.Add(connection.Id);
         GetOrdersQueries.Add(query);
+        CancelOnGetOrders?.Cancel();
+        ct.ThrowIfCancellationRequested();
         if (GetOrdersException != null)
             throw GetOrdersException;
 
@@ -118,6 +121,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
         CancellationToken ct = default)
     {
         GetOrderCalls++;
+        ct.ThrowIfCancellationRequested();
         if (OrdersById.TryGetValue(externalOrderId, out var order))
             return Task.FromResult<ExternalOrder?>(order);
         return Task.FromResult<ExternalOrder?>(null);
