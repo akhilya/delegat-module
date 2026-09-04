@@ -329,6 +329,8 @@ builder.Services.AddScoped<PlatformToolJobService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<MarketplaceCommerceService>();
+builder.Services.AddScoped<MarketplaceOrderSnapshotService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<IStoreDeletionService, StoreDeletionService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
