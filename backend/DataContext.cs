@@ -44,6 +44,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<CategoryMapping> categoryMappings { get; set; }
     public DbSet<MappingGenerativeCache> mappingGenerativeCaches { get; set; }
     public DbSet<ProductMarketplaceLink> productMarketplaceLinks { get; set; }
+    public DbSet<MarketplaceOrder> marketplaceOrders { get; set; }
+    public DbSet<MarketplaceOrderSyncState> marketplaceOrderSyncStates { get; set; }
 
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
@@ -578,5 +580,26 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(j => new { j.connectionId, j.externalCategoryId, j.status });
         builder.Entity<PendingProductImport>()
             .HasIndex(p => new { p.connectionId, p.externalCategoryId });
+
+        builder.Entity<MarketplaceOrder>(e =>
+        {
+            e.Property(x => x.channel).HasDefaultValue("shop");
+            e.HasIndex(x => new { x.storeId, x.connectionId, x.marketplaceOrderId }).IsUnique();
+            e.HasIndex(x => new { x.storeId, x.status });
+            e.HasIndex(x => new { x.connectionId, x.status });
+            e.HasIndex(x => x.displayId);
+            e.HasOne<MarketplaceConnection>()
+                .WithMany()
+                .HasForeignKey(x => x.connectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<MarketplaceOrderSyncState>(e =>
+        {
+            e.HasIndex(x => new { x.connectionId, x.status }).IsUnique();
+            e.HasOne<MarketplaceConnection>()
+                .WithMany()
+                .HasForeignKey(x => x.connectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }
