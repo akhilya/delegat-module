@@ -7,6 +7,7 @@ public class MarketplaceOrderBucketsTests
 {
     [Theory]
     [InlineData("assembly", new[] { "new", "unpaid", "confirmed", "awaiting_pack" })]
+    [InlineData("Assembly", new[] { "new", "unpaid", "confirmed", "awaiting_pack" })]
     [InlineData("ship", new[] { "awaiting_deliver" })]
     [InlineData("delivery", new[] { "delivering" })]
     [InlineData("done", new[] { "delivered" })]
@@ -25,8 +26,11 @@ public class MarketplaceOrderBucketsTests
     [Fact]
     public void ListStatusesForAdapter_HidesMissingMailboxes()
     {
-        Assert.DoesNotContain(
+        Assert.Contains(
             MarketplaceOrderStatuses.New,
+            MarketplaceOrderBuckets.ListStatusesForAdapter("ozon"));
+        Assert.Contains(
+            MarketplaceOrderStatuses.Unpaid,
             MarketplaceOrderBuckets.ListStatusesForAdapter("ozon"));
         Assert.DoesNotContain(
             MarketplaceOrderStatuses.AwaitingDeliver,
@@ -37,10 +41,14 @@ public class MarketplaceOrderBucketsTests
         Assert.Contains(
             MarketplaceOrderStatuses.Cancelled,
             MarketplaceOrderBuckets.ListStatusesForAdapter("ozon"));
+        Assert.DoesNotContain(
+            MarketplaceOrderStatuses.New,
+            MarketplaceOrderBuckets.ListStatusesForAdapter("wildberries"));
     }
 
     [Theory]
     [InlineData("delivered", true)]
+    [InlineData("Delivered", true)]
     [InlineData("cancelled", true)]
     [InlineData("returned", true)]
     [InlineData("awaiting_pack", false)]
