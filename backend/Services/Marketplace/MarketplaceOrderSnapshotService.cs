@@ -83,6 +83,8 @@ public sealed class MarketplaceOrderSnapshotService
         CancellationToken ct)
     {
         var pageNumber = page < 1 ? 1 : page;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 200) pageSize = 200;
         return await ApplyFilters(storeId, connectionId, statuses, channel, search, from, to)
             .OrderByDescending(o => o.orderCreatedAt)
             .ThenByDescending(o => o.Id)
@@ -102,12 +104,22 @@ public sealed class MarketplaceOrderSnapshotService
         CancellationToken ct)
         => ApplyFilters(storeId, connectionId, statuses, channel, search, from, to).CountAsync(ct);
 
-    public Task<MarketplaceOrder?> FindAsync(int storeId, int connectionId, string orderId, CancellationToken ct)
-        => _db.marketplaceOrders.FirstOrDefaultAsync(
+    public async Task<MarketplaceOrder?> FindAsync(int storeId, int connectionId, string orderId, CancellationToken ct)
+    {
+        var byPosting = await _db.marketplaceOrders.FirstOrDefaultAsync(
             o => o.storeId == storeId
                 && o.connectionId == connectionId
-                && (o.marketplaceOrderId == orderId || o.displayId == orderId),
+                && o.marketplaceOrderId == orderId,
             ct);
+        if (byPosting != null)
+            return byPosting;
+
+        return await _db.marketplaceOrders.FirstOrDefaultAsync(
+            o => o.storeId == storeId
+                && o.connectionId == connectionId
+                && o.displayId == orderId,
+            ct);
+    }
 
     public ExternalOrder ToExternalOrder(MarketplaceOrder row)
     {
@@ -155,7 +167,10 @@ public sealed class MarketplaceOrderSnapshotService
             q = q.Where(o => statuses.Contains(o.status));
 
         if (!string.IsNullOrWhiteSpace(channel))
-            q = q.Where(o => o.channel.Equals(channel, StringComparison.OrdinalIgnoreCase));
+        {
+            var ch = channel.Trim().ToLower();
+            q = q.Where(o => o.channel.ToLower() == ch);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

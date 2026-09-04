@@ -119,6 +119,90 @@ public class MarketplaceOrderSnapshotServiceTests
     }
 
     [Fact]
+    public async Task List_ChannelFilter_IgnoresCase()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, _, store, connection) = await CreateSutAsync(db);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("111-1", displayId: "111", channel: "fbs"),
+            CancellationToken.None);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("222-1", displayId: "222", channel: "FBO"),
+            CancellationToken.None);
+
+        var listed = await svc.ListAsync(
+            store.Id, connection.Id, [], "FBS", null, from: null, to: null, page: 1, pageSize: 10, CancellationToken.None);
+
+        Assert.Single(listed);
+        Assert.Equal("111-1", listed[0].marketplaceOrderId);
+    }
+
+    [Fact]
+    public void ChannelFilter_UsesToLower_NotStringComparison()
+    {
+        var src = System.IO.File.ReadAllText(FindRepoFile("backend", "Services", "Marketplace", "MarketplaceOrderSnapshotService.cs"));
+        Assert.DoesNotContain("StringComparison.OrdinalIgnoreCase", src);
+        Assert.Contains("ToLower()", src);
+    }
+
+    [Fact]
+    public async Task Find_PrefersMarketplaceOrderId_WhenDisplayIdsMatch()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, _, store, connection) = await CreateSutAsync(db);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("76728543-0063-2", displayId: "76728543-0063"),
+            CancellationToken.None);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("76728543-0063-1", displayId: "76728543-0063"),
+            CancellationToken.None);
+
+        var byPosting = await svc.FindAsync(store.Id, connection.Id, "76728543-0063-1", CancellationToken.None);
+        Assert.NotNull(byPosting);
+        Assert.Equal("76728543-0063-1", byPosting.marketplaceOrderId);
+    }
+
+    [Fact]
+    public async Task Find_MarketplaceOrderId_WinsOverAnotherRowsDisplayId()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, _, store, connection) = await CreateSutAsync(db);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("76728543-0063-2", displayId: "76728543-0063-1"),
+            CancellationToken.None);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("76728543-0063-1", displayId: "76728543-0063"),
+            CancellationToken.None);
+
+        var found = await svc.FindAsync(store.Id, connection.Id, "76728543-0063-1", CancellationToken.None);
+        Assert.NotNull(found);
+        Assert.Equal("76728543-0063-1", found.marketplaceOrderId);
+    }
+
+    [Fact]
+    public async Task List_PageSizeZero_DoesNotThrow()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, _, store, connection) = await CreateSutAsync(db);
+        await svc.UpsertAsync(
+            store.Id, connection.Id,
+            MakeOrder("111-1", displayId: "111"),
+            CancellationToken.None);
+
+        var listed = await svc.ListAsync(
+            store.Id, connection.Id, [], null, null, from: null, to: null, page: 1, pageSize: 0, CancellationToken.None);
+
+        Assert.Single(listed);
+        Assert.Equal("111-1", listed[0].marketplaceOrderId);
+    }
+
+    [Fact]
     public async Task ToExternalOrder_RestoresExternalIdStatusAndItems()
     {
         await using var db = TestDbFactory.CreateDb();
@@ -210,6 +294,19 @@ public class MarketplaceOrderSnapshotServiceTests
             Total = 100m,
             CreatedAt = created ?? new DateTimeOffset(2026, 1, 15, 8, 0, 0, TimeSpan.Zero)
         };
+    }
+
+    private static string FindRepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (System.IO.File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException(string.Join('/', parts));
     }
 
     private sealed class FixedTimeProvider : TimeProvider
