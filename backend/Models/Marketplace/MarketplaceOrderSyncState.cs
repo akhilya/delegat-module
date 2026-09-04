@@ -16,7 +16,7 @@ public class MarketplaceOrderSyncState : IEntity
     [StringLength(32)]
     public string status { get; set; } = "";
 
-    public DateTime lastPulledAt { get; set; }
+    public DateTime? lastPulledAt { get; set; }
 
     [StringLength(2000)]
     public string? lastError { get; set; }

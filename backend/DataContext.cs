@@ -584,6 +584,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<MarketplaceOrder>(e =>
         {
             e.Property(x => x.channel).HasDefaultValue("shop");
+            e.Property(x => x.total).HasPrecision(18, 2).HasColumnType("decimal(18,2)");
             e.HasIndex(x => new { x.storeId, x.connectionId, x.marketplaceOrderId }).IsUnique();
             e.HasIndex(x => new { x.storeId, x.status });
             e.HasIndex(x => new { x.connectionId, x.status });

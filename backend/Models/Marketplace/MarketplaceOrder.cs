@@ -31,6 +31,7 @@ public class MarketplaceOrder : IEntity
     [StringLength(8)]
     public string currency { get; set; } = "";
 
+    [Column(TypeName = "decimal(18,2)")]
     public decimal? total { get; set; }
 
     public DateTime? orderCreatedAt { get; set; }

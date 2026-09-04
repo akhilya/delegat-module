@@ -37,6 +37,19 @@ public class MarketplaceOrderEntityTests
     }
 
     [Fact]
+    public void Total_HasCatalogMoneyPrecision()
+    {
+        using var db = TestDbFactory.CreateDb();
+        var property = db.Model
+            .FindEntityType(typeof(MarketplaceOrder))!
+            .FindProperty(nameof(MarketplaceOrder.total))!;
+
+        Assert.Equal("decimal(18,2)", property.FindAnnotation("Relational:ColumnType")?.Value);
+        Assert.Equal(18, property.GetPrecision());
+        Assert.Equal(2, property.GetScale());
+    }
+
+    [Fact]
     public async Task RoundTrip_StoresSyncState()
     {
         using var db = TestDbFactory.CreateDb();
@@ -48,7 +61,6 @@ public class MarketplaceOrderEntityTests
         {
             connectionId = connection.Id,
             status = "awaiting_pack",
-            lastPulledAt = DateTime.UtcNow,
             lastError = null
         });
         await db.SaveChangesAsync();
@@ -56,6 +68,19 @@ public class MarketplaceOrderEntityTests
         var row = await db.marketplaceOrderSyncStates.AsNoTracking().SingleAsync();
         Assert.Equal(connection.Id, row.connectionId);
         Assert.Equal("awaiting_pack", row.status);
+        Assert.Null(row.lastPulledAt);
         Assert.Null(row.lastError);
+    }
+
+    [Fact]
+    public void LastPulledAt_IsNullable()
+    {
+        using var db = TestDbFactory.CreateDb();
+        var property = db.Model
+            .FindEntityType(typeof(MarketplaceOrderSyncState))!
+            .FindProperty(nameof(MarketplaceOrderSyncState.lastPulledAt))!;
+
+        Assert.True(property.IsNullable);
+        Assert.Equal(typeof(DateTime?), property.ClrType);
     }
 }
