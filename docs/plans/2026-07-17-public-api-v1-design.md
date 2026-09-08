@@ -2,7 +2,7 @@
 
 **Goal:** Partner REST API for ERP/1C/n8n with API keys: catalog CRUD + marketplace sync.
 
-**Architecture:** Separate façade `/api/v1` over existing services and background queues. SPA `/api/*` (JWT cookie + CSRF) unchanged. No MCP; AI `ToolDispatcher` is not the API surface.
+**Architecture:** Separate façade `/api/v1` over existing services and background queues. SPA `/api/*` (JWT cookie + CSRF) unchanged. Operator MCP (`POST /api/mcp`) is a **different** surface (2026-09-06); it is not partner v1 and is not this design. AI tools are not the Public API.
 
 ## Decisions
 
@@ -15,9 +15,9 @@
 | Long operations | Always `202` + poll `operations/{operationId}` |
 | Approach | New Public API façade (not expose SPA routes, not wrap AI tools) |
 
-## Why not MCP / AI tools
+## Why not MCP / AI tools for partners
 
-The product has no MCP server. `mcps/` is Cursor IDE cache. AI tools share domains but are LLM-shaped (JWT + SSE). Reuse services, `PendingProduct*` workers, and the `operations` table.
+Partner ERP traffic stays REST `/api/v1`. Instance operator MCP (Cursor, cabinet agent) is documented in [`docs/api/mcp.md`](../api/mcp.md) and is independent of `API_USAGE_ENABLED`. Reuse services, `PendingProduct*` workers, and the `operations` table for v1.
 
 ## Auth
 

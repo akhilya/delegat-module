@@ -22,10 +22,58 @@ export const ORDER_ACTION = {
   Cancel: "cancel",
 };
 
+export const ORDER_ACTION_LABEL = {
+  confirm: "pages.ordersPage.actionConfirm",
+  pack: "pages.ordersPage.actionPack",
+  ship: "pages.ordersPage.actionShip",
+  deliver: "pages.ordersPage.actionDeliver",
+  complete: "pages.ordersPage.actionComplete",
+  cancel: "pages.ordersPage.actionCancel",
+};
+
+export const ORDER_ACTION_CONFIRM = {
+  confirm: {
+    title: "pages.ordersPage.confirmConfirmTitle",
+    description: "pages.ordersPage.confirmConfirmDescription",
+    label: "pages.ordersPage.actionConfirm",
+    destructive: false,
+  },
+  pack: {
+    title: "pages.ordersPage.confirmPackTitle",
+    description: "pages.ordersPage.confirmPackDescription",
+    label: "pages.ordersPage.actionPack",
+    destructive: false,
+  },
+  ship: {
+    title: "pages.ordersPage.confirmShipTitle",
+    description: "pages.ordersPage.confirmShipDescription",
+    label: "pages.ordersPage.actionShip",
+    destructive: false,
+  },
+  deliver: {
+    title: "pages.ordersPage.confirmDeliverTitle",
+    description: "pages.ordersPage.confirmDeliverDescription",
+    label: "pages.ordersPage.actionDeliver",
+    destructive: false,
+  },
+  complete: {
+    title: "pages.ordersPage.confirmCompleteTitle",
+    description: "pages.ordersPage.confirmCompleteDescription",
+    label: "pages.ordersPage.actionComplete",
+    destructive: false,
+  },
+  cancel: {
+    title: "pages.ordersPage.cancelTitle",
+    description: "pages.ordersPage.cancelDescription",
+    label: "pages.ordersPage.cancelConfirm",
+    destructive: true,
+  },
+};
+
 export const DEFAULT_ORDER_BUCKET = "new";
 
 /**
- * Sidebar mailboxes. `statuses` are sent as separate list queries and merged.
+ * Cabinet mailboxes. `statuses` are sent as separate list queries and merged.
  * `icon` is a lucide-compatible export name.
  */
 export const ORDER_BUCKETS = [
@@ -35,7 +83,6 @@ export const ORDER_BUCKETS = [
     icon: "Inbox",
     labelKey: "nav.ordersNew",
     titleKey: "routes.ordersNew",
-    descriptionKey: "pages.ordersPage.mailboxNewHint",
     emptyDescriptionKey: "pages.ordersPage.emptyNewDescription",
   },
   {
@@ -44,7 +91,6 @@ export const ORDER_BUCKETS = [
     icon: "Package",
     labelKey: "nav.ordersPack",
     titleKey: "routes.ordersPack",
-    descriptionKey: "pages.ordersPage.mailboxPackHint",
     emptyDescriptionKey: "pages.ordersPage.emptyPackDescription",
   },
   {
@@ -53,7 +99,6 @@ export const ORDER_BUCKETS = [
     icon: "Truck",
     labelKey: "nav.ordersShip",
     titleKey: "routes.ordersShip",
-    descriptionKey: "pages.ordersPage.mailboxShipHint",
     emptyDescriptionKey: "pages.ordersPage.emptyShipDescription",
   },
   {
@@ -62,7 +107,6 @@ export const ORDER_BUCKETS = [
     icon: "MapPin",
     labelKey: "nav.ordersDelivery",
     titleKey: "routes.ordersDelivery",
-    descriptionKey: "pages.ordersPage.mailboxDeliveryHint",
     emptyDescriptionKey: "pages.ordersPage.emptyDeliveryDescription",
   },
   {
@@ -71,7 +115,6 @@ export const ORDER_BUCKETS = [
     icon: "CheckCircle",
     labelKey: "nav.ordersDone",
     titleKey: "routes.ordersDone",
-    descriptionKey: "pages.ordersPage.mailboxDoneHint",
     emptyDescriptionKey: "pages.ordersPage.emptyDoneDescription",
   },
   {
@@ -80,7 +123,6 @@ export const ORDER_BUCKETS = [
     icon: "XCircle",
     labelKey: "nav.ordersClosed",
     titleKey: "routes.ordersClosed",
-    descriptionKey: "pages.ordersPage.mailboxClosedHint",
     emptyDescriptionKey: "pages.ordersPage.emptyClosedDescription",
   },
 ];
@@ -100,8 +142,359 @@ export function orderBucketPath(id) {
   return `/orders/${bucket}`;
 }
 
-export function statusesForBucket(id) {
-  return orderBucketById(id)?.statuses?.slice() || [];
+const ADAPTER_ORDER_MAILBOXES = {
+  ozon: ["pack", "ship", "delivery", "done", "closed"],
+  wildberries: ["pack", "ship", "delivery", "done", "closed"],
+  yandex: ["new", "pack", "ship", "delivery", "done", "closed"],
+  woocommerce: ["new", "pack", "done", "closed"],
+  opencart: ["new", "pack", "done", "closed"],
+};
+
+function normalizeAdapterKey(adapterKey) {
+  return String(adapterKey || "")
+    .trim()
+    .toLowerCase();
+}
+
+function connectionIdOf(connection) {
+  return Number(connection?.id ?? connection?.Id ?? 0);
+}
+
+function adapterKeyOf(connection) {
+  return connection?.adapterKey ?? connection?.AdapterKey ?? "";
+}
+
+export function orderMailboxesForAdapter(adapterKey) {
+  const key = normalizeAdapterKey(adapterKey);
+  const ids =
+    ADAPTER_ORDER_MAILBOXES[key] || ORDER_BUCKETS.map((box) => box.id);
+  return ids.map((id) => orderBucketById(id)).filter(Boolean);
+}
+
+export function defaultOrderMailbox(adapterKey) {
+  return orderMailboxesForAdapter(adapterKey)[0]?.id || "pack";
+}
+
+export function resolveOrderMailbox(adapterKey, requested) {
+  const allowed = orderMailboxesForAdapter(adapterKey);
+  const hit = allowed.find((box) => box.id === String(requested || ""));
+  return hit?.id || allowed[0]?.id || "pack";
+}
+
+export function orderMailboxPath(connectionId, bucket, adapterKey) {
+  const id = Number(connectionId);
+  if (!Number.isFinite(id) || id <= 0) return "/orders";
+  return `/orders/${id}/${resolveOrderMailbox(adapterKey, bucket)}`;
+}
+
+function pickConnection(connections, id) {
+  const n = Number(id);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return (connections || []).find((item) => connectionIdOf(item) === n) || null;
+}
+
+export function parseOrdersPath(routePath) {
+  const path = String(routePath || "").split("?")[0];
+  const parts = path.replace(/\/+$/, "").split("/").filter(Boolean);
+  if (parts[0] !== "orders") {
+    return { connectionId: null, bucket: null, legacyBucket: null };
+  }
+  if (parts.length < 2) {
+    return { connectionId: null, bucket: null, legacyBucket: null };
+  }
+  if (parts.length === 2) {
+    if (isOrderBucket(parts[1])) {
+      return { connectionId: null, bucket: null, legacyBucket: parts[1] };
+    }
+    const id = Number(parts[1]);
+    return {
+      connectionId: Number.isFinite(id) && id > 0 ? id : null,
+      bucket: null,
+      legacyBucket: null,
+    };
+  }
+  const id = Number(parts[1]);
+  return {
+    connectionId: Number.isFinite(id) && id > 0 ? id : null,
+    bucket: parts[2] || null,
+    legacyBucket: null,
+  };
+}
+
+export function isOrdersOverviewPath(routePath) {
+  const path = String(routePath || "")
+    .split("?")[0]
+    .replace(/\/+$/, "");
+  return path === "/orders";
+}
+
+export const ORDER_OVERVIEW_TABS = [
+  { id: "assembly", labelKey: "nav.ordersAssembly" },
+  { id: "ship", labelKey: "nav.ordersPicking" },
+  { id: "delivery", labelKey: "nav.ordersInDelivery" },
+  { id: "done", labelKey: "nav.ordersDelivered" },
+];
+
+export function parseOrdersOverviewTab(queryTab) {
+  const id = String(queryTab || "assembly")
+    .trim()
+    .toLowerCase();
+  return ORDER_OVERVIEW_TABS.some((tab) => tab.id === id) ? id : "assembly";
+}
+
+export function overviewTabPath(tab, query = {}) {
+  const id = parseOrdersOverviewTab(tab);
+  const nextQuery = { ...query };
+  if (id === "assembly") delete nextQuery.tab;
+  else nextQuery.tab = id;
+  return { path: "/orders", query: nextQuery };
+}
+
+export function statusesForOverviewTab(tab) {
+  switch (parseOrdersOverviewTab(tab)) {
+    case "assembly":
+      return [
+        ORDER_STATUS.New,
+        ORDER_STATUS.Unpaid,
+        ORDER_STATUS.Confirmed,
+        ORDER_STATUS.AwaitingPack,
+      ];
+    case "ship":
+      return [ORDER_STATUS.AwaitingDeliver];
+    case "delivery":
+      return [ORDER_STATUS.Delivering];
+    case "done":
+      return [ORDER_STATUS.Delivered];
+    default:
+      return [];
+  }
+}
+
+export function mailboxForOverviewTab(tab, adapterKey) {
+  const id = parseOrdersOverviewTab(tab);
+  const wanted =
+    id === "ship"
+      ? "ship"
+      : id === "delivery"
+        ? "delivery"
+        : id === "done"
+          ? "done"
+          : "pack";
+  const allowed = orderMailboxesForAdapter(adapterKey);
+  if (allowed.some((box) => box.id === wanted)) return wanted;
+  return defaultOrderMailbox(adapterKey);
+}
+
+export function overviewTabForStatus(status) {
+  const s = orderStatusOf({ status });
+  if (
+    s === ORDER_STATUS.New ||
+    s === ORDER_STATUS.Unpaid ||
+    s === ORDER_STATUS.Confirmed ||
+    s === ORDER_STATUS.AwaitingPack
+  ) {
+    return "assembly";
+  }
+  if (s === ORDER_STATUS.AwaitingDeliver) return "ship";
+  if (s === ORDER_STATUS.Delivering) return "delivery";
+  if (s === ORDER_STATUS.Delivered) return "done";
+  return null;
+}
+
+export function overviewTabEmptyTitleKey(tab) {
+  switch (parseOrdersOverviewTab(tab)) {
+    case "ship":
+      return "pages.ordersPage.emptyOverviewShipTitle";
+    case "delivery":
+      return "pages.ordersPage.emptyOverviewDeliveryTitle";
+    case "done":
+      return "pages.ordersPage.emptyOverviewDoneTitle";
+    default:
+      return "pages.ordersPage.emptyAssemblyTitle";
+  }
+}
+
+export function overviewTabEmptyDescriptionKey(tab) {
+  switch (parseOrdersOverviewTab(tab)) {
+    case "ship":
+      return "pages.ordersPage.emptyOverviewShipDescription";
+    case "delivery":
+      return "pages.ordersPage.emptyOverviewDeliveryDescription";
+    case "done":
+      return "pages.ordersPage.emptyOverviewDoneDescription";
+    default:
+      return "pages.ordersPage.emptyAssemblyDescription";
+  }
+}
+
+export function assemblyMailboxesForAdapter(adapterKey) {
+  return orderMailboxesForAdapter(adapterKey).filter(
+    (box) => box.id === "new" || box.id === "pack",
+  );
+}
+
+export function assemblyStatusesForAdapter(adapterKey) {
+  const statuses = [];
+  for (const box of assemblyMailboxesForAdapter(adapterKey)) {
+    for (const status of statusesForBucket(box.id, adapterKey)) {
+      if (!statuses.includes(status)) statuses.push(status);
+    }
+  }
+  return statuses;
+}
+
+export function isAssemblyOrderStatus(status) {
+  const s = orderStatusOf({ status });
+  return (
+    s === ORDER_STATUS.New ||
+    s === ORDER_STATUS.Unpaid ||
+    s === ORDER_STATUS.Confirmed ||
+    s === ORDER_STATUS.AwaitingPack
+  );
+}
+
+export function assemblyCounts(orders) {
+  let waiting = 0;
+  let packing = 0;
+  for (const row of Array.isArray(orders) ? orders : []) {
+    const s = orderStatusOf(row);
+    if (s === ORDER_STATUS.New || s === ORDER_STATUS.Unpaid) waiting += 1;
+    else if (s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack) {
+      packing += 1;
+    }
+  }
+  return { waiting, packing, total: waiting + packing };
+}
+
+/**
+ * Canonical cabinet URL: `/orders` (assembly overview) or
+ * `/orders/:connectionId/:mailbox`. Legacy `/orders/:bucket` and
+ * `/orders/:connectionId` collapse onto a mailbox.
+ */
+export function resolveOrdersLocation({
+  connections = [],
+  storedConnectionId,
+  preferredMailbox,
+  routePath,
+  query = {},
+} = {}) {
+  const nextQuery = { ...query };
+  if (isOrdersOverviewPath(routePath)) {
+    return { path: "/orders", query: nextQuery };
+  }
+  const fromQuery = nextQuery.connectionId;
+  delete nextQuery.connectionId;
+  const parsed = parseOrdersPath(routePath);
+
+  if (!connections.length) {
+    return { path: "/orders", query: nextQuery };
+  }
+
+  const connection =
+    pickConnection(connections, parsed.connectionId) ||
+    pickConnection(connections, fromQuery) ||
+    pickConnection(connections, storedConnectionId) ||
+    connections[0];
+
+  const requested =
+    parsed.bucket || parsed.legacyBucket || preferredMailbox || null;
+  const adapterKey = adapterKeyOf(connection);
+  return {
+    path: orderMailboxPath(connectionIdOf(connection), requested, adapterKey),
+    query: nextQuery,
+  };
+}
+
+export function statusesForBucket(id, adapterKey) {
+  const statuses = orderBucketById(id)?.statuses?.slice() || [];
+  if (String(id) === "pack" && normalizeAdapterKey(adapterKey) === "ozon") {
+    for (const extra of [ORDER_STATUS.New, ORDER_STATUS.Unpaid]) {
+      if (!statuses.includes(extra)) statuses.push(extra);
+    }
+  }
+  return statuses;
+}
+
+/** Mailbox that lists this normalized status for the adapter, or null if it has no such tab. */
+export function mailboxForOrderStatus(status, adapterKey) {
+  const s = orderStatusOf({ status });
+  for (const box of orderMailboxesForAdapter(adapterKey)) {
+    if (statusesForBucket(box.id, adapterKey).includes(s)) return box.id;
+  }
+  return null;
+}
+
+/**
+ * After a successful lookup by order number, open that order on the mailbox
+ * that actually contains it (search used to stay on the current tab and miss).
+ */
+export function resolveOrderSearchNavigation({
+  found,
+  connectionId,
+  adapterKey,
+  currentPath,
+}) {
+  const id = orderExternalId(found);
+  if (!id) return null;
+  const mailbox = mailboxForOrderStatus(orderStatusOf(found), adapterKey);
+  const path = mailbox
+    ? orderMailboxPath(connectionId, mailbox, adapterKey)
+    : currentPath || "/orders";
+  if (!path || path === "/orders") return null;
+  return { path, query: { order: id } };
+}
+
+/** Ids to try on GET …/orders/{id}. Ozon table shows order_number; get needs posting_number. */
+export function orderSearchLookupIds(search) {
+  const q = String(search || "").trim();
+  if (!q) return [];
+  const ids = [q];
+  const parts = q
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 2 && parts.every((part) => /^\d+$/.test(part))) {
+    ids.push(`${q}-1`);
+  }
+  return ids;
+}
+
+export function orderMatchesSearch(row, search) {
+  const needle = String(search || "")
+    .trim()
+    .toLowerCase();
+  if (!needle) return true;
+  const id = orderExternalId(row).toLowerCase();
+  const display = orderDisplayId(row).toLowerCase();
+  return id.includes(needle) || display.includes(needle);
+}
+
+export function filterOrdersBySearch(rows, search) {
+  const list = Array.isArray(rows) ? rows : [];
+  const q = String(search || "").trim();
+  if (!q) return list;
+  return list.filter((row) => orderMatchesSearch(row, q));
+}
+
+export function orderSearchHitPage(found) {
+  if (!orderExternalId(found)) return null;
+  return {
+    items: [found],
+    page: 1,
+    nextCursor: null,
+    hasMore: false,
+  };
+}
+
+/** Search pins the found row; do not replace it with the destination mailbox dump. */
+export function shouldFetchMailboxAfterRouteSync({
+  fetch = false,
+  connectionChanged = false,
+  mailboxChanged = false,
+  searchQuery = "",
+} = {}) {
+  if (String(searchQuery || "").trim()) return false;
+  return Boolean(fetch || connectionChanged || mailboxChanged);
 }
 
 export function orderExternalId(row) {
@@ -148,6 +541,16 @@ export function orderItemSku(item) {
   ).trim();
 }
 
+export function orderItemLocalProductId(item) {
+  const n = Number(item?.localProductId ?? item?.LocalProductId ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function orderItemProductTo(item) {
+  const id = orderItemLocalProductId(item);
+  return id ? `/products/${id}/edit` : null;
+}
+
 /** Collapsed mailbox shows this many lines; the rest sit behind Show N more. */
 export const ORDER_ITEM_PREVIEW_MAX = 3;
 
@@ -168,6 +571,14 @@ export function orderItemNames(row) {
 
 export function orderPrimaryItemName(row) {
   return orderItemNames(row)[0] || "";
+}
+
+export function orderAssemblyTitle(row) {
+  return orderPrimaryItemName(row) || orderDisplayId(row);
+}
+
+export function orderAssemblyMoreCount(row) {
+  return Math.max(0, orderLineCount(row) - 1);
 }
 
 export function orderPrimaryItemQuantity(row) {
@@ -232,6 +643,24 @@ export function orderStatusOf(row) {
   return String(raw || ORDER_STATUS.Unknown);
 }
 
+export function orderChannelOf(row) {
+  return String(row?.channel ?? row?.Channel ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Ozon/WB logistics mark delivered; the seller cannot. */
+export function orderDeliveryIsMarketplaceOwned(adapterKey) {
+  const key = normalizeAdapterKey(adapterKey);
+  return key === "ozon" || key === "wildberries";
+}
+
+export function orderActionNeedsShipmentFields(action, adapterKey) {
+  if (String(action || "") !== ORDER_ACTION.Ship) return false;
+  const key = normalizeAdapterKey(adapterKey);
+  return key !== "ozon" && key !== "wildberries";
+}
+
 export function orderCreatedAtMs(row) {
   const raw = row?.createdAt ?? row?.CreatedAt;
   const t = raw ? Date.parse(raw) : NaN;
@@ -253,8 +682,8 @@ export function mergeOrderLists(lists) {
   );
 }
 
-export function primaryActionsForStatus(status) {
-  switch (orderStatusOf({ status })) {
+function shopPrimaryActions(status) {
+  switch (status) {
     case ORDER_STATUS.New:
     case ORDER_STATUS.Unpaid:
       return [ORDER_ACTION.Confirm];
@@ -264,18 +693,214 @@ export function primaryActionsForStatus(status) {
     case ORDER_STATUS.AwaitingDeliver:
       return [ORDER_ACTION.Ship];
     case ORDER_STATUS.Delivering:
-      return [ORDER_ACTION.Deliver, ORDER_ACTION.Complete];
+      return [ORDER_ACTION.Complete];
     default:
       return [];
   }
 }
 
-export function canCancelOrder(status) {
+/**
+ * Seller buttons for this marketplace. Ozon/WB have no “mark delivered” API;
+ * delivery is theirs after you hand over the parcel.
+ */
+export function primaryActionsForStatus(status, adapterKey, channel) {
   const s = orderStatusOf({ status });
+  const key = normalizeAdapterKey(adapterKey);
+  const ch = String(channel || "")
+    .trim()
+    .toLowerCase();
+
+  if (key === "ozon") {
+    if (ch === "fbo") return [];
+    if (s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack) {
+      return [ORDER_ACTION.Pack];
+    }
+    if (s === ORDER_STATUS.AwaitingDeliver) return [ORDER_ACTION.Ship];
+    return [];
+  }
+
+  if (key === "wildberries") {
+    if (s === ORDER_STATUS.AwaitingPack) return [ORDER_ACTION.Pack];
+    if (s === ORDER_STATUS.AwaitingDeliver) return [ORDER_ACTION.Ship];
+    return [];
+  }
+
+  if (key === "yandex") {
+    if (ch === "fby") return [];
+    if (s === ORDER_STATUS.New || s === ORDER_STATUS.Unpaid) {
+      return [ORDER_ACTION.Confirm];
+    }
+    if (s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack) {
+      return [ORDER_ACTION.Pack];
+    }
+    if (s === ORDER_STATUS.AwaitingDeliver) return [ORDER_ACTION.Ship];
+    if (s === ORDER_STATUS.Delivering && (ch === "dbs" || ch === "express")) {
+      return [ORDER_ACTION.Deliver];
+    }
+    return [];
+  }
+
+  return shopPrimaryActions(s);
+}
+
+export function canCancelOrder(status, adapterKey, channel) {
+  const s = orderStatusOf({ status });
+  if (
+    s === ORDER_STATUS.Cancelled ||
+    s === ORDER_STATUS.Returned ||
+    s === ORDER_STATUS.Delivered
+  ) {
+    return false;
+  }
+  const key = normalizeAdapterKey(adapterKey);
+  const ch = String(channel || "")
+    .trim()
+    .toLowerCase();
+
+  if (key === "ozon") {
+    if (ch === "fbo") return false;
+    return (
+      s === ORDER_STATUS.New ||
+      s === ORDER_STATUS.Confirmed ||
+      s === ORDER_STATUS.AwaitingPack ||
+      s === ORDER_STATUS.AwaitingDeliver
+    );
+  }
+  if (key === "wildberries") {
+    return s === ORDER_STATUS.AwaitingPack;
+  }
+  if (key === "yandex") {
+    if (ch === "fby") return false;
+    if (s === ORDER_STATUS.Delivering && ch !== "dbs" && ch !== "express") {
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
+
+/**
+ * Packing label / barcode when that marketplace can actually print it.
+ * Ozon FBS: after assemble, Ready to ship. Wildberries: in a supply or in
+ * delivery (`confirm` / `complete`). Yandex FBS/DBS: while packing
+ * (`PROCESSING`). FBO/FBY and shop adapters have no seller label.
+ */
+export function canDownloadOrderLabel(status, adapterKey, channel) {
+  const s = orderStatusOf({ status });
+  const key = normalizeAdapterKey(adapterKey);
+  const ch = String(channel || "")
+    .trim()
+    .toLowerCase();
+
+  if (key === "ozon") {
+    return ch !== "fbo" && s === ORDER_STATUS.AwaitingDeliver;
+  }
+  if (key === "wildberries") {
+    return (
+      s === ORDER_STATUS.AwaitingDeliver || s === ORDER_STATUS.Delivering
+    );
+  }
+  if (key === "yandex") {
+    if (ch === "fby") return false;
+    return s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack;
+  }
+  return false;
+}
+
+/** Intersection of seller actions every selected order can run. */
+export function orderBulkCapabilities(
+  orders,
+  adapterKey,
+  { canMutate = false, canDownloadLabel = false } = {},
+) {
+  const list = Array.isArray(orders) ? orders : [];
+  if (list.length === 0) {
+    return { actions: [], canCancel: false, canDownloadLabel: false };
+  }
+
+  let actions = canMutate
+    ? primaryActionsForStatus(
+        orderStatusOf(list[0]),
+        adapterKey,
+        orderChannelOf(list[0]),
+      ).slice()
+    : [];
+  let canCancel = canMutate;
+  let download = canDownloadLabel;
+
+  for (const order of list) {
+    const status = orderStatusOf(order);
+    const channel = orderChannelOf(order);
+    if (canMutate) {
+      const next = primaryActionsForStatus(status, adapterKey, channel);
+      actions = actions.filter((action) => next.includes(action));
+      canCancel = canCancel && canCancelOrder(status, adapterKey, channel);
+    } else {
+      actions = [];
+      canCancel = false;
+    }
+    download =
+      download && canDownloadOrderLabel(status, adapterKey, channel);
+  }
+
+  return {
+    actions,
+    canCancel,
+    canDownloadLabel: download,
+  };
+}
+
+export function orderStatusUpdatePayload(action, order, adapterKey) {
+  const payload = { action: String(action || "") };
+  if (
+    payload.action === ORDER_ACTION.Ship &&
+    normalizeAdapterKey(adapterKey) === "wildberries"
+  ) {
+    const supplyId = orderSupplyId(order);
+    if (supplyId) payload.extra = { supplyId };
+  }
+  return payload;
+}
+
+export function orderExtraOf(order) {
+  const extra = order?.extra ?? order?.Extra;
+  if (!extra || typeof extra !== "object" || Array.isArray(extra)) return {};
+  return extra;
+}
+
+export function orderExtraString(order, key) {
+  if (!key) return "";
+  const extra = orderExtraOf(order);
+  const pascal = key.charAt(0).toUpperCase() + key.slice(1);
+  const value = extra[key] ?? extra[pascal];
+  if (value == null || value === "") return "";
+  return String(value).trim();
+}
+
+export function orderSupplyId(order) {
+  return orderExtraString(order, "supplyId");
+}
+
+export function orderBoxId(order) {
+  return orderExtraString(order, "boxId");
+}
+
+/** Box QR when the order is boxed in a Wildberries supply (Ready to ship). */
+export function canDownloadBoxLabel(status, adapterKey, boxId) {
   return (
-    s !== ORDER_STATUS.Cancelled &&
-    s !== ORDER_STATUS.Returned &&
-    s !== ORDER_STATUS.Delivered
+    Boolean(String(boxId || "").trim()) &&
+    canDownloadOrderLabel(status, adapterKey, "fbs") &&
+    normalizeAdapterKey(adapterKey) === "wildberries" &&
+    orderStatusOf({ status }) === ORDER_STATUS.AwaitingDeliver
+  );
+}
+
+/** Supply QR after Wildberries deliver (in delivery). */
+export function canDownloadShipmentQr(status, adapterKey, supplyId) {
+  return (
+    Boolean(String(supplyId || "").trim()) &&
+    normalizeAdapterKey(adapterKey) === "wildberries" &&
+    orderStatusOf({ status }) === ORDER_STATUS.Delivering
   );
 }
 
@@ -345,6 +970,125 @@ export function decodeOrderLabelBytes(label) {
   }
 }
 
+export function marketplaceOrderStatusUrl(connectionId, orderId) {
+  return `/marketplace/connections/${connectionId}/orders/${encodeURIComponent(orderId)}/status`;
+}
+
+export function marketplaceOrderLabelUrl(connectionId, orderId) {
+  return `/marketplace/connections/${connectionId}/orders/${encodeURIComponent(orderId)}/label`;
+}
+
+export function orderJobConfirmMeta(job, t, { adapterKey } = {}) {
+  if (!job) {
+    return { title: "", description: "", label: "", destructive: false };
+  }
+  if (job.kind === "label") {
+    const count = job.ids?.length || 0;
+    return {
+      title:
+        count === 1
+          ? t("pages.ordersPage.actionDownloadLabel")
+          : t("pages.ordersPage.bulkLabelTitle", { count }),
+      description:
+        count === 1
+          ? t("pages.ordersPage.bulkLabelDescriptionOne")
+          : t("pages.ordersPage.bulkLabelDescription", { count }),
+      label: t("pages.ordersPage.actionDownloadLabel"),
+      destructive: false,
+    };
+  }
+  const spec = ORDER_ACTION_CONFIRM[job.action] || ORDER_ACTION_CONFIRM.pack;
+  const count = job.ids?.length || 0;
+  const actionLabel = t(ORDER_ACTION_LABEL[job.action] || ORDER_ACTION_LABEL.pack);
+  const key = normalizeAdapterKey(adapterKey || job.adapterKey);
+  if (count === 1) {
+    const description =
+      job.action === "ship" && key === "wildberries"
+        ? t("pages.ordersPage.confirmShipSupplyDescription")
+        : t(spec.description);
+    return {
+      title: t(spec.title),
+      description,
+      label: t(spec.label),
+      destructive: Boolean(spec.destructive),
+    };
+  }
+  return {
+    title: t("pages.ordersPage.bulkConfirmTitle", {
+      action: actionLabel,
+      count,
+    }),
+    description: t("pages.ordersPage.bulkConfirmDescription"),
+    label: actionLabel,
+    destructive: Boolean(spec.destructive),
+  };
+}
+
+export function saveOrderLabelFile(
+  label,
+  fallbackName,
+  { t, triggerDownload } = {},
+) {
+  const bytes = decodeOrderLabelBytes(label);
+  if (!bytes) {
+    throw new Error(t("pages.ordersPage.labelEmpty"));
+  }
+  const blob = new Blob([bytes], { type: orderLabelContentType(label) });
+  const url = URL.createObjectURL(blob);
+  try {
+    triggerDownload(url, orderLabelFileName(label, fallbackName));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function postMarketplaceOrderStatus({
+  http,
+  connectionId,
+  orderId,
+  action,
+  order,
+  adapterKey,
+}) {
+  await http.post(
+    marketplaceOrderStatusUrl(connectionId, orderId),
+    orderStatusUpdatePayload(action, order, adapterKey),
+  );
+}
+
+export async function runPendingOrderJob(
+  job,
+  { t, runOne, onItemError, onSuccess, onPartial } = {},
+) {
+  if (!job) return { ok: 0, failedIds: [] };
+  let ok = 0;
+  const failedIds = [];
+  for (const id of job.ids || []) {
+    try {
+      await runOne(id, job);
+      ok += 1;
+    } catch (error) {
+      failedIds.push(id);
+      onItemError?.(error);
+    }
+  }
+  if (failedIds.length === 0 && ok > 0) {
+    onSuccess?.(
+      job.kind === "label"
+        ? t("pages.ordersPage.bulkLabelDownloaded", { count: ok })
+        : t("pages.ordersPage.statusUpdated"),
+    );
+  } else if (ok > 0) {
+    onPartial?.(
+      t("pages.ordersPage.bulkPartialFailed", {
+        ok,
+        failed: failedIds.length,
+      }),
+    );
+  }
+  return { ok, failedIds };
+}
+
 export function orderConnectionStorageKey(storeId) {
   return `delegat.orders.connectionId.${storeId}`;
 }
@@ -371,6 +1115,33 @@ export function writeStoredConnectionId(storeId, connectionId) {
       orderConnectionStorageKey(storeId),
       String(connectionId),
     );
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function orderMailboxStorageKey(storeId) {
+  return `delegat.orders.mailbox.${storeId}`;
+}
+
+export function readStoredMailbox(storeId) {
+  if (storeId == null || typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(orderMailboxStorageKey(storeId));
+    return isOrderBucket(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredMailbox(storeId, mailbox) {
+  if (storeId == null || typeof localStorage === "undefined") return;
+  try {
+    if (!isOrderBucket(mailbox)) {
+      localStorage.removeItem(orderMailboxStorageKey(storeId));
+      return;
+    }
+    localStorage.setItem(orderMailboxStorageKey(storeId), mailbox);
   } catch {
     /* ignore quota / private mode */
   }

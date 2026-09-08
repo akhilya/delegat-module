@@ -87,6 +87,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build & push Python sandbox
+        uses: docker/build-push-action@v7
+        with:
+          context: sandbox/python
+          file: sandbox/python/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.tag }}
+            ${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.minor }}
+            ${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.major }}
+            ${{ env.IMAGE_PREFIX }}/sandbox:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Extract changelog section
         run: |
           VERSION="${{ steps.version.outputs.version }}"

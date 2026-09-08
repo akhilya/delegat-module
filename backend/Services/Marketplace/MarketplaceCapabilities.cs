@@ -139,6 +139,16 @@ public enum MarketplaceCapabilities
     /// </summary>
     GetOrderLabels = 1 << 24,
 
+    /// <summary>
+    /// List seller warehouses and marketplace offices (pass-through).
+    /// </summary>
+    GetFulfillmentLocations = 1 << 25,
+
+    /// <summary>
+    /// List, create, and box live shipments / supplies.
+    /// </summary>
+    ManageShipments = 1 << 26,
+
     #endregion
 
     /// <summary>

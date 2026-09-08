@@ -14,6 +14,7 @@ public static class ConnectionRemoteIdentity
     {
         "bulkChunkSize",
         "languageId",
+        "sandbox",
     };
 
     public static string Build(

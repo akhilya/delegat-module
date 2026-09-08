@@ -46,7 +46,7 @@ const showNavCenter = computed(() => {
   <Page
     :class="
       cn(
-        fillViewport && 'h-svh max-h-svh min-h-0 overflow-hidden',
+        fillViewport && '!min-h-0 h-full max-h-full overflow-hidden',
         props.class,
       )
     "
@@ -64,14 +64,14 @@ const showNavCenter = computed(() => {
     </NavigationBar>
 
     <!--
-      Below-nav region: min height = 100svh − navbar so empty states can expand
-      without Page growing past the viewport (nav + this = svh).
+      Below-nav region. min-h-full on Page fills the inset scroller so empty
+      states can expand. fillViewport clips to the pane for nested canvases.
     -->
     <div
       :class="
         cn(
-          'flex min-h-[calc(100svh-var(--app-navbar-height))] flex-1 flex-col',
-          fillViewport && 'min-h-0 overflow-hidden',
+          'flex min-h-0 flex-1 flex-col',
+          fillViewport && 'overflow-hidden',
         )
       "
     >
@@ -86,7 +86,7 @@ const showNavCenter = computed(() => {
         :class="
           cn(
             'flex min-h-0 flex-1 flex-col',
-            !fillViewport && 'pb-4',
+            !fillViewport && 'pb-[var(--page-scroll-end)]',
             props.contentClass,
           )
         "

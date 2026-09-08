@@ -66,7 +66,11 @@ const emits = defineEmits([
 const attrs = useAttrs();
 const isInset = computed(() => props.inset || props.resizable);
 
-const { width: liveWidth, isResizing, startResize } = useSheetResize({
+const {
+  width: liveWidth,
+  isResizing,
+  startResize,
+} = useSheetResize({
   enabled: toRef(props, "resizable"),
   width: toRef(props, "width"),
   setWidth: (w) => emits("update:width", w),
@@ -186,14 +190,12 @@ function insetSideClass() {
       :data-resizing="resizable && isResizing ? '' : undefined"
       :class="
         cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[var(--z-modal)] flex flex-col gap-4 ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed z-[var(--z-modal)] flex flex-col gap-4 ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
           resizable &&
             (isResizing
               ? 'transition-none will-change-[width]'
               : 'transition-[width] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]'),
-          isInset
-            ? 'min-h-0 rounded-xl border-0'
-            : 'shadow-none',
+          isInset ? 'min-h-0 rounded-xl border-0' : 'shadow-none',
           side === 'right' &&
             (isInset
               ? insetSideClass()

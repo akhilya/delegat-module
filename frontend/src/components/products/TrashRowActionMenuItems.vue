@@ -15,6 +15,7 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { Undo2, Trash2 } from "lucide-vue-next";
+import ProductImageSizeContextSub from "./ProductImageSizeContextSub.vue";
 
 export default {
   name: "TrashRowActionMenuItems",
@@ -29,6 +30,7 @@ export default {
     ContextMenuSeparator,
     Undo2,
     Trash2,
+    ProductImageSizeContextSub,
   },
   props: {
     /** "dropdown" | "context" */
@@ -130,4 +132,9 @@ export default {
       {{ $t("trashRowActions.deleteForever") }}
     </component>
   </component>
+
+  <template v-if="surface === 'context'">
+    <component :is="ui.Separator" />
+    <ProductImageSizeContextSub />
+  </template>
 </template>

@@ -1,12 +1,10 @@
 import { computed, reactive, readonly } from "vue";
 import { t } from "@/i18n";
+import { storeIconUrl } from "@/lib/storeIcon.js";
 
 const DEFAULT_NAME = import.meta.env.VITE_BRAND_NAME || "Delegat.Module";
 /** No default logo — show brand name only until an upload or BRAND_LOGO_URL seed. */
 const DEFAULT_LOGO = (import.meta.env.VITE_BRAND_LOGO || "").trim();
-/** Control Plane square favicon (copied into frontend/public). */
-const DEFAULT_FAVICON =
-  (import.meta.env.VITE_BRAND_FAVICON || "").trim() || "/logo-square-favicon.webp";
 const DEFAULT_DESCRIPTION =
   import.meta.env.VITE_BRAND_DESCRIPTION || `${DEFAULT_NAME} - ${t("common.brandDescription")}`;
 
@@ -19,7 +17,6 @@ const CSS_DEFAULTS = {
 };
 
 const LEGACY_LOGO = "/logo@0,25x.webp";
-const LEGACY_FAVICON = "/logo_sm@0,15x.webp";
 
 function normalizeLogoUrl(url) {
   if (!url || typeof url !== "string") return "";
@@ -29,17 +26,16 @@ function normalizeLogoUrl(url) {
 }
 
 function normalizeFaviconUrl(url) {
-  if (!url || typeof url !== "string") return DEFAULT_FAVICON;
-  const trimmed = url.trim();
-  if (!trimmed || trimmed === LEGACY_FAVICON) return DEFAULT_FAVICON;
-  return trimmed;
+  const fromEnv = (import.meta.env.VITE_BRAND_FAVICON || "").trim();
+  if (url === undefined || url === null) return storeIconUrl(fromEnv);
+  return storeIconUrl(url) || storeIconUrl(fromEnv);
 }
 
 const state = reactive({
   name: DEFAULT_NAME,
   description: DEFAULT_DESCRIPTION,
   logoUrl: normalizeLogoUrl(DEFAULT_LOGO),
-  faviconUrl: normalizeFaviconUrl(DEFAULT_FAVICON),
+  faviconUrl: normalizeFaviconUrl(""),
   hasCustomLogo: false,
   hasCustomFavicon: false,
   primaryColor: null,
@@ -58,7 +54,7 @@ export const BRAND_DESCRIPTION = DEFAULT_DESCRIPTION;
 /** @deprecated Prefer useBrand().logoUrl */
 export const BRAND_LOGO = normalizeLogoUrl(DEFAULT_LOGO);
 /** @deprecated Prefer useBrand().faviconUrl */
-export const BRAND_FAVICON = normalizeFaviconUrl(DEFAULT_FAVICON);
+export const BRAND_FAVICON = normalizeFaviconUrl("");
 
 export function getBrandName() {
   return state.name;
@@ -118,6 +114,16 @@ export function applyBranding(dto) {
 
 /** Optional provider for the page/detail segment of the document title (registered by router). */
 let pageTitleDetailProvider = () => null;
+let documentIconSuppressed = false;
+
+/**
+ * Hide the tab icon on unbranded system screens (API down, many stores).
+ * @param {boolean} suppressed
+ */
+export function setDocumentIconSuppressed(suppressed) {
+  documentIconSuppressed = Boolean(suppressed);
+  applyDocumentChrome();
+}
 
 /**
  * Router registers how to resolve the non-brand part of the tab title
@@ -149,15 +155,22 @@ function normalizeHex(value) {
 }
 
 function applyDocumentChrome() {
-  const favicon = state.faviconUrl || DEFAULT_FAVICON;
+  if (typeof document === "undefined") return;
+  const favicon = documentIconSuppressed
+    ? ""
+    : storeIconUrl(state.faviconUrl);
   let link = document.querySelector("link[rel='icon']");
-  if (!link) {
-    link = document.createElement("link");
-    link.setAttribute("rel", "icon");
-    document.head.appendChild(link);
-  }
-  if (link.getAttribute("href") !== favicon) {
-    link.setAttribute("href", favicon);
+  if (!favicon) {
+    link?.remove();
+  } else {
+    if (!link) {
+      link = document.createElement("link");
+      link.setAttribute("rel", "icon");
+      document.head.appendChild(link);
+    }
+    if (link.getAttribute("href") !== favicon) {
+      link.setAttribute("href", favicon);
+    }
   }
 
   const meta = document.querySelector('meta[name="description"]');
@@ -228,4 +241,4 @@ export function invalidateBrandingCache() {
   loadPromise = null;
 }
 
-export const DEFAULT_BRAND_FAVICON = DEFAULT_FAVICON;
+export const DEFAULT_BRAND_FAVICON = "";

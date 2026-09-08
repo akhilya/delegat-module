@@ -27,6 +27,8 @@
   --app-navbar-height: 3.5rem;
   /* Breadcrumbs row (list min-h-7 + mb-4) — AppPageChrome / fill-height panes. */
   --app-breadcrumbs-height: 2.75rem;
+  /* Space below the last row so it is not flush with the docked footer / inset edge. */
+  --page-scroll-end: 1.25rem;
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -165,16 +167,16 @@ button {
 [data-slot="sidebar-panel"][data-inset] {
   box-shadow:
     0 0 0 1px color-mix(in oklch, var(--foreground) 18%, transparent),
-    0 10px 36px oklch(0 0 0 / 0.14),
-    0 2px 8px oklch(0 0 0 / 0.06);
+    0 1px 2px oklch(0 0 0 / 0.05),
+    0 3px 8px oklch(0 0 0 / 0.06);
 }
 
 .dark [data-slot="sheet-content"][data-inset],
 .dark [data-slot="sidebar-panel"][data-inset] {
   box-shadow:
     0 0 0 1px color-mix(in oklch, var(--foreground) 22%, transparent),
-    0 12px 40px oklch(0 0 0 / 0.48),
-    0 2px 8px oklch(0 0 0 / 0.2);
+    0 1px 2px oklch(0 0 0 / 0.18),
+    0 3px 8px oklch(0 0 0 / 0.16);
 }
 
 /* JS sets --scroll-fade-t/b from scroll position. Kill the CSS timeline so it

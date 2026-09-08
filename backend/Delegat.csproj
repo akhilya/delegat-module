@@ -9,6 +9,8 @@
     <BuildPlugins Condition="'$(BuildPlugins)' == ''">true</BuildPlugins>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- Local test/build dumps. Default None is **/* — without this, GenerateWatchList glob-walks artifacts and hangs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts/**;_build_checkplugins/**;BaseOutputPath=artifacts/**</DefaultItemExcludes>
     <!-- Canonical SemVer is root VERSION; Docker /p:InformationalVersion overrides when set. -->
     <VersionFilePath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\VERSION'))</VersionFilePath>
     <InformationalVersion Condition="'$(InformationalVersion)' == '' And Exists('$(VersionFilePath)')">$([System.IO.File]::ReadAllText('$(VersionFilePath)').Trim())</InformationalVersion>
@@ -83,7 +85,7 @@
   </ItemGroup>
 
   <!-- Build plugins and copy their output to backend output directory -->
-  <Target Name="CopyPlugins" AfterTargets="Build" Condition="'$(BuildPlugins)' != 'false'">
+  <Target Name="CopyPlugins" AfterTargets="Build" Condition="'$(BuildPlugins)' != 'false' And '$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <PluginProjects Include="..\plugins\Delegat.Marketplace.Ozon\Delegat.Marketplace.Ozon.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.Wildberries\Delegat.Marketplace.Wildberries.csproj" />

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Delegat.Marketplace.Ozon;
@@ -86,12 +87,84 @@ public class OzonCommerceMapperTests
         var order = OzonCommerceMapper.FromFbs(posting);
 
         Assert.Equal("1234-0001", order.ExternalId);
+        Assert.Equal("99", order.DisplayId);
         Assert.Equal("fbs", order.Channel);
         Assert.Equal(MarketplaceOrderStatuses.AwaitingPack, order.Status);
         Assert.Equal(300m, order.Total);
         Assert.Single(order.Items);
         Assert.Equal("SKU-1", order.Items[0].Sku);
         Assert.Null(order.Items[0].ImageUrl);
+    }
+
+    [Fact]
+    public void FromFbs_MapsWarehouseFromDeliveryMethodWhenAnalyticsIsEmpty()
+    {
+        var order = OzonCommerceMapper.FromFbs(new OzonFbsPosting
+        {
+            PostingNumber = "1234-0001-1",
+            OrderId = 99,
+            Status = "delivering",
+            DeliveryMethod = new OzonDeliveryMethod
+            {
+                Name = "ПВЗ Ozon",
+                Warehouse = "Хоругвино",
+                WarehouseId = 15431806189000
+            }
+        });
+
+        Assert.Equal("Хоругвино", Convert.ToString(order.Extra!["warehouse"], CultureInfo.InvariantCulture));
+        Assert.Equal("15431806189000", Convert.ToString(order.Extra["warehouseId"], CultureInfo.InvariantCulture));
+        Assert.Equal("ПВЗ Ozon", Convert.ToString(order.Extra["deliveryMethod"], CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void FromFbs_PrefersAnalyticsWarehouseName()
+    {
+        var order = OzonCommerceMapper.FromFbs(new OzonFbsPosting
+        {
+            PostingNumber = "1-1",
+            AnalyticsData = new OzonPostingAnalytics
+            {
+                WarehouseName = "Тверь",
+                WarehouseId = 9
+            },
+            DeliveryMethod = new OzonDeliveryMethod
+            {
+                Warehouse = "Хоругвино",
+                WarehouseId = 8
+            }
+        });
+
+        Assert.Equal("Тверь", Convert.ToString(order.Extra!["warehouse"], CultureInfo.InvariantCulture));
+        Assert.Equal("8", Convert.ToString(order.Extra["warehouseId"], CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void PostingLookupCandidates_AddsFirstPackageWhenSearchIsOrderNumber()
+    {
+        Assert.Equal(
+            ["76728543-0063", "76728543-0063-1"],
+            OzonCommerceMapper.PostingLookupCandidates("76728543-0063"));
+        Assert.Equal(
+            ["76728543-0063-1"],
+            OzonCommerceMapper.PostingLookupCandidates("76728543-0063-1"));
+        Assert.Empty(OzonCommerceMapper.PostingLookupCandidates("  "));
+    }
+
+    [Fact]
+    public void MatchesSearch_FindsOrderNumberOnThePostingIdTheCabinetShows()
+    {
+        var order = OzonCommerceMapper.FromFbs(new OzonFbsPosting
+        {
+            PostingNumber = "76728543-0063-1",
+            OrderNumber = "76728543-0063",
+            Status = "awaiting_packaging"
+        });
+
+        Assert.True(OzonCommerceMapper.MatchesSearch(order, "76728543-0063"));
+        Assert.True(OzonCommerceMapper.MatchesSearch(order, "76728543-0063-1"));
+        Assert.False(OzonCommerceMapper.MatchesSearch(order, "11111111-0001"));
+        Assert.True(OzonCommerceMapper.MatchesSearch(order, " "));
     }
 
     [Fact]
@@ -238,5 +311,51 @@ public class OzonCommerceMapperTests
 
         Assert.Equal("ticket.pdf", label!.FileName);
         Assert.Equal(pdf, Convert.FromBase64String(label.ContentBase64));
+    }
+
+    [Theory]
+    [InlineData("pack", MarketplaceOrderActions.Pack)]
+    [InlineData("confirm", MarketplaceOrderActions.Pack)]
+    [InlineData("ship", MarketplaceOrderActions.Ship)]
+    [InlineData("cancel", MarketplaceOrderActions.Cancel)]
+    public void NormalizeSellerAction_MapsAssembleAndHandover(string action, string expected)
+    {
+        Assert.Equal(expected, OzonCommerceMapper.NormalizeSellerAction(action));
+    }
+
+    [Theory]
+    [InlineData("deliver")]
+    [InlineData("complete")]
+    [InlineData("")]
+    public void NormalizeSellerAction_RejectsDeliveryMarks(string action)
+    {
+        Assert.Null(OzonCommerceMapper.NormalizeSellerAction(action));
+    }
+
+    [Theory]
+    [InlineData(MarketplaceOrderStatuses.AwaitingDeliver, "fbs", true)]
+    [InlineData(MarketplaceOrderStatuses.AwaitingPack, "fbs", false)]
+    [InlineData(MarketplaceOrderStatuses.Delivering, "fbs", false)]
+    [InlineData(MarketplaceOrderStatuses.AwaitingDeliver, "fbo", false)]
+    public void CanGetPackageLabel_OnlyPackedFbs(string status, string channel, bool expected)
+    {
+        Assert.Equal(expected, OzonCommerceMapper.CanGetPackageLabel(status, channel));
+    }
+
+    [Fact]
+    public void FromWarehouse_IsSellerStockLocation()
+    {
+        var location = OzonCommerceMapper.FromWarehouse(new WarehouseInfo
+        {
+            WarehouseId = 123,
+            Name = "FBS склад",
+            Status = "working",
+            IsRfbs = true
+        });
+
+        Assert.Equal("123", location.ExternalId);
+        Assert.Equal("FBS склад", location.Name);
+        Assert.Equal(MarketplaceLocationKinds.SellerWarehouse, location.Kind);
+        Assert.Equal("working", location.Extra!["status"]?.ToString());
     }
 }

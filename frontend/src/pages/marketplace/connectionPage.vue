@@ -21,6 +21,7 @@ import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
 import { randomUuidCompact } from "@/utils/uuid";
 import { FIELD_LIMITS, clipToLimit, fieldLimitIssue } from "@/lib/fieldLimits";
+import { normalizeCredentialFields } from "@/lib/credentialFields";
 import { displayFieldValue } from "@/lib/fieldDiff";
 import {
   displaySonnerError,
@@ -520,6 +521,15 @@ export default {
         updateOrderStatus: this.$t(
           "marketplace.connectionPage.capabilities.updateOrderStatus",
         ),
+        getOrderLabels: this.$t(
+          "marketplace.connectionPage.capabilities.getOrderLabels",
+        ),
+        getFulfillmentLocations: this.$t(
+          "marketplace.connectionPage.capabilities.getFulfillmentLocations",
+        ),
+        manageShipments: this.$t(
+          "marketplace.connectionPage.capabilities.manageShipments",
+        ),
         getPromotions: this.$t(
           "marketplace.connectionPage.capabilities.getPromotions",
         ),
@@ -543,6 +553,9 @@ export default {
         ),
         archiveProduct: this.$t(
           "marketplace.connectionPage.capabilities.archiveProduct",
+        ),
+        searchPublicCatalog: this.$t(
+          "marketplace.connectionPage.capabilities.searchPublicCatalog",
         ),
       };
     },
@@ -576,23 +589,7 @@ export default {
       return adapter?.credentialsSchema;
     },
     credentialFields() {
-      const schema = this.selectedAdapterSchema;
-      if (!schema) return [];
-      // Plugin-sourced schemas arrive PascalCase; normalize each field so the
-      // template's camelCase access (key/displayName/isSecret/…) always resolves.
-      const raw = schema.fields || schema.Fields || [];
-      return raw.map((f) => {
-        const type = f.type ?? f.Type ?? "text";
-        return {
-          key: f.key ?? f.Key,
-          displayName: f.displayName ?? f.DisplayName ?? f.key ?? f.Key,
-          description: f.description ?? f.Description,
-          placeholder: f.placeholder ?? f.Placeholder,
-          type,
-          isRequired: f.isRequired ?? f.IsRequired ?? true,
-          isSecret: (f.isSecret ?? f.IsSecret ?? false) || type === "password",
-        };
-      });
+      return normalizeCredentialFields(this.selectedAdapterSchema);
     },
     adapterDisplayName() {
       if (!this.connection) return "";
@@ -1096,10 +1093,12 @@ export default {
         if (field.isSecret) {
           this.credentialValues[field.key] = "";
         } else {
-          this.credentialValues[field.key] =
+          const fromPublic =
             publicCreds[field.key] != null
               ? String(publicCreds[field.key])
               : "";
+          this.credentialValues[field.key] =
+            fromPublic || field.defaultValue || "";
         }
       }
     },
@@ -3280,6 +3279,24 @@ export default {
                       }}
                     </Button>
                   </div>
+                  <Select
+                    v-else-if="field.type === 'select'"
+                    :model-value="credentialValues[field.key]"
+                    @update:model-value="credentialValues[field.key] = $event"
+                  >
+                    <SelectTrigger :id="`cred-${field.key}`" class="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="option in field.options"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Input
                     v-else
                     :id="`cred-${field.key}`"

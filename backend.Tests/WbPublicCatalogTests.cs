@@ -62,6 +62,30 @@ public class WbPublicCatalogTests
     }
 
     [Fact]
+    public void CardsDetailUrl_JoinsNmIds()
+    {
+        var url = WbPublicCatalogClient.CardsDetailUrl([555, 777]);
+        Assert.Contains("card.wb.ru/cards/v4/detail", url, StringComparison.Ordinal);
+        Assert.Contains("nm=555;777", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetProducts_MapsEachNmId()
+    {
+        var json = """
+            {"products":[{"id":555,"name":"Card A","salePriceU":10000,"pics":0},{"id":777,"name":"Card B","salePriceU":20000,"pics":0}]}
+            """;
+        var http = Scripted("card.wb.ru", json);
+        var client = new WbPublicCatalogClient(http);
+
+        var products = await client.GetProductsAsync([555, 777], CancellationToken.None);
+
+        Assert.Equal(2, products.Count);
+        Assert.Equal("Card A", products.First(p => p.ExternalId == "555").Name);
+        Assert.Equal("Card B", products.First(p => p.ExternalId == "777").Name);
+    }
+
+    [Fact]
     public void MapProduct_ReadsNestedSizePriceAndNamedOptions()
     {
         using var doc = JsonDocument.Parse(

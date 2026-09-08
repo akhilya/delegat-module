@@ -58,6 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl default-my
 EXPOSE 5000
 WORKDIR /app
 COPY --from=build --chown=1000:1000 /app .
+COPY --chown=1000:1000 docs /app/knowledge/docs
+COPY --chown=1000:1000 MEMORY.md PRODUCT.md DESIGN.md /app/knowledge/
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 USER 1000
 ENTRYPOINT ["dotnet", "Delegat.dll"]

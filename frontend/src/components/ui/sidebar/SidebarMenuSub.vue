@@ -11,6 +11,7 @@ const { setListRef, indicatorStyle } = useSlidingIndicator({
   itemSelector: SIDEBAR_NAV_INDICATOR_SELECTOR,
   observeSelector: SIDEBAR_NAV_INDICATOR_ITEMS,
   attributeFilter: ["data-active"],
+  edgeEnter: true,
 });
 </script>
 

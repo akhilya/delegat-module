@@ -341,5 +341,7 @@ public class EffectivePermissionsUnionTests
         Assert.DoesNotContain(Permissions.UsersManage, ops);
         Assert.DoesNotContain(Permissions.RolesManage, ops);
         Assert.Contains(Permissions.CatalogManage, ops);
+        Assert.Contains(Permissions.OrdersManage, ops);
+        Assert.Contains(Permissions.MarketplaceManage, ops);
     }
 }

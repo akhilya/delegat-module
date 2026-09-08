@@ -1,5 +1,9 @@
 # Development - infrastructure services only
 # Usage: docker compose up -d
+# Python sidecar (`sandbox`) is profile `ai` — started only when AI is on
+# (`pnpm dev` reads AI_ENABLED from .env.dev). Raw compose:
+#   docker compose --profile ai up     # AI on
+#   docker compose up                  # AI off (does not create sandbox)
 # Then run backend and frontend locally with: npm run dev
 
 name: delegat-dashboard
@@ -45,6 +49,41 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    restart: unless-stopped
+    networks:
+      - delegat-network
+
+  sandbox:
+    profiles: ["ai"]
+    build:
+      context: ./sandbox/python
+      dockerfile: Dockerfile
+    container_name: delegat-sandbox
+    environment:
+      SANDBOX_SECRET: ${SANDBOX_SECRET:-}
+      SANDBOX_TIMEOUT_SEC: ${SANDBOX_TIMEOUT_SEC:-30}
+      SANDBOX_CPU_THREADS: ${SANDBOX_CPU_THREADS:-1}
+      SANDBOX_AS_MB: ${SANDBOX_AS_MB:-384}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8091:8080"
+    # Keep the host usable: half a CPU, 512 MiB RAM, no extra swap.
+    cpus: ${SANDBOX_CPUS:-0.50}
+    cpu_shares: 128
+    mem_limit: ${SANDBOX_MEM_LIMIT:-512m}
+    memswap_limit: ${SANDBOX_MEM_LIMIT:-512m}
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - delegat-network

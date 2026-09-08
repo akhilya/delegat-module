@@ -106,6 +106,10 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<ReferenceTimezone> referenceTimezones { get; set; }
     public DbSet<ReferencePlugin> referencePlugins { get; set; }
     public DbSet<AiConversationMessage> aiConversationMessages { get; set; }
+    public DbSet<AiKnowledgeChunk> aiKnowledgeChunks { get; set; }
+    public DbSet<AiSandboxRun> aiSandboxRuns { get; set; }
+    public DbSet<AiAgentAudit> aiAgentAudits { get; set; }
+    public DbSet<AiChatAttachment> aiChatAttachments { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
@@ -516,6 +520,15 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiStoreSettings>()
             .HasIndex(s => s.StoreId)
             .IsUnique();
+
+        builder.Entity<AiKnowledgeChunk>()
+            .HasIndex(c => c.sourcePath);
+        builder.Entity<AiSandboxRun>()
+            .HasIndex(r => new { r.storeId, r.createdAt });
+        builder.Entity<AiAgentAudit>()
+            .HasIndex(a => new { a.storeId, a.createdAt });
+        builder.Entity<AiChatAttachment>()
+            .HasIndex(a => new { a.storeId, a.userId, a.sessionId });
 
         // StoreBrandingSettings - one row per store
         builder.Entity<StoreBrandingSettings>()

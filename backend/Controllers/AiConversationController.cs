@@ -15,12 +15,18 @@ public class AiConversationController : ControllerBase
     private readonly DataContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly AiChatService _chatService;
+    private readonly AiLiveTurnHub _liveTurns;
 
-    public AiConversationController(DataContext context, ICurrentUserService currentUserService, AiChatService chatService)
+    public AiConversationController(
+        DataContext context,
+        ICurrentUserService currentUserService,
+        AiChatService chatService,
+        AiLiveTurnHub liveTurns)
     {
         _context = context;
         _currentUserService = currentUserService;
         _chatService = chatService;
+        _liveTurns = liveTurns;
     }
 
     // GET /api/ai/conversations - list recent conversations
@@ -56,19 +62,7 @@ public class AiConversationController : ControllerBase
 
         if (conv == null) return NotFound();
 
-        return Ok(new
-        {
-            sessionId = conv.sessionId,
-            title     = conv.title,
-            messages  = conv.messages.Select(m => new
-            {
-                dbId           = m.Id,
-                role           = m.role,
-                content        = m.content,
-                toolCallsJson  = m.toolCallsJson,
-                feedbackRating = m.feedbackRating,
-            })
-        });
+        return Ok(ConversationDto(conv, storeId.Value, userId.Value));
     }
 
     // PATCH /api/ai/conversations/{sessionId} - rename conversation
@@ -106,19 +100,7 @@ public class AiConversationController : ControllerBase
 
         if (conv == null) return Ok(null);
 
-        return Ok(new
-        {
-            sessionId = conv.sessionId,
-            title     = conv.title,
-            messages  = conv.messages.Select(m => new
-            {
-                dbId          = m.Id,
-                role          = m.role,
-                content       = m.content,
-                toolCallsJson = m.toolCallsJson,
-                feedbackRating = m.feedbackRating,
-            })
-        });
+        return Ok(ConversationDto(conv, storeId.Value, userId.Value));
     }
 
     // POST /api/ai/conversations/{sessionId}/generate-title
@@ -171,22 +153,89 @@ public class AiConversationController : ControllerBase
             await _context.SaveChangesAsync(ct);
         }
 
-        // Only append messages beyond what's already saved (frontend sends full history)
-        var savedCount = await _context.aiConversationMessages
-            .CountAsync(m => m.conversationId == conv.Id, ct);
+        var existing = await _context.aiConversationMessages
+            .Where(m => m.conversationId == conv.Id)
+            .OrderBy(m => m.createdAt)
+            .ThenBy(m => m.Id)
+            .ToListAsync(ct);
+
+        var saved = new List<object>();
+        var hasIds = req.Messages.Any(m => m.DbId is > 0);
+
+        if (hasIds)
+        {
+            var incomingIds = req.Messages
+                .Where(m => m.DbId is > 0)
+                .Select(m => m.DbId!.Value)
+                .ToHashSet();
+            var extras = existing.Where(m => !incomingIds.Contains(m.Id)).ToList();
+            if (extras.Count > 0)
+                _context.aiConversationMessages.RemoveRange(extras);
+
+            var byId = existing.ToDictionary(m => m.Id);
+            foreach (var m in req.Messages)
+            {
+                if (m.DbId is > 0 && byId.TryGetValue(m.DbId.Value, out var row)
+                    && extras.All(e => e.Id != row.Id))
+                {
+                    row.role = m.Role;
+                    row.content = m.Content;
+                    row.toolCallsJson = m.ToolCallsJson;
+                    continue;
+                }
+
+                if (m.DbId is > 0) continue;
+
+                var msg = new AiConversationMessage
+                {
+                    conversationId = conv.Id,
+                    role = m.Role,
+                    content = m.Content,
+                    toolCallsJson = m.ToolCallsJson,
+                    createdAt = m.CreatedAt ?? DateTime.UtcNow,
+                };
+                _context.aiConversationMessages.Add(msg);
+                await _context.SaveChangesAsync(ct);
+                saved.Add(new { role = m.Role, dbId = msg.Id });
+            }
+
+            conv.lastMessageAt = DateTime.UtcNow;
+            conv.messageCount = req.Messages.Count;
+            if (conv.modelName == null && req.ModelName != null)
+                conv.modelName = req.ModelName;
+            await _context.SaveChangesAsync(ct);
+            return Ok(new { saved });
+        }
+
+        var savedCount = existing.Count;
+        if (req.Messages.Count == savedCount && savedCount > 0)
+        {
+            var lastReq = req.Messages[^1];
+            var last = existing[^1];
+            if (string.Equals(lastReq.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+                && last.role == "assistant")
+            {
+                last.content = lastReq.Content;
+                last.toolCallsJson = lastReq.ToolCallsJson;
+            }
+
+            conv.lastMessageAt = DateTime.UtcNow;
+            if (conv.modelName == null && req.ModelName != null)
+                conv.modelName = req.ModelName;
+            await _context.SaveChangesAsync(ct);
+            return Ok(new { saved });
+        }
 
         var newMessages = req.Messages.Skip(savedCount).ToList();
-        var saved = new List<object>();
-
         foreach (var m in newMessages)
         {
             var msg = new AiConversationMessage
             {
                 conversationId = conv.Id,
-                role           = m.Role,
-                content        = m.Content,
-                toolCallsJson  = m.ToolCallsJson,
-                createdAt      = m.CreatedAt ?? DateTime.UtcNow,
+                role = m.Role,
+                content = m.Content,
+                toolCallsJson = m.ToolCallsJson,
+                createdAt = m.CreatedAt ?? DateTime.UtcNow,
             };
             _context.aiConversationMessages.Add(msg);
             await _context.SaveChangesAsync(ct);
@@ -194,7 +243,7 @@ public class AiConversationController : ControllerBase
         }
 
         conv.lastMessageAt = DateTime.UtcNow;
-        conv.messageCount  = savedCount + newMessages.Count;
+        conv.messageCount = savedCount + newMessages.Count;
         if (conv.modelName == null && req.ModelName != null)
             conv.modelName = req.ModelName;
         await _context.SaveChangesAsync(ct);
@@ -241,6 +290,21 @@ public class AiConversationController : ControllerBase
         await _context.SaveChangesAsync(ct);
         return Ok(new { success = true });
     }
+
+    private object ConversationDto(AiConversation conv, int storeId, int userId) => new
+    {
+        sessionId = conv.sessionId,
+        title = conv.title,
+        generating = _liveTurns.IsGenerating(conv.sessionId, storeId, userId),
+        messages = conv.messages.Select(m => new
+        {
+            dbId = m.Id,
+            role = m.role,
+            content = m.content,
+            toolCallsJson = m.toolCallsJson,
+            feedbackRating = m.feedbackRating,
+        })
+    };
 }
 
 public class SaveMessagesRequest
@@ -252,6 +316,7 @@ public class SaveMessagesRequest
 
 public class SaveMessageItem
 {
+    public int? DbId { get; set; }
     public string Role { get; set; } = "";
     public string Content { get; set; } = "";
     public string? ToolCallsJson { get; set; }

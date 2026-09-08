@@ -47,7 +47,7 @@ const ROUTE_PERMISSIONS = {
   [PAGE_CATEGORIES]: [PERMS.CatalogManage],
   [PAGE_BARCODES]: [PERMS.CatalogManage],
   [PAGE_NOTES]: [PERMS.CatalogManage],
-  [PAGE_ORDERS]: [PERMS.MarketplaceManage],
+  [PAGE_ORDERS]: [PERMS.OrdersManage],
   [PAGE_STORE_ATTRIBUTES]: [PERMS.CatalogManage],
   [PAGE_TOOLS]: [
     PERMS.OperationsManage,
@@ -101,7 +101,7 @@ export function getRequiredPermissionsForPath(path) {
   }
   if (p.startsWith(`${PAGE_NOTES}/`)) return [PERMS.CatalogManage];
   if (p === PAGE_ORDERS || p.startsWith(`${PAGE_ORDERS}/`)) {
-    return [PERMS.MarketplaceManage];
+    return [PERMS.OrdersManage];
   }
   if (p.startsWith(`${PAGE_TOOLS}/`)) {
     return [PERMS.MarketplaceManage];

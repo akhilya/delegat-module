@@ -32,6 +32,10 @@ public class PluginCapabilitySmokeTests
         AssertCommerceFlags(new WildberriesPlugin().Capabilities);
         Assert.True(new OzonPlugin().Capabilities.HasFlag(MarketplaceCapabilities.SearchPublicCatalog));
         Assert.True(new WildberriesPlugin().Capabilities.HasFlag(MarketplaceCapabilities.SearchPublicCatalog));
+        Assert.True(new OzonPlugin().Capabilities.HasFlag(MarketplaceCapabilities.GetFulfillmentLocations));
+        Assert.False(new OzonPlugin().Capabilities.HasFlag(MarketplaceCapabilities.ManageShipments));
+        Assert.True(new WildberriesPlugin().Capabilities.HasFlag(MarketplaceCapabilities.GetFulfillmentLocations));
+        Assert.True(new WildberriesPlugin().Capabilities.HasFlag(MarketplaceCapabilities.ManageShipments));
     }
 
     private static void AssertCommerceFlags(MarketplaceCapabilities capabilities)

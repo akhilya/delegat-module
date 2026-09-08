@@ -129,7 +129,10 @@ public sealed class MarketplaceOrderSnapshotService
             {
                 var parsed = JsonSerializer.Deserialize<ExternalOrder>(row.payloadJson, JsonOptions);
                 if (parsed != null)
+                {
+                    parsed.SyncedAt = new DateTimeOffset(DateTime.SpecifyKind(row.syncedAt, DateTimeKind.Utc));
                     return parsed;
+                }
             }
             catch (JsonException)
             {
@@ -145,7 +148,8 @@ public sealed class MarketplaceOrderSnapshotService
             Currency = row.currency,
             Total = row.total,
             CreatedAt = ToOffset(row.orderCreatedAt),
-            UpdatedAt = ToOffset(row.orderUpdatedAt)
+            UpdatedAt = ToOffset(row.orderUpdatedAt),
+            SyncedAt = new DateTimeOffset(DateTime.SpecifyKind(row.syncedAt, DateTimeKind.Utc))
         };
     }
 

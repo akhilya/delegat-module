@@ -4,6 +4,7 @@
  * Parent should give the wrapper a size (e.g. size-full inside a sized box).
  */
 import { ref, watch } from "vue";
+import { Image } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,15 @@ function onError(e) {
 </script>
 
 <template>
-  <div :class="cn('relative overflow-hidden', props.class)">
+  <div
+    :class="
+      cn(
+        'relative overflow-hidden',
+        (!src || failed) && 'flex items-center justify-center',
+        props.class,
+      )
+    "
+  >
     <div
       v-if="src && isLoading"
       class="absolute inset-0 z-20 flex items-center justify-center"
@@ -75,7 +84,7 @@ function onError(e) {
         :class="cn('text-muted-foreground', spinnerClass)"
       />
     </div>
-    <template v-if="src">
+    <template v-if="src && !failed">
       <img
         v-if="blurBackdrop"
         :src="src"
@@ -86,12 +95,19 @@ function onError(e) {
       <img
         :src="src"
         :alt="alt"
-        :class="cn(imgClass, isLoading || failed ? 'opacity-0' : 'opacity-100')"
+        :class="cn(imgClass, isLoading ? 'opacity-0' : 'opacity-100')"
         v-bind="$attrs"
         @load="onLoad"
         @error="onError"
       />
     </template>
-    <slot v-else />
+    <slot v-else>
+      <div
+        class="bg-secondary flex size-full items-center justify-center"
+        aria-hidden="true"
+      >
+        <Image class="text-secondary-foreground size-[25%]" />
+      </div>
+    </slot>
   </div>
 </template>

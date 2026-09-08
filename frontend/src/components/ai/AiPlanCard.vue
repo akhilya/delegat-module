@@ -1,58 +1,62 @@
 <script setup>
-import { AlertTriangle, CheckCircle2, X } from "lucide-vue-next";
+import { Check, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import { useI18n } from "vue-i18n";
-
-const { t } = useI18n();
 
 defineProps({
   plan: { type: Object, required: true },
   confirmed: { type: Boolean, default: false },
   cancelled: { type: Boolean, default: false },
+  executed: { type: Boolean, default: false },
+  failed: { type: Boolean, default: false },
 });
 defineEmits(["confirm", "cancel"]);
+
+const { t } = useI18n();
 </script>
 
 <template>
-  <div
-    class="border-l-2 pl-3 py-0.5 text-sm"
-    :class="plan.isDestructive ? 'border-amber-400/70' : 'border-border'"
-  >
-    <!-- Header -->
-    <div class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
-      <AlertTriangle v-if="plan.isDestructive" class="size-3.5 text-amber-500 shrink-0" />
-      <span>{{ plan.summary }}</span>
+  <InsetGroup class="w-full">
+    <div class="px-2.5 py-2.5">
+      <p class="text-xs text-muted-foreground">{{ t("ai.planTitle") }}</p>
+      <p class="mt-0.5 text-sm leading-snug">{{ plan.summary }}</p>
+      <p v-if="plan.affectedCount" class="mt-1 text-xs text-muted-foreground">
+        {{ t("ai.planAffected") }}
+        <span class="text-foreground">{{ plan.affectedCount }}</span>
+      </p>
     </div>
-
-    <!-- Steps -->
-    <div v-if="plan.steps?.length" class="flex flex-col gap-0.5 mb-2">
-      <div
-        v-for="(step, i) in plan.steps"
-        :key="i"
-        class="flex items-baseline gap-2 text-xs text-muted-foreground"
+    <InsetGroupItem v-for="(step, i) in plan.steps" :key="i" as="div">
+      <p class="leading-snug">{{ step.description }}</p>
+    </InsetGroupItem>
+    <div v-if="!confirmed && !cancelled" class="flex gap-2 px-2 pb-2 pt-1">
+      <Button size="sm" class="h-8 flex-1" @click="$emit('confirm')">
+        {{ t("ai.planExecute") }}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-8 flex-1"
+        @click="$emit('cancel')"
       >
-        <span class="font-mono text-[10px] text-foreground/50 shrink-0 min-w-[60px]">{{ step.tool }}</span>
-        <span class="leading-snug">{{ step.description }}</span>
-      </div>
+        {{ t("common.cancel") }}
+      </Button>
     </div>
-
-    <!-- Affected count -->
-    <div v-if="plan.affectedCount" class="text-xs text-muted-foreground mb-2">
-      {{ t("ai.planAffected") }} <span class="text-foreground font-medium">{{ plan.affectedCount }}</span>
+    <div
+      v-else
+      class="flex items-center gap-2 px-2.5 pb-2.5 text-xs text-muted-foreground"
+    >
+      <Check v-if="confirmed && !cancelled && !failed" class="size-3.5" />
+      <X v-else class="size-3.5" :class="failed && 'text-destructive'" />
+      <span :class="failed && 'text-destructive'">{{
+        cancelled
+          ? t("ai.planCancelled")
+          : failed
+            ? t("ai.planFailed")
+            : executed
+              ? t("ai.planExecuted")
+              : t("ai.planExecuting")
+      }}</span>
     </div>
-
-    <!-- Actions / Status -->
-    <div v-if="!confirmed && !cancelled" class="flex gap-2 mt-2">
-      <Button size="sm" class="h-7 text-xs" @click="$emit('confirm')">{{ t("ai.planExecute") }}</Button>
-      <Button variant="ghost" size="sm" class="h-7 text-xs" @click="$emit('cancel')">{{ t("common.cancel") }}</Button>
-    </div>
-    <div v-else-if="confirmed" class="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-      <CheckCircle2 class="size-3 text-green-600" />
-      <span>{{ t("ai.planExecuting") }}</span>
-    </div>
-    <div v-else-if="cancelled" class="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-      <X class="size-3" />
-      <span>{{ t("ai.planCancelled") }}</span>
-    </div>
-  </div>
+  </InsetGroup>
 </template>

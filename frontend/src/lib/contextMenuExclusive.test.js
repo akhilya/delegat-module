@@ -55,3 +55,16 @@ describe("products table context menu", () => {
     assert.match(src, /@contextmenu="onRowContextMenu\(row\)"/);
   });
 });
+
+describe("orders packing overview context menu", () => {
+  it("uses one ContextMenu per connection group, not one per row", () => {
+    const src = readFileSync(
+      new URL("../pages/orders/OrdersAssemblyPage.vue", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(src, /<ContextMenu\s+v-for/);
+    assert.match(src, /<ContextMenu(?:\s|>)/);
+    assert.match(src, /OrderRowContextMenu/);
+    assert.match(src, /@contextmenu="onRowContextMenu\(/);
+  });
+});

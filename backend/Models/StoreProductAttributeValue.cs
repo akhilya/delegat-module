@@ -107,6 +107,7 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
         /// Updated attribute value string.
         /// </summary>
         [StringLength(VALUE_MAX_LENGTH)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(Delegat.Infrastructure.Json.FlexibleJsonStringConverter))]
         public string? value { get; set; }
     }
 
@@ -155,6 +156,7 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
         /// Attribute value string.
         /// </summary>
         [StringLength(VALUE_MAX_LENGTH)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(Delegat.Infrastructure.Json.FlexibleJsonStringConverter))]
         public string value { get; set; }
     }
 }

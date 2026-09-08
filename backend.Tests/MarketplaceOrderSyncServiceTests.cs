@@ -330,6 +330,58 @@ public class MarketplaceOrderSyncServiceTests
         Assert.Equal(MarketplaceOrderSyncService.MaxInFlightIdRefreshesPerRun, adapter.GetOrderCalls);
     }
 
+    [Fact]
+    public async Task RefreshInFlight_TakesUnlistedAfterExcludingThisRunUpserts()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db);
+        var listed = Enumerable.Range(0, MarketplaceOrderSyncService.MaxInFlightIdRefreshesPerRun)
+            .Select(i => MakeOrder($"listed-{i}"))
+            .ToList();
+        var listedSyncedAt = time.UtcNow.UtcDateTime;
+        foreach (var order in listed)
+        {
+            db.marketplaceOrders.Add(new MarketplaceOrder
+            {
+                storeId = connection.storeId,
+                connectionId = connection.Id,
+                marketplaceOrderId = order.ExternalId,
+                status = MarketplaceOrderStatuses.AwaitingPack,
+                channel = "fbs",
+                currency = "RUB",
+                syncedAt = listedSyncedAt,
+                payloadJson = "{}"
+            });
+        }
+
+        db.marketplaceOrders.Add(new MarketplaceOrder
+        {
+            storeId = connection.storeId,
+            connectionId = connection.Id,
+            marketplaceOrderId = "unlisted-stale",
+            status = MarketplaceOrderStatuses.AwaitingPack,
+            channel = "fbs",
+            currency = "RUB",
+            syncedAt = listedSyncedAt.AddHours(-2),
+            payloadJson = "{}"
+        });
+        await db.SaveChangesAsync();
+
+        adapter.EnqueuePages(
+            MarketplaceOrderStatuses.AwaitingPack,
+            OrdersAdapterFake.Page(listed, hasMore: false));
+        adapter.OrdersById["unlisted-stale"] = MakeOrder("unlisted-stale", status: MarketplaceOrderStatuses.Delivering);
+
+        await sync.SyncConnectionStatusesAsync(
+            connection,
+            [MarketplaceOrderStatuses.AwaitingPack],
+            "background",
+            CancellationToken.None);
+
+        Assert.Equal(1, adapter.GetOrderCalls);
+        Assert.Equal(["unlisted-stale"], adapter.GetOrderIds);
+    }
+
     private static async Task<(
         MarketplaceOrderSyncService Sync,
         OrdersAdapterFake Adapter,

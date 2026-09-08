@@ -2,16 +2,15 @@
   "name": "delegat-dashboard",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n docker,api,web -c blue,green,cyan \"npm run dev:docker\" \"npm run dev:api\" \"npm run dev:web:after-api\"",
-    "dev:docker": "docker compose --env-file .env.dev up",
+    "dev": "concurrently -n docker,api,web -c blue,green,cyan \"npm run dev:docker\" \"npm run dev:api:skip-vite\" \"npm run dev:web\"",
+    "dev:docker": "node scripts/compose-dev.mjs up",
     "dev:api": "cd backend && dotenv -e ../.env.dev -o -- dotnet watch run",
+    "dev:api:skip-vite": "cd backend && dotenv -e ../.env.dev -o -v SKIP_VITE_DEV_SERVER=1 -- dotnet watch run",
     "dev:web": "cd frontend && npm run dev",
-    "dev:web:after-api": "wait-on -t 180000 http-get://127.0.0.1:5000/api/health && npm run dev:web",
-    "dev:stop": "docker compose down"
+    "dev:stop": "node scripts/compose-dev.mjs down"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "dotenv-cli": "^8.0.0",
-    "wait-on": "^8.0.5"
+    "dotenv-cli": "^8.0.0"
   }
 }

@@ -137,8 +137,8 @@ Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is t
 |--------|------|-------------|
 | GET | `/` | List. Query: `search` (name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode), `categoryId` (`-1` = no category), `page`, `pageSize`. Items include `variantCount`. Trashed products are omitted. |
 | GET | `/{productId}` | Detail: prices, `attributeValues`, `storeAttributeValues`, and `variants` (size, SKU, barcode, price, quantity, sortOrder) |
-| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create. `categoryId` must belong to this store. Barcode must be EAN-8/13 when set. |
-| PATCH | `/{productId}` | Partial update. Sending `attributeValues` or `storeAttributeValues` **replaces** that collection (same as the dashboard). |
+| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create. `categoryId` must belong to this store. Barcode must be EAN-8/13 when set. Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted and stored as text (arrays as JSON text). |
+| PATCH | `/{productId}` | Partial update. Sending `attributeValues` or `storeAttributeValues` **replaces** that collection (same as the dashboard). Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted. |
 | DELETE | `/{productId}` | Soft-delete (trash) |
 | GET | `/{productId}/variants` | Size variants for the product |
 | POST | `/{productId}/variants` | Create. Body: `{ sku?, barcode?, size?, price?, quantity? }` |
@@ -207,19 +207,29 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 | POST | `/export-stocks` | `{ linkIds?: number[] }` | |
 | POST | `/import-stocks` | _(empty)_ | Adapter must support import stocks |
 
-### Marketplace commerce (live, not stored)
+### Marketplace commerce (orders stored; prices/promotions/shipments live)
 
 Base: `/stores/{storeId}/connections/{connectionId}/…`
 
-These calls go to the marketplace cabinet and return immediately. They do **not** create an Operation and do **not** persist orders or promotions in Delegat. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`.
+Order **lists and gets** read Delegat’s snapshot (eventually consistent; additive `syncedAt`). They do **not** call the marketplace. A background worker plus cabinet page-load (5-minute cooldown) pull new rows. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`. Seller status POST still goes to the marketplace, then upserts. Labels, shipments, prices, and promotions stay live pass-through.
 
 | Method | Path | Capability | Notes |
 |--------|------|------------|--------|
 | GET | `/prices` | ImportPrices | Query `ids` = comma-separated marketplace product ids (omit = page what the adapter can list). Includes discounts / sale / marketing price when the marketplace sends them. |
-| GET | `/orders` | GetOrders | Query: `page`, `pageSize`, `cursor`, `status`, `from`, `to`, `channel` (`fbs` / `fbo` / `shop`), `search`. Response is the usual page plus `nextCursor` and `hasMore` when the marketplace is cursor-based. Normalized `status`: `new`, `confirmed`, `awaiting_pack`, `awaiting_deliver`, `delivering`, `delivered`, `cancelled`, `returned`, `unpaid`, `unknown`. Cabinet New (`new` / `unpaid`) is the accept queue (Ozon `awaiting_approve`). Wildberries FBS has no accept step: new assembly tasks (`supplierStatus=new`, `GET /api/v3/orders/new`) are `awaiting_pack`; in a supply (`confirm`) is `awaiting_deliver`; handed to WB (`complete`) is `delivering` until `wbStatus=sold`. List payloads have no statuses — the adapter loads them from `POST /api/v3/orders/status`. Each item may include `imageUrl` (Wildberries basket CDN, Ozon Seller API primary photo, or the local linked product photo). |
-| GET | `/orders/{orderId}` | GetOrders | Missing → `404 order_not_found` |
-| GET | `/orders/{orderId}/label` | GetOrderLabels | Packing label / barcode sticker. Body: `{ contentType, fileName, contentBase64, format, barcode?, extra? }`. `format` is `pdf`, `png`, or `svg`. Ozon FBS PDF (`/v2/posting/fbs/package-label`), Wildberries PNG sticker (`/api/v3/orders/stickers`), Yandex Market PDF (`/v2/campaigns/…/orders/…/delivery/labels`). WooCommerce and OpenCart → `400 adapter_capability_missing`. Failure → `400 order_label_failed` (order not packed yet, FBO, marketplace error). |
-| POST | `/orders/{orderId}/status` | UpdateOrderStatus | Body `{ action, reason?, trackingNumber?, deliveryService?, extra? }`. `action`: `confirm`, `pack`, `ship`, `deliver`, `complete`, `cancel`. Failure → `400 order_status_failed`. |
+| GET | `/orders` | GetOrders | Snapshot. Query: `page`, `pageSize`, `cursor` (ignored; next page is `page+1` in `nextCursor`), `status`, `from`, `to`, `channel` (`fbs` / `fbo` / `shop`), `search`. Same item fields as before plus `syncedAt`. Never synced → empty page, not a live cabinet dump. Normalized `status`: `new`, `confirmed`, `awaiting_pack`, `awaiting_deliver`, `delivering`, `delivered`, `cancelled`, `returned`, `unpaid`, `unknown`. Yandex Market maps those to Partner API `UNPAID` / `PROCESSING` / `PICKUP` / `DELIVERY` / `DELIVERED` / `CANCELLED` / `RETURNED` (`new` is `UNPAID`, packing is `PROCESSING` — Yandex has no `NEW` / `AWAITING_PACK`). Cabinet New (`new` / `unpaid`) is the accept queue (Ozon `awaiting_approve`). Wildberries FBS has no accept step: new assembly tasks (`supplierStatus=new`, `GET /api/v3/orders/new`) are `awaiting_pack`; in a supply (`confirm`) is `awaiting_deliver`; handed to WB (`complete`) is `delivering` until `wbStatus=sold`. Each item may include `imageUrl`, `name`, `barcode`, and `localProductId` as before. Wildberries `displayId` is the numeric order id (not `rid`). Search matches stored posting / display ids. |
+| GET | `/orders/{orderId}` | GetOrders | Snapshot. Missing → `404 order_not_found` (never synced). Ozon: posting number or the cabinet order number. Same item fields as the list plus `syncedAt`. |
+| GET | `/orders/{orderId}/label` | GetOrderLabels | Packing label / barcode sticker. Body: `{ contentType, fileName, contentBase64, format, barcode?, extra? }`. `format` is `pdf`, `png`, or `svg`. **Only in statuses where the marketplace can print:** Ozon FBS PDF (`/v2/posting/fbs/package-label`) after assemble (`awaiting_deliver`); FBO has none. Wildberries PNG sticker (`/api/v3/orders/stickers`) for `confirm` (in a supply) and `complete` (in delivery), not new assembly. Yandex Market PDF (`/v2/campaigns/…/orders/…/delivery/labels`) while `PROCESSING` (FBS/DBS); FBY has none. WooCommerce and OpenCart → `400 adapter_capability_missing`. Wrong status or marketplace error → `400 order_label_failed`. |
+| POST | `/orders/{orderId}/status` | UpdateOrderStatus | Body `{ action, reason?, trackingNumber?, deliveryService?, extra? }`. `action`: `confirm`, `pack`, `ship`, `deliver`, `complete`, `cancel`. **Not every marketplace accepts every action.** Ozon FBS: `pack`/`confirm` assemble (`/v4/posting/fbs/ship`), `ship` hands over (`/v2/posting/fbs/awaiting-delivery`), `cancel` before handover. Ozon does **not** let the seller mark delivered (`deliver`/`complete` → `400 order_status_failed`). Wildberries FBS: `pack`/`confirm` add to a supply (`extra.supplyId` uses that supply; omit it and the adapter creates one), optional `extra.boxId` / `extra.createBox` for a TRBX; `ship` delivers **the whole supply** (`extra.supplyId`); `cancel` on new assembly tasks; sold is WB logistics. Yandex: `deliver`/`complete` are for DBS (shop delivery), not FBS/FBY. Woo/OpenCart: shop-owned statuses. Failure → `400 order_status_failed`. |
+| GET | `/fulfillment/locations` | GetFulfillmentLocations | Query `kind`: `seller_warehouse` or `marketplace_office` (omit = both). Wildberries: seller warehouses (`GET /api/v3/warehouses`) and drop-off offices (`GET /api/v3/offices`). Ozon: seller warehouses only (`/v2/warehouse/list`). Yandex/Woo/OpenCart → `400 adapter_capability_missing`. Marketplace error → `400 fulfillment_location_failed`. Not stored. |
+| GET | `/shipments` | ManageShipments | Query: `limit`, `cursor`, `openOnly`. Live supplies (Wildberries `GET /api/v3/supplies`). Response is a page plus `nextCursor` / `hasMore`. Yandex/Ozon/Woo/OpenCart → `400 adapter_capability_missing`. Marketplace error → `400 shipment_failed`. Not stored. |
+| POST | `/shipments` | ManageShipments | Body `{ name?, destinationLocationId? }`. Creates an open Wildberries supply. `destinationLocationId` is display-only when the marketplace has no write. Failure → `400 shipment_failed`. |
+| GET | `/shipments/{shipmentId}` | ManageShipments | Missing → `404 shipment_not_found`. Includes order ids and boxes when the API has them. |
+| POST | `/shipments/{shipmentId}/orders` | ManageShipments | Body `{ orderIds }`. Adds assembly orders to the supply. Failure → `400 shipment_failed`. |
+| GET | `/shipments/{shipmentId}/boxes` | ManageShipments | Wildberries TRBX list. |
+| POST | `/shipments/{shipmentId}/boxes` | ManageShipments | Body `{ amount }` (default 1). Pickup-point supplies only. Failure → `400 shipment_failed`. |
+| POST | `/shipments/{shipmentId}/boxes/{boxId}/orders` | ManageShipments | Body `{ orderIds }`. Puts orders into a TRBX. Failure → `400 shipment_failed`. |
+| GET | `/shipments/{shipmentId}/boxes/{boxId}/label` | ManageShipments | Box QR sticker (same body as order labels). Empty box or marketplace error → `400 shipment_failed`. |
+| GET | `/shipments/{shipmentId}/label` | ManageShipments | Supply QR. Wildberries: only after `ship` / deliver. Failure → `400 shipment_failed`. |
 | GET | `/promotions` | GetPromotions | Query: `page`, `pageSize`, `cursor`, `status`, `type`. Marketplace actions, calendar campaigns, or shop coupons. |
 | GET | `/promotions/{promotionId}` | GetPromotions | Missing → `404 promotion_not_found` |
 | POST | `/promotions/{promotionId}/products` | UpdatePromotions | Body `{ add: [{ externalProductId, actionPrice? }], removeExternalProductIds: [] }`. Failure → `400 promotion_update_failed`. |
@@ -243,18 +253,22 @@ curl -X POST -H "Authorization: Bearer dk_..." \
   -d '{"linkIds":[10,11]}' \
   "https://instance.example/api/v1/stores/1/connections/3/export-prices"
 
-# List orders (live marketplace cabinet)
+# List stored orders (snapshot)
 curl -H "Authorization: Bearer dk_..." \
   "https://instance.example/api/v1/stores/1/connections/3/orders?page=1&pageSize=50"
 
 # Packing label (Base64 file; Ozon / Wildberries / Yandex Market)
 curl -H "Authorization: Bearer dk_..." \
   "https://instance.example/api/v1/stores/1/connections/3/orders/1234-0001/label"
+
+# Open Wildberries supplies
+curl -H "Authorization: Bearer dk_..." \
+  "https://instance.example/api/v1/stores/1/connections/3/shipments?openOnly=true"
 ```
 
 ## Out of scope (v1)
 
-Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys. Orders and promotions are not stored in Delegat (no local order tables).
+Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys. Promotions are not stored in Delegat. Order snapshots are kept until the connection or store is deleted (no historical backfill of the cabinet). Operator MCP / Agent HTTP (`docs/api/mcp.md`) is not part of `/api/v1`.
 
 ## Related
 

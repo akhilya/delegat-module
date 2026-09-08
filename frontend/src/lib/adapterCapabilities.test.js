@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   adapterCanGetOrderLabels,
+  adapterCanGetFulfillmentLocations,
   adapterCanGetOrders,
   adapterCanImportAll,
   adapterCanImportCatalog,
   adapterCanLink,
+  adapterCanManageShipments,
   adapterCanSearchPublicCatalog,
   adapterCanUpdateOrderStatus,
   adapterHasCapability,
@@ -178,5 +181,50 @@ describe("adapterCanGetOrders", () => {
       adapterCanGetOrderLabels({ capabilities: "GetOrders" }),
       false,
     );
+    assert.equal(
+      adapterCanManageShipments({ capabilities: { manageShipments: true } }),
+      true,
+    );
+    assert.equal(
+      adapterCanManageShipments({ capabilities: "GetOrderLabels" }),
+      false,
+    );
+    assert.equal(
+      adapterCanGetFulfillmentLocations({
+        capabilities: { getFulfillmentLocations: true },
+      }),
+      true,
+    );
+  });
+});
+
+describe("adapter capability dialog labels", () => {
+  it("names packing labels, fulfillment, shipments, and public catalog search", () => {
+    const connectionPage = readFileSync(
+      new URL("../pages/marketplace/connectionPage.vue", import.meta.url),
+      "utf8",
+    );
+    const en = JSON.parse(
+      readFileSync(new URL("../locales/en.json", import.meta.url), "utf8"),
+    );
+    const ru = JSON.parse(
+      readFileSync(new URL("../locales/ru.json", import.meta.url), "utf8"),
+    );
+    const labels = en.marketplace.connectionPage.capabilities;
+    const ruLabels = ru.marketplace.connectionPage.capabilities;
+    for (const key of [
+      "getOrderLabels",
+      "getFulfillmentLocations",
+      "manageShipments",
+      "searchPublicCatalog",
+    ]) {
+      assert.match(connectionPage, new RegExp(`capabilities\\.${key}`));
+      assert.equal(typeof labels[key], "string");
+      assert.ok(labels[key].length > 0);
+      assert.equal(typeof ruLabels[key], "string");
+      assert.ok(ruLabels[key].length > 0);
+    }
+    assert.equal(typeof en.pages.usersPage.permissionLabels.orders.manage, "string");
+    assert.equal(typeof ru.pages.usersPage.permissionLabels.orders.manage, "string");
   });
 });

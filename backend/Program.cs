@@ -22,8 +22,7 @@ using Delegat.Controllers;
 using Delegat.Services;
 using Delegat.Services.DataMigrations;
 using Delegat.Services.Ai;
-using Delegat.Services.Ai.Tools;
-using Delegat.Services.Ai.Tools.Handlers;
+using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Tools;
 using Delegat.Services.Plugins;
@@ -250,8 +249,7 @@ builder.Services.AddSingleton<PluginManager>();
 builder.Services.AddSingleton<IMediaBlobReader, StorageMediaBlobReader>();
 
 builder.Services.AddSingleton(CatalogScrapePlaywrightOptions.FromEnvironment());
-builder.Services.AddSingleton<StorefrontPlaywrightLoader>();
-builder.Services.AddSingleton<IStorefrontPageLoader>(sp => sp.GetRequiredService<StorefrontPlaywrightLoader>());
+builder.Services.AddSingleton<IStorefrontPageLoader, StorefrontPlaywrightLoader>();
 
 // Plugin Adapter Registry (implements IMarketplaceAdapterRegistry using plugins)
 builder.Services.AddSingleton<PluginAdapterRegistry>();
@@ -290,24 +288,7 @@ builder.Services.AddHostedService<AdapterHttpLogCleanupService>();
 // AI services — registered only when AI_ENABLED is true at process start (restart to toggle).
 var aiEnabled = FeatureFlags.IsAiEnabled();
 if (aiEnabled)
-{
-    builder.Services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
-    builder.Services.AddScoped<AiModelConfigService>();
-    builder.Services.AddScoped<AiChatService>();
-    builder.Services.AddScoped<ProductToolHandlers>();
-    builder.Services.AddScoped<CategoryToolHandlers>();
-    builder.Services.AddScoped<MappingToolHandlers>();
-    builder.Services.AddScoped<GroupToolHandlers>();
-    builder.Services.AddScoped<SyncToolHandlers>();
-    builder.Services.AddScoped<FileToolHandlers>();
-    builder.Services.AddScoped<AnalyticsToolHandlers>();
-    builder.Services.AddScoped<RollbackToolHandlers>();
-    builder.Services.AddScoped<ToolDispatcher>();
-    builder.Services.AddScoped<GraphMutationService>();
-    builder.Services.AddScoped<MappingIntelligenceService>();
-    builder.Services.AddScoped<AiOperationService>();
-    builder.Services.AddScoped<GenerativeMappingService>();
-}
+    builder.Services.AddAiAssistant();
 
 // Sync services (MappingService resolves GenerativeMappingService optionally)
 builder.Services.AddScoped<MappingService>(sp =>
@@ -348,6 +329,7 @@ builder.Services.AddScoped<Delegat.Services.FolderJobs.FolderJobService>();
 builder.Services.AddHostedService<FolderJobBackgroundService>();
 builder.Services.AddHostedService<CatalogConnectBackgroundService>();
 builder.Services.AddHostedService<QueueCleanupBackgroundService>();
+builder.Services.AddHostedService<OrderSyncBackgroundService>();
 
 if (builder.Environment.IsDevelopment())
     builder.Services.AddHostedService<ViteDevServerHostedService>();
@@ -463,6 +445,9 @@ builder.Services.AddRateLimiter(options =>
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         var path = httpContext.Request.Path;
+
+        if (httpContext.Items.ContainsKey(CabinetRequestInvoker.NestedItemKey))
+            return RateLimitPartition.GetNoLimiter("exempt-agent-nested");
 
         // Probes and SignalR must not share the SPA bucket — 429 here causes reconnect storms.
         if (path.StartsWithSegments("/api/health") || path.StartsWithSegments("/hubs"))
@@ -682,7 +667,18 @@ using (var scope = app.Services.CreateScope())
 
 // Middleware pipeline
 app.UseForwardedHeaders();
+if (aiEnabled)
+{
+    var cabinetPipeline = app.Services.GetRequiredService<CabinetPipeline>();
+    app.Use((ctx, next) =>
+    {
+        cabinetPipeline.Capture(next);
+        return next(ctx);
+    });
+}
 app.UseMiddleware<ExceptionMiddleware>();
+// Explicit so nested platform_request includes routing (auto-insert at the start would skip it).
+app.UseRouting();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 // Before Swagger so /swagger is also gated by the Public API instance toggle.
 app.UseMiddleware<PublicApiEnabledMiddleware>();

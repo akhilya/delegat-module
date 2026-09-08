@@ -24,6 +24,7 @@ public sealed class StorefrontPlaywrightLoader : IStorefrontPageLoader, IAsyncDi
     private bool _loggedUnavailable;
     private bool _triedInstall;
     private bool _droppedChannel;
+    private int _disposed;
 
     public StorefrontPlaywrightLoader(
         CatalogScrapePlaywrightOptions options,
@@ -460,14 +461,24 @@ public sealed class StorefrontPlaywrightLoader : IStorefrontPageLoader, IAsyncDi
 
     public async ValueTask DisposeAsync()
     {
-        await _initLock.WaitAsync();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         try
         {
-            await DisposeBrowserUnlockedAsync();
+            await _initLock.WaitAsync();
+            try
+            {
+                await DisposeBrowserUnlockedAsync();
+            }
+            finally
+            {
+                _initLock.Release();
+            }
         }
-        finally
+        catch (ObjectDisposedException)
         {
-            _initLock.Release();
+            // Host can dispose the singleton twice (concrete + IStorefrontPageLoader).
         }
 
         _initLock.Dispose();

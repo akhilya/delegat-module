@@ -7,11 +7,13 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ChevronDown } from "lucide-vue-next";
 import ProductIdentityCell from "@/components/products/ProductIdentityCell.vue";
+import { useProductImageSize } from "@/composables/useProductImageSize";
 import {
   ORDER_ITEM_PREVIEW_MAX,
   orderHiddenLineCount,
   orderItemImageUrl,
   orderItemName,
+  orderItemProductTo,
   orderItemQuantity,
   orderItemSku,
   orderItemsNeedCollapse,
@@ -24,6 +26,7 @@ const props = defineProps({
 
 const { t } = useI18n();
 const expanded = ref(false);
+const { spec } = useProductImageSize();
 
 const needsCollapse = computed(() =>
   orderItemsNeedCollapse(props.row, ORDER_ITEM_PREVIEW_MAX),
@@ -54,7 +57,11 @@ function toggleExpanded(event) {
 </script>
 
 <template>
-  <div v-if="visibleItems.length === 0" class="flex h-11 items-center">
+  <div
+    v-if="visibleItems.length === 0"
+    class="flex items-center"
+    :class="spec.identityClass"
+  >
     <span class="text-sm text-muted-foreground">{{ t("common.emDash") }}</span>
   </div>
   <div v-else class="flex min-w-0 flex-col gap-2.5">
@@ -65,10 +72,13 @@ function toggleExpanded(event) {
       :caption="lineCaption(item)"
       :thumbnail-url="orderItemImageUrl(item)"
       :image-url="orderItemImageUrl(item)"
+      :to="orderItemProductTo(item)"
     >
       <template v-if="orderItemQuantity(item) > 1" #meta>
         <span class="text-xs font-normal tabular-nums text-muted-foreground">
-          {{ t("pages.ordersPage.itemQty", { count: orderItemQuantity(item) }) }}
+          {{
+            t("pages.ordersPage.itemQty", { count: orderItemQuantity(item) })
+          }}
         </span>
       </template>
     </ProductIdentityCell>

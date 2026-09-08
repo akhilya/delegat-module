@@ -10,6 +10,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { productImageSizeId } from "@/composables/useProductImageSize";
+import { productImageSizeSpec } from "@/lib/productImageSize";
 
 export default {
   name: "ProductImageCell",
@@ -34,6 +36,11 @@ export default {
       type: String,
       default: "size-32",
     },
+    /** Use the shared catalog / orders / scrape photo size instead of imageClass. */
+    followTableSize: {
+      type: Boolean,
+      default: false,
+    },
     /** Stop pointer/click so table row / menu handlers do not fire (disable inside labels). */
     stopEvents: {
       type: Boolean,
@@ -41,6 +48,12 @@ export default {
     },
   },
   computed: {
+    resolvedImageClass() {
+      if (this.followTableSize) {
+        return productImageSizeSpec(productImageSizeId.value).imageOnlyClass;
+      }
+      return this.imageClass;
+    },
     thumbSrc() {
       return this.thumbnailUrl || this.imageUrl || null;
     },
@@ -51,11 +64,21 @@ export default {
       return this.thumbSrc ? { fullPath: this.thumbSrc } : null;
     },
   },
+  data() {
+    return {
+      thumbFailed: false,
+    };
+  },
+  watch: {
+    thumbSrc() {
+      this.thumbFailed = false;
+    },
+  },
 };
 </script>
 
 <template>
-  <TooltipProvider v-if="previewSrc" :delay-duration="300">
+  <TooltipProvider v-if="previewSrc && !thumbFailed" :delay-duration="300">
     <Tooltip>
       <TooltipTrigger as-child>
         <div
@@ -64,7 +87,11 @@ export default {
           @click="stopEvents && $event.stopPropagation()"
         >
           <slot>
-            <ImageFile :class="imageClass" :file="file" />
+            <ImageFile
+              :class="resolvedImageClass"
+              :file="file"
+              @error="thumbFailed = true"
+            />
           </slot>
         </div>
       </TooltipTrigger>
@@ -85,7 +112,11 @@ export default {
   </TooltipProvider>
   <template v-else>
     <slot>
-      <ImageFile :class="imageClass" :file="null" />
+      <ImageFile
+        :class="resolvedImageClass"
+        :file="thumbFailed ? null : file"
+        @error="thumbFailed = true"
+      />
     </slot>
   </template>
 </template>

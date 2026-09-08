@@ -2,9 +2,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import { computed } from "vue";
 import { useStore } from "vuex";
-import {
-  Sparkles,
-} from "lucide-vue-next";
+import { Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "vue-i18n";
 
@@ -14,7 +12,7 @@ const isLoading = computed(() => store.state.aiChat.isLoading);
 const isOpen = computed(() => store.state.aiChat.isOpen);
 const panelWidth = computed(() => store.state.aiChat.panelWidth);
 const fabsHidden = computed(() => store.state.aiChat.fabsHidden);
-const fabRight = computed(() => isOpen.value ? panelWidth.value + 24 : 24);
+const fabRight = computed(() => (isOpen.value ? panelWidth.value + 24 : 24));
 
 function toggle() {
   store.commit("aiChat/toggle");
@@ -27,7 +25,7 @@ function toggle() {
       v-if="!fabsHidden"
       type="button"
       size="icon"
-      class="fixed bottom-20 z-[9994] size-12 rounded-full shadow-lg transition-[right] duration-200 ease-in-out"
+      class="fixed bottom-20 z-[9994] size-12 rounded-full shadow-lg transition-[right] duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)]"
       :style="{ right: fabRight + 'px' }"
       :title="isOpen ? t('ai.closeAssistant') : t('ai.openAssistant')"
       @click="toggle"

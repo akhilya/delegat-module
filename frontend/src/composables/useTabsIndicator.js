@@ -59,16 +59,66 @@ export function tabIndicatorBox(list, active) {
   };
 }
 
-export function tabIndicatorStyle(box, { motion = true } = {}) {
+export function tabIndicatorStyle(box, { motion = true, hidden = false } = {}) {
   if (!box) {
     return { opacity: "0" };
   }
   return {
-    opacity: "1",
+    opacity: hidden ? "0" : "1",
     width: `${box.width}px`,
     height: `${box.height}px`,
     transform: `translate3d(${box.x}px, ${box.y}px, 0)`,
-    transition: motion ? INDICATOR_MOTION : "none",
+    transition: motion
+      ? `${INDICATOR_MOTION}, opacity var(--duration-ui) var(--ease-out-quart)`
+      : "none",
+  };
+}
+
+const SIDEBAR_NAV_EDGE_EPS = 4;
+let lastSidebarNavActiveTop = null;
+
+export function rememberSidebarNavActiveTop(top) {
+  if (Number.isFinite(top)) lastSidebarNavActiveTop = top;
+}
+
+export function peekSidebarNavActiveTop() {
+  return lastSidebarNavActiveTop;
+}
+
+export function resetSidebarNavActiveTop() {
+  lastSidebarNavActiveTop = null;
+}
+
+/**
+ * Where a group pill should start when the previous active row was in
+ * another group. From below → last row (slide up). From above → first row.
+ */
+export function indicatorEnterBox(list, target, { fromBottom, items } = {}) {
+  if (!target) return null;
+  const nodes = Array.isArray(items) ? items : [];
+  const edge = fromBottom ? nodes[nodes.length - 1] : nodes[0];
+  if (!edge) {
+    return {
+      x: target.x,
+      y: fromBottom ? target.y : 0,
+      width: target.width,
+      height: target.height,
+    };
+  }
+  const edgeBox = tabIndicatorBox(list, edge);
+  if (!edgeBox) {
+    return {
+      x: target.x,
+      y: fromBottom ? target.y : 0,
+      width: target.width,
+      height: target.height,
+    };
+  }
+  return {
+    x: target.x,
+    y: edgeBox.y,
+    width: target.width,
+    height: target.height,
   };
 }
 
@@ -88,27 +138,95 @@ export function useSlidingIndicator({
   itemSelector = TABS_INDICATOR_SELECTOR,
   observeSelector = TABS_INDICATOR_ITEMS,
   attributeFilter = ["data-state", "data-active"],
+  edgeEnter = false,
 } = {}) {
   const listRef = ref(null);
   const box = ref(null);
+  const visible = ref(false);
   const motion = ref(false);
   let resizeObserver = null;
   let mutationObserver = null;
+  let enterFrame = 0;
 
   function listEl() {
     return resolveTabsListElement(listRef.value);
   }
 
+  function cancelEnter() {
+    if (!enterFrame) return;
+    cancelAnimationFrame(enterFrame);
+    enterFrame = 0;
+  }
+
   function measure() {
     const list = listEl();
     if (!list || typeof list.querySelector !== "function") {
-      if (box.value != null) box.value = null;
+      visible.value = false;
+      if (!edgeEnter && box.value != null) box.value = null;
       return;
     }
     const active = list.querySelector(itemSelector);
     const next = tabIndicatorBox(list, active);
+    if (!edgeEnter) {
+      if (boxesEqual(box.value, next)) return;
+      box.value = next;
+      return;
+    }
+
+    if (!next) {
+      cancelEnter();
+      visible.value = false;
+      return;
+    }
+
+    const nextTop =
+      typeof active.getBoundingClientRect === "function"
+        ? active.getBoundingClientRect().top
+        : next.y;
+    const wasHidden = !visible.value;
+    const prevTop = peekSidebarNavActiveTop();
+    visible.value = true;
+
+    if (
+      wasHidden &&
+      motion.value &&
+      !prefersReducedMotion() &&
+      Number.isFinite(prevTop) &&
+      Math.abs(prevTop - nextTop) > SIDEBAR_NAV_EDGE_EPS
+    ) {
+      const start = indicatorEnterBox(list, next, {
+        fromBottom: prevTop > nextTop,
+        items:
+          typeof list.querySelectorAll === "function"
+            ? [...list.querySelectorAll(observeSelector)]
+            : [],
+      });
+      rememberSidebarNavActiveTop(nextTop);
+      if (start && !boxesEqual(start, next)) {
+        cancelEnter();
+        motion.value = false;
+        box.value = start;
+        enterFrame = requestAnimationFrame(() => {
+          enterFrame = requestAnimationFrame(() => {
+            enterFrame = 0;
+            motion.value = true;
+            box.value = next;
+          });
+        });
+        return;
+      }
+    }
+
+    rememberSidebarNavActiveTop(nextTop);
     if (boxesEqual(box.value, next)) return;
     box.value = next;
+  }
+
+  function prefersReducedMotion() {
+    return (
+      typeof globalThis.matchMedia === "function" &&
+      globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
   }
 
   function bindObservers() {
@@ -149,12 +267,16 @@ export function useSlidingIndicator({
   });
 
   onUnmounted(() => {
+    cancelEnter();
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
   });
 
   const indicatorStyle = computed(() =>
-    tabIndicatorStyle(box.value, { motion: motion.value }),
+    tabIndicatorStyle(box.value, {
+      motion: motion.value,
+      hidden: edgeEnter && !visible.value,
+    }),
   );
 
   return { setListRef, indicatorStyle, measure };

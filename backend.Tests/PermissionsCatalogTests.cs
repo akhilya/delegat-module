@@ -23,6 +23,7 @@ public class PermissionsCatalogTests
         Assert.Contains(Permissions.StoreMembersManage, sm);
         Assert.Contains(Permissions.StoreSettingsManage, sm);
         Assert.Contains(Permissions.CatalogManage, sm);
+        Assert.Contains(Permissions.OrdersManage, sm);
         Assert.DoesNotContain(Permissions.UsersManage, sm);
     }
 
@@ -32,6 +33,7 @@ public class PermissionsCatalogTests
         var viewer = AppRoles.RolePermissions[AppRoles.Viewer];
         Assert.Contains(Permissions.ReferenceRead, viewer);
         Assert.DoesNotContain(Permissions.CatalogManage, viewer);
+        Assert.DoesNotContain(Permissions.OrdersManage, viewer);
         Assert.DoesNotContain(Permissions.WorkspaceView, viewer);
     }
 
@@ -82,5 +84,17 @@ public class PermissionsCatalogTests
     {
         Assert.True(Permissions.IsStoreScoped(Permissions.CatalogManage));
         Assert.False(Permissions.IsStoreScoped(Permissions.UsersManage));
+    }
+
+    [Fact]
+    public void OrdersManage_IsStoreScopedAndOnOperator()
+    {
+        Assert.Equal("orders.manage", Permissions.OrdersManage);
+        Assert.Contains(Permissions.OrdersManage, Permissions.All);
+        Assert.Contains(Permissions.OrdersManage, Permissions.Assignable);
+        Assert.Contains(Permissions.OrdersManage, Permissions.StoreScoped);
+        Assert.DoesNotContain(Permissions.OrdersManage, Permissions.Platform);
+        Assert.Contains(Permissions.OrdersManage, AppRoles.RolePermissions[AppRoles.Operator]);
+        Assert.Contains(Permissions.OrdersManage, AppRoles.RolePermissions[AppRoles.Owner]);
     }
 }

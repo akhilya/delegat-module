@@ -105,4 +105,27 @@ public class CsrfHeaderMiddlewareTests
         Assert.True(called);
         Assert.NotEqual(403, context.Response.StatusCode);
     }
+
+    [Theory]
+    [InlineData("/api/mcp")]
+    [InlineData("/api/agent/stores/1/sql")]
+    [InlineData("/mcp")]
+    public async Task Post_ToAgentOrMcp_WithoutCsrf_Passes(string path)
+    {
+        var called = false;
+        var middleware = new CsrfHeaderMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Path = path;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(called);
+        Assert.NotEqual(403, context.Response.StatusCode);
+    }
 }

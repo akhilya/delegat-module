@@ -16,6 +16,7 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { ArrowRight, ArrowRightLeft, Copy, Trash2 } from "lucide-vue-next";
+import ProductImageSizeContextSub from "./ProductImageSizeContextSub.vue";
 
 export default {
   name: "ProductRowActionMenuItems",
@@ -32,6 +33,7 @@ export default {
     ArrowRightLeft,
     Copy,
     Trash2,
+    ProductImageSizeContextSub,
   },
   props: {
     /** "dropdown" | "context" */
@@ -146,4 +148,9 @@ export default {
       {{ $t("productRowActions.moveToTrash") }}
     </component>
   </component>
+
+  <template v-if="surface === 'context'">
+    <component :is="ui.Separator" />
+    <ProductImageSizeContextSub />
+  </template>
 </template>

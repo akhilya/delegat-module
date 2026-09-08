@@ -67,7 +67,7 @@ export default {
   <div
     :class="[
       'h-[var(--app-navbar-height)] w-full shrink-0 overflow-hidden bg-background',
-      sticky && 'sticky top-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm',
+      sticky && 'sticky top-0 left-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm',
     ]"
   >
     <template v-if="!isLoading">

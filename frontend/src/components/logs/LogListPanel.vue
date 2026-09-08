@@ -10,7 +10,7 @@ defineProps({
   emptyIcon: { type: [Object, Function], default: undefined },
   emptyTitle: { type: String, default: "" },
   emptyDescription: { type: String, default: "" },
-  /** Stretch to the remaining page height (rare; tables are content-height by default). */
+  /** Stretch to the remaining page height (products / orders pin the footer). */
   fill: { type: Boolean, default: false },
   /** Show footer when there are rows */
   showFooter: { type: Boolean, default: false },
@@ -41,7 +41,7 @@ defineEmits(["load-more", "download", "delete", "clear-selection"]);
       $props.class,
     ]"
   >
-    <LogTableFrame :class="fill ? 'min-h-0 flex-1' : ''">
+    <LogTableFrame :fill="fill">
       <slot />
       <LogScrollLoadMore
         v-if="hasMore"

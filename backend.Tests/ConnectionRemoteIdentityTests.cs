@@ -57,6 +57,19 @@ public class ConnectionRemoteIdentityTests
     }
 
     [Fact]
+    public void Wildberries_SandboxFlag_DoesNotChangeIdentity()
+    {
+        var a = ConnectionRemoteIdentity.Build(
+            "wildberries",
+            new Dictionary<string, string> { ["apiKey"] = "tok", ["sandbox"] = "sandbox" });
+        var b = ConnectionRemoteIdentity.Build(
+            "wildberries",
+            new Dictionary<string, string> { ["apiKey"] = "tok", ["sandbox"] = "production" });
+
+        Assert.Equal(a, b);
+    }
+
+    [Fact]
     public void Woo_UrlTrailingSlash_Match()
     {
         var a = ConnectionRemoteIdentity.Build(

@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
+using System.Text.Json;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
+using Delegat.Services.Ai.Agent;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Delegat.Controllers;
 
@@ -13,21 +17,32 @@ namespace Delegat.Controllers;
 [Route("ai")]
 public class AiController : ControllerBase
 {
+    public const string ConfirmedPlanUserText = AiConversationTurnStore.ConfirmedPlanUserText;
+
     private readonly AiChatService _chatService;
     private readonly AiOperationService _operationService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly AiLiveTurnHub _liveTurns;
+    private readonly AgentFileUploadService _uploads;
+    private readonly IStorageService _storage;
 
     public AiController(
         AiChatService chatService,
         AiOperationService operationService,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        AiLiveTurnHub liveTurns,
+        AgentFileUploadService uploads,
+        IStorageService storage)
     {
         _chatService = chatService;
         _operationService = operationService;
         _currentUserService = currentUserService;
+        _liveTurns = liveTurns;
+        _uploads = uploads;
+        _storage = storage;
     }
 
-    // POST /api/ai/chat - SSE streaming chat
+    // POST /api/ai/chat - start (or attach to) a live SSE turn
     [HttpPost("chat")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
     public async Task<IActionResult> Chat([FromBody] AiChatRequest request, CancellationToken ct)
@@ -39,19 +54,115 @@ public class AiController : ControllerBase
         if (userId == null || storeId == null)
             return Unauthorized();
 
-        Response.Headers.ContentType = "text/event-stream";
-        Response.Headers.CacheControl = "no-cache";
-        Response.Headers.Connection = "keep-alive";
-        Response.Headers["X-Accel-Buffering"] = "no";
-
-        await foreach (var chunk in _chatService.StreamChatAsync(
-            request.Messages, storeId.Value, userId.Value, request.ModelId, request.PageContext, request.SessionId, ct))
+        var locale = Request.Headers["X-UI-Locale"].ToString();
+        if (string.IsNullOrWhiteSpace(request.SessionId))
         {
-            var bytes = Encoding.UTF8.GetBytes(chunk);
-            await Response.Body.WriteAsync(bytes, ct);
-            await Response.Body.FlushAsync(ct);
+            PrepareSseHeaders();
+            await WriteSseAsync(
+                _chatService.StreamChatAsync(
+                    request.Messages, storeId.Value, userId.Value, request.ModelId, request.PageContext,
+                    request.SessionId, locale, ct),
+                ct);
+            return new EmptyResult();
         }
 
+        var sessionId = request.SessionId;
+        var messages = request.Messages;
+        var modelId = request.ModelId;
+        var pageContext = request.PageContext;
+        var lastUser = LastPlainUser(messages);
+
+        _liveTurns.TryStart(
+            sessionId, storeId.Value, userId.Value, lastUser,
+            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatAsync(
+                messages, storeId.Value, userId.Value, modelId, pageContext, sessionId, locale, token));
+
+        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
+        if (turn == null)
+            return NotFound();
+
+        PrepareSseHeaders();
+        await WriteSseAsync(turn.Subscribe(ct), ct);
+        return new EmptyResult();
+    }
+
+    // POST /api/ai/chat/attachments?sessionId= — stage files for this chat (bytes never go to the model)
+    [HttpPost("chat/attachments")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
+    public async Task<IActionResult> UploadChatAttachments(
+        [FromQuery] string sessionId,
+        [FromForm] IFormFile[] files,
+        [FromForm] string[]? relativePaths,
+        CancellationToken ct)
+    {
+        EnsureAiEnabled();
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            return Unauthorized();
+
+        try
+        {
+            var staged = await _uploads.StageChatAttachmentsAsync(
+                storeId.Value, userId.Value, sessionId, files ?? [], relativePaths, ct);
+            return Ok(new { count = staged.Count, items = staged });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+    }
+
+    // GET /api/ai/chat/attachments/{id} — download a staged file while it is still live (24h)
+    [HttpGet("chat/attachments/{id:int}")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    public async Task DownloadChatAttachment(int id, CancellationToken ct)
+    {
+        EnsureAiEnabled();
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            throw ApiException.Unauthorized();
+
+        var row = await _uploads.GetLiveOwnedAsync(storeId.Value, userId.Value, id, ct);
+        if (row == null)
+            throw ApiException.NotFound("Attachment expired or not found", code: "attachment_expired");
+
+        if (!await _storage.ExistsAsync(row.storageKey, ct))
+            throw ApiException.NotFound("Attachment expired or not found", code: "attachment_expired");
+
+        var encoded = Uri.EscapeDataString(row.fileName);
+        Response.ContentType = string.IsNullOrWhiteSpace(row.contentType)
+            ? "application/octet-stream"
+            : row.contentType;
+        Response.ContentLength = row.length;
+        Response.Headers["Content-Disposition"] =
+            $"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}";
+        await _storage.StreamToAsync(row.storageKey, Response.Body, ct);
+    }
+
+    // GET /api/ai/chat/stream?sessionId= — replay + tail a live turn after reload
+    [HttpGet("chat/stream")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    public async Task<IActionResult> ChatStream([FromQuery] string sessionId, CancellationToken ct)
+    {
+        EnsureAiEnabled();
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            return Unauthorized();
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return BadRequest("sessionId required");
+
+        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
+        if (turn == null)
+            return NotFound();
+
+        PrepareSseHeaders();
+        await WriteSseAsync(turn.Subscribe(ct), ct);
         return new EmptyResult();
     }
 
@@ -69,29 +180,43 @@ public class AiController : ControllerBase
         if (request.Steps.Count == 0)
             return BadRequest("steps are required");
 
-        Response.Headers.ContentType = "text/event-stream";
-        Response.Headers.CacheControl = "no-cache";
-        Response.Headers.Connection = "keep-alive";
-        Response.Headers["X-Accel-Buffering"] = "no";
-
-        await foreach (var chunk in _chatService.ExecutePlanStreamAsync(request.Steps, storeId.Value, userId.Value, ct))
+        var steps = request.Steps;
+        if (string.IsNullOrWhiteSpace(request.SessionId))
         {
-            var bytes = Encoding.UTF8.GetBytes(chunk);
-            await Response.Body.WriteAsync(bytes, ct);
-            await Response.Body.FlushAsync(ct);
+            PrepareSseHeaders();
+            await WriteSseAsync(
+                _chatService.ExecutePlanStreamAsync(steps, storeId.Value, userId.Value, ct),
+                ct);
+            return new EmptyResult();
         }
 
+        var sessionId = request.SessionId;
+        _liveTurns.TryStart(
+            sessionId, storeId.Value, userId.Value, userMessage: null,
+            (sp, token) => sp.GetRequiredService<AiChatService>()
+                .ExecutePlanStreamAsync(steps, storeId.Value, userId.Value, token));
+
+        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
+        if (turn == null)
+            return NotFound();
+
+        PrepareSseHeaders();
+        await WriteSseAsync(turn.Subscribe(ct), ct);
         return new EmptyResult();
     }
 
     // POST /api/ai/stop - cancel server-side generation for the given session
     [HttpPost("stop")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
-    public IActionResult Stop([FromBody] StopRequest req)
+    public async Task<IActionResult> Stop([FromBody] StopRequest req, CancellationToken ct)
     {
         EnsureAiEnabled();
         if (string.IsNullOrEmpty(req.SessionId)) return BadRequest("sessionId required");
-        var stopped = AiChatService.StopSession(req.SessionId);
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            return Unauthorized();
+        var stopped = _liveTurns.Stop(req.SessionId, storeId.Value, userId.Value);
         return Ok(new { stopped });
     }
 
@@ -164,6 +289,41 @@ public class AiController : ControllerBase
         }));
     }
 
+    private void PrepareSseHeaders()
+    {
+        Response.Headers.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+        Response.Headers["X-Accel-Buffering"] = "no";
+    }
+
+    private async Task WriteSseAsync(IAsyncEnumerable<string> chunks, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var chunk in chunks.WithCancellation(ct))
+            {
+                var bytes = Encoding.UTF8.GetBytes(chunk);
+                await Response.Body.WriteAsync(bytes, ct);
+                await Response.Body.FlushAsync(ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Subscriber left; the hub turn keeps running.
+        }
+    }
+
+    private static ChatMessage? LastPlainUser(List<ChatMessage> messages)
+    {
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            if (AiConversationTurnStore.UserText(messages[i]) != null)
+                return messages[i];
+        }
+        return null;
+    }
+
     private static void EnsureAiEnabled()
     {
         if (!FeatureFlags.IsAiEnabled())
@@ -187,6 +347,7 @@ public class AiChatRequest
 public class ExecutePlanRequest
 {
     public List<PlanStepInput> Steps { get; set; } = [];
+    public string? SessionId { get; set; }
 }
 
 public class ExplainErrorRequest

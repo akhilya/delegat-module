@@ -19,7 +19,9 @@ git clone --recurse-submodules https://github.com/akhilya/delegat-module.git
 cd delegat-module
 cp .env.example .env
 # Fill in the values in .env
-docker compose -f docker-compose.prod.yml up -d
+# AI on (self-host default): start the Python sidecar with --profile ai
+docker compose -f docker-compose.prod.yml --profile ai up -d
+# AI_ENABLED=false: omit --profile ai so the sidecar is not created
 ```
 
 ## Structure

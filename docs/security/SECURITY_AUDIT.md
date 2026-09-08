@@ -260,13 +260,13 @@ Additionally, `AiPageContext` fields (`MappingName`, `ConnectionName`, `ProductN
 - AI tools execute server-side with `storeId` scoping — the AI cannot access other stores' data
 - Mutating operations require `propose_plan` confirmation before execution
 - Tool dispatcher validates tool names against a fixed whitelist (switch expression)
-- AI cannot execute arbitrary code — it can only call predefined tools
+- Mutating chat tools require `propose_plan`; Python runs only in the optional sandbox sidecar (no DB URL; cgroup 0.50 CPU / 512 MiB, one job, BLAS single-thread)
 
 ### Impact
 
 - Prompt injection could trick the AI into performing unwanted mutations (e.g., deleting products, exporting data) that the user then confirms via the plan confirmation step
 - Cannot directly escalate to cross-store access because tool handlers enforce `storeId` scoping
-- Cannot achieve code execution — the tool dispatcher is a closed set
+- Cannot achieve host code execution — Python is an optional sandbox; MCP/Agent HTTP uses cabinet controllers minus a denylist of secrets and irreversible routes
 
 ### Recommendation
 
@@ -366,14 +366,14 @@ Configuration exposure is well-controlled. Admin-only access is consistently enf
 
 ## Finding 11: Cross-Store Isolation in AI Tool Handlers (INFORMATIONAL)
 
-**File:** `backend/Services/Ai/Tools/ToolDispatcher.cs`, lines 45–46  
-**File:** `backend/Services/Ai/Tools/Handlers/SyncToolHandlers.cs`, lines 33–36
+**File:** `backend/Services/Ai/Agent/AgentToolHost.cs`  
+**File:** `backend/Services/Ai/Agent/SqlReadonlyService.cs`
 
 ### Analysis
 
-All tool handler methods receive `storeId` as a parameter from the authenticated user's context. Database queries consistently include `.Where(c => c.storeId == storeId)` filters. The `storeId` is extracted server-side from the JWT + cookie + membership validation, not from AI model outputs.
+Tool methods receive `storeId` from the authenticated session (`AgentSessionResolver`), not from model output. SQL always applies the current store. Catalog and platform handlers filter by `storeId`.
 
-The AI model cannot influence which `storeId` is used — it is injected by the controller layer before the tool dispatcher runs.
+The AI model cannot choose another store's slice.
 
 ### Conclusion
 

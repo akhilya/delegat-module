@@ -11,15 +11,28 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Public API v1: live marketplace prices, orders, and promotions on a connection (not stored; not a 202 operation)
+- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and Cursor: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
+- Cabinet assistant: category and store attributes (list/create), product `attributeValues` merge, `GET /products?categoryId=`, SQL on attribute tables plus `IN (...)` and `description`
+- Cabinet assistant: execution timeline interleaves thinking with each tool step instead of stacking tools above a single merged paragraph
+- Cabinet AI: attach files or a folder in chat. Bytes stay downloadable for 24 hours, then they are purged (names stay on the thread). The assistant decides what to do (including putting them on products) with the usual tools after you confirm a plan
+- Knowledge corpus for the assistant (docs / MEMORY / PRODUCT / DESIGN), reindexed when the API starts. Optional Python sidecar (`SANDBOX_URL`) with pandas, Pillow, and openpyxl
+- Cabinet Orders: `/orders` has four all-marketplace tabs (To pack, Being packed, In delivery, Delivered). Connection mailboxes stay in the sidebar. Listed orders are stored snapshots; lists read that snapshot
+- Public API `GET …/orders` reads stored snapshots (`syncedAt`); status POST still hits the marketplace then upserts. Labels and shipments stay live
+- Public API v1: live marketplace prices and promotions on a connection (not stored; not a 202 operation). Orders are stored snapshots
+- Cabinet Orders: stored snapshots on each GetOrders connection. The sidebar is the connection; status tabs sit in the page bar (`/orders/{connectionId}/{mailbox}`). Mailbox rows use a fixed-height overlapping product-photo stack (name + count); the order sheet lists each line with its photo
+- Public API and cabinet JWT: live fulfillment locations and shipments on a connection (not stored). `GET …/fulfillment/locations`, `GET/POST …/shipments`, boxes and box/supply labels. Wildberries: seller warehouses, drop-off offices, supplies, TRBX boxes. Ozon: seller warehouses only. Missing capability → `400 adapter_capability_missing`; marketplace errors → `400 fulfillment_location_failed` / `400 shipment_failed`
+- Cabinet order sheet (Wildberries): pack confirm picks an open supply or creates one, optional box; Ready to ship can download the box barcode; ship confirms handing over the **whole supply**; Delivery can download the supply QR after handover
+- Public API and cabinet order items may include `barcode` (Wildberries `skus`; omitted when the marketplace has none)
+- Public API and cabinet order items may include `localProductId` when the line is linked to a local catalog product (cabinet name is a link to that product)
+- Cabinet Orders: select loaded rows for bulk pack / ship / confirm / deliver / complete / cancel / barcode (only actions every selected order allows). Right-click a mailbox or packing-overview row for the same actions and photo size
 - Public API and cabinet JWT: packing labels / barcode stickers for a live order (`GET …/orders/{orderId}/label`). Ozon FBS PDF, Wildberries PNG sticker, Yandex Market PDF. WooCommerce and OpenCart do not support this. Not stored. Cabinet order sheet can download the file when the adapter supports it
-- Cabinet Orders group: live marketplace mailboxes (`/orders/:bucket`) on a selected connection (not stored). Mailbox rows use a fixed-height overlapping product-photo stack (name + count); the order sheet lists each line with its photo
 - Tools: Update all prices and Remove products from promotions (`/tools`, job ids `export-all-prices` / `clear-promotion-products`). The Tools page splits catalog, prices, promotions, Public API, and each adapter into separate lists. A job tool is its own inset group: open the row, or run from the last row (confirm). Confirm on the catalog runs every active connection that supports the job. Wildberries cannot clear calendar promotions. Not on Public API.
 - Tools catalog: each entry has a stage (`stable` / `experimental`). Catalog scrape, Update all prices, and Remove products from promotions are experimental (quiet trailing label). Connect catalogs and Try Public API stay unlabeled.
 - Ozon, Wildberries, Yandex Market, WooCommerce, and OpenCart adapters can read discounted prices, list and update orders, and manage promotions (Woo bridge ≥ 1.3.0, OpenCart bridge ≥ 1.1.0)
 - WooCommerce, OpenCart, and Ozon mapping fields that were English-only (stock, sale price, model, SEO, price-strategy options) now follow the UI language
 - Sign-in: TOTP second factor after password, recovery codes, and passwordless passkeys (Bitwarden / 1Password / Windows Hello)
 - Extra permission `workspace.view`: browse the cabinet without changing data (plugins stay closed). Assign on a Viewer who is a store member for a demo account.
+- Cabinet permission `orders.manage` for marketplace orders (stored snapshots), packing labels, and shipments. Operator and Store manager receive it. Connections, mappings, prices, and promotions stay `marketplace.manage`
 - Global attributes: the same select/multiselect Custom values toggle, max values, max characters, numeric min/max, and regex as category attributes
 - User settings: authenticator app (QR + recovery codes) and passkey register/remove
 - Instance dashboard asks search engines not to index it (`robots.txt`, HTML `noindex`, `X-Robots-Tag` on the SPA and API)
@@ -27,18 +40,40 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Public API v1: product size variants (`GET` product includes `variants`; list/create/patch/delete under `/products/{id}/variants`)
 - Public API v1: create category accepts `hasSizes`; category list attributes include `options` and the other GET-detail fields
 - Public API v1: product list `search` matches barcode, variant SKU/barcode, and marketplace ids (same as the catalog), and items include `variantCount`
+- Cabinet AI generation keeps running if you reload the page: reopen the companion sheet to watch the live turn (tools, thoughts, Stop). It does not survive an API process restart
 - Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
 
 ### Changed
 
+- Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
+- Public API and cabinet product create/patch: characteristic `value` accepts JSON numbers, booleans, and arrays and stores them as text (same as the product form strings)
+- Cabinet assistant remaining catalog slots are in the chat context. At the cap it must not trash an existing product to free a slot. A confirmed plan that returns HTTP 4xx/5xx is a failure; if earlier steps already applied, the reply says so (including trash) instead of “nothing changed”. Oversized product cards are slimmed instead of dropped
+- Cabinet assistant `platform_request` calls the same cabinet JSON API as the SPA (permissions, store, quotas). Secrets, user admin, plugins, and irreversible actions (delete a store, permanent product delete) stay blocked. Product characteristics PATCH replaces `attributeValues` like the product form
+- Python sandbox Compose service starts only when AI is on (profile `ai`). `pnpm dev` follows `AI_ENABLED`; self-host `docker compose --profile ai` when the assistant is enabled
+- Cabinet assistant stays on store work: jokes, recipes, homework, general coding, and jailbreak/secret dumps are refused (mixed requests still answer the catalog part). Replies, plans, and thoughts stay in catalog language (products, characteristics, connections) and do not name SQL, HTTP, or tools
+- Cabinet AI companion sheet fades as it slides; the latest turn, plan, and chat/history switch ease in (no thread stagger). After a turn, tool activity is a one-line disclosure; open it for thoughts, compact steps, and Python (script and output stay collapsed)
+- Cabinet assistant offers navigation as buttons on the reply (open a page and/or send a follow-up). It is prompted to put those buttons on the reply instead of only describing the path
+- Cabinet AI chat uses Apple inset chrome: history is Mail-style (title, count, date on the right). Replies strip emoji so Settings → Emoji: Don't use is visible in the thread
+- Cabinet AI no longer exposes dozens of named tools; it uses the operator MCP/Agent HTTP surface (knowledge, SQL, catalog search, plan confirm). Mapping-suggest and explain-error stay as prompt skills
+- Cabinet sidebar and inset sheets keep the hairline ring and use a quiet drop shadow (no large ambient cloud)
+- Catalog and order mailbox pagination / bulk footers sit under the last row when the table fits the page; they pin to the inset bottom only when the page overflows. Hairline top border only (no ring, no rounding)
+- Cabinet order mailbox rows have a hairline under each row
+- Catalog, packing overview, and order mailboxes scroll with the page (tables and lists are not height-locked). Catalog and mailbox table headers stay under the page bar while the page scrolls. Pagination / bulk footers follow the last row unless the page overflows, then they pin to the inset bottom
+- Cabinet packing overview (`/orders`): each order is one Mail-style inset row (photo stack, product name, order id, amount). Line items stay on the sheet
+- Cabinet “Server temporarily unavailable” is a full-viewport system screen (large title, one Try again button, no store logo). Sign-in / sign-up also drop the store logo. The Control Plane square is no longer the default favicon; the store icon is the tab and sidebar mark, or the store’s initial if none is uploaded
+- Wildberries pack uses the supply in `extra.supplyId` when the caller passes one (the cabinet sheet does); omitting it still creates a supply so Public API callers keep working. Optional `extra.boxId` / `extra.createBox` assign the order to a TRBX. Order `extra` may include `boxId` when the box membership is known
+- Cabinet Orders: mailbox pages no longer show a hint under the search field
+- Cabinet Orders: mailbox footer pack / ship / barcode actions use the filled button (same as the order sheet), not outline
+- Product photos in the catalog, packing overview, order mailboxes, and catalog scrape can be Small (the previous 44px), Medium, or Large. The product-row and order-row context menus (Photo size submenu) and the catalog scrape toolbar keep the choice; it is no longer in the catalog column picker
+- Adapter capabilities dialog names packing labels, fulfillment locations, shipments, and public catalog search (those flags were already returned by the API)
 - Products catalog identity cell (photo + name) is a 44px thumb and two truncated lines on a single row height. Adapter chips stay on one line so rows no longer grow. Hover preview, SKU copy, adapters, and column presets are unchanged
-- Order mailbox lists each line item (photo + name + quantity). Row height follows the number of lines; four or more collapse behind Show N more. The order sheet is unchanged
+- Order mailbox lists each line item (photo + name + quantity). Row height follows the number of lines; four or more collapse behind Show N more
 - Wildberries FBS order mailboxes match the cabinet (Ozon-style) statuses: new assembly tasks (`supplierStatus=new`) are Assembly (`awaiting_pack`), not New; in a supply (`confirm`) is Ready to ship; `complete` is delivering until `sold`. New stays empty on WB (no accept step). The pack list uses `GET /api/v3/orders/new`; other mailboxes load `/api/v3/orders` and statuses from `/api/v3/orders/status` (the list payload has none)
 - Tabs: the active pill slides between triggers (150ms, same curve as menus). Panel content still fades. Reduced motion keeps the instant jump (global token collapse)
 - Desktop sidebar floats inset from the viewport like those sheets. The nav list hides its scrollbar; edge fades only appear while there is overflow past that edge. Nav groups ease open and closed; the current page pill in a group slides like tabs (150ms). The capsule handle sits on the right hairline with no full-height wash (width is kept). Collapse and expand use the 150ms menu curve. The mobile sidebar sheet is inset and not resizable.
 - Page region loaders (`EmptyState loading`) have no bordered box. The spinner and the first paint of the page body fade in (200ms)
 - Order sheet floats inset from the viewport like Operations; buyer, address, and items are inset groups. Action buttons have icons; every status change asks for confirmation first
-- Data tables sit flush on the page (no rounded card, no outer ring), including the products catalog. Tables are as tall as their rows: the footer sits under the last row, and the page scrolls. Horizontal overflow still scrolls inside the table. Row hairlines, sort, sticky headers, column reorder, pagination, and log footers are unchanged
+- Data tables sit flush on the page (no rounded card, no outer ring), including the products catalog. Catalog and order mailboxes grow with the page scroller; table headers stick under the navbar. Horizontal overflow scrolls the page (an inner `overflow-x` wrapper would unpin the header). Row hairlines, sort, column reorder, and log footers are unchanged
 - Catalog scrape: search and copy from Ozon, Wildberries, or Yandex Market without connecting that adapter. A store connection is used only when one already exists (for category import). WooCommerce and OpenCart stay cabinet-only.
 - Catalog scrape: when Ozon or Yandex Market unofficial HTTP is blocked, the API opens the public page in Chromium (Playwright). It uses full Chrome headless (`CATALOG_SCRAPE_PLAYWRIGHT_CHANNEL=chromium`, not headless-shell), a reused session, and a User-Agent that matches the browser. Local Windows installs Chromium on first miss. Interactive captcha is still `storefront_blocked`. Optional installed Chrome (`channel=chrome`) or a proxy. Wildberries stays on `search.wb.ru`. The API Docker image includes Chromium.
 - Public API `PATCH` product now replaces `attributeValues` / `storeAttributeValues` when those arrays are sent (same as the dashboard)
@@ -53,7 +88,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Product create Properties uses the same Apple Settings sections as product edit (no Cards / heading mix)
 - Dropdowns, context menus, selects, popovers, and tooltips use the same Apple menu material (frosted paper, hairline ring, denser rows) instead of a bordered `shadow-md` panel
 - Overlays and menus share one motion curve (`ease-out-quart`): sheets open in 280ms (was 500ms), dialogs 200ms, menus 150ms; buttons press-scale; tab panels fade. Respects reduced motion
-- Operations and AI inset sheets use a stronger hairline and a drop shadow so the floating panel reads against the page. The AI companion has a visible capsule handle on the left edge to resize width
+- Operations and AI inset sheets use a stronger hairline and a quiet drop shadow so the floating panel reads against the page. The AI companion has a visible capsule handle on the left edge to resize width
 - Operations and AI panels sit 8px off the viewport with rounded corners, not flush to the screen edges. AI chat is a resizable inset sheet (not a split pane) and no longer lists every assistant tool; it has no overlay scrim, stays open while using the rest of the app, and does not close on an outside click
 - Menu radio/checkbox rows and select lists use a trailing check (Apple picker), not a leading radio disc
 - Product Notes tab is an inset grouped list like store notes: a row opens the bar sheet, Add note is the last row, and the tab grows with the page instead of stacked writing pads
@@ -82,10 +117,26 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Cabinet AI chat shows attached file names on the sent message (they used to vanish from the composer before the bubble appeared)
+- Cabinet `run_python` no longer returns HTTP 413 `invalid body`: the API sends a buffered JSON body with `Content-Length` (chunked `JsonContent` was empty to the sidecar)
+- `sql_readonly` accepts `COUNT(*)` and `COUNT(DISTINCT col)` (not mixed with row columns)
+- Failed API startup (port 5000 already in use) no longer crashes a second time while disposing catalog-scrape Chromium
+- Cabinet `run_python` is omitted when `SANDBOX_URL` is unset (instead of advertising a tool that always fails). Local compose already publishes the sidecar on `8091`; set `SANDBOX_URL=http://127.0.0.1:8091` and `SANDBOX_AGENT_BASE_URL=http://host.docker.internal:5000`
+- Yandex Market order lines include the product photo (`imageUrl`) from Partner API offer-mappings `pictures`. Order list/get have no photos; unlinked cards still get the marketplace CDN photo. Local linked photos remain the fallback
+- Yandex Market order list no longer 500s when the cabinet mailbox sends normalized statuses (`new`, `awaiting_pack`). Those map to Partner API `UNPAID` / `PROCESSING` (Yandex has no `NEW` / `AWAITING_PACK`)
+- Yandex Market order list no longer 500s when Partner API sends `updatedAt` as `dd-MM-yyyy HH:mm:ss` (the same cabinet date as `creationDate`)
+- Order sheet (and Public API) packing label / barcode is only offered when that marketplace can print it: Ozon FBS in Ready to ship (`awaiting_deliver`), not Assembly or Delivery, and never FBO; Wildberries after the order is in a supply (`confirm`) or in delivery (`complete`); Yandex Market while packing (`PROCESSING`, FBS/DBS), not FBY. GET label at the wrong status → `400 order_label_failed`
+- Order sheet (and Public API `deliver` / `complete`) no longer pretends Ozon or Wildberries can mark an in-transit order delivered. Those marketplaces record delivery themselves; the seller can pack and hand over the parcel (`pack` / `ship`), and cancel before handover. FBO / FBY have no seller status buttons. Shop adapters (Woo, OpenCart) still complete the order. Yandex DBS can mark delivered
+- Searching an order by number keeps that row in the table (it used to reload the whole mailbox tab after opening the sheet). The typed Ozon order number (`30625619-0031`) also looks up the first posting (`…-1`)
+- Ozon order search by the number in the table (`76728543-0063`) 404’d: that is the order number, while get/list used the posting number (`…-1`). An unmatched posting filter then returned the whole mailbox instead of that order
+- Searching orders by number finds the order even when it sits in another mailbox (Assembly search used to query only that tab, so a Ready to ship id looked missing)
+- Missing or 404 product photos (order mailboxes, catalog, scrape) show the empty photo placeholder instead of a broken image with “Product image” alt text
+- Wildberries FBS order list showed the internal `rid` (`eP.…`) instead of the numeric order id, and line items had no title (the cabinet payload has no name). The id is the WB order number; titles come from the storefront card, or the local linked product when present.
 - Ozon order lines include the product photo (`imageUrl`) from Seller API product info. The posting list does not send images; unlinked cards still get the marketplace CDN photo. Local linked photos remain the fallback.
 - Ozon order list maps cabinet statuses (`confirmed`, `awaiting_pack`, …) to Ozon posting aliases instead of sending them raw (that was a 500)
 - Plugin host no longer copies or loads adapter test assemblies (`*Tests.dll`). WooCommerce unit-test DLLs were treated as a plugin on local `pnpm dev`
-- `pnpm dev` waits for API health before starting Vite, so the proxy no longer floods `ECONNREFUSED` while `dotnet watch` is still building
+- Local `pnpm dev` starts Vite immediately. Waiting for `/api/health` (3 minutes) often expired while `dotnet watch` was still compiling, so the web pane never started. The Vite proxy answers `503` while port 5000 is closed instead of logging `ECONNREFUSED`.
+- Local `dotnet watch` no longer selects a preview SDK (10 preview stuck on GenerateWatchList and never bound `:5000`). `global.json` rolls forward only on stable SDKs; plugin copy is skipped during design-time / watch-list builds. GenerateWatchList also excludes `backend/artifacts` (and other local dump folders) so MSBuild does not glob every test output file.
 - Database dump (`GET /settings/database/dump`) is limited to the instance owner (`settings.dump`). A demo `workspace.view` user can no longer download it.
 - Collapsed product-group rail: hovering a variant photo opens the preview beside the tile, not in the top-left of the screen
 - Right-clicking another product closes the previous row menu (only one context menu at a time)
@@ -115,6 +166,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Security
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
+- Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling
 
 ## [1.6.0] - 2026-08-18
 

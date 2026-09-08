@@ -15,8 +15,8 @@ This instance repo keeps **stubs** only — do not maintain a second CP canon he
 ## Architecture (instance)
 
 - [**saas-architecture.md**](architecture/saas-architecture.md) - Per-instance SaaS: provisioning sketch, quotas, Redis
-- [**ai-assistant.md**](architecture/ai-assistant.md) - AI assistant: architecture, prompts, tools
-- [**ai-system.md**](architecture/ai-system.md) - Full AI system reference
+- [**ai-assistant.md**](architecture/ai-assistant.md) - AI assistant maintenance (thin tools, prompts)
+- [**ai-system.md**](architecture/ai-system.md) - Instance AI / MCP architecture
 
 ## Design canon (impeccable)
 
@@ -34,6 +34,7 @@ This instance repo keeps **stubs** only — do not maintain a second CP canon he
 ## API
 
 - [**public-v1.md**](api/public-v1.md) - Partner Public API v1
+- [**mcp.md**](api/mcp.md) - Operator MCP and Agent HTTP (not partner v1)
 
 ## Adapters
 
@@ -47,6 +48,11 @@ This instance repo keeps **stubs** only — do not maintain a second CP canon he
 
 ## Implementation plans (instance)
 
+- [**2026-09-06-agent-mcp-design.md**](plans/2026-09-06-agent-mcp-design.md) - Operator AI rewrite (MCP, RAG, SQL, sandbox)
+- [**2026-09-04-stored-orders-overview-tabs-design.md**](plans/2026-09-04-stored-orders-overview-tabs-design.md)
+- [**2026-09-04-stored-orders-overview-tabs.md**](plans/2026-09-04-stored-orders-overview-tabs.md) (implementation)
+- [**2026-09-04-orders-assembly-overview-design.md**](plans/2026-09-04-orders-assembly-overview-design.md)
+- [**2026-09-04-fulfillment-shipments-design.md**](plans/2026-09-04-fulfillment-shipments-design.md)
 - [**2026-07-18-platform-test-catalog.md**](plans/2026-07-18-platform-test-catalog.md)
 - [**2026-07-17-public-api-v1-design.md**](plans/2026-07-17-public-api-v1-design.md)
 - [**2026-03-17-product-soft-delete.md**](plans/2026-03-17-product-soft-delete.md)

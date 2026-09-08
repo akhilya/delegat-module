@@ -111,7 +111,7 @@ export default {
       this.loadShellData(true);
     },
     "$route.path"(path) {
-      if (path.startsWith("/adapter")) {
+      if (path.startsWith("/adapter") || path.startsWith("/orders")) {
         this.fetchConnections();
         this.fetchAdapters();
       }
@@ -300,10 +300,10 @@ export default {
     };
     this._onStoreBrandingUpdated = (event) => {
       const detail = event?.detail;
-      if (!detail?.storeId || !detail?.faviconUrl) return;
+      if (!detail?.storeId) return;
       this.memberships = this.memberships.map((store) =>
         store.id === detail.storeId
-          ? { ...store, faviconUrl: detail.faviconUrl }
+          ? { ...store, faviconUrl: detail.faviconUrl || "" }
           : store,
       );
     };

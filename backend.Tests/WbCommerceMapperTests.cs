@@ -89,7 +89,7 @@ public class WbCommerceMapperTests
         var order = WbCommerceMapper.FromOrder(new WbOrder
         {
             Id = 55,
-            Rid = "rid-1",
+            Rid = "eP.r2419e9995249481da1345e48a45b44e2.0.0",
             NmId = 1001,
             Price = 19900,
             ConvertedPrice = 19900,
@@ -101,13 +101,60 @@ public class WbCommerceMapperTests
         });
 
         Assert.Equal("55", order.ExternalId);
+        Assert.Equal("55", order.DisplayId);
         Assert.Equal(199m, order.Total);
         Assert.Equal("RUB", order.Currency);
         Assert.Equal(MarketplaceOrderStatuses.AwaitingPack, order.Status);
         Assert.Equal("WB-GI-1", WbCommerceMapper.SupplyIdOf(order));
         Assert.Equal("1001", order.Items[0].ExternalProductId);
         Assert.Equal("ART-1", order.Items[0].Sku);
+        Assert.Equal("ART-1", order.Items[0].OfferId);
+        Assert.Null(order.Items[0].Name);
         Assert.Contains("/1001/", order.Items[0].ImageUrl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FromOrder_UsesSkuBarcodeWhenArticlePresent()
+    {
+        var order = WbCommerceMapper.FromOrder(new WbOrder
+        {
+            Id = 2,
+            Article = "ART-1",
+            Skus = ["203540001"],
+            NmId = 1001,
+            Price = 10000
+        });
+
+        Assert.Equal("ART-1", order.Items[0].Sku);
+        Assert.Equal("203540001", order.Items[0].Barcode);
+    }
+
+    [Fact]
+    public void FromOrder_UsesNumericIdNotRid_AndBarcodeWhenArticleMissing()
+    {
+        const string json =
+            """{"orders":[{"id":13833711,"rid":"eP.r2419e9995249481da1345e48a45b44e2.0.0","nmId":1001,"skus":["203540001"]}],"next":0}""";
+        var parsed = System.Text.Json.JsonSerializer.Deserialize<WbOrdersListResponse>(json);
+        Assert.NotNull(parsed?.Orders);
+        var order = WbCommerceMapper.FromOrder(parsed.Orders[0]);
+
+        Assert.Equal("13833711", order.ExternalId);
+        Assert.Equal("13833711", order.DisplayId);
+        Assert.Equal("203540001", order.Items[0].Sku);
+        Assert.Equal("203540001", order.Items[0].Barcode);
+        Assert.Null(order.Items[0].Name);
+    }
+
+    [Fact]
+    public void ApplyProductTitles_FillsMissingNamesFromNmId()
+    {
+        var order = WbCommerceMapper.FromOrder(new WbOrder { Id = 1, NmId = 1001 });
+        WbCommerceMapper.ApplyProductTitles(
+            [order],
+            [new ExternalProduct("1001", "ART", "Miniatures Adeptus")]);
+
+        Assert.Equal("Miniatures Adeptus", order.Items[0].Name);
+        Assert.Equal("ART", order.Items[0].Sku);
     }
 
     [Fact]
@@ -178,5 +225,134 @@ public class WbCommerceMapperTests
     public void FromSticker_EmptyFile_ReturnsNull()
     {
         Assert.Null(WbCommerceMapper.FromSticker(new WbSticker { OrderId = 1, File = "" }));
+    }
+
+    [Theory]
+    [InlineData("pack", MarketplaceOrderActions.Pack)]
+    [InlineData("confirm", MarketplaceOrderActions.Pack)]
+    [InlineData("ship", MarketplaceOrderActions.Ship)]
+    [InlineData("cancel", MarketplaceOrderActions.Cancel)]
+    public void NormalizeSellerAction_MapsAssembleAndHandover(string action, string expected)
+    {
+        Assert.Equal(expected, WbCommerceMapper.NormalizeSellerAction(action));
+    }
+
+    [Theory]
+    [InlineData("deliver")]
+    [InlineData("complete")]
+    public void NormalizeSellerAction_RejectsDeliveryMarks(string action)
+    {
+        Assert.Null(WbCommerceMapper.NormalizeSellerAction(action));
+    }
+
+    [Theory]
+    [InlineData(MarketplaceOrderStatuses.AwaitingDeliver, true)]
+    [InlineData(MarketplaceOrderStatuses.Delivering, true)]
+    [InlineData(MarketplaceOrderStatuses.AwaitingPack, false)]
+    [InlineData(MarketplaceOrderStatuses.Delivered, false)]
+    public void CanGetSticker_InSupplyOrDelivery(string status, bool expected)
+    {
+        Assert.Equal(expected, WbCommerceMapper.CanGetSticker(status));
+    }
+
+    [Fact]
+    public void FromWarehouse_IsSellerStockLocation()
+    {
+        var location = WbCommerceMapper.FromWarehouse(new WbWarehouse
+        {
+            Id = 42,
+            Name = "Мой склад",
+            OfficeId = 99,
+            CargoType = 1
+        });
+
+        Assert.Equal("42", location.ExternalId);
+        Assert.Equal("Мой склад", location.Name);
+        Assert.Equal(MarketplaceLocationKinds.SellerWarehouse, location.Kind);
+        Assert.Equal("99", location.Extra!["officeId"]?.ToString());
+    }
+
+    [Fact]
+    public void FromOffice_IsMarketplaceDropOff()
+    {
+        var location = WbCommerceMapper.FromOffice(new WbOffice
+        {
+            Id = 217081,
+            Name = "Коледино",
+            Address = "МО, Коледино"
+        });
+
+        Assert.Equal("217081", location.ExternalId);
+        Assert.Equal(MarketplaceLocationKinds.MarketplaceOffice, location.Kind);
+        Assert.Equal("МО, Коледино", location.Address);
+    }
+
+    [Fact]
+    public void FromSupply_MapsOpenAndDone()
+    {
+        var open = WbCommerceMapper.FromSupply(new WbSupply
+        {
+            Id = "WB-GI-1",
+            Name = "Morning",
+            Done = false,
+            DestinationOfficeId = 10,
+            RecommendedWhId = 20,
+            IsPickupPointShipmentAllowed = true
+        });
+        var done = WbCommerceMapper.FromSupply(new WbSupply { Id = "WB-GI-2", Done = true });
+
+        Assert.Equal(MarketplaceShipmentStatuses.Open, open.Status);
+        Assert.Equal("10", open.LocationId);
+        Assert.Equal("20", open.Extra!["recommendedWhId"]?.ToString());
+        Assert.Equal(MarketplaceShipmentStatuses.Done, done.Status);
+    }
+
+    [Fact]
+    public void FromTrbx_MapsOrdersAndFindsBoxForOrder()
+    {
+        var box = WbCommerceMapper.FromTrbx(new WbTrbx
+        {
+            Id = "WB-TRBX-9",
+            Orders = [55, 56]
+        });
+        Assert.Equal("WB-TRBX-9", box.ExternalId);
+        Assert.Equal(["55", "56"], box.OrderIds);
+        Assert.Equal(
+            "WB-TRBX-9",
+            WbCommerceMapper.BoxIdForOrder([box], "55"));
+        Assert.Null(WbCommerceMapper.BoxIdForOrder([box], "99"));
+    }
+
+    [Fact]
+    public void ApplyBoxId_WritesExtraWhenBoxed()
+    {
+        var order = WbCommerceMapper.FromOrder(new WbOrder
+        {
+            Id = 55,
+            SupplierStatus = "confirm",
+            SupplyId = "WB-GI-1"
+        });
+        WbCommerceMapper.ApplyBoxId(order, [
+            new ExternalShipmentBox { ExternalId = "WB-TRBX-9", OrderIds = ["55"] }
+        ]);
+
+        Assert.Equal("WB-TRBX-9", WbCommerceMapper.BoxIdOf(order));
+        Assert.Equal("WB-GI-1", WbCommerceMapper.SupplyIdOf(order));
+    }
+
+    [Fact]
+    public void FromBoxSticker_MapsPngQr()
+    {
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var label = WbCommerceMapper.FromBoxSticker(new WbTrbxSticker
+        {
+            Barcode = "$WBMP:1:1:9",
+            File = Convert.ToBase64String(png)
+        }, "WB-TRBX-9");
+
+        Assert.NotNull(label);
+        Assert.Equal("png", label!.Format);
+        Assert.Equal("$WBMP:1:1:9", label.Barcode);
+        Assert.Equal("wb-box-WB-TRBX-9.png", label.FileName);
     }
 }

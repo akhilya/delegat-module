@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -117,6 +118,78 @@ function docsRuntimeConfigPlugin() {
   };
 }
 
+function isDevApiProxyPath(url) {
+  const pathname = String(url || "").split("?")[0];
+  return (
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/hubs" ||
+    pathname.startsWith("/hubs/") ||
+    pathname === "/swagger" ||
+    pathname.startsWith("/swagger/")
+  );
+}
+
+function createApiPortProbe(port = 5000, host = "127.0.0.1") {
+  let open = false;
+  let lastAt = 0;
+  let inFlight = null;
+  const ttlMs = 400;
+
+  return function probe() {
+    const now = Date.now();
+    if (inFlight) return inFlight;
+    if (now - lastAt < ttlMs) return Promise.resolve(open);
+
+    inFlight = new Promise((resolve) => {
+      let settled = false;
+      const sock = net.connect({ host, port });
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        open = value;
+        lastAt = Date.now();
+        sock.destroy();
+        resolve(value);
+      };
+      sock.setTimeout(250);
+      sock.once("connect", () => done(true));
+      sock.once("error", () => done(false));
+      sock.once("timeout", () => done(false));
+    }).finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
+}
+
+/** Answer 503 before the proxy when the API is not listening — avoids ECONNREFUSED log floods. */
+function apiBootGatePlugin() {
+  const probe = createApiPortProbe();
+  return {
+    name: "api-boot-gate",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!isDevApiProxyPath(req.url)) {
+          next();
+          return;
+        }
+        probe()
+          .then((up) => {
+            if (up) {
+              next();
+              return;
+            }
+            res.statusCode = 503;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "api_unavailable" }));
+          })
+          .catch(next);
+      });
+    },
+  };
+}
+
 function apiProxy(extra = {}) {
   return {
     target: "http://localhost:5000",
@@ -144,7 +217,7 @@ export default defineConfig(({ command }) => {
   }
 
   return {
-    plugins: [vue(), tailwindcss(), docsRuntimeConfigPlugin()],
+    plugins: [vue(), tailwindcss(), docsRuntimeConfigPlugin(), apiBootGatePlugin()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

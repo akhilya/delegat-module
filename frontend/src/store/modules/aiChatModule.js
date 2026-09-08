@@ -1,61 +1,50 @@
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { randomUuid } from "@/utils/uuid";
 import { t } from "@/i18n";
+import {
+  appendTextDelta,
+  appendTool,
+} from "@/lib/ai/timeline";
+import {
+  AI_CONFIRM_PLAN,
+  emptyAssistantMessage,
+  hydrateConversation,
+  isAiControlMessage,
+  serializeToolCallsJson,
+  toolResultFailed,
+} from "@/lib/ai/persist";
+import { applyStagedIds, attachmentMetaList } from "@/lib/ai/attachments";
 
-/** Model-facing control messages - always English (system prompts are English). */
-const AI_CONFIRM_PLAN = "Confirmed, proceed";
-const AI_CANCEL_PLAN =
-  "Cancelling the proposed plan - do NOT execute it. Do not roll anything back and do not call rollback_last_operation: the plan was never executed. Just confirm the cancellation.";
+function newSessionId() {
+  return randomUuid();
+}
 
-function newSessionId() { return randomUuid(); }
+async function uploadChatAttachments(sessionId, attached) {
+  if (!attached.length) return [];
+  const formData = new FormData();
+  for (const item of attached) {
+    formData.append("files", item.file);
+    formData.append("relativePaths", item.relativePath);
+  }
+  const response = await fetchWithAuth(
+    `/api/ai/chat/attachments?sessionId=${encodeURIComponent(sessionId)}`,
+    {
+      method: "POST",
+      headers: { "X-CSRF": "1" },
+      body: formData,
+    },
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  try {
+    const body = await response.json();
+    return Array.isArray(body.items) ? body.items : [];
+  } catch {
+    return [];
+  }
+}
 
 let abortController = null;
-
-/** Parse persisted toolCallsJson — either tool-call array or UI context card envelope. */
-function parsePersistedMessageMeta(toolCallsJson) {
-  if (!toolCallsJson) return { toolCalls: [], contextCard: null };
-  try {
-    const parsed = JSON.parse(toolCallsJson);
-    if (parsed && parsed._ui === "operationContext") {
-      return { toolCalls: [], contextCard: parsed.card || null };
-    }
-    if (Array.isArray(parsed)) {
-      return {
-        toolCalls: parsed.map((tc) => ({ ...tc, status: "done" })),
-        contextCard: null,
-      };
-    }
-  } catch { /* ignore corrupt payload */ }
-  return { toolCalls: [], contextCard: null };
-}
-
-function mapStoredMessage(m) {
-  const { toolCalls, contextCard } = parsePersistedMessageMeta(m.toolCallsJson);
-  return {
-    id: m.dbId,
-    dbId: m.dbId,
-    role: m.role,
-    content: m.content || "",
-    toolCalls,
-    contextCard,
-    plan: null,
-    apiBlocks: [],
-    done: m.role === "assistant",
-    feedbackRating: m.feedbackRating ?? null,
-  };
-}
-
-function serializeToolCallsJson(m) {
-  if (m.contextCard) {
-    return JSON.stringify({ _ui: "operationContext", card: m.contextCard });
-  }
-  if (m.toolCalls?.length) {
-    return JSON.stringify(
-      m.toolCalls.map((tc) => ({ name: tc.name, input: tc.input, summary: tc.summary })),
-    );
-  }
-  return null;
-}
+let userStopped = false;
 
 function titleSeedFromUserMessage(msg) {
   if (msg?.contextCard?.title) {
@@ -101,8 +90,14 @@ function buildHistory(messages) {
       }
 
       if (m.plan) {
-        const steps = (m.plan.steps || []).map((s) => `- ${s.description || s.tool}`).join("\n");
-        const status = m.planConfirmed ? "confirmed by user" : m.planCancelled ? "cancelled by user" : "pending";
+        const steps = (m.plan.steps || [])
+          .map((s) => `- ${s.description || s.tool}`)
+          .join("\n");
+        const status = m.planConfirmed
+          ? "confirmed by user"
+          : m.planCancelled
+            ? "cancelled by user"
+            : "pending";
         result.push({
           role: "assistant",
           content: `[Plan: "${m.plan.summary || ""}" | Steps:\n${steps}\n| Status: ${status}]`,
@@ -116,16 +111,27 @@ function buildHistory(messages) {
     let content = m.content || "";
 
     if (m.toolCalls?.length) {
-      const toolLines = m.toolCalls.map((tc) => {
-        const input = (tc.input || "").length > 200 ? tc.input.slice(0, 200) + "..." : (tc.input || "");
-        return `${tc.name}(${input})${tc.summary ? ` -> ${tc.summary}` : ""}`;
-      }).join("\n");
+      const toolLines = m.toolCalls
+        .map((tc) => {
+          const input =
+            (tc.input || "").length > 200
+              ? tc.input.slice(0, 200) + "..."
+              : tc.input || "";
+          return `${tc.name}(${input})${tc.summary ? ` -> ${tc.summary}` : ""}`;
+        })
+        .join("\n");
       content = `[ALREADY EXECUTED IN PREVIOUS TURN - DO NOT REPEAT OR IMITATE:\n${toolLines}]\n${content}`;
     }
 
     if (m.plan) {
-      const steps = (m.plan.steps || []).map((s) => `- ${s.description || s.tool}`).join("\n");
-      const status = m.planConfirmed ? "confirmed by user" : m.planCancelled ? "cancelled by user" : "pending";
+      const steps = (m.plan.steps || [])
+        .map((s) => `- ${s.description || s.tool}`)
+        .join("\n");
+      const status = m.planConfirmed
+        ? "confirmed by user"
+        : m.planCancelled
+          ? "cancelled by user"
+          : "pending";
       content += `\n[Plan: "${m.plan.summary || m.plan.description || ""}" | Steps:\n${steps}\n| Status: ${status}]`;
     }
 
@@ -179,20 +185,40 @@ async function consumeSse(response, commit, dispatch) {
                 summary: event.data?.summary,
                 result: event.data?.result,
               });
+              let parsedResult = event.data?.result;
+              if (typeof parsedResult === "string") {
+                try {
+                  parsedResult = JSON.parse(parsedResult);
+                } catch {
+                  parsedResult = null;
+                }
+              }
+              const failed = toolResultFailed(parsedResult, event.data?.summary);
               const effects = event.data?.effects || [];
-              if (effects.includes("mapping")) commit("triggerMappingRefresh");
-              if (effects.includes("product")) commit("triggerProductRefresh");
+              if (!failed) {
+                if (effects.includes("mapping")) commit("triggerMappingRefresh");
+                if (effects.includes("product")) commit("triggerProductRefresh");
+              }
             }
             break;
           case "plan":
             commit("updateLastAssistantMessage", { plan: event.data });
             break;
-          case "done":
-            commit("updateLastAssistantMessage", { done: true, modelName: event.data?.modelName });
+          case "done": {
+            const patch = {
+              done: true,
+              modelName: event.data?.modelName,
+            };
+            if (typeof event.data?.ok === "boolean")
+              patch.planFailed = !event.data.ok;
+            commit("updateLastAssistantMessage", patch);
             dispatch?.("syncHistory");
             break;
+          }
           case "error":
-            commit("updateLastAssistantMessage", { delta: `\n\n${event.data?.message}` });
+            commit("updateLastAssistantMessage", {
+              delta: `\n\n${event.data?.message}`,
+            });
             break;
         }
       } catch {
@@ -217,6 +243,7 @@ export default {
     productRefreshToken: 0,
     fabsHidden: localStorage.getItem("fabs-hidden") === "1",
     selectedModelId: null,
+    attachedFiles: [],
   }),
 
   mutations: {
@@ -229,8 +256,30 @@ export default {
     addMessage(state, msg) {
       state.messages.push(msg);
     },
+    removeLastUserMessage(state) {
+      const last = state.messages.at(-1);
+      if (last?.role === "user") state.messages.pop();
+    },
+    patchLastUserAttachments(state, attachments) {
+      for (let i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === "user") {
+          state.messages[i].attachments = attachments;
+          return;
+        }
+      }
+    },
     setMessages(state, messages) {
       state.messages = messages;
+    },
+    replaceLastAssistant(state, msg) {
+      const i = state.messages.length - 1;
+      if (i < 0 || state.messages[i].role !== "assistant") return;
+      const prev = state.messages[i];
+      state.messages.splice(i, 1, {
+        ...msg,
+        id: prev.id,
+        dbId: prev.dbId,
+      });
     },
     setSessionId(state, id) {
       state.sessionId = id;
@@ -246,29 +295,46 @@ export default {
         }
       }
     },
-    updateLastAssistantMessage(state, { delta, textBlock, toolCall, plan, done, modelName, dbId }) {
+    updateLastAssistantMessage(
+      state,
+      { delta, textBlock, toolCall, plan, done, modelName, dbId, resume, planFailed },
+    ) {
       const last = state.messages[state.messages.length - 1];
       if (!last || last.role !== "assistant") return;
 
+      if (resume) last.done = false;
       if (delta !== undefined) last.content += delta;
+      if (delta) last.timeline = appendTextDelta(last.timeline, delta);
       if (modelName) last.modelName = modelName;
       if (dbId !== undefined) last.dbId = dbId;
+      if (planFailed === true) last.planFailed = true;
+      if (planFailed === false) last.planFailed = false;
 
       if (!last.apiBlocks) last.apiBlocks = [];
+      if (!last.toolCalls) last.toolCalls = [];
+      if (!last.timeline) last.timeline = [];
 
       if (textBlock && textBlock.length > 0) {
-        const assistantBlock = last.apiBlocks.find((b) => b.role === "assistant");
+        const assistantBlock = last.apiBlocks.find(
+          (b) => b.role === "assistant",
+        );
         if (assistantBlock) {
-          const textEntry = assistantBlock.content.find((c) => c.type === "text");
+          const textEntry = assistantBlock.content.find(
+            (c) => c.type === "text",
+          );
           if (textEntry) textEntry.text += textBlock;
           else assistantBlock.content.push({ type: "text", text: textBlock });
         } else {
-          last.apiBlocks.push({ role: "assistant", content: [{ type: "text", text: textBlock }] });
+          last.apiBlocks.push({
+            role: "assistant",
+            content: [{ type: "text", text: textBlock }],
+          });
         }
       }
 
       if (toolCall) {
         last.toolCalls.push(toolCall);
+        last.timeline = appendTool(last.timeline, toolCall);
 
         let assistantBlock = last.apiBlocks.find((b) => b.role === "assistant");
         if (!assistantBlock) {
@@ -276,7 +342,11 @@ export default {
           last.apiBlocks.push(assistantBlock);
         }
         let inputObj = {};
-        try { inputObj = JSON.parse(toolCall.input || "{}"); } catch {}
+        try {
+          inputObj = JSON.parse(toolCall.input || "{}");
+        } catch {
+          inputObj = {};
+        }
         assistantBlock.content.push({
           type: "tool_use",
           id: toolCall.id || toolCall.name,
@@ -286,20 +356,35 @@ export default {
       }
 
       if (plan) last.plan = plan;
-      if (done) last.done = true;
+      if (done) {
+        last.done = true;
+        if (last.planConfirmed && !last.planCancelled) last.planExecuted = true;
+      }
     },
     updateToolCall(state, { id, name, status, summary, result }) {
       const last = state.messages[state.messages.length - 1];
       if (!last) return;
-      const tc = last.toolCalls?.find((t) =>
-        (id && t.id === id) || (!id && t.name === name && t.status === "running")
+      const tc = last.toolCalls?.find(
+        (t) =>
+          (id && t.id === id) ||
+          (!id && t.name === name && t.status === "running"),
       );
       if (tc) {
         tc.status = status;
         if (summary) tc.summary = summary;
         if (result !== undefined && result !== null) {
-          try { tc.result = typeof result === "string" ? JSON.parse(result) : result; }
-          catch { tc.result = result; }
+          try {
+            tc.result =
+              typeof result === "string" ? JSON.parse(result) : result;
+          } catch {
+            tc.result = result;
+          }
+        }
+        if (
+          last.planConfirmed &&
+          toolResultFailed(tc.result, tc.summary || summary)
+        ) {
+          last.planFailed = true;
         }
       }
 
@@ -319,6 +404,10 @@ export default {
       state.messages = [];
       state.sessionId = newSessionId();
       state.conversationTitle = null;
+      state.attachedFiles = [];
+    },
+    setAttachedFiles(state, files) {
+      state.attachedFiles = Array.isArray(files) ? files : [];
     },
     setPageContext(state, ctx) {
       state.pageContext = ctx;
@@ -343,11 +432,21 @@ export default {
       state.productRefreshToken++;
     },
     setLastPlanConfirmed(state) {
-      const planMsg = [...state.messages].reverse().find((m) => m.plan && !m.planConfirmed);
-      if (planMsg) planMsg.planConfirmed = true;
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan && !m.planConfirmed && !m.planCancelled);
+      if (!planMsg) return;
+      planMsg.planConfirmed = true;
+      planMsg.planFailed = false;
+      if (!Number.isInteger(planMsg.planExecStart)) {
+        planMsg.planExecStart = (planMsg.timeline || []).length;
+      }
+      planMsg.done = false;
     },
     setLastPlanCancelled(state) {
-      const planMsg = [...state.messages].reverse().find((m) => m.plan && !m.planConfirmed);
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan && !m.planConfirmed);
       if (planMsg) planMsg.planCancelled = true;
     },
   },
@@ -358,7 +457,7 @@ export default {
       commit("clearMessages");
     },
 
-    async loadLastConversation({ commit }) {
+    async loadLastConversation({ commit, dispatch }) {
       try {
         const { http } = await import("@/main");
         const res = await http.get("/ai/conversations/latest");
@@ -368,9 +467,98 @@ export default {
         commit("setSessionId", data.sessionId);
         if (data.title) commit("setConversationTitle", data.title);
 
-        const messages = (data.messages || []).map(mapStoredMessage);
+        const messages = hydrateConversation(data.messages || []);
         commit("setMessages", messages);
-      } catch { /* silent */ }
+        await dispatch("maybeAttachLiveStream", data);
+      } catch {
+        /* silent */
+      }
+    },
+
+    maybeAttachLiveStream({ dispatch, state }, data) {
+      if (!data?.generating) return;
+      const last = state.messages.at(-1);
+      if (
+        last?.role === "assistant" &&
+        last.done &&
+        !(last.plan && last.planConfirmed && !last.planExecuted)
+      )
+        return;
+      return dispatch("attachLiveStream");
+    },
+
+    async reloadConversationMessages({ state, commit }) {
+      if (!state.sessionId) return;
+      try {
+        const { http } = await import("@/main");
+        const res = await http.get(`/ai/conversations/${state.sessionId}`);
+        const data = res.data;
+        if (!data) return;
+        if (data.title) commit("setConversationTitle", data.title);
+        commit(
+          "setMessages",
+          hydrateConversation(data.messages || []),
+        );
+      } catch {
+        /* silent */
+      }
+    },
+
+    async attachLiveStream({ state, commit, dispatch }) {
+      if (!state.sessionId) return;
+      const sessionId = state.sessionId;
+      const last = state.messages.at(-1);
+      if (last?.role === "assistant" && last.done && !last.plan) return;
+
+      userStopped = false;
+      commit("setLoading", true);
+      abortController = new AbortController();
+      const { signal } = abortController;
+
+      try {
+        const response = await fetchWithAuth(
+          `/api/ai/chat/stream?sessionId=${encodeURIComponent(sessionId)}`,
+          { method: "GET", headers: { "X-CSRF": "1" }, signal },
+        );
+        if (response.status === 404) {
+          await dispatch("reloadConversationMessages");
+          return;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const current = state.messages.at(-1);
+        if (current?.role === "assistant") {
+          if (current.done && !current.plan) return;
+          if (
+            current.plan &&
+            current.planConfirmed &&
+            !current.planExecuted
+          ) {
+            commit("updateLastAssistantMessage", { resume: true });
+          } else if (!current.plan) {
+            commit("replaceLastAssistant", emptyAssistantMessage());
+          }
+        } else {
+          commit("addMessage", emptyAssistantMessage());
+        }
+        await consumeSse(response, commit, dispatch);
+      } catch (err) {
+        if (state.sessionId !== sessionId) return;
+        if (err.name === "AbortError") {
+          if (userStopped) {
+            commit("updateLastAssistantMessage", { done: true });
+            dispatch("syncHistory");
+          }
+        } else if (err.message !== "Session expired") {
+          commit("updateLastAssistantMessage", {
+            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
+            done: true,
+          });
+        }
+      } finally {
+        abortController = null;
+        if (state.sessionId === sessionId) commit("setLoading", false);
+      }
     },
 
     async sendMessage({ state, commit, dispatch }, payload) {
@@ -378,20 +566,51 @@ export default {
 
       const content = typeof payload === "string" ? payload : payload?.content;
       const contextCard =
-        typeof payload === "object" && payload?.contextCard ? payload.contextCard : null;
-      if (!content) return;
+        typeof payload === "object" && payload?.contextCard
+          ? payload.contextCard
+          : null;
+      const attached = [...(state.attachedFiles || [])];
+      const attachments = attachmentMetaList(attached);
+      const text =
+        content ||
+        (attachments.length ? t("ai.attachedFilesMessage") : "");
+      if (!text) return;
+
+      userStopped = false;
+      commit("setLoading", true);
 
       const userMsg = {
         id: Date.now(),
         role: "user",
-        content,
+        content: text,
+        attachments,
         ...(contextCard ? { contextCard } : {}),
       };
       commit("addMessage", userMsg);
-      commit("setLoading", true);
+      commit("setAttachedFiles", []);
 
-      const assistantMsg = { id: Date.now() + 1, role: "assistant", content: "", toolCalls: [], plan: null, apiBlocks: [] };
-      commit("addMessage", assistantMsg);
+      if (attached.length) {
+        try {
+          const staged = await uploadChatAttachments(state.sessionId, attached);
+          commit(
+            "patchLastUserAttachments",
+            applyStagedIds(attachments, staged),
+          );
+        } catch (err) {
+          commit("removeLastUserMessage");
+          commit("setAttachedFiles", attached);
+          commit("setLoading", false);
+          commit("addMessage", {
+            id: Date.now(),
+            role: "assistant",
+            content: t("ai.attachFailed", { message: err.message }),
+            done: true,
+          });
+          return;
+        }
+      }
+
+      commit("addMessage", emptyAssistantMessage());
 
       // Save user message immediately so it's not lost if generation is interrupted
       dispatch("syncHistory");
@@ -408,7 +627,9 @@ export default {
             messages: history,
             pageContext: state.pageContext,
             sessionId: activeSessionId,
-            modelId: state.selectedModelId ? parseInt(state.selectedModelId) : null,
+            modelId: state.selectedModelId
+              ? parseInt(state.selectedModelId)
+              : null,
           }),
           signal: abortController.signal,
         });
@@ -420,8 +641,10 @@ export default {
         if (state.sessionId !== activeSessionId) return;
 
         if (err.name === "AbortError") {
-          commit("updateLastAssistantMessage", { done: true });
-          dispatch("syncHistory");
+          if (userStopped) {
+            commit("updateLastAssistantMessage", { done: true });
+            dispatch("syncHistory");
+          }
         } else if (err.message !== "Session expired") {
           commit("updateLastAssistantMessage", {
             delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
@@ -430,11 +653,18 @@ export default {
         }
       } finally {
         abortController = null;
+        if (state.sessionId !== activeSessionId) return;
+        const last = state.messages.at(-1);
+        if (!userStopped && last?.role === "assistant" && !last.done) {
+          await dispatch("attachLiveStream");
+          return;
+        }
         commit("setLoading", false);
       }
     },
 
     stopGeneration({ state }) {
+      userStopped = true;
       abortController?.abort();
       if (state.sessionId) {
         fetchWithAuth("/api/ai/stop", {
@@ -446,34 +676,45 @@ export default {
     },
 
     async confirmPlan({ state, commit, dispatch }) {
-      const planMsg = [...state.messages].reverse().find((m) => m.plan && !m.planConfirmed && !m.planCancelled);
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan && !m.planConfirmed && !m.planCancelled);
       const steps = planMsg?.plan?.steps || [];
-      const executable = steps.length > 0 && steps.every((s) => s.tool && s.args);
+      const executable =
+        steps.length > 0 && steps.every((s) => s.tool && s.args);
 
       commit("setLastPlanConfirmed");
+      dispatch("syncHistory");
 
       if (!executable) {
         dispatch("sendMessage", AI_CONFIRM_PLAN);
         return;
       }
 
-      commit("addMessage", { id: Date.now(), role: "user", content: AI_CONFIRM_PLAN });
+      userStopped = false;
+      const activeSessionId = state.sessionId;
       commit("setLoading", true);
-      commit("addMessage", { id: Date.now() + 1, role: "assistant", content: "", toolCalls: [], plan: null, apiBlocks: [] });
       abortController = new AbortController();
 
       try {
         const response = await fetchWithAuth("/api/ai/execute-plan", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF": "1" },
-          body: JSON.stringify({ steps }),
+          body: JSON.stringify({
+            steps,
+            sessionId: activeSessionId,
+          }),
           signal: abortController.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         await consumeSse(response, commit, dispatch);
       } catch (err) {
+        if (state.sessionId !== activeSessionId) return;
         if (err.name === "AbortError") {
-          commit("updateLastAssistantMessage", { done: true });
+          if (userStopped) {
+            commit("updateLastAssistantMessage", { done: true });
+            dispatch("syncHistory");
+          }
         } else if (err.message !== "Session expired") {
           commit("updateLastAssistantMessage", {
             delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
@@ -482,17 +723,28 @@ export default {
         }
       } finally {
         abortController = null;
+        if (state.sessionId !== activeSessionId) return;
+        const last = state.messages.at(-1);
+        if (!userStopped && last?.role === "assistant" && !last.done) {
+          await dispatch("attachLiveStream");
+          return;
+        }
         commit("setLoading", false);
       }
     },
 
     async syncHistory({ state, commit, dispatch }) {
       // Include completed assistant messages and all user messages; skip empty assistant placeholders
-      const msgs = state.messages.filter((m) =>
-        m.role === "user" || (m.role === "assistant" && m.done && (m.content || m.toolCalls?.length))
+      const msgs = state.messages.filter(
+        (m) =>
+          (m.role === "user" && !isAiControlMessage(m)) ||
+          (m.role === "assistant" &&
+            (m.done || (m.plan && (m.planConfirmed || m.planCancelled))) &&
+            (m.content || m.toolCalls?.length || m.plan)),
       );
       if (msgs.length < 1) return;
-      const modelName = [...msgs].reverse().find((m) => m.modelName)?.modelName ?? null;
+      const modelName =
+        [...msgs].reverse().find((m) => m.modelName)?.modelName ?? null;
       try {
         const { http } = await import("@/main");
         const body = {
@@ -503,6 +755,7 @@ export default {
             content: m.content || "",
             toolCallsJson: serializeToolCallsJson(m),
             createdAt: new Date().toISOString(),
+            dbId: m.dbId || undefined,
           })),
         };
         const res = await http.post("/ai/conversations/messages", body);
@@ -517,7 +770,9 @@ export default {
             }
           }
         }
-      } catch { /* silent */ }
+      } catch {
+        /* silent */
+      }
     },
 
     async loadConversation({ state, commit, dispatch }, sessionId) {
@@ -530,9 +785,12 @@ export default {
         if (!data) return;
         commit("setSessionId", data.sessionId);
         commit("setConversationTitle", data.title ?? null);
-        const messages = (data.messages || []).map(mapStoredMessage);
+        const messages = hydrateConversation(data.messages || []);
         commit("setMessages", messages);
-      } catch { /* silent */ }
+        await dispatch("maybeAttachLiveStream", data);
+      } catch {
+        /* silent */
+      }
     },
 
     async renameConversation({ state, commit }, title) {
@@ -545,7 +803,7 @@ export default {
       }
     },
 
-    async deleteConversation({ state, commit, dispatch }, sessionId) {
+    async deleteConversation({ state, commit }, sessionId) {
       try {
         const { http } = await import("@/main");
         await http.delete(`/ai/conversations/${sessionId}`);
@@ -553,16 +811,23 @@ export default {
         if (state.sessionId === sessionId) {
           commit("clearMessages");
         }
-      } catch { /* silent */ }
+      } catch {
+        /* silent */
+      }
     },
 
     async generateTitle({ state, commit }, firstUserMessage) {
       if (state.conversationTitle) return;
       try {
         const { http } = await import("@/main");
-        const res = await http.post(`/ai/conversations/${state.sessionId}/generate-title`, { firstUserMessage });
+        const res = await http.post(
+          `/ai/conversations/${state.sessionId}/generate-title`,
+          { firstUserMessage },
+        );
         if (res.data?.title) commit("setConversationTitle", res.data.title);
-      } catch { /* silent */ }
+      } catch {
+        /* silent */
+      }
     },
 
     async sendFeedback({ state }, { dbId, rating }) {
@@ -579,7 +844,7 @@ export default {
 
     cancelPlan({ commit, dispatch }) {
       commit("setLastPlanCancelled");
-      dispatch("sendMessage", AI_CANCEL_PLAN);
+      dispatch("syncHistory");
     },
   },
 };

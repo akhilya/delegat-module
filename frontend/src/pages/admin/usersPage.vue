@@ -39,7 +39,7 @@ import {
   UserPlus,
   X,
 } from "lucide-vue-next";
-import { hasPermission, PERMS } from "@/lib/permissions";
+import { ASSIGNABLE_PERMISSIONS, hasPermission, mergeAssignableCatalog, PERMS } from "@/lib/permissions";
 import { isOwnerRoleLocked, isUserAccessRowLocked } from "@/lib/userAccessEdit";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { newPasswordFieldsIssue } from "@/lib/authValidation";
@@ -105,7 +105,7 @@ export default {
       },
       permissionsFromRoles: [],
       roleCatalog: [],
-      permissionCatalog: [],
+      permissionCatalog: [...ASSIGNABLE_PERMISSIONS],
       isEditDialogOpen: false,
       isLoading: false,
       savingUserId: null,
@@ -319,9 +319,14 @@ export default {
       await this.getPermissionsCatalog({
         onSuccess: (response) => {
           const data = response.data.value ?? response.data ?? {};
-          this.permissionCatalog = data.assignable || data.all || [];
+          this.permissionCatalog = mergeAssignableCatalog(
+            data.assignable || data.all || [],
+          );
         },
-        onError: displaySonnerError,
+        onError: (error) => {
+          this.permissionCatalog = mergeAssignableCatalog([]);
+          displaySonnerError(error);
+        },
       });
     },
 

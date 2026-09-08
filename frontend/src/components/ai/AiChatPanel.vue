@@ -1,13 +1,10 @@
 <script setup>
-import { Spinner } from "@/components/ui/spinner";
 import { ref, computed, nextTick, watch, onMounted } from "vue";
 import { useStore } from "vuex";
 import { unrefElement } from "@vueuse/core";
 import {
   ArrowDown,
   ArrowUp,
-  CheckCircle2,
-  ExternalLink,
   Square,
   Copy,
   Check,
@@ -19,11 +16,15 @@ import {
   ChevronLeft,
   History,
   MessageSquare,
+  FolderOpen,
+  Files,
+  FileText,
 } from "lucide-vue-next";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import AiPlanCard from "./AiPlanCard.vue";
+import AiChatProcess from "./AiChatProcess.vue";
+import AiChatActions from "./AiChatActions.vue";
 import OperationContextBubble from "./OperationContextBubble.vue";
+import AiChatAttachmentList from "./AiChatAttachmentList.vue";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,10 +72,30 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
 import { useI18n } from "vue-i18n";
+import {
+  filesFromDirectoryInput,
+  mergeAttachedFiles,
+} from "@/lib/ai/attachments";
+import { hasPermission, PERMS } from "@/lib/permissions";
+import { getCachedMe } from "@/lib/meCache";
+import {
+  executionView,
+  splitPlanExecution,
+  timelineFromLegacy,
+} from "@/lib/ai/timeline";
+import { isAiControlMessage } from "@/lib/ai/persist";
+import { renderAiMarkdown } from "@/lib/ai/markdown";
+import "./aiMessage.css";
 
 const { t } = useI18n();
 const store = useStore();
@@ -87,6 +108,8 @@ const {
 loadMemberships();
 const messagesEl = ref(null);
 const inputEl = ref(null);
+const folderInputEl = ref(null);
+const filesInputEl = ref(null);
 const inputText = ref("");
 const isAtBottom = ref(true);
 const aiWidthStorageKey = SHEET_WIDTH_STORAGE.ai;
@@ -108,6 +131,11 @@ const confirmDeleteDialog = ref({
 
 const isOpen = computed(() => store.state.aiChat.isOpen);
 const isLoading = computed(() => store.state.aiChat.isLoading);
+const attachedFiles = computed(() => store.state.aiChat.attachedFiles || []);
+const attachedCount = computed(() => attachedFiles.value.length);
+const canAttach = computed(() =>
+  hasPermission(getCachedMe(), PERMS.FilesManage),
+);
 const messages = computed(() => store.state.aiChat.messages);
 const panelWidth = computed(() => store.state.aiChat.panelWidth);
 const conversationTitle = computed(() => store.state.aiChat.conversationTitle);
@@ -224,6 +252,13 @@ async function copyText(id, text) {
     /* clipboard may be blocked */
   }
 }
+function userClipboard(msg) {
+  const names = (msg.attachments || [])
+    .map((a) => a.fileName || a.relativePath)
+    .filter(Boolean);
+  return [msg.content, names.join("\n")].filter(Boolean).join("\n");
+}
+
 function messageClipboard(msg) {
   const parts = [];
   if (msg.toolCalls?.length) {
@@ -343,13 +378,53 @@ function inputDom() {
 
 async function submit() {
   const text = inputText.value.trim();
-  if (!text || isLoading.value || !hasEnabledModels.value) return;
+  if (
+    (!text && !attachedCount.value) ||
+    isLoading.value ||
+    !hasEnabledModels.value
+  )
+    return;
   inputText.value = "";
   const sendPromise = store.dispatch("aiChat/sendMessage", text);
   await nextTick();
   const el = inputDom();
   if (el?.style) el.style.height = "auto";
   await sendPromise;
+}
+
+function onChatAsk(prompt) {
+  if (isLoading.value || !hasEnabledModels.value || !prompt) return;
+  store.dispatch("aiChat/sendMessage", prompt);
+}
+
+function pickFolder() {
+  folderInputEl.value?.click();
+}
+
+function pickFiles() {
+  filesInputEl.value?.click();
+}
+
+function onFolderPicked(e) {
+  const extra = filesFromDirectoryInput(e.target?.files);
+  store.commit(
+    "aiChat/setAttachedFiles",
+    mergeAttachedFiles(attachedFiles.value, extra),
+  );
+  e.target.value = "";
+}
+
+function onFilesPicked(e) {
+  const extra = filesFromDirectoryInput(e.target?.files);
+  store.commit(
+    "aiChat/setAttachedFiles",
+    mergeAttachedFiles(attachedFiles.value, extra),
+  );
+  e.target.value = "";
+}
+
+function clearAttachments() {
+  store.commit("aiChat/setAttachedFiles", []);
 }
 
 function submitExample(example) {
@@ -407,9 +482,63 @@ function onPanelWidth(w) {
   store.commit("aiChat/setPanelWidth", w);
 }
 
-function renderMarkdown(text) {
-  if (!text) return "";
-  return DOMPurify.sanitize(marked.parse(text));
+function messageTimeline(msg) {
+  return msg.timeline?.length
+    ? msg.timeline
+    : timelineFromLegacy(msg.content, msg.toolCalls);
+}
+
+function hasPlanExec(msg) {
+  return Number.isInteger(msg.planExecStart);
+}
+
+function turnLayout(msg) {
+  const timeline = messageTimeline(msg);
+  if (!hasPlanExec(msg)) {
+    return {
+      proposal: executionView(timeline, { done: !!msg.done }),
+      execution: { process: [], reply: "", actions: [] },
+    };
+  }
+  return splitPlanExecution(timeline, msg.planExecStart, { done: !!msg.done });
+}
+
+function proposalView(msg) {
+  return turnLayout(msg).proposal;
+}
+
+function executionPart(msg) {
+  return turnLayout(msg).execution;
+}
+
+function replyText(msg) {
+  const layout = turnLayout(msg);
+  return hasPlanExec(msg) ? layout.execution.reply : layout.proposal.reply;
+}
+
+function chatActions(msg) {
+  const layout = turnLayout(msg);
+  const actions = [...layout.proposal.actions, ...layout.execution.actions];
+  const seen = new Set();
+  return actions.filter((action) => {
+    const key = `${action.url}|${action.prompt}|${action.label}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function messageExecution(msg) {
+  const layout = turnLayout(msg);
+  return {
+    process: [...layout.proposal.process, ...layout.execution.process],
+    reply: replyText(msg),
+    actions: chatActions(msg),
+  };
+}
+
+function isLatestTurn(msg) {
+  return msg.id === messages.value.at(-1)?.id;
 }
 </script>
 
@@ -431,7 +560,11 @@ function renderMarkdown(text) {
       @escape-key-down="onSheetEscape"
       @open-auto-focus="onOpenAutoFocus"
     >
-      <SheetHeader v-if="activeView === 'chat'" variant="bar">
+      <SheetHeader
+        v-if="activeView === 'chat'"
+        variant="bar"
+        class="animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+      >
         <div class="flex min-h-8 items-center gap-2">
           <Button
             variant="ghost"
@@ -487,7 +620,11 @@ function renderMarkdown(text) {
         </SheetDescription>
       </SheetHeader>
 
-      <SheetHeader v-else variant="bar">
+      <SheetHeader
+        v-else
+        variant="bar"
+        class="animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+      >
         <div class="flex min-h-8 items-center gap-2">
           <Button
             variant="ghost"
@@ -521,7 +658,7 @@ function renderMarkdown(text) {
 
       <div
         v-if="activeView === 'history'"
-        class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        class="min-h-0 flex-1 overflow-y-auto px-4 py-4 animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
       >
         <EmptyState v-if="convListLoading" loading :framed="false" />
         <EmptyState
@@ -547,27 +684,30 @@ function renderMarkdown(text) {
                 :selected="c.sessionId === sessionId"
                 @click="switchConversation(c.sessionId)"
               >
-                <MessageSquare class="size-4 shrink-0" />
-                <div class="min-w-0 flex-1">
-                  <p class="truncate leading-snug">
-                    {{ c.title || t("ai.untitled") }}
-                  </p>
-                  <p class="mt-0.5 text-xs text-muted-foreground">
-                    {{ formatRelativeDate(c.lastMessageAt) }}
-                    · {{ c.messageCount }} {{ t("ai.messagesCountSuffix") }}
-                  </p>
-                </div>
+                <p class="truncate leading-snug">
+                  {{ c.title || t("ai.untitled") }}
+                </p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                  {{ c.messageCount }} {{ t("ai.messagesCountSuffix") }}
+                </p>
                 <template #trailing>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    :title="t('ai.deleteConversationTooltip')"
-                    :aria-label="t('ai.deleteConversationTooltip')"
-                    @click="openConfirmDelete($event, c.sessionId)"
-                  >
-                    <Trash2 class="size-4" />
-                  </Button>
+                  <span class="flex items-center gap-0.5">
+                    <span
+                      class="px-1 text-xs text-muted-foreground tabular-nums"
+                    >
+                      {{ formatRelativeDate(c.lastMessageAt) }}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      :title="t('ai.deleteConversationTooltip')"
+                      :aria-label="t('ai.deleteConversationTooltip')"
+                      @click="openConfirmDelete($event, c.sessionId)"
+                    >
+                      <Trash2 class="size-4" />
+                    </Button>
+                  </span>
                 </template>
               </InsetGroupItem>
             </InsetGroup>
@@ -575,7 +715,10 @@ function renderMarkdown(text) {
         </div>
       </div>
 
-      <div v-else class="relative min-h-0 flex-1">
+      <div
+        v-else
+        class="relative min-h-0 flex-1 animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+      >
         <div
           ref="messagesEl"
           class="h-full overflow-y-auto px-4 py-4"
@@ -591,41 +734,48 @@ function renderMarkdown(text) {
                 : t('ai.noModelsEnabled')
             "
           >
-            <div
-              v-if="hasEnabledModels"
-              class="flex max-w-[280px] flex-wrap justify-center gap-1.5"
-            >
-              <Bubble
+            <InsetGroup v-if="hasEnabledModels" class="w-full max-w-[280px]">
+              <InsetGroupItem
                 v-for="example in examplePrompts"
                 :key="example"
-                variant="outline"
-                as="button"
-                type="button"
                 @click="submitExample(example)"
               >
-                <BubbleContent
-                  class="px-2.5 py-1 text-xs text-muted-foreground"
-                >
-                  {{ example }}
-                </BubbleContent>
-              </Bubble>
-            </div>
+                {{ example }}
+              </InsetGroupItem>
+            </InsetGroup>
           </EmptyState>
 
-          <div v-else class="flex flex-col gap-4">
+          <div v-else class="ai-thread flex flex-col gap-4">
             <template v-for="msg in messages" :key="msg.id">
-              <Message v-if="msg.role === 'user'" align="end">
+              <Message
+                v-if="msg.role === 'user' && !isAiControlMessage(msg)"
+                align="end"
+              >
                 <MessageContent>
                   <OperationContextBubble
                     v-if="msg.contextCard"
                     :card="msg.contextCard"
                     :raw="msg.content"
                   />
-                  <Bubble v-else variant="muted" align="end">
+                  <Bubble
+                    v-else-if="
+                      msg.content &&
+                      !(
+                        msg.attachments?.length &&
+                        msg.content === t('ai.attachedFilesMessage')
+                      )
+                    "
+                    variant="default"
+                    align="end"
+                  >
                     <BubbleContent>{{ msg.content }}</BubbleContent>
                   </Bubble>
+                  <AiChatAttachmentList
+                    v-if="msg.attachments?.length"
+                    :files="msg.attachments"
+                  />
                   <MessageFooter
-                    class="opacity-0 transition-opacity group-hover/message:opacity-100"
+                    class="opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100"
                   >
                     <Button
                       variant="ghost"
@@ -634,11 +784,11 @@ function renderMarkdown(text) {
                       :title="
                         copiedId === msg.id ? t('ai.copied') : t('common.copy')
                       "
-                      @click="copyText(msg.id, msg.content)"
+                      @click="copyText(msg.id, userClipboard(msg))"
                     >
                       <Check
                         v-if="copiedId === msg.id"
-                        class="size-3.5 text-green-600"
+                        class="size-3.5 animate-in zoom-in-95 fade-in-0 duration-[var(--duration-press)] ease-[var(--ease-out-quart)]"
                       />
                       <Copy v-else class="size-3.5" />
                     </Button>
@@ -646,98 +796,79 @@ function renderMarkdown(text) {
                 </MessageContent>
               </Message>
 
-              <Message v-else align="start">
+              <Message v-else-if="msg.role === 'assistant'" align="start">
                 <MessageContent>
-                  <div
-                    v-if="msg.toolCalls?.length"
-                    class="flex w-full flex-col gap-1"
-                  >
-                    <template
-                      v-for="tc in msg.toolCalls"
-                      :key="tc.id || tc.name"
-                    >
-                      <details>
-                        <summary class="list-none cursor-pointer">
-                          <Marker>
-                            <Spinner
-                              v-if="tc.status === 'running'"
-                              size="xs"
-                              class="shrink-0"
-                            />
-                            <CheckCircle2
-                              v-else
-                              class="size-3.5 shrink-0 text-green-500/80"
-                            />
-                            <MarkerContent class="font-mono text-xs">
-                              {{ tc.name }}
-                              <span v-if="tc.summary" class="opacity-50">
-                                → {{ tc.summary }}</span
-                              >
-                            </MarkerContent>
-                          </Marker>
-                        </summary>
-                        <div
-                          v-if="tc.input || tc.summary"
-                          class="ml-6 mt-0.5 mb-0.5 border-l border-border/40 pl-2 font-mono text-xs text-muted-foreground/60"
-                        >
-                          <div v-if="tc.input" class="break-all">
-                            {{
-                              tc.input.length > 300
-                                ? tc.input.slice(0, 300) + "…"
-                                : tc.input
-                            }}
-                          </div>
-                        </div>
-                      </details>
-                      <RouterLink
-                        v-if="tc.name === 'navigate_to' && tc.result?.navigate"
-                        :to="tc.result.url"
-                        class="ml-6 mt-1 inline-flex w-fit items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                      >
-                        <ExternalLink class="size-3 shrink-0" />
-                        {{ tc.result.label || tc.result.url }}
-                      </RouterLink>
-                    </template>
-                  </div>
-
-                  <AiPlanCard
-                    v-if="msg.plan"
-                    :plan="msg.plan"
-                    :confirmed="msg.planConfirmed"
-                    :cancelled="msg.planCancelled"
-                    @confirm="confirmPlan"
-                    @cancel="cancelPlan"
+                  <AiChatProcess
+                    :process="proposalView(msg).process"
+                    :done="!!msg.done || hasPlanExec(msg)"
+                    :enter="isLatestTurn(msg)"
                   />
 
-                  <Bubble v-if="msg.content" variant="ghost">
-                    <BubbleContent class="w-full max-w-none p-0">
-                      <div
-                        class="ai-message text-sm leading-relaxed"
-                        v-html="renderMarkdown(msg.content)"
-                      />
-                    </BubbleContent>
-                  </Bubble>
+                  <div
+                    v-if="hasPlanExec(msg) && proposalView(msg).reply"
+                    class="ai-message min-w-0 w-full text-sm leading-relaxed wrap-break-word"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                    v-html="renderAiMarkdown(proposalView(msg).reply)"
+                  />
 
-                  <Marker
-                    v-if="
-                      !msg.done &&
-                      isLoading &&
-                      msg === lastAssistant &&
-                      !hasRunningTool &&
-                      !msg.plan
-                    "
-                    class="h-5"
+                  <div
+                    v-if="msg.plan"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
-                    <MarkerContent class="flex items-center gap-1">
-                      <span class="ai-dot" />
-                      <span class="ai-dot" style="animation-delay: 0.2s" />
-                      <span class="ai-dot" style="animation-delay: 0.4s" />
-                    </MarkerContent>
-                  </Marker>
+                    <AiPlanCard
+                      :plan="msg.plan"
+                      :confirmed="msg.planConfirmed"
+                      :cancelled="msg.planCancelled"
+                      :executed="msg.planExecuted"
+                      :failed="msg.planFailed"
+                      @confirm="confirmPlan"
+                      @cancel="cancelPlan"
+                    />
+                  </div>
+
+                  <AiChatProcess
+                    v-if="hasPlanExec(msg)"
+                    :process="executionPart(msg).process"
+                    :done="!!msg.done"
+                    :enter="isLatestTurn(msg)"
+                  />
+
+                  <div
+                    v-if="replyText(msg)"
+                    class="ai-message min-w-0 w-full text-sm leading-relaxed wrap-break-word"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                    v-html="renderAiMarkdown(replyText(msg))"
+                  />
+
+                  <AiChatActions
+                    v-if="msg.done && chatActions(msg).length"
+                    :actions="chatActions(msg)"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                    @ask="onChatAsk"
+                  />
+
+                  <Transition name="ai-fade">
+                    <Marker
+                      v-if="
+                        !msg.done &&
+                        isLoading &&
+                        msg === lastAssistant &&
+                        !hasRunningTool &&
+                        !msg.plan
+                      "
+                      class="h-5"
+                    >
+                      <MarkerContent class="flex items-center gap-1">
+                        <span class="ai-dot" />
+                        <span class="ai-dot" style="animation-delay: 0.2s" />
+                        <span class="ai-dot" style="animation-delay: 0.4s" />
+                      </MarkerContent>
+                    </Marker>
+                  </Transition>
 
                   <MessageFooter
                     v-if="msg.done && (msg.content || msg.toolCalls?.length)"
-                    class="gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+                    class="gap-1 opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100"
                   >
                     <Button
                       variant="ghost"
@@ -750,7 +881,7 @@ function renderMarkdown(text) {
                     >
                       <Check
                         v-if="copiedId === msg.id"
-                        class="size-3.5 text-green-600"
+                        class="size-3.5 animate-in zoom-in-95 fade-in-0 duration-[var(--duration-press)] ease-[var(--ease-out-quart)]"
                       />
                       <Copy v-else class="size-3.5" />
                     </Button>
@@ -760,8 +891,8 @@ function renderMarkdown(text) {
                       class="size-7"
                       :class="
                         msg.feedbackRating === 1
-                          ? 'text-green-600'
-                          : 'text-muted-foreground hover:text-green-600'
+                          ? 'text-foreground'
+                          : 'text-muted-foreground'
                       "
                       :title="t('ai.goodResponse')"
                       @click="sendFeedback(msg, 1)"
@@ -774,8 +905,8 @@ function renderMarkdown(text) {
                       class="size-7"
                       :class="
                         msg.feedbackRating === -1
-                          ? 'text-red-500'
-                          : 'text-muted-foreground hover:text-red-500'
+                          ? 'text-foreground'
+                          : 'text-muted-foreground'
                       "
                       :title="t('ai.badResponse')"
                       @click="sendFeedback(msg, -1)"
@@ -789,20 +920,51 @@ function renderMarkdown(text) {
           </div>
         </div>
 
-        <Button
-          v-if="!isAtBottom && messages.length > 0"
-          variant="outline"
-          size="icon"
-          class="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 rounded-full"
-          :title="t('ai.jumpToLatest')"
-          :aria-label="t('ai.jumpToLatest')"
-          @click="scrollToLatest"
-        >
-          <ArrowDown class="size-4" />
-        </Button>
+        <Transition name="ai-fade">
+          <Button
+            v-if="!isAtBottom && messages.length > 0"
+            variant="outline"
+            size="icon"
+            class="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 rounded-full"
+            :title="t('ai.jumpToLatest')"
+            :aria-label="t('ai.jumpToLatest')"
+            @click="scrollToLatest"
+          >
+            <ArrowDown class="size-4" />
+          </Button>
+        </Transition>
       </div>
 
-      <SheetFooter v-if="activeView === 'chat'" variant="bar">
+      <SheetFooter
+        v-if="activeView === 'chat'"
+        variant="bar"
+        class="flex-col items-stretch sm:flex-col sm:items-stretch sm:justify-start animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+      >
+        <input
+          ref="filesInputEl"
+          type="file"
+          class="hidden"
+          multiple
+          @change="onFilesPicked"
+        />
+        <input
+          ref="folderInputEl"
+          type="file"
+          class="hidden"
+          webkitdirectory
+          directory
+          multiple
+          @change="onFolderPicked"
+        />
+        <Transition name="ai-fade">
+          <AiChatAttachmentList
+            v-if="attachedCount"
+            class="mb-2"
+            :files="attachedFiles"
+            clearable
+            @clear="clearAttachments"
+          />
+        </Transition>
         <InputGroup class="w-full rounded-xl">
           <InputGroupTextarea
             ref="inputEl"
@@ -818,38 +980,64 @@ function renderMarkdown(text) {
             @keydown="onComposerKeydown"
           />
           <InputGroupAddon align="block-end" class="justify-between">
-            <Select
-              v-if="enabledModels.length"
-              :model-value="effectiveModelId"
-              @update:model-value="
-                (v) => store.commit('aiChat/setSelectedModel', v || null)
-              "
-            >
-              <SelectTrigger
-                class="h-auto w-auto border-0 bg-transparent p-0 shadow-none focus:ring-0 gap-1 text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground [&>svg]:size-2.5 [&>svg]:opacity-50"
+            <div class="flex min-w-0 items-center gap-1">
+              <DropdownMenu v-if="canAttach">
+                <DropdownMenuTrigger as-child>
+                  <InputGroupButton
+                    variant="ghost"
+                    size="icon-sm"
+                    class="rounded-full"
+                    :disabled="isLoading || !hasEnabledModels"
+                    :title="t('ai.attach')"
+                    :aria-label="t('ai.attach')"
+                  >
+                    <Files class="size-4" />
+                  </InputGroupButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top">
+                  <DropdownMenuItem @select="pickFiles">
+                    <FileText class="size-4" />
+                    {{ t("ai.attachFiles") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @select="pickFolder">
+                    <FolderOpen class="size-4" />
+                    {{ t("ai.attachFolder") }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Select
+                v-if="enabledModels.length"
+                :model-value="effectiveModelId"
+                @update:model-value="
+                  (v) => store.commit('aiChat/setSelectedModel', v || null)
+                "
               >
-                <SelectValue
-                  :placeholder="lastModelName ?? t('ai.modelPlaceholder')"
-                />
-              </SelectTrigger>
-              <SelectContent align="start" side="top" class="min-w-[160px]">
-                <SelectItem
-                  v-for="m in enabledModels"
-                  :key="m.id"
-                  :value="String(m.id)"
-                  class="text-xs"
+                <SelectTrigger
+                  class="h-auto w-auto border-0 bg-transparent p-0 shadow-none focus:ring-0 gap-1 text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground [&>svg]:size-2.5 [&>svg]:opacity-50"
                 >
-                  {{ m.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <span
-              v-else
-              class="max-w-[200px] truncate font-mono text-[10px] leading-none text-muted-foreground/60 select-none"
-              :title="t('ai.noModelsPlaceholder')"
-            >
-              {{ t("ai.noEnabledModels") }}
-            </span>
+                  <SelectValue
+                    :placeholder="lastModelName ?? t('ai.modelPlaceholder')"
+                  />
+                </SelectTrigger>
+                <SelectContent align="start" side="top" class="min-w-[160px]">
+                  <SelectItem
+                    v-for="m in enabledModels"
+                    :key="m.id"
+                    :value="String(m.id)"
+                    class="text-xs"
+                  >
+                    {{ m.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <span
+                v-else
+                class="max-w-[200px] truncate font-mono text-[10px] leading-none text-muted-foreground/60 select-none"
+                :title="t('ai.noModelsPlaceholder')"
+              >
+                {{ t("ai.noEnabledModels") }}
+              </span>
+            </div>
             <InputGroupButton
               v-if="isLoading"
               variant="secondary"
@@ -865,8 +1053,12 @@ function renderMarkdown(text) {
               v-else
               size="icon-sm"
               class="rounded-full"
-              :variant="inputText.trim() ? 'default' : 'secondary'"
-              :disabled="!inputText.trim() || !hasEnabledModels"
+              :variant="
+                inputText.trim() || attachedCount ? 'default' : 'secondary'
+              "
+              :disabled="
+                (!inputText.trim() && !attachedCount) || !hasEnabledModels
+              "
               :title="
                 hasEnabledModels ? t('ai.send') : t('ai.noModelsPlaceholder')
               "
@@ -931,97 +1123,5 @@ function renderMarkdown(text) {
   50% {
     opacity: 1;
   }
-}
-
-.ai-message :deep(h1),
-.ai-message :deep(h2),
-.ai-message :deep(h3),
-.ai-message :deep(h4) {
-  font-weight: 600;
-  margin-top: 0.6em;
-  margin-bottom: 0.25em;
-  line-height: 1.3;
-}
-.ai-message :deep(h1) {
-  font-size: 1.05em;
-}
-.ai-message :deep(h2) {
-  font-size: 1em;
-}
-.ai-message :deep(h3) {
-  font-size: 0.95em;
-}
-.ai-message :deep(p) {
-  margin: 0.3em 0;
-}
-.ai-message :deep(p:first-child) {
-  margin-top: 0;
-}
-.ai-message :deep(p:last-child) {
-  margin-bottom: 0;
-}
-.ai-message :deep(ul),
-.ai-message :deep(ol) {
-  margin: 0.3em 0;
-  padding-left: 1.4em;
-}
-.ai-message :deep(li) {
-  margin: 0.1em 0;
-}
-.ai-message :deep(strong) {
-  font-weight: 600;
-}
-.ai-message :deep(em) {
-  font-style: italic;
-}
-.ai-message :deep(code) {
-  font-family: ui-monospace, monospace;
-  font-size: 0.85em;
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 3px;
-  padding: 0.1em 0.35em;
-}
-.ai-message :deep(pre) {
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  padding: 0.6em 0.8em;
-  margin: 0.4em 0;
-  overflow-x: auto;
-  font-size: 0.82em;
-}
-.ai-message :deep(pre code) {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 1em;
-}
-.ai-message :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.4em 0;
-  font-size: 0.9em;
-}
-.ai-message :deep(th),
-.ai-message :deep(td) {
-  border: 1px solid hsl(var(--border));
-  padding: 0.25em 0.5em;
-  text-align: left;
-}
-.ai-message :deep(th) {
-  font-weight: 600;
-  background: hsl(var(--background));
-}
-.ai-message :deep(hr) {
-  border: none;
-  border-top: 1px solid hsl(var(--border));
-  margin: 0.5em 0;
-}
-.ai-message :deep(blockquote) {
-  border-left: 3px solid hsl(var(--border));
-  margin: 0.3em 0;
-  padding-left: 0.7em;
-  color: hsl(var(--muted-foreground));
 }
 </style>

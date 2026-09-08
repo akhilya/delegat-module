@@ -631,6 +631,86 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         CancellationToken ct = default)
         => _plugin.GetOrderLabelAsync(CreateContext(connection), externalOrderId, ct);
 
+    public Task<List<ExternalFulfillmentLocation>> GetFulfillmentLocationsAsync(
+        MarketplaceConnection connection,
+        FulfillmentLocationQuery? query = null,
+        CancellationToken ct = default)
+        => _plugin.GetFulfillmentLocationsAsync(CreateContext(connection), query, ct);
+
+    public async Task<Models.Marketplace.DTOs.PagedResult<ExternalShipment>> GetShipmentsAsync(
+        MarketplaceConnection connection,
+        ShipmentQuery? query = null,
+        CancellationToken ct = default)
+    {
+        var result = await _plugin.GetShipmentsAsync(CreateContext(connection), query, ct);
+        return new Models.Marketplace.DTOs.PagedResult<ExternalShipment>(
+            result.Items ?? [],
+            result.HasMore,
+            result.NextCursor,
+            result.TotalCount);
+    }
+
+    public Task<ExternalShipment?> GetShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => _plugin.GetShipmentAsync(CreateContext(connection), externalShipmentId, ct);
+
+    public Task<ShipmentMutationResult> CreateShipmentAsync(
+        MarketplaceConnection connection,
+        CreateShipmentRequest request,
+        CancellationToken ct = default)
+        => _plugin.CreateShipmentAsync(CreateContext(connection), request, ct);
+
+    public Task<ShipmentMutationResult> AddOrdersToShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+        => _plugin.AddOrdersToShipmentAsync(CreateContext(connection), externalShipmentId, update, ct);
+
+    public Task<CreateShipmentBoxesResult> CreateShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CreateShipmentBoxesRequest request,
+        CancellationToken ct = default)
+        => _plugin.CreateShipmentBoxesAsync(CreateContext(connection), externalShipmentId, request, ct);
+
+    public Task<List<ExternalShipmentBox>> GetShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => _plugin.GetShipmentBoxesAsync(CreateContext(connection), externalShipmentId, ct);
+
+    public Task<ShipmentMutationResult> AssignOrdersToShipmentBoxAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+        => _plugin.AssignOrdersToShipmentBoxAsync(
+            CreateContext(connection), externalShipmentId, externalBoxId, update, ct);
+
+    public Task<OrderLabelResult> GetShipmentBoxLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        CancellationToken ct = default)
+        => _plugin.GetShipmentBoxLabelAsync(
+            CreateContext(connection), externalShipmentId, externalBoxId, ct);
+
+    public Task<OrderLabelResult> GetShipmentLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => _plugin.GetShipmentLabelAsync(CreateContext(connection), externalShipmentId, ct);
+
+    public Task<ShipmentMutationResult> DeliverShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => _plugin.DeliverShipmentAsync(CreateContext(connection), externalShipmentId, ct);
+
     public async Task<Models.Marketplace.DTOs.PagedResult<ExternalPromotion>> GetPromotionsAsync(
         MarketplaceConnection connection,
         PromotionQuery? query = null,

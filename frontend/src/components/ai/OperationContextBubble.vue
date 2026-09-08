@@ -1,7 +1,12 @@
 <script setup>
 import { computed } from "vue";
-import { Activity, ChevronDown } from "lucide-vue-next";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown } from "lucide-vue-next";
+import { InsetGroup } from "@/components/ui/inset-group";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useI18n } from "vue-i18n";
 
 const props = defineProps({
@@ -19,24 +24,6 @@ const statusLabel = computed(() => {
   return translated === key ? status : translated;
 });
 
-const statusBadgeClass = computed(() => {
-  switch (props.card.status) {
-    case "running":
-      return "bg-primary/10 text-primary border-transparent";
-    case "paused":
-    case "partial":
-      return "bg-warning/10 text-warning border-transparent";
-    case "completed":
-      return "bg-success/10 text-success border-transparent";
-    case "failed":
-      return "bg-error/10 text-error border-transparent";
-    case "cancelled":
-      return "bg-muted text-muted-foreground border-transparent";
-    default:
-      return "bg-muted text-muted-foreground border-transparent";
-  }
-});
-
 const metaParts = computed(() => {
   const parts = [];
   if (props.card.authorUserName) parts.push(props.card.authorUserName);
@@ -50,63 +37,52 @@ const metaParts = computed(() => {
 </script>
 
 <template>
-  <div
-    class="w-full max-w-full overflow-hidden rounded-xl border border-border/80 bg-muted/40 px-3.5 py-3 text-left"
-  >
-    <div class="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-      <Activity class="size-3 shrink-0 opacity-70" />
-      <span>{{ t("ai.operationContextEyebrow") }}</span>
-    </div>
-
-    <div class="mt-2 flex items-start gap-2">
-      <h3 class="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
-        {{ card.title || t("ai.operationContextUntitled") }}
-      </h3>
-      <Badge
-        v-if="card.status"
-        :class="statusBadgeClass"
-        class="shrink-0 text-[10px] px-1.5 py-0"
+  <InsetGroup class="w-full max-w-full">
+    <div class="px-2.5 py-2.5">
+      <p class="text-xs text-muted-foreground">
+        {{ t("ai.operationContextEyebrow") }}
+      </p>
+      <div class="mt-1 flex items-start justify-between gap-3">
+        <h3 class="min-w-0 flex-1 text-sm leading-snug">
+          {{ card.title || t("ai.operationContextUntitled") }}
+        </h3>
+        <span v-if="card.status" class="shrink-0 text-xs text-muted-foreground">
+          {{ statusLabel }}
+        </span>
+      </div>
+      <p
+        v-if="card.type"
+        class="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
       >
-        {{ statusLabel }}
-      </Badge>
-    </div>
-
-    <div
-      v-if="card.type"
-      class="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80"
-    >
-      {{ card.type }}
-    </div>
-
-    <div
-      v-if="metaParts.length"
-      class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground"
-    >
-      <template v-for="(part, i) in metaParts" :key="i">
-        <span v-if="i > 0" class="text-border" aria-hidden="true">·</span>
-        <span class="truncate">{{ part }}</span>
-      </template>
-    </div>
-
-    <p
-      v-if="card.summary"
-      class="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground"
-    >
-      {{ card.summary }}
-    </p>
-
-    <details v-if="raw" class="group mt-2.5 border-t border-border/60 pt-2">
-      <summary
-        class="flex cursor-pointer list-none items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden"
+        {{ card.type }}
+      </p>
+      <p
+        v-if="metaParts.length"
+        class="mt-1.5 text-[11px] text-muted-foreground"
       >
-        <ChevronDown
-          class="size-3 shrink-0 transition-transform group-open:rotate-180"
-        />
+        {{ metaParts.join(" · ") }}
+      </p>
+      <p
+        v-if="card.summary"
+        class="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+      >
+        {{ card.summary }}
+      </p>
+    </div>
+    <Collapsible v-if="raw">
+      <CollapsibleTrigger
+        class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-muted-foreground outline-none transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:[&_svg]:rotate-180"
+      >
         <span>{{ t("ai.operationContextShowDetails") }}</span>
-      </summary>
-      <pre
-        class="mt-2 max-h-48 overflow-auto rounded-md bg-background/80 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
-      >{{ raw }}</pre>
-    </details>
-  </div>
+        <ChevronDown
+          class="size-3.5 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent class="duration-[var(--duration-overlay)]">
+        <pre
+          class="mx-1 mb-1 max-h-48 overflow-auto rounded-lg bg-muted/60 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
+          >{{ raw }}</pre>
+      </CollapsibleContent>
+    </Collapsible>
+  </InsetGroup>
 </template>

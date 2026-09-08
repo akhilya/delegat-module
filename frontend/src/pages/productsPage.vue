@@ -1,6 +1,7 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import PageDockFooter from "@/components/PageDockFooter.vue";
 import ProductsTable from "@/components/products/productsTable.vue";
 import ProductRowActionButtons from "@/components/products/productRowActionButtons.vue";
 import TrashRowActionButtons from "@/components/products/trashRowActionButtons.vue";
@@ -107,6 +108,7 @@ export default {
   components: {
     Spinner,
     AppPageChrome,
+    PageDockFooter,
     ProductsTable,
     ProductRowActionButtons,
     TrashRowActionButtons,
@@ -1071,10 +1073,8 @@ export default {
         </template>
       </ProductsTable>
       <!-- Combined Footer -->
-      <div
-        class="flex items-center justify-between px-3 py-2 border-t bg-background"
-        v-if="!isProductsLoading"
-      >
+      <PageDockFooter v-if="!isProductsLoading">
+        <div class="flex min-w-0 flex-1 items-center justify-between gap-3">
         <!-- Left: Page size + Selection info -->
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-2">
@@ -1168,7 +1168,8 @@ export default {
             <ChevronsRight class="size-4" />
           </Button>
         </div>
-      </div>
+        </div>
+      </PageDockFooter>
     </div>
 
     <!-- Bulk Edit Dialog -->

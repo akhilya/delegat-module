@@ -19,7 +19,7 @@ import { useI18n } from "vue-i18n";
 import { brandName } from "@/brand";
 import { loadMe } from "@/main";
 import { ME_UPDATED_EVENT } from "@/lib/meCache";
-import { resolveAiChromeEnabled } from "@/lib/shellAi";
+import { resolveAiChromeEnabled } from "@/lib/ai/chrome";
 
 const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPanel.vue"));
 
@@ -133,10 +133,20 @@ export default {
   </RouterView>
   <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
     <AppSidebar />
-    <SidebarInset class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-      <RouterView v-slot="{ Component, route }">
-        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
-      </RouterView>
+    <SidebarInset class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        data-slot="page-scroll"
+        class="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-pb-[var(--page-scroll-end)]"
+      >
+        <RouterView v-slot="{ Component, route }">
+          <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+        </RouterView>
+      </div>
+      <div
+        id="page-footer-dock"
+        data-slot="page-footer-dock"
+        class="shrink-0 empty:hidden"
+      />
     </SidebarInset>
   </SidebarProvider>
   <Toaster />

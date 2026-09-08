@@ -172,6 +172,8 @@ public class FeatureFlagsTests
         application.Controllers.Add(MakeController(typeof(AiController)));
         application.Controllers.Add(MakeController(typeof(AiConversationController)));
         application.Controllers.Add(MakeController(typeof(AiSettingsController)));
+        application.Controllers.Add(MakeController(typeof(AgentController)));
+        application.Controllers.Add(MakeController(typeof(AgentMcpController)));
         application.Controllers.Add(MakeController(typeof(ProductController)));
 
         new AiControllersConvention(aiEnabled: false).Apply(application);

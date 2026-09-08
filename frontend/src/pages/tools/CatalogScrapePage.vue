@@ -27,6 +27,8 @@ import { adapterCanSearchPublicCatalog } from "@/lib/adapterCapabilities";
 import { PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
 import { Search } from "lucide-vue-next";
 import { randomUuidCompact } from "@/utils/uuid";
+import ProductImageSizeMenu from "@/components/products/ProductImageSizeMenu.vue";
+import { useProductImageSize } from "@/composables/useProductImageSize";
 
 // Platform Tools catalog: id `catalog-scrape`, mode `page`.
 
@@ -51,6 +53,11 @@ export default {
     TableHeader,
     TableRow,
     Search,
+    ProductImageSizeMenu,
+  },
+  setup() {
+    const { spec } = useProductImageSize();
+    return { productImageSpec: spec };
   },
   data() {
     return {
@@ -411,6 +418,9 @@ export default {
           v-else-if="results.length > 0"
           class="mt-8"
         >
+          <div class="mb-2 flex justify-end">
+            <ProductImageSizeMenu />
+          </div>
           <Table>
             <TableHeader>
               <TableRow class="hover:bg-transparent">
@@ -422,7 +432,7 @@ export default {
                     @update:model-value="toggleSelectAll"
                   />
                 </TableHead>
-                <TableHead class="w-14">{{ $t("pages.catalogScrape.columnPhoto") }}</TableHead>
+                <TableHead>{{ $t("pages.catalogScrape.columnPhoto") }}</TableHead>
                 <TableHead>{{ $t("pages.catalogScrape.columnName") }}</TableHead>
                 <TableHead>{{ $t("pages.catalogScrape.columnBrand") }}</TableHead>
                 <TableHead>{{ $t("pages.catalogScrape.columnSeller") }}</TableHead>
@@ -442,13 +452,16 @@ export default {
                     @update:model-value="selected[row.externalId] = $event === true"
                   />
                 </TableCell>
-                <TableCell class="w-14">
-                  <div class="bg-muted size-10 overflow-hidden rounded-md">
+                <TableCell>
+                  <div
+                    class="bg-muted overflow-hidden rounded-lg"
+                    :class="productImageSpec.boxClass"
+                  >
                     <AppImage
                       v-if="row.thumbnailUrl"
                       :src="row.thumbnailUrl"
                       :alt="row.name || row.externalId"
-                      class="size-10"
+                      :class="productImageSpec.boxClass"
                       img-class="relative z-10 size-full object-cover"
                     />
                   </div>

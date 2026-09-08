@@ -23,10 +23,32 @@ export const PERMS = {
   StoreSettingsManage: "store.settings.manage",
   CatalogManage: "catalog.manage",
   MarketplaceManage: "marketplace.manage",
+  OrdersManage: "orders.manage",
   FilesManage: "files.manage",
   OperationsManage: "operations.manage",
   AiUse: "ai.use",
 };
+
+/** Never shown as a grant checkbox (instance owner only). */
+export const ADMIN_ONLY_PERMS = [PERMS.RolesManage, PERMS.SettingsDump];
+
+/** Grant checkboxes on Administration → Users. Keep in sync with backend Permissions.Assignable. */
+export const ASSIGNABLE_PERMISSIONS = Object.values(PERMS).filter(
+  (permission) => !ADMIN_ONLY_PERMS.includes(permission),
+);
+
+/** SPA catalog first so new grants stay visible if GET /permissions is stale. */
+export function mergeAssignableCatalog(apiList = []) {
+  const known = new Set(ASSIGNABLE_PERMISSIONS);
+  const extra = [];
+  for (const permission of Array.isArray(apiList) ? apiList : []) {
+    if (typeof permission !== "string") continue;
+    if (known.has(permission) || ADMIN_ONLY_PERMS.includes(permission)) continue;
+    known.add(permission);
+    extra.push(permission);
+  }
+  return extra.length ? [...ASSIGNABLE_PERMISSIONS, ...extra] : [...ASSIGNABLE_PERMISSIONS];
+}
 
 /** Browse a surface without the write grant. Never covers plugins, AI, or the DB dump. */
 export function canBrowse(me, permission) {

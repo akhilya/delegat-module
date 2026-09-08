@@ -259,17 +259,23 @@ public sealed class MarketplaceOrderSyncService
         var upserted = 0;
         try
         {
-            var ids = await _db.marketplaceOrders
+            var pending = _db.marketplaceOrders
                 .AsNoTracking()
-                .Where(o => o.connectionId == connection.Id && !TerminalStatuses.Contains(o.status))
+                .Where(o => o.connectionId == connection.Id && !TerminalStatuses.Contains(o.status));
+            if (upsertedIds.Count > 0)
+            {
+                var skip = upsertedIds.ToList();
+                pending = pending.Where(o => !skip.Contains(o.marketplaceOrderId));
+            }
+
+            var ids = await pending
+                .OrderBy(o => o.syncedAt)
                 .Select(o => o.marketplaceOrderId)
                 .Take(MaxInFlightIdRefreshesPerRun)
                 .ToListAsync(ct);
 
             foreach (var id in ids)
             {
-                if (upsertedIds.Contains(id))
-                    continue;
 
                 var live = await adapter.GetOrderAsync(connection, id, ct);
                 if (live == null)

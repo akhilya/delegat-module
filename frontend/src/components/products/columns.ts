@@ -293,7 +293,7 @@ export const columns: ProductColumnDef[] = [
     header: "",
     cell: ({ row }) => {
       return h(ProductImageCell, {
-        imageClass: "size-11 shrink-0 rounded-lg shadow-sm",
+        followTableSize: true,
         thumbnailUrl: row.original.primaryImageThumbnail ?? null,
         imageUrl: row.original.primaryImage ?? null,
       });

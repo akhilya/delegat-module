@@ -155,7 +155,12 @@ public class QuotaService
             .Where(f => f.storeId == storeId && !f.filePath.StartsWith(brandingPrefix))
             .SumAsync(f => (long?)f.length, ct) ?? 0L;
 
-        return productFilesBytes + storeFilesBytes;
+        var stagedChatBytes = await _db.aiChatAttachments
+            .AsNoTracking()
+            .Where(a => a.storeId == storeId)
+            .SumAsync(a => (long?)a.length, ct) ?? 0L;
+
+        return productFilesBytes + storeFilesBytes + stagedChatBytes;
     }
 
     private async Task<int> GetStoreFileCountAsync(int storeId, CancellationToken ct = default)

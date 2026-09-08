@@ -5,6 +5,8 @@ import {
   canBrowse,
   hasPermission,
   isCabinetViewOnly,
+  ASSIGNABLE_PERMISSIONS,
+  mergeAssignableCatalog,
 } from "./permissions.js";
 
 const VIEW_ONLY = [PERMS.ReferenceRead, PERMS.WorkspaceView];
@@ -29,8 +31,10 @@ describe("isCabinetViewOnly", () => {
 describe("canBrowse", () => {
   it("treats workspace.view as read access except plugins and the database dump", () => {
     const me = { permissions: VIEW_ONLY };
+    assert.equal(PERMS.OrdersManage, "orders.manage");
     assert.equal(canBrowse(me, PERMS.UsersManage), true);
     assert.equal(canBrowse(me, PERMS.MarketplaceManage), true);
+    assert.equal(canBrowse(me, PERMS.OrdersManage), true);
     assert.equal(canBrowse(me, PERMS.OperationsManage), true);
     assert.equal(canBrowse(me, PERMS.SettingsPlatform), true);
     assert.equal(canBrowse(me, PERMS.PluginsManage), false);
@@ -46,5 +50,23 @@ describe("canBrowse", () => {
       canBrowse({ permissions: [PERMS.SettingsDump] }, PERMS.SettingsDump),
       true,
     );
+  });
+});
+
+describe("assignable permission catalog", () => {
+  it("always lists orders.manage and never admin-only claims", () => {
+    assert.equal(ASSIGNABLE_PERMISSIONS.includes(PERMS.OrdersManage), true);
+    assert.equal(ASSIGNABLE_PERMISSIONS.includes(PERMS.MarketplaceManage), true);
+    assert.equal(ASSIGNABLE_PERMISSIONS.includes(PERMS.RolesManage), false);
+    assert.equal(ASSIGNABLE_PERMISSIONS.includes(PERMS.SettingsDump), false);
+  });
+
+  it("keeps SPA grants when the API catalog is stale", () => {
+    const merged = mergeAssignableCatalog([
+      PERMS.CatalogManage,
+      PERMS.MarketplaceManage,
+    ]);
+    assert.equal(merged.includes(PERMS.OrdersManage), true);
+    assert.equal(merged.includes(PERMS.RolesManage), false);
   });
 });

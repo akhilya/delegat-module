@@ -27,6 +27,7 @@ public static class AppRoles
             [
                 Permissions.CatalogManage,
                 Permissions.MarketplaceManage,
+                Permissions.OrdersManage,
                 Permissions.FilesManage,
                 Permissions.OperationsManage,
                 Permissions.AiUse,
@@ -38,6 +39,7 @@ public static class AppRoles
                 Permissions.StoreSettingsManage,
                 Permissions.CatalogManage,
                 Permissions.MarketplaceManage,
+                Permissions.OrdersManage,
                 Permissions.FilesManage,
                 Permissions.OperationsManage,
                 Permissions.AiUse,

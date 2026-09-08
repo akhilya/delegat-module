@@ -298,6 +298,110 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
         throw new NotImplementedException($"GetOrderLabelAsync not implemented for {Key}");
     }
 
+    public virtual Task<List<Delegat.Marketplace.SDK.DTOs.ExternalFulfillmentLocation>> GetFulfillmentLocationsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.FulfillmentLocationQuery? query = null,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.GetFulfillmentLocations);
+        throw new NotImplementedException($"GetFulfillmentLocationsAsync not implemented for {Key}");
+    }
+
+    public virtual Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalShipment>> GetShipmentsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.ShipmentQuery? query = null,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"GetShipmentsAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ExternalShipment?> GetShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"GetShipmentAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> CreateShipmentAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.CreateShipmentRequest request,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"CreateShipmentAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> AddOrdersToShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        Delegat.Marketplace.SDK.DTOs.ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"AddOrdersToShipmentAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.CreateShipmentBoxesResult> CreateShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        Delegat.Marketplace.SDK.DTOs.CreateShipmentBoxesRequest request,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"CreateShipmentBoxesAsync not implemented for {Key}");
+    }
+
+    public virtual Task<List<Delegat.Marketplace.SDK.DTOs.ExternalShipmentBox>> GetShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"GetShipmentBoxesAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> AssignOrdersToShipmentBoxAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        Delegat.Marketplace.SDK.DTOs.ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"AssignOrdersToShipmentBoxAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetShipmentBoxLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"GetShipmentBoxLabelAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetShipmentLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"GetShipmentLabelAsync not implemented for {Key}");
+    }
+
+    public virtual Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> DeliverShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+    {
+        EnsureCapability(MarketplaceCapabilities.ManageShipments);
+        throw new NotImplementedException($"DeliverShipmentAsync not implemented for {Key}");
+    }
+
     public virtual Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalPromotion>> GetPromotionsAsync(
         MarketplaceConnection connection,
         Delegat.Marketplace.SDK.DTOs.PromotionQuery? query = null,

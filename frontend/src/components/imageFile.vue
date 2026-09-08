@@ -12,14 +12,19 @@ export default {
     file: Object,
     thumbnailUrl: String,
   },
+  emits: ["load", "error"],
   computed: {
     resolvedSrc() {
       return this.thumbnailUrl || this.file?.fullPath;
+    },
+    showPhoto() {
+      return Boolean(this.file && this.resolvedSrc && !this.failed);
     },
   },
   data() {
     return {
       isLoading: true,
+      failed: false,
     };
   },
   mounted() {
@@ -34,6 +39,7 @@ export default {
   },
   methods: {
     checkImageCache() {
+      this.failed = false;
       if (!this.resolvedSrc) {
         this.isLoading = false;
         return;
@@ -42,15 +48,23 @@ export default {
       img.src = this.resolvedSrc;
       if (img.complete && img.naturalWidth > 0) {
         this.isLoading = false;
+      } else if (img.complete) {
+        this.isLoading = false;
+        this.failed = true;
+        this.$emit("error");
       } else {
         this.isLoading = true;
       }
     },
     onImageLoad() {
       this.isLoading = false;
+      this.failed = false;
+      this.$emit("load");
     },
     onImageError() {
       this.isLoading = false;
+      this.failed = true;
+      this.$emit("error");
     },
   },
 };
@@ -58,7 +72,7 @@ export default {
 
 <template>
   <div
-    v-if="file"
+    v-if="showPhoto"
     class="bg-secondary relative overflow-hidden rounded-lg"
   >
     <div
@@ -72,7 +86,11 @@ export default {
       @load="onImageLoad"
       @error="onImageError"
       :src="resolvedSrc"
-      :alt="file?.displayName || file?.fileName || $t('components.imageFile.altFallback')"
+      :alt="
+        file?.displayName ||
+        file?.fileName ||
+        $t('components.imageFile.altFallback')
+      "
       class="absolute h-full w-full object-contain"
       :class="isLoading ? 'opacity-0' : 'opacity-100'"
     />

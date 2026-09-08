@@ -177,4 +177,28 @@ public class PublicApiEnabledMiddlewareTests
 
         Assert.True(called);
     }
+
+    [Theory]
+    [InlineData("/api/mcp")]
+    [InlineData("/api/agent/stores/1/sql")]
+    public async Task AgentAndMcpPaths_WhenPublicApiDisabled_PassThrough(string path)
+    {
+        using var _api = SetEnv("API_USAGE_ENABLED", "false");
+        using var _cp = SetEnv("CONTROL_PLANE_URL", null);
+
+        var called = false;
+        var middleware = new PublicApiEnabledMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+
+        await middleware.InvokeAsync(context, new StubPublicApiSettings(enabled: false));
+
+        Assert.True(called);
+        Assert.NotEqual(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+    }
 }

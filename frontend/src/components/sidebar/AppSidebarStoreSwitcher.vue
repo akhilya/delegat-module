@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { t } from "@/i18n";
 import { PAGE_SETUP } from "@/router";
-import { DEFAULT_BRAND_FAVICON } from "@/brand";
+import StoreMark from "@/components/StoreMark.vue";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -40,10 +40,6 @@ const selectedStore = computed(() =>
   || props.memberships.find((s) => String(s.id) === String(props.selectedStoreId))
   || null,
 );
-
-function faviconFor(store) {
-  return store?.faviconUrl || DEFAULT_BRAND_FAVICON;
-}
 </script>
 
 <template>
@@ -60,11 +56,10 @@ function faviconFor(store) {
               v-if="selectedStore"
               class="flex min-w-0 items-center gap-2"
             >
-              <img
-                :src="faviconFor(selectedStore)"
-                alt=""
-                class="size-4 shrink-0 rounded-sm object-cover"
-              >
+              <StoreMark
+                :src="selectedStore.faviconUrl"
+                :name="selectedStore.name"
+              />
               <span class="truncate">{{ selectedStore.name }}</span>
             </span>
           </SelectValue>
@@ -79,11 +74,10 @@ function faviconFor(store) {
               :text-value="store.name"
             >
               <span class="flex min-w-0 items-center gap-2">
-                <img
-                  :src="faviconFor(store)"
-                  alt=""
-                  class="size-4 shrink-0 rounded-sm object-cover"
-                >
+                <StoreMark
+                  :src="store.faviconUrl"
+                  :name="store.name"
+                />
                 <span class="truncate">{{ store.name }}</span>
               </span>
             </SelectItem>

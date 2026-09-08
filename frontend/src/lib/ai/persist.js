@@ -1,0 +1,263 @@
+import { hydrateTimeline, timelineFromLegacy } from "./timeline.js";
+import { attachmentMetaList } from "./attachments.js";
+
+/** Model-facing control messages — always English (system prompts are English). */
+export const AI_CONFIRM_PLAN = "Confirmed, proceed";
+export const AI_CANCEL_PLAN =
+  "Cancelling the proposed plan - do NOT execute it. The plan was never executed. Confirm the cancellation only.";
+
+export function toolResultFailed(result, summary) {
+  if (typeof summary === "string" && /HTTP\s+[45]\d\d/i.test(summary)) return true;
+  if (!result || typeof result !== "object") return false;
+  if (result.error != null && result.error !== "") return true;
+  if (typeof result.status === "number" && result.status >= 400) return true;
+  return false;
+}
+
+export function emptyAssistantMessage() {
+  return {
+    id: Date.now() + 1,
+    role: "assistant",
+    content: "",
+    toolCalls: [],
+    timeline: [],
+    plan: null,
+    apiBlocks: [],
+    done: false,
+  };
+}
+
+function readAttachments(parsed) {
+  if (!Array.isArray(parsed?.attachments)) return [];
+  return parsed.attachments
+    .filter((a) => a && (a.relativePath || a.fileName))
+    .map((a) => {
+      const relativePath = String(a.relativePath || a.fileName || "");
+      const row = {
+        relativePath,
+        fileName: String(a.fileName || relativePath.split("/").pop() || relativePath),
+        size: Number(a.size) || 0,
+      };
+      const id = Number(a.id) || 0;
+      if (id > 0) row.id = id;
+      return row;
+    });
+}
+
+/** Parse persisted toolCallsJson — tool-call array or UI context / assistant-turn envelope. */
+export function parsePersistedMessageMeta(toolCallsJson) {
+  if (!toolCallsJson) {
+    return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null };
+  }
+  try {
+    const parsed = JSON.parse(toolCallsJson);
+    if (
+      parsed &&
+      (parsed._ui === "operationContext" || parsed._ui === "userAttachments")
+    ) {
+      return {
+        toolCalls: [],
+        contextCard: parsed.card || null,
+        attachments: readAttachments(parsed),
+        timeline: [],
+        plan: null,
+      };
+    }
+    if (parsed && parsed._ui === "assistantTurn") {
+      const toolCalls = (parsed.tools || []).map((tc) => ({
+        ...tc,
+        status: "done",
+      }));
+      return {
+        toolCalls,
+        contextCard: null,
+        attachments: [],
+        timeline: hydrateTimeline(parsed.timeline || [], toolCalls),
+        plan: parsed.plan || null,
+        planConfirmed: !!parsed.planConfirmed,
+        planCancelled: !!parsed.planCancelled,
+        planExecuted: !!parsed.planExecuted,
+        planFailed: !!parsed.planFailed,
+        planExecStart: Number.isInteger(parsed.planExecStart)
+          ? parsed.planExecStart
+          : undefined,
+      };
+    }
+    if (Array.isArray(parsed)) {
+      return {
+        toolCalls: parsed.map((tc) => ({ ...tc, status: "done" })),
+        contextCard: null,
+        attachments: [],
+        timeline: [],
+        plan: null,
+      };
+    }
+  } catch {
+    /* ignore corrupt payload */
+  }
+  return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null };
+}
+
+export function mapStoredMessage(m) {
+  const {
+    toolCalls,
+    contextCard,
+    attachments,
+    timeline: storedTimeline,
+    plan,
+    planConfirmed,
+    planCancelled,
+    planExecuted,
+    planFailed,
+    planExecStart,
+  } = parsePersistedMessageMeta(m.toolCallsJson);
+  const content = m.content || "";
+  const timeline = storedTimeline?.length
+    ? storedTimeline
+    : timelineFromLegacy(content, toolCalls);
+  return {
+    id: m.dbId,
+    dbId: m.dbId,
+    role: m.role,
+    content,
+    toolCalls,
+    timeline,
+    contextCard,
+    attachments,
+    plan: plan || null,
+    planConfirmed: !!planConfirmed,
+    planCancelled: !!planCancelled,
+    planExecuted: !!planExecuted,
+    planFailed: !!planFailed,
+    planExecStart,
+    apiBlocks: [],
+    done: m.role === "assistant",
+    feedbackRating: m.feedbackRating ?? null,
+  };
+}
+
+export function serializeToolCallsJson(m) {
+  const attachments = attachmentMetaList(m.attachments);
+  if (m.contextCard || attachments.length) {
+    return JSON.stringify({
+      _ui: m.contextCard ? "operationContext" : "userAttachments",
+      ...(m.contextCard ? { card: m.contextCard } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    });
+  }
+  const tools = (m.toolCalls || []).map((tc) => ({
+    id: tc.id,
+    name: tc.name,
+    input: tc.input,
+    summary: tc.summary,
+    result: tc.result,
+  }));
+  if (m.plan || m.timeline?.some((item) => item.type === "tool")) {
+    return JSON.stringify({
+      _ui: "assistantTurn",
+      tools,
+      timeline: (m.timeline || []).map((item) =>
+        item.type === "tool"
+          ? { type: "tool", id: item.id }
+          : { type: "text", text: item.text },
+      ),
+      plan: m.plan || null,
+      planConfirmed: m.planConfirmed || undefined,
+      planCancelled: m.planCancelled || undefined,
+      planExecuted: m.planExecuted || undefined,
+      planFailed: m.planFailed || undefined,
+      planExecStart: Number.isInteger(m.planExecStart) ? m.planExecStart : undefined,
+    });
+  }
+  if (tools.length) {
+    return JSON.stringify(
+      tools.map(({ name, input, summary }) => ({ name, input, summary })),
+    );
+  }
+  return null;
+}
+
+export function isAiControlMessage(msg) {
+  const text = typeof msg === "string" ? msg : msg?.content;
+  return text === AI_CONFIRM_PLAN || text === AI_CANCEL_PLAN;
+}
+
+function mergePlanExecution(planMsg, execMsg) {
+  const proposal = Array.isArray(planMsg.timeline) ? planMsg.timeline : [];
+  const execution = Array.isArray(execMsg.timeline) ? execMsg.timeline : [];
+  const content = [planMsg.content, execMsg.content].filter(Boolean).join("\n\n");
+  return {
+    ...planMsg,
+    content,
+    timeline: [...proposal, ...execution],
+    toolCalls: [...(planMsg.toolCalls || []), ...(execMsg.toolCalls || [])],
+    planConfirmed: true,
+    planExecuted: true,
+    planFailed: !!execMsg.planFailed,
+    planCancelled: false,
+    planExecStart: proposal.length,
+    done: true,
+  };
+}
+
+/** Hide Confirmed/Cancel user lines and fold the follow-up execution into the plan message. */
+export function foldPlanTurns(messages) {
+  const next = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const confirm = messages[i + 1];
+    const exec = messages[i + 2];
+    if (
+      msg?.role === "assistant" &&
+      msg.plan &&
+      isAiControlMessage(confirm) &&
+      confirm.content === AI_CONFIRM_PLAN &&
+      exec?.role === "assistant"
+    ) {
+      next.push(mergePlanExecution(msg, exec));
+      i += 2;
+      continue;
+    }
+    if (isAiControlMessage(msg)) {
+      if (msg.content === AI_CONFIRM_PLAN) {
+        const prev = next.at(-1);
+        if (prev?.plan) prev.planConfirmed = true;
+      } else if (msg.content === AI_CANCEL_PLAN) {
+        const prev = next.at(-1);
+        if (prev?.plan) prev.planCancelled = true;
+      }
+      continue;
+    }
+    next.push(msg);
+  }
+  return next;
+}
+
+export function hydrateConversation(rows) {
+  return foldPlanTurns(applyPlanDecisions((rows || []).map(mapStoredMessage)));
+}
+
+/** After reload, mark plans confirmed/cancelled from the following user line. */
+export function applyPlanDecisions(messages) {
+  const next = messages.map((m) => ({ ...m }));
+  for (let i = 0; i < next.length; i++) {
+    const m = next[i];
+    if (m.role !== "user") continue;
+    if (m.content === AI_CONFIRM_PLAN) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (next[j].plan) {
+          next[j].planConfirmed = true;
+          break;
+        }
+      }
+    } else if (m.content === AI_CANCEL_PLAN) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (next[j].plan) {
+          next[j].planCancelled = true;
+          break;
+        }
+      }
+    }
+  }
+  return next;
+}

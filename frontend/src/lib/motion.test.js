@@ -15,6 +15,26 @@ const aiChat = readFileSync(
   new URL("../components/ai/AiChatPanel.vue", import.meta.url),
   "utf8",
 );
+const aiMessageCss = readFileSync(
+  new URL("../components/ai/aiMessage.css", import.meta.url),
+  "utf8",
+);
+const aiToolStep = readFileSync(
+  new URL("../components/ai/AiToolStep.vue", import.meta.url),
+  "utf8",
+);
+const aiPython = readFileSync(
+  new URL("../components/ai/AiPythonRunBlock.vue", import.meta.url),
+  "utf8",
+);
+const aiProcess = readFileSync(
+  new URL("../components/ai/AiChatProcess.vue", import.meta.url),
+  "utf8",
+);
+const aiTrigger = readFileSync(
+  new URL("../components/ai/AiTriggerButton.vue", import.meta.url),
+  "utf8",
+);
 
 const sheetHandle = readFileSync(
   new URL("../components/ui/sheet/SheetResizeHandle.vue", import.meta.url),
@@ -82,6 +102,8 @@ describe("product motion tokens", () => {
     assert.match(button, /active:scale-\[0\.98\]/);
     assert.doesNotMatch(button, /bounce|elastic/);
     assert.match(sheet, /--duration-drawer/);
+    assert.match(sheet, /fade-in-0/);
+    assert.match(sheet, /fade-out-0/);
     assert.doesNotMatch(sheet, /duration-500/);
     assert.match(sheet, /isInset/);
     assert.match(sheet, /rounded-xl/);
@@ -95,6 +117,9 @@ describe("product motion tokens", () => {
     assert.match(sheet, /SheetResizeHandle/);
     assert.match(sheet, /data-resizable/);
     assert.match(style, /\[data-slot="sheet-content"\]\[data-inset\]/);
+    assert.match(style, /0 3px 8px oklch\(0 0 0 \/ 0\.06\)/);
+    assert.doesNotMatch(style, /0 10px 36px/);
+    assert.doesNotMatch(style, /0 12px 40px/);
     assert.match(aiChat, /<Sheet[\s\S]*SheetContent/);
     assert.match(aiChat, /:modal="false"/);
     assert.match(aiChat, /:overlay="false"/);
@@ -122,6 +147,7 @@ describe("product motion tokens", () => {
     assert.match(sidebarContent, /useScrollFade/);
     assert.match(sidebarMenuSub, /sidebar-nav-indicator/);
     assert.match(sidebarMenuSub, /useSlidingIndicator/);
+    assert.match(sidebarMenuSub, /edgeEnter:\s*true/);
     assert.match(collapsibleContent, /animate-collapsible-down/);
     assert.match(collapsibleContent, /--duration-ui/);
     assert.match(sheetHandle, /scale-x-150/);
@@ -134,6 +160,30 @@ describe("product motion tokens", () => {
     assert.match(tabsContent, /--duration-ui/);
     assert.match(aiChat, /InputGroup/);
     assert.match(aiChat, /<Message /);
+    assert.match(aiChat, /AiChatProcess/);
+    assert.match(aiChat, /AiChatActions/);
+    assert.match(aiChat, /turnLayout/);
+    assert.match(aiChat, /isAiControlMessage/);
+    assert.match(aiChat, /ai-thread/);
+    assert.match(aiChat, /isLatestTurn/);
+    assert.match(aiChat, /name="ai-fade"/);
+    assert.match(aiMessageCss, /@keyframes ai-turn-in/);
+    assert.match(aiMessageCss, /--duration-overlay/);
+    assert.match(aiMessageCss, /ai-tool-enter-active/);
+    assert.doesNotMatch(aiMessageCss, /animation-delay:\s*[1-9]/);
+    assert.match(aiProcess, /enter:\s*\{ type: Boolean/);
+    assert.match(aiProcess, /done:\s*\{ type: Boolean/);
+    assert.match(aiProcess, /TransitionGroup/);
+    assert.match(aiProcess, /name="ai-tool"/);
+    assert.match(aiProcess, /processUsed/);
+    assert.doesNotMatch(aiProcess, /InsetGroup/);
+    assert.doesNotMatch(aiToolStep, /InsetGroupItem/);
+    assert.doesNotMatch(aiToolStep, /:default-open="running"/);
+    assert.doesNotMatch(aiPython, /scriptOpen/);
+    assert.doesNotMatch(aiPython, /:default-open=/);
+    assert.doesNotMatch(aiPython, /InsetGroup/);
+    assert.match(aiTrigger, /--duration-overlay/);
+    assert.doesNotMatch(aiTrigger, /ease-in-out/);
     assert.doesNotMatch(aiChat, /openTools|toolCategories|toolsTitle/);
   });
 });

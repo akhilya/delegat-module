@@ -386,6 +386,8 @@ public class MarketplaceConnectionController : ControllerBase
                 getOrders = capabilities.HasFlag(MarketplaceCapabilities.GetOrders),
                 updateOrderStatus = capabilities.HasFlag(MarketplaceCapabilities.UpdateOrderStatus),
                 getOrderLabels = capabilities.HasFlag(MarketplaceCapabilities.GetOrderLabels),
+                getFulfillmentLocations = capabilities.HasFlag(MarketplaceCapabilities.GetFulfillmentLocations),
+                manageShipments = capabilities.HasFlag(MarketplaceCapabilities.ManageShipments),
                 getPromotions = capabilities.HasFlag(MarketplaceCapabilities.GetPromotions),
                 updatePromotions = capabilities.HasFlag(MarketplaceCapabilities.UpdatePromotions),
                 fieldBasedGrouping = capabilities.HasFlag(MarketplaceCapabilities.FieldBasedGrouping),

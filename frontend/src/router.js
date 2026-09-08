@@ -1,10 +1,10 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
-import { setPageTitleDetailProvider, syncDocumentTitle } from "@/brand";
+import { setPageTitleDetailProvider, syncDocumentTitle, setDocumentIconSuppressed } from "@/brand";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
 import { PAGE_SETUP } from "@/lib/setupGate";
-import { isOrderBucket, orderBucketById } from "@/lib/ordersUi";
+import { orderBucketById, parseOrdersPath } from "@/lib/ordersUi";
 
 const signUpPage = () => import("./pages/signUpPage.vue");
 const signInPage = () => import("./pages/signInPage.vue");
@@ -18,10 +18,12 @@ const notesPage = () => import("./pages/notesPage.vue");
 const productGroupsPage = () => import("./pages/productGroupsPage.vue");
 const productGroupEditPage = () => import("./pages/productGroupEditPage.vue");
 const storeAttributesPage = () => import("./pages/storeAttributesPage.vue");
-const storeAttributeEditPage = () => import("./pages/storeAttributeEditPage.vue");
+const storeAttributeEditPage = () =>
+  import("./pages/storeAttributeEditPage.vue");
 const storeStoragePage = () => import("./pages/storeStoragePage.vue");
 const SettingsShell = () => import("./layouts/SettingsShell.vue");
-const SettingsOverviewPage = () => import("./pages/settings/settingsOverviewPage.vue");
+const SettingsOverviewPage = () =>
+  import("./pages/settings/settingsOverviewPage.vue");
 const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const UnavailablePage = () => import("./pages/unavailablePage.vue");
@@ -36,14 +38,19 @@ const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
 const AdminErrorLogsPage = () => import("./pages/admin/errorLogsPage.vue");
 const AdminApiPage = () => import("./pages/admin/apiPage.vue");
 const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
-const MarketplaceConnectionPage = () => import("./pages/marketplace/connectionPage.vue");
-const MarketplaceCategoryImportPage = () => import("./pages/marketplace/categoryImportPage.vue");
-const MarketplaceFieldMappingPage = () => import("./pages/marketplace/fieldMappingPage.vue");
+const MarketplaceConnectionPage = () =>
+  import("./pages/marketplace/connectionPage.vue");
+const MarketplaceCategoryImportPage = () =>
+  import("./pages/marketplace/categoryImportPage.vue");
+const MarketplaceFieldMappingPage = () =>
+  import("./pages/marketplace/fieldMappingPage.vue");
 const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
 const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
 const SetupWizardPage = () => import("./pages/setup/SetupWizardPage.vue");
 const OrdersPage = () => import("./pages/orders/OrdersPage.vue");
+const OrdersAssemblyPage = () =>
+  import("./pages/orders/OrdersAssemblyPage.vue");
 
 export const PAGE_SIGN_UP = "/signUp";
 export const PAGE_SIGN_IN = "/signIn";
@@ -57,7 +64,9 @@ export const PAGE_CATEGORY_EDIT = "/categories/:id/edit";
 export const PAGE_BARCODES = "/barcodes";
 export const PAGE_NOTES = "/notes";
 export const PAGE_ORDERS = "/orders";
-export const PAGE_ORDERS_BUCKET = "/orders/:bucket";
+export const PAGE_ORDERS_CONNECTION = "/orders/:connectionId";
+export const PAGE_ORDERS_MAILBOX = "/orders/:connectionId/:bucket";
+export const PAGE_ORDERS_BUCKET = PAGE_ORDERS_MAILBOX;
 export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";
@@ -85,50 +94,88 @@ export const PAGE_MARKETPLACE = "/adapter";
 export const PAGE_MARKETPLACE_PLUGINS = "/adapter/plugins";
 export const PAGE_ADAPTER_LOGS = "/settings/adapter-logs";
 export const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
-export const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/adapter/:connId/categories/import";
-export const PAGE_MARKETPLACE_FIELD_MAPPING = "/adapter/:connId/categories/:mappingId";
+export const PAGE_MARKETPLACE_CATEGORY_IMPORT =
+  "/adapter/:connId/categories/import";
+export const PAGE_MARKETPLACE_FIELD_MAPPING =
+  "/adapter/:connId/categories/:mappingId";
 
 // Track whether a page component set a custom title (prevents afterEach from overwriting it on tab/query changes)
 let _customTitle = null;
 
 export const routes = [
-  { path: PAGE_SIGN_UP, component: signUpPage, meta: { public: true, titleKey: "routes.signUp" } },
-  { path: PAGE_SIGN_IN, component: signInPage, meta: { public: true, titleKey: "routes.signIn" } },
+  {
+    path: PAGE_SIGN_UP,
+    component: signUpPage,
+    meta: { public: true, titleKey: "routes.signUp" },
+  },
+  {
+    path: PAGE_SIGN_IN,
+    component: signInPage,
+    meta: { public: true, titleKey: "routes.signIn" },
+  },
   {
     path: PAGE_UNAVAILABLE,
     component: UnavailablePage,
-    meta: { public: true, titleKey: "routes.unavailable" },
+    meta: { public: true, unbranded: true, titleKey: "routes.unavailable" },
   },
   {
     path: PAGE_SETUP,
     component: SetupWizardPage,
-    meta: { bareLayout: true, titleKey: "routes.setup", permissions: [PERMS.StoresCreate] },
+    meta: {
+      bareLayout: true,
+      titleKey: "routes.setup",
+      permissions: [PERMS.StoresCreate],
+    },
   },
   { path: "/", component: productsPage, meta: { titleKey: "routes.products" } },
-  { path: PAGE_PRODUCTS, component: productsPage, meta: { titleKey: "routes.products" } },
-  { path: PAGE_ORDERS, redirect: "/orders/new" },
   {
-    path: PAGE_ORDERS_BUCKET,
+    path: PAGE_PRODUCTS,
+    component: productsPage,
+    meta: { titleKey: "routes.products" },
+  },
+  {
+    path: PAGE_ORDERS_MAILBOX,
     component: OrdersPage,
-    meta: { titleKey: "routes.orders", permissions: [PERMS.MarketplaceManage] },
-    beforeEnter(to) {
-      if (!isOrderBucket(to.params.bucket)) {
-        return { path: "/orders/new", query: to.query };
-      }
-      const bucket = orderBucketById(to.params.bucket);
-      if (bucket?.titleKey) to.meta.titleKey = bucket.titleKey;
-      return true;
+    meta: {
+      titleKey: "routes.orders",
+      stableKey: "orders",
+      permissions: [PERMS.OrdersManage],
+    },
+  },
+  {
+    path: PAGE_ORDERS_CONNECTION,
+    component: OrdersPage,
+    meta: {
+      titleKey: "routes.orders",
+      stableKey: "orders",
+      permissions: [PERMS.OrdersManage],
+    },
+  },
+  {
+    path: PAGE_ORDERS,
+    component: OrdersAssemblyPage,
+    meta: {
+      titleKey: "routes.ordersAssembly",
+      stableKey: "orders-assembly",
+      permissions: [PERMS.OrdersManage],
     },
   },
   {
     path: PAGE_PRODUCT_CREATION,
     component: productCreationPage,
-    meta: { titleKey: "routes.productCreation", permissions: [PERMS.CatalogManage] },
+    meta: {
+      titleKey: "routes.productCreation",
+      permissions: [PERMS.CatalogManage],
+    },
   },
   {
     path: PAGE_PRODUCT_EDIT,
     component: productEditPage,
-    meta: { titleKey: "routes.productEdit", stableKey: "product-edit", permissions: [PERMS.CatalogManage] },
+    meta: {
+      titleKey: "routes.productEdit",
+      stableKey: "product-edit",
+      permissions: [PERMS.CatalogManage],
+    },
   },
   {
     path: PAGE_CATEGORIES,
@@ -138,7 +185,10 @@ export const routes = [
   {
     path: PAGE_CATEGORY_EDIT,
     component: categoryEditPage,
-    meta: { titleKey: "routes.categoryEdit", permissions: [PERMS.CatalogManage] },
+    meta: {
+      titleKey: "routes.categoryEdit",
+      permissions: [PERMS.CatalogManage],
+    },
   },
   {
     path: PAGE_BARCODES,
@@ -158,7 +208,10 @@ export const routes = [
   {
     path: PAGE_PRODUCT_GROUP_CREATE,
     component: productGroupEditPage,
-    meta: { titleKey: "routes.groupCreate", permissions: [PERMS.CatalogManage] },
+    meta: {
+      titleKey: "routes.groupCreate",
+      permissions: [PERMS.CatalogManage],
+    },
   },
   {
     path: PAGE_PRODUCT_GROUP_EDIT,
@@ -168,7 +221,10 @@ export const routes = [
   {
     path: PAGE_STORE_ATTRIBUTE_EDIT,
     component: storeAttributeEditPage,
-    meta: { titleKey: "routes.attributeEdit", permissions: [PERMS.CatalogManage] },
+    meta: {
+      titleKey: "routes.attributeEdit",
+      permissions: [PERMS.CatalogManage],
+    },
   },
   {
     path: PAGE_STORE_ATTRIBUTES,
@@ -188,17 +244,28 @@ export const routes = [
       {
         path: "",
         component: SettingsOverviewPage,
-        meta: { titleKey: "routes.settingsOverview", permissions: [PERMS.SettingsPlatform] },
+        meta: {
+          titleKey: "routes.settingsOverview",
+          permissions: [PERMS.SettingsPlatform],
+        },
       },
       { path: "operations", redirect: "" },
-      { path: "user", component: SettingsUserPage, meta: { titleKey: "routes.settingsUser" } },
+      {
+        path: "user",
+        component: SettingsUserPage,
+        meta: { titleKey: "routes.settingsUser" },
+      },
       { path: "store", redirect: "/settings/admin/stores" },
       {
         path: "admin/stores",
         component: AdminStoresPage,
         meta: {
           titleKey: "routes.stores",
-          permissions: [PERMS.StoresCreate, PERMS.StoreSettingsManage, PERMS.StoreMembersManage],
+          permissions: [
+            PERMS.StoresCreate,
+            PERMS.StoreSettingsManage,
+            PERMS.StoreMembersManage,
+          ],
         },
       },
       {
@@ -206,7 +273,11 @@ export const routes = [
         component: AdminStoreDetailPage,
         meta: {
           titleKey: "routes.store",
-          permissions: [PERMS.StoresCreate, PERMS.StoreSettingsManage, PERMS.StoreMembersManage],
+          permissions: [
+            PERMS.StoresCreate,
+            PERMS.StoreSettingsManage,
+            PERMS.StoreMembersManage,
+          ],
         },
       },
       {
@@ -226,17 +297,26 @@ export const routes = [
       {
         path: "admin/error-logs",
         component: AdminErrorLogsPage,
-        meta: { titleKey: "routes.errorLogs", permissions: [PERMS.SettingsPlatform] },
+        meta: {
+          titleKey: "routes.errorLogs",
+          permissions: [PERMS.SettingsPlatform],
+        },
       },
       {
         path: "admin/plugins",
         component: PluginsPage,
-        meta: { titleKey: "routes.plugins", permissions: [PERMS.PluginsManage] },
+        meta: {
+          titleKey: "routes.plugins",
+          permissions: [PERMS.PluginsManage],
+        },
       },
       {
         path: "admin/ai",
         component: AiModelsPage,
-        meta: { titleKey: "routes.aiModels", permissions: [PERMS.SettingsPlatform] },
+        meta: {
+          titleKey: "routes.aiModels",
+          permissions: [PERMS.SettingsPlatform],
+        },
       },
       {
         path: "admin/usage",
@@ -245,13 +325,20 @@ export const routes = [
       {
         path: "adapter-logs",
         component: AdapterLogsPage,
-        meta: { titleKey: "routes.adapterLogs", permissions: [PERMS.SettingsPlatform] },
+        meta: {
+          titleKey: "routes.adapterLogs",
+          permissions: [PERMS.SettingsPlatform],
+        },
       },
     ],
   },
   { path: PAGE_SETTINGS_OPERATIONS, redirect: PAGE_SETTINGS },
   { path: "/adapter-logs", redirect: PAGE_ADAPTER_LOGS },
-  { path: PAGE_NOT_FOUND, component: NotFoundPage, meta: { titleKey: "routes.notFound" } },
+  {
+    path: PAGE_NOT_FOUND,
+    component: NotFoundPage,
+    meta: { titleKey: "routes.notFound" },
+  },
   {
     path: PAGE_CATALOG_CONNECT,
     component: CatalogConnectPage,
@@ -287,36 +374,80 @@ export const routes = [
   {
     path: PAGE_TOOLS,
     component: ToolsPage,
-    meta: { titleKey: "routes.tools", permissions: [PERMS.OperationsManage, PERMS.CatalogManage, PERMS.MarketplaceManage, PERMS.ApiAccess] },
+    meta: {
+      titleKey: "routes.tools",
+      permissions: [
+        PERMS.OperationsManage,
+        PERMS.CatalogManage,
+        PERMS.MarketplaceManage,
+        PERMS.ApiAccess,
+      ],
+    },
   },
   {
     path: PAGE_MARKETPLACE,
     component: MarketplacePage,
-    meta: { titleKey: "routes.adapters", permissions: [PERMS.MarketplaceManage] },
+    meta: {
+      titleKey: "routes.adapters",
+      permissions: [PERMS.MarketplaceManage],
+    },
   },
   { path: PAGE_MARKETPLACE_PLUGINS, redirect: PAGE_ADMIN_PLUGINS },
   {
     path: PAGE_MARKETPLACE_CONNECTION,
     component: MarketplaceConnectionPage,
-    meta: { titleKey: "routes.connection", permissions: [PERMS.MarketplaceManage] },
+    meta: {
+      titleKey: "routes.connection",
+      permissions: [PERMS.MarketplaceManage],
+    },
   },
   {
     path: PAGE_MARKETPLACE_CATEGORY_IMPORT,
     component: MarketplaceCategoryImportPage,
-    meta: { titleKey: "routes.categoryImport", permissions: [PERMS.MarketplaceManage] },
+    meta: {
+      titleKey: "routes.categoryImport",
+      permissions: [PERMS.MarketplaceManage],
+    },
   },
   {
     path: PAGE_MARKETPLACE_FIELD_MAPPING,
     component: MarketplaceFieldMappingPage,
-    meta: { titleKey: "routes.fieldMapping", permissions: [PERMS.MarketplaceManage] },
+    meta: {
+      titleKey: "routes.fieldMapping",
+      permissions: [PERMS.MarketplaceManage],
+    },
   },
-  { path: "/marketplace/:connId/categories/import", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/import`, query: to.query }) },
-  { path: "/marketplace/:connId/categories/:mappingId", redirect: to => ({ path: `/adapter/${to.params.connId}/categories/${to.params.mappingId}`, query: to.query }) },
+  {
+    path: "/marketplace/:connId/categories/import",
+    redirect: (to) => ({
+      path: `/adapter/${to.params.connId}/categories/import`,
+      query: to.query,
+    }),
+  },
+  {
+    path: "/marketplace/:connId/categories/:mappingId",
+    redirect: (to) => ({
+      path: `/adapter/${to.params.connId}/categories/${to.params.mappingId}`,
+      query: to.query,
+    }),
+  },
   { path: "/marketplace/plugins", redirect: PAGE_ADMIN_PLUGINS },
   { path: "/admin/plugins", redirect: PAGE_ADMIN_PLUGINS },
-  { path: "/marketplace/:connId", redirect: to => ({ path: `/adapter/${to.params.connId}`, query: to.query }) },
+  {
+    path: "/marketplace/:connId",
+    redirect: (to) => ({
+      path: `/adapter/${to.params.connId}`,
+      query: to.query,
+    }),
+  },
   { path: "/marketplace", redirect: PAGE_MARKETPLACE },
-  { path: "/admin/stores/:id", redirect: to => ({ path: `/settings/admin/stores/${to.params.id}`, query: to.query }) },
+  {
+    path: "/admin/stores/:id",
+    redirect: (to) => ({
+      path: `/settings/admin/stores/${to.params.id}`,
+      query: to.query,
+    }),
+  },
   { path: "/admin/stores", redirect: PAGE_ADMIN_STORES },
   { path: "/admin/users", redirect: PAGE_ADMIN_USERS },
   { path: "/admin/tokens", redirect: PAGE_ADMIN_USERS },
@@ -336,7 +467,9 @@ export function setPageTitle(detail) {
 }
 
 function resolveRouteTitle(to) {
-  const key = to.meta?.titleKey;
+  const mailbox = parseOrdersPath(to.path).bucket;
+  const mailboxTitleKey = mailbox ? orderBucketById(mailbox)?.titleKey : null;
+  const key = mailboxTitleKey || to.meta?.titleKey;
   if (key) return t(key);
   return to.meta?.title || null;
 }
@@ -362,9 +495,12 @@ export function createRouter() {
     routes,
   });
 
-  setPageTitleDetailProvider(() => currentPageTitleDetail(router.currentRoute.value));
+  setPageTitleDetailProvider(() =>
+    currentPageTitleDetail(router.currentRoute.value),
+  );
 
   router.afterEach((to, from) => {
+    setDocumentIconSuppressed(to.meta?.unbranded === true);
     if (_customTitle && to.path === from.path) {
       // Keep custom detail; still refresh brand suffix after store switch.
       syncDocumentTitle(_customTitle);

@@ -1,5 +1,8 @@
 bin/
 obj/
+artifacts/
+_build_checkplugins/
+BaseOutputPath=artifacts/
 Properties/
 .vs
 

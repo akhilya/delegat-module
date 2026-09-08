@@ -17,6 +17,17 @@ import {
   FIELD_LIMITS,
   isNonEmptyWithinLimit,
 } from "@/lib/fieldLimits";
+import {
+  defaultCredentialValues,
+  normalizeCredentialFields,
+} from "@/lib/credentialFields";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default {
   components: {
@@ -32,6 +43,11 @@ export default {
     AdapterIcon,
     BookOpen,
     ExternalLink,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
   },
   props: {
     adapters: { type: Array, default: () => [] },
@@ -59,22 +75,7 @@ export default {
       return this.selectedAdapterMeta?.credentialsSchema || null;
     },
     credentialFields() {
-      const schema = this.selectedAdapterSchema;
-      if (!schema) return [];
-      const raw = schema.fields || schema.Fields || [];
-      return raw
-        .map((field) => ({
-          key: field.key || field.Key,
-          displayName: field.displayName || field.DisplayName,
-          description: field.description || field.Description || "",
-          isRequired: field.isRequired ?? field.IsRequired ?? true,
-          isSecret: field.isSecret ?? field.IsSecret ?? false,
-          placeholder: field.placeholder || field.Placeholder || "",
-          maxLength:
-            Number(field.maxLength || field.MaxLength) ||
-            FIELD_LIMITS.credentialValue,
-        }))
-        .filter((field) => field.key);
+      return normalizeCredentialFields(this.selectedAdapterSchema);
     },
     credentialsDocsUrl() {
       if (!this.adapterKey) return null;
@@ -110,6 +111,7 @@ export default {
         const meta = this.selectedAdapterMeta;
         if (meta?.displayName) this.name = meta.displayName;
       }
+      this.credentialValues = defaultCredentialValues(this.credentialFields);
     },
     payload() {
       return {
@@ -235,6 +237,28 @@ export default {
             :maxlength="field.maxLength || FIELD_LIMITS.credentialValue"
             :disabled="disabled"
           />
+          <Select
+            v-else-if="field.type === 'select'"
+            :model-value="credentialValues[field.key]"
+            :disabled="disabled"
+            @update:model-value="credentialValues[field.key] = $event"
+          >
+            <SelectTrigger
+              :id="`${idPrefix}-cred-${field.key}`"
+              class="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="option in field.options"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
           <Input
             v-else
             :id="`${idPrefix}-cred-${field.key}`"

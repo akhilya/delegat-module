@@ -50,11 +50,37 @@ public class MarketplacePluginPublicCatalogTests
     }
 
     [Fact]
+    public void FulfillmentFlags_AreDistinctFromOrders()
+    {
+        Assert.Equal(1 << 25, (int)MarketplaceCapabilities.GetFulfillmentLocations);
+        Assert.Equal(1 << 26, (int)MarketplaceCapabilities.ManageShipments);
+        Assert.False(MarketplaceCapabilities.GetFulfillmentLocations.HasFlag(MarketplaceCapabilities.GetOrders));
+        Assert.False(MarketplaceCapabilities.ManageShipments.HasFlag(MarketplaceCapabilities.GetOrderLabels));
+        Assert.False(MarketplaceCapabilities.FullProducts.HasFlag(MarketplaceCapabilities.ManageShipments));
+    }
+
+    [Fact]
     public async Task GetOrderLabel_Default_ThrowsNotSupported()
     {
         var plugin = new StubPlugin();
         await Assert.ThrowsAsync<NotSupportedException>(() =>
             plugin.GetOrderLabelAsync(new ConnectionContext(), "1"));
+    }
+
+    [Fact]
+    public async Task GetFulfillmentLocations_Default_ThrowsNotSupported()
+    {
+        var plugin = new StubPlugin();
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.GetFulfillmentLocationsAsync(new ConnectionContext()));
+    }
+
+    [Fact]
+    public async Task GetShipments_Default_ThrowsNotSupported()
+    {
+        var plugin = new StubPlugin();
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.GetShipmentsAsync(new ConnectionContext()));
     }
 
     private sealed class StubPlugin : MarketplacePluginBase

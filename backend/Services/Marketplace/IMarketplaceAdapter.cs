@@ -313,6 +313,77 @@ public interface IMarketplaceAdapter
         CancellationToken ct = default)
         => throw new NotSupportedException("GetOrderLabels is not supported");
 
+    Task<List<Delegat.Marketplace.SDK.DTOs.ExternalFulfillmentLocation>> GetFulfillmentLocationsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.FulfillmentLocationQuery? query = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("GetFulfillmentLocations is not supported");
+
+    Task<PagedResult<Delegat.Marketplace.SDK.DTOs.ExternalShipment>> GetShipmentsAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.ShipmentQuery? query = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.ExternalShipment?> GetShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> CreateShipmentAsync(
+        MarketplaceConnection connection,
+        Delegat.Marketplace.SDK.DTOs.CreateShipmentRequest request,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> AddOrdersToShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        Delegat.Marketplace.SDK.DTOs.ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.CreateShipmentBoxesResult> CreateShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        Delegat.Marketplace.SDK.DTOs.CreateShipmentBoxesRequest request,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<List<Delegat.Marketplace.SDK.DTOs.ExternalShipmentBox>> GetShipmentBoxesAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> AssignOrdersToShipmentBoxAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        Delegat.Marketplace.SDK.DTOs.ShipmentOrdersUpdate update,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetShipmentBoxLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        string externalBoxId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.OrderLabelResult> GetShipmentLabelAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
+    Task<Delegat.Marketplace.SDK.DTOs.ShipmentMutationResult> DeliverShipmentAsync(
+        MarketplaceConnection connection,
+        string externalShipmentId,
+        CancellationToken ct = default)
+        => throw new NotSupportedException("ManageShipments is not supported");
+
     /// <summary>
     /// List promotions, calendar campaigns, coupons, or auto-actions.
     /// </summary>

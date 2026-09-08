@@ -27,6 +27,8 @@ public static class Permissions
     public const string StoreSettingsManage = "store.settings.manage";
     public const string CatalogManage = "catalog.manage";
     public const string MarketplaceManage = "marketplace.manage";
+    /// <summary>Marketplace orders, packing labels, and shipments (stored snapshots + live actions).</summary>
+    public const string OrdersManage = "orders.manage";
     public const string FilesManage = "files.manage";
     public const string OperationsManage = "operations.manage";
     public const string AiUse = "ai.use";
@@ -46,6 +48,7 @@ public static class Permissions
         StoreSettingsManage,
         CatalogManage,
         MarketplaceManage,
+        OrdersManage,
         FilesManage,
         OperationsManage,
         AiUse,
@@ -81,6 +84,7 @@ public static class Permissions
         StoreSettingsManage,
         CatalogManage,
         MarketplaceManage,
+        OrdersManage,
         FilesManage,
         OperationsManage,
         AiUse,

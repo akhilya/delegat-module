@@ -91,6 +91,18 @@ public class StorefrontPlaywrightLoaderTests
         Assert.True(StorefrontPlaywrightLoader.IsBrandedChannel("chrome"));
         Assert.False(StorefrontPlaywrightLoader.IsBrandedChannel("chromium"));
     }
+
+    [Fact]
+    public async Task DisposeAsync_CanBeCalledTwice()
+    {
+        var loader = new StorefrontPlaywrightLoader(
+            CatalogScrapePlaywrightOptions.From(_ => null),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<StorefrontPlaywrightLoader>.Instance);
+
+        await loader.DisposeAsync();
+        var ex = await Record.ExceptionAsync(async () => await loader.DisposeAsync());
+        Assert.Null(ex);
+    }
 }
 
 public class StorefrontPlaywrightProfileTests

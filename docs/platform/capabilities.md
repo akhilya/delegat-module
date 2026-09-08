@@ -5,7 +5,7 @@
 **Per-instance self-hosting:** each customer receives an isolated Docker stack on their own subdomain.
 
 - Dedicated MySQL, MinIO, backend, and frontend containers
-- Stack: `docker-compose.prod.yml` (mysql + minio + delegat-api + frontend/nginx)
+- Stack: `docker-compose.prod.yml` (mysql + minio + delegat-api + frontend/nginx). Python sidecar `sandbox` is Compose profile `ai` (not started when `AI_ENABLED` is false)
 - Deploy: Dokploy + GitHub Actions
 - Isolation: physical - cross-tenant data leakage is architecturally impossible
 
@@ -31,7 +31,7 @@
 ### Marketplace Integration
 - Plugin architecture (DLL, isolated AssemblyLoadContext, hot reload)
 - Plugins: Wildberries, Ozon, OpenCart (via bridge)
-- Marketplace connections (MarketplaceConnection) with AES-256 encrypted credentials; create tests the adapter first and refuses to save on failure
+- Marketplace connections (MarketplaceConnection) with AES-256 encrypted credentials; create tests the adapter first and refuses to save on failure. Wildberries developer test tokens use `*-sandbox.wildberries.ru` (Auto from the JWT test claim, or Environment = Sandbox)
 - Several connections of the same adapter per store are allowed; create/update is rejected if the remote shop is already connected (same Client ID, store URL, campaign, or API key)
 - Visual field mapping editor (node graph, MappingCanvas)
 - Modifier pipeline: regex, template, calculation, value-map
@@ -39,7 +39,7 @@
 - Two-way product sync (ProductSyncService). Import stores attribute values in local types (`.` decimals, JSON multiselect); marketplace required flags stay on the mapping graph, not on local category attributes. When the marketplace card has no selling price, import loads it from the prices API (Wildberries content cards never include price)
 - Linked products: Import photos (preview picker, append-only gallery). Already-imported URLs can be queued again as extra copies; in-flight URLs are skipped. Image download worker never replaces an occupied gallery slot; file/storage quota failures are not retried.
 - Price sync (PriceSyncService) and stock sync
-- Live marketplace commerce (pass-through, not stored): current prices with discounts, cabinet orders and status actions, packing labels / barcode stickers (Ozon FBS, Wildberries, Yandex Market), promotions / calendar campaigns / coupons. Public API and JWT; no order tables. Cabinet SPA has live order mailboxes (`/orders/:bucket`) with an inset order sheet and product photos; still no promo screens
+- Live marketplace prices and promotions (pass-through). **Stored order snapshots** (background pull + throttled cabinet refresh); packing labels / barcode stickers when that marketplace can print them; **fulfillment locations and live shipments**. Public API and JWT. Cabinet SPA: `/orders` four all-adapter tabs (To pack / Being packed / In delivery / Delivered); sidebar is To pack then each connection; status mailboxes are navbar tabs on the connection; inset order sheet. Still no promo screens
 - Group sync (GroupSyncService)
 - Bulk export/import operations
 - SDK-level rate limiting (RateLimitConfig, MarketplaceRateLimiter)
@@ -64,7 +64,7 @@
 - JWT in HttpOnly, SameSite=Strict cookie
 - Refresh tokens stored in DB with rotation on use
 - ASP.NET Identity with account lockout (5 attempts, 15 min lockout)
-- **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies
+- **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies. Store-scoped `orders.manage` covers live cabinet orders, packing labels, and shipments (Operator and Store manager). `marketplace.manage` stays connections, mappings, sync, prices, and promotions.
 - `User.isAdmin` is an **instance owner marker** only (break-glass / assign owner); API access is not granted by the flag alone
 - `roles.manage` and `settings.dump` are **admin-only**: effective solely for `isAdmin`, never assignable via roles or grants. `GET /settings/database/dump` requires `settings.dump` (a full MySQL dump of users, password hashes, API keys, and marketplace credentials). `workspace.view` does not substitute for it.
 - Instance owners cannot change their **own** roles or extra permissions, and cannot drop the Owner role from a user who still has `isAdmin` (prevents locking themselves out of Administration → Users). `isAdmin` always keeps the Owner role; a missing Owner role on an owner is restored on the next permission hydrate.
@@ -78,12 +78,14 @@
 - **Public API v1:** API keys (`dk_…`) for ERP/1C/n8n - see [docs/api/public-v1.md](../api/public-v1.md); request activity logged for key owners
 
 ### AI Assistant
-- Embedded Claude-powered agent via `AiChatPanel` (inset companion sheet, no overlay; catalog stays usable while it is open)
-- 50+ tools: full platform coverage (products, categories, mappings, export, groups, analytics)
-- **Auto-mapping:** on category mapping creation, AI semantically connects adapter fields to local attributes
-- **Inline error explanation:** "✦ Объяснить ошибку" button next to sync/adapter errors
+- Embedded agent via `AiChatPanel` (inset companion sheet, no overlay; catalog stays usable while it is open)
+- Thin tools (not 50+ named handlers): knowledge search, live catalog search, read-only SQL (including category/store attributes), optional Python sandbox, `platform_request` (same cabinet controllers as the SPA; denylist for secrets and irreversible actions), file-name match, plan confirm. Same permissions and quotas as the SPA
+- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for Cursor and scripts — JWT or `dk_…`, permission `ai.use`. **Not** Public API v1; **not** gated by `API_USAGE_ENABLED`. See [docs/api/mcp.md](../api/mcp.md)
+- Local product files: UI folder attach → match → browser upload after confirm; Cursor pairs a filesystem MCP with instance MCP + Agent HTTP upload. Bytes never go through the model
+- **Auto-mapping:** on category mapping creation, AI semantically connects adapter fields to local attributes (mapping-suggest skill, not a second tool zoo)
+- **Inline error explanation:** explain-error button next to sync/adapter errors
 - **Confirmation flow:** AI always shows a plan before any mutation; user confirms or cancels
-- **Undo:** every AI mutation records a snapshot; "отмени" rolls back the last operation
+- **Undo:** prefer Operations / service-level undo where it exists; otherwise the step is not undoable
 - **Admin model management:** `/settings/admin/ai` - connect any Anthropic or OpenAI-compatible model
 - **Access:** controlled by `AI_ENABLED` env var (tariff feature). When `false`, AI DI services/controllers and UI are not loaded at process start; `/settings/admin/ai` is blocked and `llmGenerate` is hidden in the mapping palette — change the flag and **restart** the instance to enable. Unset: enabled for self-host; **disabled** when `CONTROL_PLANE_URL` is set (Control Plane must emit an explicit `true`/`false`).
 - All prompts in `backend/Services/Ai/Prompts/AiPrompts.cs` - editable without rebuilding services
@@ -194,7 +196,7 @@
 - DB indexing strategy.
 
 #### Extended Branding
-- Runtime white-label **per store** in **Settings → Stores → Branding** tab (logo, favicon, primary/accent; display name follows the store; favicon in sidebar store switcher). Seeded from `BRAND_*` env when a store’s branding row is first created; admin UI is source of truth after that. First-run Setup: store create, then branding.
+- Runtime white-label **per store** in **Settings → Stores → Branding** tab (logo, store icon, primary/accent; display name follows the store; store icon in the sidebar switcher and the browser tab). Seeded from `BRAND_*` env when a store’s branding row is first created; admin UI is source of truth after that. First-run Setup: store create, then branding. Sign-in / unavailable screens are unbranded (no store logo; unavailable has no tab icon).
 - Email templates (still future).
 
 ---

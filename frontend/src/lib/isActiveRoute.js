@@ -18,7 +18,10 @@ export function getNavRouteMatchScore(route, to) {
   }
 
   if (path === targetPath) {
-    if (targetPath === "/products" && (query.trash === "1" || query.trash === 1)) {
+    if (
+      targetPath === "/products" &&
+      (query.trash === "1" || query.trash === 1)
+    ) {
       return -1;
     }
     return 2000 + targetPath.length;
@@ -32,6 +35,17 @@ export function getNavRouteMatchScore(route, to) {
     if (path === targetPath || path.startsWith(`${targetPath}/`)) {
       return 1000 + targetPath.length;
     }
+    return -1;
+  }
+
+  if (/^\/orders\/\d+$/.test(targetPath)) {
+    if (path === targetPath || path.startsWith(`${targetPath}/`)) {
+      return 1000 + targetPath.length;
+    }
+    return -1;
+  }
+
+  if (targetPath === "/orders") {
     return -1;
   }
 

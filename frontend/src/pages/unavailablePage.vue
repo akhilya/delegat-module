@@ -4,7 +4,7 @@ import { onMounted, onUnmounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 
-import AuthLayout from "@/components/auth/AuthLayout.vue";
+import ServiceLayout from "@/components/auth/ServiceLayout.vue";
 import { Button } from "@/components/ui/button";
 import {
   checkNow,
@@ -38,25 +38,31 @@ async function onRetry() {
 </script>
 
 <template>
-  <AuthLayout
+  <ServiceLayout
     :title="t('pages.unavailablePage.title')"
     :subtitle="t('pages.unavailablePage.description')"
   >
     <Button
       size="lg"
-      class="auth-submit w-full"
       :disabled="isChecking"
       @click="onRetry"
     >
-      <Spinner v-if="isChecking" />
+      <Spinner v-if="isChecking" size="sm" />
       {{
         isChecking
           ? t("pages.unavailablePage.checking")
           : t("pages.unavailablePage.retry")
       }}
     </Button>
-    <p v-if="!isChecking" class="text-center text-sm text-muted-foreground">
-      {{ t("pages.unavailablePage.autoHint") }}
+    <p
+      class="text-[0.8125rem] leading-snug tracking-[-0.01em] text-muted-foreground"
+      aria-live="polite"
+    >
+      {{
+        isChecking
+          ? t("pages.unavailablePage.checking")
+          : t("pages.unavailablePage.autoHint")
+      }}
     </p>
-  </AuthLayout>
+  </ServiceLayout>
 </template>

@@ -1,7 +1,5 @@
 <script setup>
-import Logo from "@/components/logo.vue";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
-import { brandLogo } from "@/brand";
 
 defineProps({
   /** Large page title (Sign in / Create your account). */
@@ -28,7 +26,6 @@ defineProps({
     <div class="auth-main" :class="{ 'auth-main--start': align === 'start' }">
       <div class="auth-panel">
         <header class="auth-heading">
-          <Logo v-if="brandLogo" class="auth-logo" />
           <h1 class="auth-title">{{ title }}</h1>
           <p v-if="subtitle" class="auth-subtitle">{{ subtitle }}</p>
         </header>
@@ -98,13 +95,6 @@ defineProps({
   align-items: center;
   text-align: center;
   gap: 0.75rem;
-}
-
-.auth-logo {
-  width: 3.25rem !important;
-  height: auto;
-  margin-bottom: 0.25rem;
-  opacity: 1 !important;
 }
 
 .auth-title {

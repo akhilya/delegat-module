@@ -24,10 +24,11 @@ const orderItems = readFileSync(
 );
 
 describe("product identity cell", () => {
-  it("keeps a fixed 44px thumb and two truncated lines", () => {
+  it("keeps two truncated lines and follows the table photo size", () => {
     assert.match(identity, /data-slot="product-identity-cell"/);
-    assert.match(identity, /flex h-11 min-w-0 items-center/);
-    assert.match(identity, /image-class="size-11/);
+    assert.match(identity, /useProductImageSize/);
+    assert.match(identity, /spec\.identityClass/);
+    assert.match(identity, /spec\.thumbClass/);
     assert.match(
       identity,
       /truncate text-sm leading-none font-medium tracking-tight/,
@@ -36,6 +37,8 @@ describe("product identity cell", () => {
       identity,
       /truncate text-xs leading-none text-muted-foreground/,
     );
+    assert.match(identity, /RouterLink/);
+    assert.match(identity, /@click\.stop/);
   });
 
   it("is used by combined catalog presets instead of wrapping size-14 thumbs", () => {
@@ -47,8 +50,8 @@ describe("product identity cell", () => {
   });
 
   it("locks catalog rows to one height so adapter chips cannot wrap them", () => {
-    assert.match(table, /h-\[4\.25rem\] cursor-pointer/);
-    assert.match(table, /h-\[4\.25rem\] overflow-hidden/);
+    assert.match(table, /productImageRowClass/);
+    assert.match(table, /useProductImageSize/);
     assert.match(adapters, /flex-nowrap overflow-hidden/);
     assert.doesNotMatch(adapters, /flex-wrap/);
   });
@@ -61,6 +64,7 @@ describe("order mailbox items cell", () => {
     assert.match(orderItems, /itemsShowMore/);
     assert.match(orderItems, /itemsShowLess/);
     assert.match(orderItems, /aria-expanded/);
+    assert.match(orderItems, /orderItemProductTo/);
     assert.doesNotMatch(orderItems, /ORDER_ITEM_STACK/);
   });
 });

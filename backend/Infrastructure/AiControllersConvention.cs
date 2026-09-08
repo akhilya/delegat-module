@@ -12,6 +12,8 @@ public sealed class AiControllersConvention : IApplicationModelConvention
         "AiController",
         "AiConversationController",
         "AiSettingsController",
+        "AgentController",
+        "AgentMcpController",
     };
 
     private readonly bool _aiEnabled;

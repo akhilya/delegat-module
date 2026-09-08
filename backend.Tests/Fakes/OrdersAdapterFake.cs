@@ -21,6 +21,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
 
     public int GetOrdersCalls { get; private set; }
     public int GetOrderCalls { get; private set; }
+    public List<string> GetOrderIds { get; } = [];
     public List<int> GetOrdersConnectionIds { get; } = [];
     public List<OrderQuery?> GetOrdersQueries { get; } = [];
     public Exception? GetOrdersException { get; set; }
@@ -121,6 +122,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
         CancellationToken ct = default)
     {
         GetOrderCalls++;
+        GetOrderIds.Add(externalOrderId);
         ct.ThrowIfCancellationRequested();
         if (OrdersById.TryGetValue(externalOrderId, out var order))
             return Task.FromResult<ExternalOrder?>(order);

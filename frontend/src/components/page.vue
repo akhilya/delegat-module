@@ -8,10 +8,10 @@ const props = defineProps({
 
 <template>
   <!--
-    min-h-svh: page fills the inset. Flex column so AppPageChrome can grow
-    the region below the navbar without forcing extra scroll (nav + flex-1 = svh).
+    min-h-full: page fills the inset scroller and can grow with rows.
+    Flex column so AppPageChrome can expand empty states without a nested table scroll.
   -->
-  <div :class="cn('flex min-h-svh flex-col bg-background adaptive-padding', props.class)">
+  <div :class="cn('flex min-h-full flex-col bg-background adaptive-padding', props.class)">
     <slot />
   </div>
 </template>

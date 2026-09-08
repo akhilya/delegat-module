@@ -16,9 +16,9 @@ import AppImage from "@/components/AppImage.vue";
 import { http } from "@/main";
 import {
   applyBranding,
-  DEFAULT_BRAND_FAVICON,
   invalidateBrandingCache,
 } from "@/brand";
+import { storeIconUrl } from "@/lib/storeIcon.js";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 
 const props = defineProps({
@@ -80,10 +80,14 @@ function afterMutation(data) {
     invalidateBrandingCache();
   }
   const storeId = data?.storeId ?? props.storeId;
-  if (storeId != null && data?.faviconUrl) {
+  if (storeId != null) {
     window.dispatchEvent(
       new CustomEvent("store-branding-updated", {
-        detail: { storeId, faviconUrl: data.faviconUrl, logoUrl: data.logoUrl },
+        detail: {
+          storeId,
+          faviconUrl: storeIconUrl(data.faviconUrl),
+          logoUrl: data.logoUrl,
+        },
       }),
     );
   }
@@ -110,7 +114,7 @@ watch(saving, (v) => emit("update:saving", v), { immediate: true });
 function applyDto(dto) {
   const next = {
     logoUrl: dto.logoUrl || "",
-    faviconUrl: dto.faviconUrl || DEFAULT_BRAND_FAVICON,
+    faviconUrl: storeIconUrl(dto.faviconUrl),
     hasCustomLogo: dto.hasCustomLogo === true,
     hasCustomFavicon: dto.hasCustomFavicon === true,
     primaryColor: dto.primaryColor || "",
@@ -218,7 +222,7 @@ function clearLogo() {
 function clearFavicon() {
   form.clearFavicon = true;
   form.hasCustomFavicon = false;
-  form.faviconUrl = DEFAULT_BRAND_FAVICON;
+  form.faviconUrl = "";
 }
 
 /**

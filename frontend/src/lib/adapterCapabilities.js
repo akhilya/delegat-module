@@ -35,6 +35,8 @@ export function parseCapabilityFlags(capabilities) {
     if (capabilities.getOrders) flags.add("GetOrders");
     if (capabilities.updateOrderStatus) flags.add("UpdateOrderStatus");
     if (capabilities.getOrderLabels) flags.add("GetOrderLabels");
+    if (capabilities.getFulfillmentLocations) flags.add("GetFulfillmentLocations");
+    if (capabilities.manageShipments) flags.add("ManageShipments");
     if (capabilities.getPromotions) flags.add("GetPromotions");
     if (capabilities.updatePromotions) flags.add("UpdatePromotions");
     expandComposites(flags);
@@ -108,4 +110,14 @@ export function adapterCanUpdateOrderStatus(adapterOrCaps) {
 /** True when the adapter can download a packing label / barcode sticker. */
 export function adapterCanGetOrderLabels(adapterOrCaps) {
   return parseCapabilityFlags(capsOf(adapterOrCaps)).has("GetOrderLabels");
+}
+
+/** True when the adapter can list seller warehouses and marketplace offices. */
+export function adapterCanGetFulfillmentLocations(adapterOrCaps) {
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has("GetFulfillmentLocations");
+}
+
+/** True when the adapter can list and box live shipments / supplies. */
+export function adapterCanManageShipments(adapterOrCaps) {
+  return parseCapabilityFlags(capsOf(adapterOrCaps)).has("ManageShipments");
 }

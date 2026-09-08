@@ -22,6 +22,92 @@ namespace Delegat.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("Delegat.Models.Ai.AiAgentAudit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("summary")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("tool")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "createdAt");
+
+                    b.ToTable("aiAgentAudits");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiChatAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("contentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("fileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<long>("length")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("relativePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("sessionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("storageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "userId", "sessionId");
+
+                    b.ToTable("aiChatAttachments");
+                });
+
             modelBuilder.Entity("Delegat.Models.Ai.AiConversation", b =>
                 {
                     b.Property<int>("Id")
@@ -102,6 +188,41 @@ namespace Delegat.Migrations
                     b.HasIndex("conversationId", "createdAt");
 
                     b.ToTable("aiConversationMessages");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiKnowledgeChunk", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("body")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("sourcePath")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)");
+
+                    b.Property<int?>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("sourcePath");
+
+                    b.ToTable("aiKnowledgeChunks");
                 });
 
             modelBuilder.Entity("Delegat.Models.Ai.AiModelConfig", b =>
@@ -199,6 +320,45 @@ namespace Delegat.Migrations
                     b.HasIndex("userId", "storeId", "createdAt");
 
                     b.ToTable("aiOperations");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiSandboxRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("durationMs")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("exitCode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("scriptHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("stdoutPreview")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "createdAt");
+
+                    b.ToTable("aiSandboxRuns");
                 });
 
             modelBuilder.Entity("Delegat.Models.Ai.AiStoreSettings", b =>
@@ -1051,6 +1211,108 @@ namespace Delegat.Migrations
                     b.HasIndex("storeId");
 
                     b.ToTable("marketplaceConnections");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("channel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("shop");
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<string>("displayId")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("marketplaceOrderId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime?>("orderCreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("orderUpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("payloadJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("syncedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal?>("total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("displayId");
+
+                    b.HasIndex("connectionId", "status");
+
+                    b.HasIndex("storeId", "status");
+
+                    b.HasIndex("storeId", "connectionId", "marketplaceOrderId")
+                        .IsUnique();
+
+                    b.ToTable("marketplaceOrders");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceOrderSyncState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("lastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime?>("lastPulledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId", "status")
+                        .IsUnique();
+
+                    b.ToTable("marketplaceOrderSyncStates");
                 });
 
             modelBuilder.Entity("Delegat.Models.Marketplace.ProductGroupMarketplaceLink", b =>
@@ -3234,6 +3496,24 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("store");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceOrder", b =>
+                {
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", null)
+                        .WithMany()
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Delegat.Models.Marketplace.MarketplaceOrderSyncState", b =>
+                {
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", null)
+                        .WithMany()
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Delegat.Models.Marketplace.ProductGroupMarketplaceLink", b =>

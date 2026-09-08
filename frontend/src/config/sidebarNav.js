@@ -8,10 +8,12 @@ import {
   PAGE_STORE_STORAGE,
   PAGE_MARKETPLACE,
   PAGE_STORE_ATTRIBUTES,
+  PAGE_ORDERS,
   PAGE_TOOLS,
 } from "@/router";
 import {
   Boxes,
+  Package,
   PackagePlus,
   Layers,
   Trash2,
@@ -27,12 +29,6 @@ import {
   Globe,
   Settings2,
   ClipboardList,
-  Inbox,
-  Package,
-  Truck,
-  MapPin,
-  CheckCircle,
-  XCircle,
 } from "lucide-vue-next";
 import { getSettingsSidebarSubItems } from "./settingsNav";
 import { getLocale, t, toBcp47 } from "@/i18n";
@@ -40,16 +36,6 @@ import { canBrowse, hasPermission, PERMS } from "@/lib/permissions";
 import { canShowNavLink, uniqueByNavTarget } from "@/lib/navAccess";
 import { adapterIconComponent } from "@/lib/adapterIcons";
 import { adapterCanGetOrders } from "@/lib/adapterCapabilities";
-import { ORDER_BUCKETS, orderBucketPath } from "@/lib/ordersUi";
-
-const ORDER_BUCKET_ICONS = {
-  Inbox,
-  Package,
-  Truck,
-  MapPin,
-  CheckCircle,
-  XCircle,
-};
 
 /**
  * @typedef {'link'|'action'} NavItemType
@@ -102,15 +88,55 @@ const SIDEBAR_GROUPS = [
     defaultOpen: true,
     visible: (ctx) =>
       Boolean(ctx.hasStore) &&
-      canBrowseNav(ctx, PERMS.MarketplaceManage) &&
+      canBrowseNav(ctx, PERMS.OrdersManage) &&
       hasGetOrdersConnection(ctx),
-    items: ORDER_BUCKETS.map((bucket) => ({
-      id: `orders-${bucket.id}`,
-      labelKey: bucket.labelKey,
-      type: "link",
-      to: orderBucketPath(bucket.id),
-      icon: ORDER_BUCKET_ICONS[bucket.icon] || ClipboardList,
-    })),
+    items: (ctx) => {
+      const activeConnections = (ctx.connections || [])
+        .filter((connection) => {
+          if (!isConnectionActive(connection)) return false;
+          const adapterKey = connection.adapterKey ?? connection.AdapterKey;
+          const adapter = (ctx.adapters || []).find(
+            (item) => (item.key ?? item.Key) === adapterKey,
+          );
+          return adapterCanGetOrders(adapter);
+        })
+        .slice()
+        .sort((a, b) => {
+          const aKey = a.adapterKey ?? a.AdapterKey;
+          const bKey = b.adapterKey ?? b.AdapterKey;
+          const aName = getAdapterDisplayName(aKey, ctx.adapters);
+          const bName = getAdapterDisplayName(bKey, ctx.adapters);
+          return aName.localeCompare(bName, toBcp47(getLocale()));
+        });
+
+      return [
+        {
+          id: "orders-assembly",
+          labelKey: "nav.ordersAssembly",
+          type: "link",
+          to: PAGE_ORDERS,
+          icon: Package,
+        },
+        ...activeConnections.map((conn) => {
+          const connId = conn.id ?? conn.Id;
+          const adapterKey = conn.adapterKey ?? conn.AdapterKey;
+          return {
+            id: `orders-conn-${connId}`,
+            label: getConnectionNavLabel(
+              { ...conn, adapterKey },
+              ctx.adapters,
+              activeConnections.map((item) => ({
+                ...item,
+                adapterKey: item.adapterKey ?? item.AdapterKey,
+              })),
+            ),
+            type: "link",
+            to: `/orders/${connId}`,
+            icon: adapterIconComponent(adapterKey, ClipboardList),
+          };
+        }),
+      ];
+    },
   },
   {
     id: "products",
