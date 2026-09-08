@@ -80,14 +80,16 @@ public class MarketplaceCommerceController : ControllerBase
         var (items, total, hasMore, nextCursor) = await _commerce.ListStoredConnectionOrdersAsync(
             connection, query, ct);
         await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, items, ct);
+        var mailboxCounts = await _commerce.CountStoredMailboxesAsync(connection, query, ct);
         return Ok(new
         {
             items,
-            page,
+            page = query.Page,
             pageSize,
             total,
             hasMore,
-            nextCursor
+            nextCursor,
+            mailboxCounts
         });
     }
 
@@ -117,6 +119,7 @@ public class MarketplaceCommerceController : ControllerBase
             await _commerce.AttachLocalOrderItemImagesAsync(group.Key, orders, ct);
         }
 
+        var tabCounts = await _commerce.CountStoredOverviewTabsAsync(storeId, query, ct);
         return Ok(new
         {
             items,
@@ -124,7 +127,8 @@ public class MarketplaceCommerceController : ControllerBase
             pageSize,
             total,
             hasMore,
-            nextCursor
+            nextCursor,
+            tabCounts
         });
     }
 

@@ -87,4 +87,46 @@ public class MarketplaceCommerceOrdersStoreTests
         Assert.Equal(1, adapter.GetOrderCalls);
         Assert.NotNull(await snapshots.FindAsync(store.Id, connection.Id, "live-1", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task CountStoredOverviewTabs_GroupsSnapshotsByTab()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id, "ozon");
+        await data.SaveAsync();
+
+        var snapshots = new MarketplaceOrderSnapshotService(db, TimeProvider.System);
+        await snapshots.UpsertAsync(store.Id, connection.Id, new ExternalOrder
+        {
+            ExternalId = "a-1",
+            Status = MarketplaceOrderStatuses.AwaitingPack,
+            Channel = "fbs"
+        }, CancellationToken.None);
+        await snapshots.UpsertAsync(store.Id, connection.Id, new ExternalOrder
+        {
+            ExternalId = "s-1",
+            Status = MarketplaceOrderStatuses.AwaitingDeliver,
+            Channel = "fbs"
+        }, CancellationToken.None);
+        await snapshots.UpsertAsync(store.Id, connection.Id, new ExternalOrder
+        {
+            ExternalId = "d-1",
+            Status = MarketplaceOrderStatuses.Delivered,
+            Channel = "fbs"
+        }, CancellationToken.None);
+
+        var adapter = new OrdersAdapterFake { Key = "ozon" };
+        var commerce = new MarketplaceCommerceService(db, new SingleAdapterRegistry(adapter), snapshots);
+        var counts = await commerce.CountStoredOverviewTabsAsync(
+            store.Id,
+            new OrderQuery(),
+            CancellationToken.None);
+
+        Assert.Equal(1, counts["assembly"]);
+        Assert.Equal(1, counts["ship"]);
+        Assert.Equal(0, counts["delivery"]);
+        Assert.Equal(1, counts["done"]);
+    }
 }

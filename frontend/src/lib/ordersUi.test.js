@@ -17,7 +17,6 @@ import {
   isOrderBucket,
   mergeOrderLists,
   orderActionNeedsShipmentFields,
-  orderBucketPath,
   orderDeliveryIsMarketplaceOwned,
   orderDisplayId,
   orderExternalId,
@@ -35,14 +34,10 @@ import {
   orderBulkCapabilities,
   orderStatusUpdatePayload,
   orderItemsNeedCollapse,
-  orderItemsSummary,
   orderLineCount,
-  orderPieceCount,
   orderBoxId,
   orderSupplyId,
   orderPrimaryItemName,
-  orderPrimaryItemQuantity,
-  orderSecondaryItemNames,
   orderSearchHitPage,
   orderSearchLookupIds,
   orderVisibleItems,
@@ -55,10 +50,8 @@ import {
   resolveOrdersLocation,
   shouldFetchMailboxAfterRouteSync,
   statusesForBucket,
+  storedOrderListPageParams,
   assemblyCounts,
-  assemblyMailboxesForAdapter,
-  assemblyStatusesForAdapter,
-  isAssemblyOrderStatus,
   isOrdersOverviewPath,
   mailboxForOverviewTab,
   overviewTabEmptyTitleKey,
@@ -66,6 +59,7 @@ import {
   overviewTabPath,
   parseOrdersOverviewTab,
   statusesForOverviewTab,
+  tabCountsFromPayload,
   orderAssemblyMoreCount,
   orderAssemblyTitle,
   ORDER_ACTION_LABEL,
@@ -94,19 +88,60 @@ describe("order buckets", () => {
     }
     assert.equal(isOrderBucket(DEFAULT_ORDER_BUCKET), true);
     assert.equal(isOrderBucket("nope"), false);
-    assert.equal(orderBucketPath("pack"), "/orders/pack");
-    assert.equal(orderBucketPath("nope"), "/orders/new");
     assert.deepEqual(statusesForBucket("new"), ["new", "unpaid"]);
     assert.equal(statusesForBucket("pack").includes("new"), false);
     assert.equal(statusesForBucket("pack", "ozon").includes("new"), true);
+    assert.equal(statusesForBucket("pack", "ozon").includes("unpaid"), false);
     assert.equal(
       ORDER_BUCKETS.every((box) => !box.descriptionKey),
       true,
     );
     assert.doesNotMatch(ordersPageSource, /mailboxHintKey/);
+    assert.doesNotMatch(ordersPageSource, /params\.cursor/);
+    assert.match(ordersPageSource, /storedOrderListPageParams/);
+    assert.match(ordersPageSource, /tabCountsFromPayload/);
     assert.equal(
       ORDER_BUCKETS[1].emptyDescriptionKey,
       "pages.ordersPage.emptyPackDescription",
+    );
+  });
+});
+
+describe("stored order list paging", () => {
+  it("loads the next snapshot page without a live-API cursor", () => {
+    assert.deepEqual(
+      storedOrderListPageParams({
+        pageSize: 50,
+        status: "awaiting_pack",
+        search: "123",
+        channel: "fbs",
+      }),
+      {
+        page: 1,
+        pageSize: 50,
+        status: "awaiting_pack",
+        search: "123",
+        channel: "fbs",
+      },
+    );
+    assert.deepEqual(
+      storedOrderListPageParams({
+        append: true,
+        page: 1,
+        nextCursor: "2",
+        pageSize: 50,
+        status: "awaiting_pack",
+      }),
+      { page: 2, pageSize: 50, status: "awaiting_pack" },
+    );
+    assert.deepEqual(
+      storedOrderListPageParams({
+        append: true,
+        page: 3,
+        nextCursor: null,
+        pageSize: 25,
+      }),
+      { page: 4, pageSize: 25 },
     );
   });
 });
@@ -241,37 +276,6 @@ describe("assembly overview", () => {
       "pages.ordersPage.emptyOverviewDoneTitle",
     );
     assert.deepEqual(
-      assemblyMailboxesForAdapter("ozon").map((box) => box.id),
-      ["pack"],
-    );
-    assert.deepEqual(
-      assemblyMailboxesForAdapter("wildberries").map((box) => box.id),
-      ["pack"],
-    );
-    assert.deepEqual(
-      assemblyMailboxesForAdapter("yandex").map((box) => box.id),
-      ["new", "pack"],
-    );
-    assert.deepEqual(assemblyStatusesForAdapter("ozon"), [
-      "confirmed",
-      "awaiting_pack",
-      "new",
-      "unpaid",
-    ]);
-    assert.deepEqual(assemblyStatusesForAdapter("wildberries"), [
-      "confirmed",
-      "awaiting_pack",
-    ]);
-    assert.deepEqual(assemblyStatusesForAdapter("yandex"), [
-      "new",
-      "unpaid",
-      "confirmed",
-      "awaiting_pack",
-    ]);
-    assert.equal(isAssemblyOrderStatus("new"), true);
-    assert.equal(isAssemblyOrderStatus("awaiting_pack"), true);
-    assert.equal(isAssemblyOrderStatus("awaiting_deliver"), false);
-    assert.deepEqual(
       assemblyCounts([
         { status: "new" },
         { status: "unpaid" },
@@ -279,7 +283,14 @@ describe("assembly overview", () => {
         { status: "confirmed" },
         { status: "delivering" },
       ]),
-      { waiting: 2, packing: 2, total: 4 },
+      { waiting: 2, packing: 2, total: 5 },
+    );
+    assert.deepEqual(
+      tabCountsFromPayload(
+        { tabCounts: { assembly: 3, ship: "2", delivery: 0 } },
+        ["assembly", "ship", "delivery", "done"],
+      ),
+      { assembly: 3, ship: 2, delivery: 0, done: 0 },
     );
   });
 
@@ -315,6 +326,9 @@ describe("assembly overview", () => {
     assert.match(assemblyPageSource, /OrderJobConfirmDialog/);
     assert.doesNotMatch(assemblyPageSource, /<ContextMenu\s+v-for/);
     assert.match(assemblyPageSource, /@contextmenu="onRowContextMenu\(/);
+    assert.doesNotMatch(assemblyPageSource, /group\.orders\.length === 0/);
+    assert.match(assemblyPageSource, /tabCountsFromPayload/);
+    assert.match(assemblyPageSource, /tabCount\(/);
   });
 
   it("summarizes an assembly row as one Mail-style cell", () => {
@@ -462,21 +476,27 @@ describe("mergeOrderLists", () => {
   });
 });
 
-describe("orderItemsSummary", () => {
-  it("joins names and quantities", () => {
-    assert.equal(
-      orderItemsSummary({
-        items: [
-          { name: "Tee", quantity: 2 },
-          { Name: "Hat", Quantity: 1 },
-        ],
-      }),
-      "Tee × 2, Hat",
-    );
-    assert.equal(orderItemsSummary({ items: [] }), "");
+describe("order item list", () => {
+  it("counts lines and collapses past the preview cap", () => {
+    const one = {
+      items: [{ name: "Tee", quantity: 2, imageUrl: "https://cdn/a.webp" }],
+    };
+    assert.equal(orderLineCount(one), 1);
+    assert.equal(orderPrimaryItemName(one), "Tee");
+    assert.equal(orderHiddenLineCount(one), 0);
+    assert.equal(orderItemsNeedCollapse(one), false);
+    assert.equal(orderVisibleItems(one, false).length, 1);
+    assert.equal(orderItemSku({ sku: "SKU-1", name: "Tee" }), "SKU-1");
     assert.equal(
       orderItemImageUrl({ imageUrl: " https://cdn/a.webp " }),
       "https://cdn/a.webp",
+    );
+    assert.equal(
+      orderItemImageUrl({
+        imageUrl:
+          "https://storage.printo.studio/storage/stores/1/products/854/images/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=dead",
+      }),
+      null,
     );
     assert.deepEqual(
       orderItemImageUrls({
@@ -488,30 +508,6 @@ describe("orderItemsSummary", () => {
       }),
       ["https://cdn/a.webp", "https://cdn/b.webp"],
     );
-    assert.equal(
-      orderItemsSummary(
-        { items: [{ sku: "SKU-1", quantity: 3 }] },
-        (qty) => `× ${qty}`,
-      ),
-      "SKU-1 × 3",
-    );
-  });
-});
-
-describe("order item list", () => {
-  it("counts lines and pieces without a photo stack", () => {
-    const one = {
-      items: [{ name: "Tee", quantity: 2, imageUrl: "https://cdn/a.webp" }],
-    };
-    assert.equal(orderLineCount(one), 1);
-    assert.equal(orderPieceCount(one), 2);
-    assert.equal(orderPrimaryItemName(one), "Tee");
-    assert.equal(orderPrimaryItemQuantity(one), 2);
-    assert.deepEqual(orderSecondaryItemNames(one), []);
-    assert.equal(orderHiddenLineCount(one), 0);
-    assert.equal(orderItemsNeedCollapse(one), false);
-    assert.equal(orderVisibleItems(one, false).length, 1);
-    assert.equal(orderItemSku({ sku: "SKU-1", name: "Tee" }), "SKU-1");
   });
 
   it("collapses past the preview cap and expands to every line", () => {
@@ -527,8 +523,6 @@ describe("order item list", () => {
     assert.equal(orderVisibleItems(row, false).length, 3);
     assert.equal(orderVisibleItems(row, true).length, 4);
     assert.equal(orderLineCount(row), 4);
-    assert.equal(orderPieceCount(row), 5);
-    assert.deepEqual(orderSecondaryItemNames(row), ["B", "C", "D"]);
     assert.equal(orderHiddenLineCount(row), 1);
     assert.equal(orderItemsNeedCollapse(row), true);
     assert.equal(orderVisibleItems({ items: [] }, false).length, 0);

@@ -2,15 +2,7 @@
 /**
  * Right-click menu for a mailbox or packing-overview order row.
  */
-import {
-  Barcode,
-  CheckCircle,
-  ClipboardList,
-  MapPin,
-  Package,
-  Truck,
-  XCircle,
-} from "lucide-vue-next";
+import { Barcode, ClipboardList, XCircle } from "lucide-vue-next";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -18,16 +10,8 @@ import {
 } from "@/components/ui/context-menu";
 import ProductImageSizeContextSub from "@/components/products/ProductImageSizeContextSub.vue";
 import { computed } from "vue";
+import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import { ORDER_ACTION_LABEL, orderBulkCapabilities } from "@/lib/ordersUi";
-
-const ACTION_ICONS = {
-  confirm: CheckCircle,
-  pack: Package,
-  ship: Truck,
-  deliver: MapPin,
-  complete: CheckCircle,
-  cancel: XCircle,
-};
 
 const props = defineProps({
   order: { type: Object, required: true },
@@ -66,7 +50,7 @@ const hasRowActions = computed(
         :key="action"
         @click="$emit('action', action)"
       >
-        <component :is="ACTION_ICONS[action]" />
+        <component :is="ORDER_ACTION_ICONS[action]" />
         {{ $t(ORDER_ACTION_LABEL[action]) }}
       </ContextMenuItem>
       <ContextMenuItem

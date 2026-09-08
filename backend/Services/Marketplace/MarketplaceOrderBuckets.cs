@@ -5,8 +5,8 @@ namespace Delegat.Services.Marketplace;
 /// <summary>
 /// Host map of overview tabs and adapter mailboxes onto normalized order statuses.
 /// Mirrors cabinet mailbox ids in the SPA; Ozon and Wildberries have no New mailbox.
-/// Ozon pack still lists <see cref="MarketplaceOrderStatuses.New"/> and
-/// <see cref="MarketplaceOrderStatuses.Unpaid"/> so a rare awaiting_approve row can sync.
+/// Ozon pack still lists <see cref="MarketplaceOrderStatuses.New"/> so a rare
+/// awaiting_approve row can sync. Unpaid is not an Ozon list filter.
 /// </summary>
 public static class MarketplaceOrderBuckets
 {
@@ -31,6 +31,9 @@ public static class MarketplaceOrderBuckets
         MarketplaceOrderStatuses.Cancelled,
         MarketplaceOrderStatuses.Returned
     ];
+
+    /// <summary>Ozon has no unpaid list filter; New maps to awaiting_approve.</summary>
+    private static readonly string[] OzonPackExtras = [MarketplaceOrderStatuses.New];
 
     private static readonly Dictionary<string, string[]> StatusesByMailbox =
         new(StringComparer.OrdinalIgnoreCase)
@@ -66,6 +69,55 @@ public static class MarketplaceOrderBuckets
         MarketplaceOrderStatuses.Returned
     ];
 
+    private static readonly string[] OverviewTabIds = ["assembly", "ship", "delivery", "done"];
+
+    public static IReadOnlyList<string> MailboxIdsForAdapter(string adapterKey)
+    {
+        if (MailboxesByAdapter.TryGetValue(adapterKey ?? "", out var ids))
+            return ids;
+        return ["new", "pack", "ship", "delivery", "done", "closed"];
+    }
+
+    public static IReadOnlyDictionary<string, int> CountOverviewTabs(
+        IReadOnlyDictionary<string, int>? byStatus)
+        => CountGroups(OverviewTabIds, StatusesForOverviewTab, byStatus);
+
+    public static IReadOnlyDictionary<string, int> CountMailboxes(
+        string adapterKey,
+        IReadOnlyDictionary<string, int>? byStatus)
+        => CountGroups(
+            MailboxIdsForAdapter(adapterKey),
+            id => StatusesForMailbox(id, adapterKey).Distinct().ToArray(),
+            byStatus);
+
+    private static Dictionary<string, int> CountGroups(
+        IReadOnlyList<string> ids,
+        Func<string, IReadOnlyList<string>> statusesOf,
+        IReadOnlyDictionary<string, int>? byStatus)
+    {
+        var src = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (byStatus != null)
+        {
+            foreach (var kv in byStatus)
+                src[kv.Key] = kv.Value;
+        }
+
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in ids)
+        {
+            var n = 0;
+            foreach (var status in statusesOf(id))
+            {
+                if (src.TryGetValue(status, out var count))
+                    n += count;
+            }
+
+            result[id] = n;
+        }
+
+        return result;
+    }
+
     public static IReadOnlyList<string> StatusesForOverviewTab(string tab)
     {
         var key = (tab ?? "").Trim();
@@ -73,19 +125,16 @@ public static class MarketplaceOrderBuckets
         {
             return
             [
-                MarketplaceOrderStatuses.New,
-                MarketplaceOrderStatuses.Unpaid,
-                MarketplaceOrderStatuses.Confirmed,
-                MarketplaceOrderStatuses.AwaitingPack
+                ..NewMailbox,
+                ..PackMailbox
             ];
         }
 
-        if (key.Equals("ship", StringComparison.OrdinalIgnoreCase))
-            return ShipMailbox;
-        if (key.Equals("delivery", StringComparison.OrdinalIgnoreCase))
-            return DeliveryMailbox;
-        if (key.Equals("done", StringComparison.OrdinalIgnoreCase))
-            return DoneMailbox;
+        if (StatusesByMailbox.TryGetValue(key, out var mailbox)
+            && (key.Equals("ship", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("delivery", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("done", StringComparison.OrdinalIgnoreCase)))
+            return mailbox;
         return [];
     }
 
@@ -108,13 +157,26 @@ public static class MarketplaceOrderBuckets
         return statuses;
     }
 
-    public static bool IsTerminal(string status) =>
-        MarketplaceOrderStatuses.Delivered.Equals(status, StringComparison.OrdinalIgnoreCase)
-        || MarketplaceOrderStatuses.Cancelled.Equals(status, StringComparison.OrdinalIgnoreCase)
-        || MarketplaceOrderStatuses.Returned.Equals(status, StringComparison.OrdinalIgnoreCase);
+    public static readonly string[] TerminalStatusList =
+    [
+        MarketplaceOrderStatuses.Delivered,
+        MarketplaceOrderStatuses.Cancelled,
+        MarketplaceOrderStatuses.Returned
+    ];
+
+    public static bool IsTerminal(string status)
+    {
+        foreach (var terminal in TerminalStatusList)
+        {
+            if (terminal.Equals(status, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
-    /// Statuses listed for one mailbox. Ozon pack appends new/unpaid extras; it is not a New mailbox.
+    /// Statuses listed for one mailbox. Ozon pack appends New (awaiting_approve); it is not a New mailbox.
     /// </summary>
     private static IEnumerable<string> StatusesForMailbox(string mailboxId, string adapterKey)
     {
@@ -128,7 +190,7 @@ public static class MarketplaceOrderBuckets
             || !string.Equals(adapterKey, "ozon", StringComparison.OrdinalIgnoreCase))
             yield break;
 
-        foreach (var extra in NewMailbox)
+        foreach (var extra in OzonPackExtras)
             yield return extra;
     }
 }

@@ -61,6 +61,25 @@ public class WbPublicCatalogTests
         Assert.Equal(100.00m, product.Price);
     }
 
+    [Theory]
+    [InlineData(14671602L, 2)]
+    [InlineData(882600000L, 39)]
+    [InlineData(1097975275L, 42)]
+    [InlineData(1500000123L, 48)]
+    public void BasketNumber_MatchesLiveCdnVolRanges(long nmId, int basket)
+    {
+        Assert.Equal(basket, WbPublicCatalogClient.BasketNumber(nmId));
+    }
+
+    [Fact]
+    public void ImageUrls_UsesLiveBasketHost()
+    {
+        var url = Assert.Single(WbPublicCatalogClient.ImageUrls(1097975275L, 1));
+        Assert.Equal(
+            "https://basket-42.wbbasket.ru/vol10979/part1097975/1097975275/images/big/1.webp",
+            url);
+    }
+
     [Fact]
     public void CardsDetailUrl_JoinsNmIds()
     {

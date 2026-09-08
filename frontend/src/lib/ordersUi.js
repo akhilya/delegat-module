@@ -74,13 +74,11 @@ export const DEFAULT_ORDER_BUCKET = "new";
 
 /**
  * Cabinet mailboxes. `statuses` are sent as separate list queries and merged.
- * `icon` is a lucide-compatible export name.
  */
 export const ORDER_BUCKETS = [
   {
     id: "new",
     statuses: [ORDER_STATUS.New, ORDER_STATUS.Unpaid],
-    icon: "Inbox",
     labelKey: "nav.ordersNew",
     titleKey: "routes.ordersNew",
     emptyDescriptionKey: "pages.ordersPage.emptyNewDescription",
@@ -88,7 +86,6 @@ export const ORDER_BUCKETS = [
   {
     id: "pack",
     statuses: [ORDER_STATUS.Confirmed, ORDER_STATUS.AwaitingPack],
-    icon: "Package",
     labelKey: "nav.ordersPack",
     titleKey: "routes.ordersPack",
     emptyDescriptionKey: "pages.ordersPage.emptyPackDescription",
@@ -96,7 +93,6 @@ export const ORDER_BUCKETS = [
   {
     id: "ship",
     statuses: [ORDER_STATUS.AwaitingDeliver],
-    icon: "Truck",
     labelKey: "nav.ordersShip",
     titleKey: "routes.ordersShip",
     emptyDescriptionKey: "pages.ordersPage.emptyShipDescription",
@@ -104,7 +100,6 @@ export const ORDER_BUCKETS = [
   {
     id: "delivery",
     statuses: [ORDER_STATUS.Delivering],
-    icon: "MapPin",
     labelKey: "nav.ordersDelivery",
     titleKey: "routes.ordersDelivery",
     emptyDescriptionKey: "pages.ordersPage.emptyDeliveryDescription",
@@ -112,7 +107,6 @@ export const ORDER_BUCKETS = [
   {
     id: "done",
     statuses: [ORDER_STATUS.Delivered],
-    icon: "CheckCircle",
     labelKey: "nav.ordersDone",
     titleKey: "routes.ordersDone",
     emptyDescriptionKey: "pages.ordersPage.emptyDoneDescription",
@@ -120,7 +114,6 @@ export const ORDER_BUCKETS = [
   {
     id: "closed",
     statuses: [ORDER_STATUS.Cancelled, ORDER_STATUS.Returned],
-    icon: "XCircle",
     labelKey: "nav.ordersClosed",
     titleKey: "routes.ordersClosed",
     emptyDescriptionKey: "pages.ordersPage.emptyClosedDescription",
@@ -137,11 +130,6 @@ export function orderBucketById(id) {
   return BUCKET_BY_ID.get(String(id || "")) || null;
 }
 
-export function orderBucketPath(id) {
-  const bucket = isOrderBucket(id) ? id : DEFAULT_ORDER_BUCKET;
-  return `/orders/${bucket}`;
-}
-
 const ADAPTER_ORDER_MAILBOXES = {
   ozon: ["pack", "ship", "delivery", "done", "closed"],
   wildberries: ["pack", "ship", "delivery", "done", "closed"],
@@ -156,12 +144,42 @@ function normalizeAdapterKey(adapterKey) {
     .toLowerCase();
 }
 
-function connectionIdOf(connection) {
+export function connectionIdOf(connection) {
   return Number(connection?.id ?? connection?.Id ?? 0);
 }
 
-function adapterKeyOf(connection) {
+export function adapterKeyOf(connection) {
   return connection?.adapterKey ?? connection?.AdapterKey ?? "";
+}
+
+export function isConnectionActive(connection) {
+  const active = connection?.isActive ?? connection?.IsActive;
+  return active !== false;
+}
+
+export function storedOrderListPageParams({
+  append = false,
+  page = 1,
+  nextCursor = null,
+  pageSize,
+  status,
+  search,
+  channel,
+} = {}) {
+  const params = { pageSize };
+  if (status) params.status = status;
+  if (search) params.search = search;
+  if (channel) params.channel = channel;
+  if (!append) {
+    params.page = 1;
+    return params;
+  }
+  const fromCursor = Number.parseInt(String(nextCursor ?? ""), 10);
+  params.page =
+    Number.isInteger(fromCursor) && fromCursor > 1
+      ? fromCursor
+      : (Number(page) || 1) + 1;
+  return params;
 }
 
 export function orderMailboxesForAdapter(adapterKey) {
@@ -234,6 +252,23 @@ export const ORDER_OVERVIEW_TABS = [
   { id: "delivery", labelKey: "nav.ordersInDelivery" },
   { id: "done", labelKey: "nav.ordersDelivered" },
 ];
+
+/** Numeric tab/mailbox counts from a stored-orders list payload. Missing → 0. */
+export function tabCountsFromPayload(payload, ids = []) {
+  const raw =
+    payload?.tabCounts ??
+    payload?.TabCounts ??
+    payload?.mailboxCounts ??
+    payload?.MailboxCounts ??
+    {};
+  const keys = ids.length > 0 ? ids : Object.keys(raw);
+  const out = {};
+  for (const id of keys) {
+    const n = Number(raw[id]);
+    out[id] = Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+  }
+  return out;
+}
 
 export function parseOrdersOverviewTab(queryTab) {
   const id = String(queryTab || "assembly")
@@ -327,43 +362,18 @@ export function overviewTabEmptyDescriptionKey(tab) {
   }
 }
 
-export function assemblyMailboxesForAdapter(adapterKey) {
-  return orderMailboxesForAdapter(adapterKey).filter(
-    (box) => box.id === "new" || box.id === "pack",
-  );
-}
-
-export function assemblyStatusesForAdapter(adapterKey) {
-  const statuses = [];
-  for (const box of assemblyMailboxesForAdapter(adapterKey)) {
-    for (const status of statusesForBucket(box.id, adapterKey)) {
-      if (!statuses.includes(status)) statuses.push(status);
-    }
-  }
-  return statuses;
-}
-
-export function isAssemblyOrderStatus(status) {
-  const s = orderStatusOf({ status });
-  return (
-    s === ORDER_STATUS.New ||
-    s === ORDER_STATUS.Unpaid ||
-    s === ORDER_STATUS.Confirmed ||
-    s === ORDER_STATUS.AwaitingPack
-  );
-}
-
 export function assemblyCounts(orders) {
+  const list = Array.isArray(orders) ? orders : [];
   let waiting = 0;
   let packing = 0;
-  for (const row of Array.isArray(orders) ? orders : []) {
+  for (const row of list) {
     const s = orderStatusOf(row);
     if (s === ORDER_STATUS.New || s === ORDER_STATUS.Unpaid) waiting += 1;
     else if (s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack) {
       packing += 1;
     }
   }
-  return { waiting, packing, total: waiting + packing };
+  return { waiting, packing, total: list.length };
 }
 
 /**
@@ -408,9 +418,7 @@ export function resolveOrdersLocation({
 export function statusesForBucket(id, adapterKey) {
   const statuses = orderBucketById(id)?.statuses?.slice() || [];
   if (String(id) === "pack" && normalizeAdapterKey(adapterKey) === "ozon") {
-    for (const extra of [ORDER_STATUS.New, ORDER_STATUS.Unpaid]) {
-      if (!statuses.includes(extra)) statuses.push(extra);
-    }
+    if (!statuses.includes(ORDER_STATUS.New)) statuses.push(ORDER_STATUS.New);
   }
   return statuses;
 }
@@ -530,9 +538,14 @@ export function orderItemQuantity(item) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function isEphemeralOrderItemImageUrl(url) {
+  return /X-Amz-|X-Goog-Signature|AWSAccessKeyId=/i.test(url);
+}
+
 export function orderItemImageUrl(item) {
   const url = String(item?.imageUrl || item?.ImageUrl || "").trim();
-  return url || null;
+  if (!url || isEphemeralOrderItemImageUrl(url)) return null;
+  return url;
 }
 
 export function orderItemSku(item) {
@@ -558,13 +571,6 @@ export function orderLineCount(row) {
   return orderItemsOf(row).length;
 }
 
-export function orderPieceCount(row) {
-  return orderItemsOf(row).reduce(
-    (sum, item) => sum + orderItemQuantity(item),
-    0,
-  );
-}
-
 export function orderItemNames(row) {
   return orderItemsOf(row).map(orderItemName).filter(Boolean);
 }
@@ -579,15 +585,6 @@ export function orderAssemblyTitle(row) {
 
 export function orderAssemblyMoreCount(row) {
   return Math.max(0, orderLineCount(row) - 1);
-}
-
-export function orderPrimaryItemQuantity(row) {
-  const item = orderItemsOf(row)[0];
-  return item ? orderItemQuantity(item) : 0;
-}
-
-export function orderSecondaryItemNames(row) {
-  return orderItemNames(row).slice(1);
 }
 
 export function orderHiddenLineCount(row, max = ORDER_ITEM_PREVIEW_MAX) {
@@ -618,24 +615,6 @@ export function orderItemImageUrls(row, max = 3) {
     if (urls.length >= limit) break;
   }
   return urls;
-}
-
-/** Product names with quantities, comma-separated. */
-export function orderItemsSummary(row, formatQty) {
-  const parts = [];
-  for (const item of orderItemsOf(row)) {
-    const name = orderItemName(item);
-    if (!name) continue;
-    const qty = orderItemQuantity(item);
-    if (typeof formatQty === "function" && qty > 1) {
-      parts.push(`${name} ${formatQty(qty)}`.trim());
-    } else if (qty > 1) {
-      parts.push(`${name} × ${qty}`);
-    } else {
-      parts.push(name);
-    }
-  }
-  return parts.join(", ");
 }
 
 export function orderStatusOf(row) {

@@ -198,6 +198,34 @@ public class OzonCommerceMapperTests
     }
 
     [Fact]
+    public void ApplyProductImages_ReplacesPresignedObjectStorageUrl()
+    {
+        var order = new ExternalOrder
+        {
+            Items =
+            [
+                new ExternalOrderItem
+                {
+                    OfferId = "_WA121",
+                    ImageUrl = "https://storage.example/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=dead"
+                }
+            ]
+        };
+
+        OzonCommerceMapper.ApplyProductImages(
+            [order],
+            [
+                new ProductInfoItem
+                {
+                    OfferId = "_WA121",
+                    PrimaryImage = ["https://cdn.ozon.ru/fresh.jpg"]
+                }
+            ]);
+
+        Assert.Equal("https://cdn.ozon.ru/fresh.jpg", order.Items[0].ImageUrl);
+    }
+
+    [Fact]
     public void ApplyProductImages_FallsBackToImagesList()
     {
         var order = new ExternalOrder

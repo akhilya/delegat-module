@@ -31,7 +31,9 @@ import {
   orderDeliveryIsMarketplaceOwned,
   orderDisplayId,
   orderItemImageUrl,
+  orderItemName,
   orderItemProductTo,
+  orderItemSku,
   orderStatusClass,
   orderStatusLabelKey,
   orderStatusOf,
@@ -49,6 +51,7 @@ import {
   orderSheetMetaFacts,
   orderTotalAmount,
 } from "@/lib/orderSheetFacts.js";
+import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import { triggerBrowserDownload } from "@/lib/artifactDownload";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -72,11 +75,7 @@ import ProductImageCell from "@/components/products/ProductImageCell.vue";
 import {
   Barcode,
   Check,
-  CheckCircle,
   Copy,
-  MapPin,
-  Package,
-  Truck,
   XCircle,
 } from "lucide-vue-next";
 import {
@@ -98,15 +97,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-const ACTION_ICON = {
-  confirm: Check,
-  pack: Package,
-  ship: Truck,
-  deliver: MapPin,
-  complete: CheckCircle,
-  cancel: XCircle,
-};
 
 const ACTION_LABEL = ORDER_ACTION_LABEL;
 
@@ -595,21 +585,11 @@ async function onConfirmSubmit() {
 }
 
 function itemName(item) {
-  return (
-    item?.name ||
-    item?.Name ||
-    item?.sku ||
-    item?.Sku ||
-    item?.offerId ||
-    item?.OfferId ||
-    t("common.emDash")
-  );
+  return orderItemName(item) || t("common.emDash");
 }
 
 function itemSku(item) {
-  return String(
-    item?.sku ?? item?.Sku ?? item?.offerId ?? item?.OfferId ?? "",
-  ).trim();
+  return orderItemSku(item);
 }
 
 function itemBarcode(item) {
@@ -1034,7 +1014,7 @@ async function copyFact(id, value) {
             @click="openActionConfirm(action)"
           >
             <Spinner v-if="acting === action" size="sm" />
-            <component :is="ACTION_ICON[action]" v-else class="size-3.5" />
+            <component :is="ORDER_ACTION_ICONS[action]" v-else class="size-3.5" />
             {{ t(ACTION_LABEL[action]) }}
           </Button>
           <Button

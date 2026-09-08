@@ -43,6 +43,41 @@ public class MarketplaceOrderSnapshotServiceTests
     }
 
     [Fact]
+    public async Task UpsertMany_InsertsAndUpdatesInOneBatch()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, time, store, connection) = await CreateSutAsync(db);
+
+        await svc.UpsertManyAsync(
+            store.Id,
+            connection.Id,
+            [
+                MakeOrder("a-1"),
+                MakeOrder("b-1"),
+                new ExternalOrder { ExternalId = "  ", Status = MarketplaceOrderStatuses.New }
+            ],
+            CancellationToken.None);
+
+        Assert.Equal(2, await db.marketplaceOrders.CountAsync());
+
+        time.UtcNow = time.UtcNow.AddMinutes(1);
+        await svc.UpsertManyAsync(
+            store.Id,
+            connection.Id,
+            [
+                MakeOrder("a-1", status: MarketplaceOrderStatuses.Delivered),
+                MakeOrder("c-1")
+            ],
+            CancellationToken.None);
+
+        Assert.Equal(3, await db.marketplaceOrders.CountAsync());
+        var updated = await db.marketplaceOrders.SingleAsync(o => o.marketplaceOrderId == "a-1");
+        Assert.Equal(MarketplaceOrderStatuses.Delivered, updated.status);
+        Assert.Equal(time.UtcNow.UtcDateTime, updated.syncedAt);
+        Assert.True(await db.marketplaceOrders.AnyAsync(o => o.marketplaceOrderId == "c-1"));
+    }
+
+    [Fact]
     public async Task Upsert_BlankExternalId_IsNoOp()
     {
         await using var db = TestDbFactory.CreateDb();

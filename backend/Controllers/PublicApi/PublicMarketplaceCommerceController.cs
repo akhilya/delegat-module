@@ -48,7 +48,7 @@ public class PublicMarketplaceCommerceController : ControllerBase
         return Ok(new { items = prices, total = prices.Count });
     }
 
-    /// <summary>Lists stored order snapshots for the connection (eventually consistent). Items may include <c>imageUrl</c>, <c>barcode</c>, and <c>syncedAt</c>.</summary>
+    /// <summary>Lists stored order snapshots for the connection (eventually consistent). Query <c>page</c> / <c>pageSize</c>; numeric <c>cursor</c> is treated as a page number. Items may include <c>imageUrl</c>, <c>barcode</c>, and <c>syncedAt</c>.</summary>
     [HttpGet("orders")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListOrders(
@@ -77,7 +77,7 @@ public class PublicMarketplaceCommerceController : ControllerBase
         await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, items, ct);
         return Ok(PublicApiResults.Page(
             items,
-            page,
+            query.Page,
             pageSize,
             total,
             nextCursor,

@@ -2,6 +2,7 @@
 // ImageFile - Displays an image from a file object with loading spinner and a placeholder fallback.
 import { Image } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
+import { imagePaintState } from "@/lib/deferredImage";
 
 export default {
   components: {
@@ -28,42 +29,31 @@ export default {
     };
   },
   mounted() {
-    this.checkImageCache();
+    this.syncFromImg();
   },
   watch: {
-    resolvedSrc: {
-      handler() {
-        this.checkImageCache();
-      },
+    resolvedSrc() {
+      this.applyPaintState(imagePaintState(this.resolvedSrc, null));
+      this.$nextTick(() => this.syncFromImg());
     },
   },
   methods: {
-    checkImageCache() {
-      this.failed = false;
-      if (!this.resolvedSrc) {
-        this.isLoading = false;
-        return;
-      }
-      const img = new window.Image();
-      img.src = this.resolvedSrc;
-      if (img.complete && img.naturalWidth > 0) {
-        this.isLoading = false;
-      } else if (img.complete) {
-        this.isLoading = false;
-        this.failed = true;
-        this.$emit("error");
-      } else {
-        this.isLoading = true;
-      }
+    applyPaintState(state) {
+      this.isLoading = state.isLoading;
+      this.failed = state.failed;
+    },
+    syncFromImg() {
+      const src = this.resolvedSrc;
+      const next = imagePaintState(src, this.$refs.imgEl);
+      this.applyPaintState(next);
+      if (src && next.failed) this.$emit("error");
     },
     onImageLoad() {
-      this.isLoading = false;
-      this.failed = false;
+      this.applyPaintState({ isLoading: false, failed: false });
       this.$emit("load");
     },
     onImageError() {
-      this.isLoading = false;
-      this.failed = true;
+      this.applyPaintState({ isLoading: false, failed: true });
       this.$emit("error");
     },
   },
@@ -83,6 +73,10 @@ export default {
       <Spinner size="sm" class="text-muted-foreground" />
     </div>
     <img
+      ref="imgEl"
+      loading="lazy"
+      decoding="async"
+      referrerpolicy="no-referrer"
       @load="onImageLoad"
       @error="onImageError"
       :src="resolvedSrc"

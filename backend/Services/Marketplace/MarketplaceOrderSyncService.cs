@@ -23,13 +23,6 @@ public sealed class MarketplaceOrderSyncService
     private static readonly TimeSpan PageCooldown = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackgroundCooldown = TimeSpan.FromMinutes(15);
 
-    private static readonly string[] TerminalStatuses =
-    [
-        MarketplaceOrderStatuses.Delivered,
-        MarketplaceOrderStatuses.Cancelled,
-        MarketplaceOrderStatuses.Returned
-    ];
-
     private readonly DataContext _db;
     private readonly IMarketplaceAdapterRegistry _adapters;
     private readonly MarketplaceOrderSnapshotService _snapshots;
@@ -111,7 +104,8 @@ public sealed class MarketplaceOrderSyncService
     {
         var statuses = MarketplaceOrderBuckets.StatusesForOverviewTab(tab);
         var connections = await _db.marketplaceConnections
-            .Where(c => c.storeId == storeId)
+            .AsNoTracking()
+            .Where(c => c.storeId == storeId && c.isActive)
             .ToListAsync(ct);
 
         var upserted = 0;
@@ -122,9 +116,6 @@ public sealed class MarketplaceOrderSyncService
 
         foreach (var connection in connections)
         {
-            if (!connection.isActive)
-                continue;
-
             var adapter = _adapters.GetByKey(connection.adapterKey);
             if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetOrders))
                 continue;
@@ -186,10 +177,11 @@ public sealed class MarketplaceOrderSyncService
                 var batch = await adapter.GetOrdersAsync(connection, query, ct);
                 pagesFetched++;
 
-                foreach (var order in batch.Items ?? [])
+                var items = batch.Items ?? [];
+                upserted += await _snapshots.UpsertManyAsync(
+                    connection.storeId, connection.Id, items, ct);
+                foreach (var order in items)
                 {
-                    await _snapshots.UpsertAsync(connection.storeId, connection.Id, order, ct);
-                    upserted++;
                     if (!string.IsNullOrWhiteSpace(order.ExternalId))
                         upsertedIds.Add(order.ExternalId);
                 }
@@ -259,9 +251,10 @@ public sealed class MarketplaceOrderSyncService
         var upserted = 0;
         try
         {
+            var terminal = MarketplaceOrderBuckets.TerminalStatusList;
             var pending = _db.marketplaceOrders
                 .AsNoTracking()
-                .Where(o => o.connectionId == connection.Id && !TerminalStatuses.Contains(o.status));
+                .Where(o => o.connectionId == connection.Id && !terminal.Contains(o.status));
             if (upsertedIds.Count > 0)
             {
                 var skip = upsertedIds.ToList();
@@ -274,18 +267,20 @@ public sealed class MarketplaceOrderSyncService
                 .Take(MaxInFlightIdRefreshesPerRun)
                 .ToListAsync(ct);
 
+            var lives = new List<ExternalOrder>();
             foreach (var id in ids)
             {
-
                 var live = await adapter.GetOrderAsync(connection, id, ct);
                 if (live == null)
                     continue;
 
-                await _snapshots.UpsertAsync(connection.storeId, connection.Id, live, ct);
-                upserted++;
+                lives.Add(live);
                 if (!string.IsNullOrWhiteSpace(id))
                     upsertedIds.Add(id);
             }
+
+            upserted += await _snapshots.UpsertManyAsync(
+                connection.storeId, connection.Id, lives, ct);
 
             state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
             state.lastError = null;

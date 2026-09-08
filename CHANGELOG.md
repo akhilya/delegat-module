@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab
 - Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and Cursor: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
 - Cabinet assistant: category and store attributes (list/create), product `attributeValues` merge, `GET /products?categoryId=`, SQL on attribute tables plus `IN (...)` and `description`
 - Cabinet assistant: execution timeline interleaves thinking with each tool step instead of stacking tools above a single merged paragraph
@@ -45,6 +46,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Catalog (and other) product thumbs load inside the cell spinner; the products table paints as soon as `/products` returns and does not wait for photos to decode
 - Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
 - Public API and cabinet product create/patch: characteristic `value` accepts JSON numbers, booleans, and arrays and stores them as text (same as the product form strings)
 - Cabinet assistant remaining catalog slots are in the chat context. At the cap it must not trash an existing product to free a slot. A confirmed plan that returns HTTP 4xx/5xx is a failure; if earlier steps already applied, the reply says so (including trash) instead of “nothing changed”. Oversized product cards are slimmed instead of dropped
@@ -117,12 +119,19 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Order list thumbs for a linked catalog product use `/api/files/{id}/thumbnail`, not the marketplace URL (Yandex CDN / expired MinIO). Adapter photos stay only when the line has no local file
+- Order line photos no longer keep expired MinIO/S3 presigned URLs (mapping export used a 2-hour `storage.printo.studio` signature). Linked products get `/api/files/{id}/thumbnail`; Yandex skips those seller `pictures` and uses Market-hosted `mediaFiles` instead
+- Yandex Market offer-mappings photos: Partner API may send `pictures` as `{ url }` objects (not strings) and put `offerMappings` at the response root. Either used to drop the whole mapping, so order thumbs stayed empty. `shopSku` is used when `offerId` is missing
+- Wildberries order and catalog photos used a stale CDN basket table, so newer nmIds 404'd (e.g. `1097975275` went to basket-46 instead of basket-42). Hosts now follow the live `cdn.wbbasket.ru` mediabasket map
+- Yandex Market order (and catalog import) photos now read Partner API `mediaFiles.pictures[].url` when `pictures` is empty — Market-hosted card photos live there, not on the seller `pictures` list
+- Marketplace product thumbs (`AppImage` / `ImageFile`) load with `referrerpolicy=no-referrer` so WB and Yandex CDNs are not blocked by the cabinet origin
+- Cabinet mailbox “Load more” paginates stored snapshots by page (it used to send a live-API cursor and reload page 1)
 - Cabinet AI chat shows attached file names on the sent message (they used to vanish from the composer before the bubble appeared)
 - Cabinet `run_python` no longer returns HTTP 413 `invalid body`: the API sends a buffered JSON body with `Content-Length` (chunked `JsonContent` was empty to the sidecar)
 - `sql_readonly` accepts `COUNT(*)` and `COUNT(DISTINCT col)` (not mixed with row columns)
 - Failed API startup (port 5000 already in use) no longer crashes a second time while disposing catalog-scrape Chromium
 - Cabinet `run_python` is omitted when `SANDBOX_URL` is unset (instead of advertising a tool that always fails). Local compose already publishes the sidecar on `8091`; set `SANDBOX_URL=http://127.0.0.1:8091` and `SANDBOX_AGENT_BASE_URL=http://host.docker.internal:5000`
-- Yandex Market order lines include the product photo (`imageUrl`) from Partner API offer-mappings `pictures`. Order list/get have no photos; unlinked cards still get the marketplace CDN photo. Local linked photos remain the fallback
+- Yandex Market order lines include the product photo (`imageUrl`) from Partner API offer-mappings `pictures`. Order list/get have no photos; unlinked cards still get the marketplace CDN photo. A linked catalog product uses the local thumb instead
 - Yandex Market order list no longer 500s when the cabinet mailbox sends normalized statuses (`new`, `awaiting_pack`). Those map to Partner API `UNPAID` / `PROCESSING` (Yandex has no `NEW` / `AWAITING_PACK`)
 - Yandex Market order list no longer 500s when Partner API sends `updatedAt` as `dd-MM-yyyy HH:mm:ss` (the same cabinet date as `creationDate`)
 - Order sheet (and Public API) packing label / barcode is only offered when that marketplace can print it: Ozon FBS in Ready to ship (`awaiting_deliver`), not Assembly or Delivery, and never FBO; Wildberries after the order is in a supply (`confirm`) or in delivery (`complete`); Yandex Market while packing (`PROCESSING`, FBS/DBS), not FBY. GET label at the wrong status → `400 order_label_failed`

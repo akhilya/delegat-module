@@ -26,6 +26,24 @@ public class MarketplaceCommerceServiceTests
         Assert.Equal("123", query.Search);
     }
 
+    [Theory]
+    [InlineData(1, "2", 2)]
+    [InlineData(1, "3", 3)]
+    [InlineData(1, null, 1)]
+    [InlineData(1, "not-a-page", 1)]
+    [InlineData(4, "2", 4)]
+    [InlineData(0, "2", 2)]
+    public void BuildOrderQuery_NumericCursor_IsStoredPageWhenPageIsDefault(
+        int page,
+        string? cursor,
+        int expectedPage)
+    {
+        var query = MarketplaceCommerceService.BuildOrderQuery(
+            page, 50, cursor, null, null, null, null, null);
+
+        Assert.Equal(expectedPage, query.Page);
+    }
+
     [Fact]
     public void CabinetOrderEndpoints_RequireOrdersManage()
     {
@@ -130,6 +148,70 @@ public class MarketplaceCommerceServiceTests
     }
 
     [Fact]
+    public void ApplyLocalOrderItemImages_ReplacesPresignedObjectStorageUrl()
+    {
+        var order = new ExternalOrder
+        {
+            Items =
+            [
+                new ExternalOrderItem
+                {
+                    ExternalProductId = "nm-1",
+                    ImageUrl = "https://storage.printo.studio/storage/stores/1/products/854/images/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260729T122814Z&X-Amz-Expires=7200&X-Amz-Signature=dead"
+                },
+                new ExternalOrderItem
+                {
+                    ExternalProductId = "keep",
+                    ImageUrl = "https://avatars.mds.yandex.net/get-mpic/keep.jpg"
+                }
+            ]
+        };
+
+        MarketplaceCommerceService.ApplyLocalOrderItemImages(
+            [order],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["nm-1"] = "/api/files/9/thumbnail?w=256",
+                ["keep"] = "/api/files/8/thumbnail?w=256"
+            });
+
+        Assert.Equal("/api/files/9/thumbnail?w=256", order.Items[0].ImageUrl);
+        Assert.Equal("/api/files/8/thumbnail?w=256", order.Items[1].ImageUrl);
+    }
+
+    [Fact]
+    public void ApplyLocalOrderItemImages_PrefersLocalCatalogOverMarketplaceCdn()
+    {
+        var order = new ExternalOrder
+        {
+            Items =
+            [
+                new ExternalOrderItem
+                {
+                    OfferId = "hat-1",
+                    ImageUrl = "https://avatars.mds.yandex.net/get-mpic/adapter.jpg"
+                },
+                new ExternalOrderItem
+                {
+                    OfferId = "keep-local",
+                    ImageUrl = "/api/files/9/thumbnail?w=256"
+                }
+            ]
+        };
+
+        MarketplaceCommerceService.ApplyLocalOrderItemImages(
+            [order],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["hat-1"] = "/api/files/12/thumbnail?w=256",
+                ["keep-local"] = "/api/files/99/thumbnail?w=256"
+            });
+
+        Assert.Equal("/api/files/12/thumbnail?w=256", order.Items[0].ImageUrl);
+        Assert.Equal("/api/files/9/thumbnail?w=256", order.Items[1].ImageUrl);
+    }
+
+    [Fact]
     public void ApplyLocalOrderItemNames_FillsMissingFromLinkKeys()
     {
         var order = new ExternalOrder
@@ -174,9 +256,23 @@ public class MarketplaceCommerceServiceTests
         };
 
         Assert.True(MarketplaceCommerceService.NeedsLocalOrderItemLookup(named));
-        Assert.False(MarketplaceCommerceService.NeedsLocalOrderItemLookup(linked));
+        Assert.True(MarketplaceCommerceService.NeedsLocalOrderItemLookup(linked));
         Assert.True(MarketplaceCommerceService.NeedsLocalOrderItemLookup(
             new ExternalOrderItem { LocalProductId = 7, Name = "x" }));
+        Assert.True(MarketplaceCommerceService.NeedsLocalOrderItemLookup(
+            new ExternalOrderItem
+            {
+                LocalProductId = 854,
+                Name = "Linked",
+                ImageUrl = "https://storage.printo.studio/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=dead"
+            }));
+        Assert.False(MarketplaceCommerceService.NeedsLocalOrderItemLookup(
+            new ExternalOrderItem
+            {
+                LocalProductId = 42,
+                Name = "Cabinet title",
+                ImageUrl = "/api/files/9/thumbnail?w=256"
+            }));
     }
 
     [Fact]

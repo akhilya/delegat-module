@@ -45,11 +45,15 @@ import {
 import {
   assemblyCounts,
   connectionNavLabel,
+  connectionIdOf,
+  adapterKeyOf,
+  isConnectionActive,
   filterOrdersBySearch,
   formatOrderMoney,
   mailboxForOverviewTab,
   mergeOrderLists,
   ORDER_OVERVIEW_TABS,
+  tabCountsFromPayload,
   orderDisplayId,
   orderExternalId,
   orderMailboxPath,
@@ -83,19 +87,6 @@ import {
 
 const CHANNEL_ALL = "__all__";
 const DEFAULT_PAGE_SIZE = 50;
-
-function connectionIdOf(connection) {
-  return Number(connection?.id ?? connection?.Id ?? 0);
-}
-
-function adapterKeyOf(connection) {
-  return connection?.adapterKey ?? connection?.AdapterKey ?? "";
-}
-
-function isConnectionActive(connection) {
-  const active = connection?.isActive ?? connection?.IsActive;
-  return active !== false;
-}
 
 export default {
   components: {
@@ -156,10 +147,11 @@ export default {
       pageSize: DEFAULT_PAGE_SIZE,
       pagesByConnection: {},
       openByConnection: {},
-      loadingMore: {},
+      loadingMore: false,
       fetchGen: 0,
       storePage: 1,
       storeHasMore: false,
+      tabCounts: {},
       contextMenuRow: null,
       contextMenuGroupId: null,
       pendingJob: null,
@@ -222,7 +214,7 @@ export default {
             orders,
             counts,
             hasMore: false,
-            loadingMore: Boolean(this.loadingMore[id]),
+            loadingMore: false,
           };
         })
         .filter((group) => group.orders.length > 0);
@@ -231,7 +223,7 @@ export default {
         groups[last] = {
           ...groups[last],
           hasMore: true,
-          loadingMore: Boolean(this.loadingMore.store),
+          loadingMore: this.loadingMore,
         };
       }
       return groups;
@@ -480,12 +472,17 @@ export default {
       this.pagesByConnection = next;
       this.storePage = Number(data.page) || page;
       this.storeHasMore = Boolean(data.hasMore);
+      this.tabCounts = tabCountsFromPayload(
+        data,
+        ORDER_OVERVIEW_TABS.map((tab) => tab.id),
+      );
     },
 
     async fetchOrders({ silent = false } = {}) {
       if (!this.orderConnections.length) {
         this.pagesByConnection = {};
         this.storeHasMore = false;
+        this.tabCounts = {};
         this.isLoading = false;
         return;
       }
@@ -512,13 +509,13 @@ export default {
 
     async loadMore() {
       if (!this.storeHasMore || this.isLoading) return;
-      this.loadingMore = { ...this.loadingMore, store: true };
+      this.loadingMore = true;
       try {
         await this.fetchStorePage(this.storePage + 1, { append: true });
       } catch (error) {
         displaySonnerError(error);
       } finally {
-        this.loadingMore = { ...this.loadingMore, store: false };
+        this.loadingMore = false;
       }
     },
 
@@ -781,6 +778,10 @@ export default {
       }
       this.$router.push(overviewTabPath(tab, keep));
     },
+
+    tabCount(id) {
+      return Number(this.tabCounts?.[id]) || 0;
+    },
   },
 };
 </script>
@@ -799,6 +800,10 @@ export default {
             :value="tab.id"
           >
             {{ $t(tab.labelKey) }}
+            <span
+              v-if="tabCount(tab.id) > 0"
+              class="text-muted-foreground text-xs font-normal tabular-nums"
+            >{{ tabCount(tab.id) }}</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -907,13 +912,7 @@ export default {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div class="border-t border-border/60 px-0.5 pb-0.5 pt-0.5">
-              <p
-                v-if="group.orders.length === 0"
-                class="px-2.5 py-2 text-xs text-muted-foreground"
-              >
-                {{ $t("pages.ordersPage.assemblyEmptyGroup") }}
-              </p>
-              <ContextMenu v-else>
+              <ContextMenu>
                 <ContextMenuTrigger as-child>
                   <div class="flex flex-col gap-0.5">
                     <OrderAssemblyRow

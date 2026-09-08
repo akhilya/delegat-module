@@ -2,11 +2,13 @@
 /**
  * Content image with centered Spinner while the network/decode finishes.
  * Parent should give the wrapper a size (e.g. size-full inside a sized box).
+ * Does not prefetch; lists paint as soon as row data is in.
  */
-import { ref, watch } from "vue";
+import { ref, watch, nextTick } from "vue";
 import { Image } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { imagePaintState } from "@/lib/deferredImage";
 
 defineOptions({ inheritAttrs: false });
 
@@ -32,34 +34,34 @@ const emit = defineEmits(["load", "error"]);
 
 const isLoading = ref(false);
 const failed = ref(false);
+const imgEl = ref(null);
+
+function applyPaintState(state, emitError = false) {
+  isLoading.value = state.isLoading;
+  failed.value = state.failed;
+  if (emitError && state.failed) emit("error");
+}
+
+function syncFromImg() {
+  applyPaintState(imagePaintState(props.src, imgEl.value), true);
+}
 
 watch(
   () => props.src,
   (src) => {
-    failed.value = false;
-    if (!src) {
-      isLoading.value = false;
-      return;
-    }
-    isLoading.value = true;
-    const probe = new window.Image();
-    probe.src = src;
-    if (probe.complete && probe.naturalWidth > 0) {
-      isLoading.value = false;
-    }
+    applyPaintState(imagePaintState(src, null));
+    nextTick(syncFromImg);
   },
   { immediate: true },
 );
 
 function onLoad(e) {
-  isLoading.value = false;
-  failed.value = false;
+  applyPaintState({ isLoading: false, failed: false });
   emit("load", e);
 }
 
 function onError(e) {
-  isLoading.value = false;
-  failed.value = true;
+  applyPaintState({ isLoading: false, failed: true });
   emit("error", e);
 }
 </script>
@@ -90,11 +92,18 @@ function onError(e) {
         :src="src"
         alt=""
         aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        referrerpolicy="no-referrer"
         class="pointer-events-none absolute inset-0 size-full scale-110 object-cover blur-md"
       />
       <img
+        ref="imgEl"
         :src="src"
         :alt="alt"
+        loading="lazy"
+        decoding="async"
+        referrerpolicy="no-referrer"
         :class="cn(imgClass, isLoading ? 'opacity-0' : 'opacity-100')"
         v-bind="$attrs"
         @load="onLoad"

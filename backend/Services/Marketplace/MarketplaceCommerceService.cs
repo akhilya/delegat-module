@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK.DTOs;
@@ -80,6 +81,20 @@ public class MarketplaceCommerceService
         }
     }
 
+    /// <summary>
+    /// Stored lists paginate by page number. Cabinet load-more used to send
+    /// <c>nextCursor</c> (the next page as a string) without <c>page</c>.
+    /// </summary>
+    public static int ResolveStoredOrderPage(int page, string? cursor)
+    {
+        if (page > 1)
+            return page;
+        if (int.TryParse(cursor, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fromCursor)
+            && fromCursor >= 1)
+            return fromCursor;
+        return page < 1 ? 1 : page;
+    }
+
     public static OrderQuery BuildOrderQuery(
         int page,
         int pageSize,
@@ -91,7 +106,7 @@ public class MarketplaceCommerceService
         string? search)
         => new()
         {
-            Page = page,
+            Page = ResolveStoredOrderPage(page, cursor),
             PageSize = pageSize,
             Cursor = cursor,
             Status = status,
@@ -112,7 +127,7 @@ public class MarketplaceCommerceService
             ? MarketplaceOrderBuckets.ListStatusesForAdapter(connection.adapterKey)
             : [query.Status];
 
-        var rows = await _snapshots.ListAsync(
+        var (rows, total) = await _snapshots.ListPageAsync(
             connection.storeId,
             connection.Id,
             statuses,
@@ -122,15 +137,6 @@ public class MarketplaceCommerceService
             query.To,
             page,
             pageSize,
-            ct);
-        var total = await _snapshots.CountAsync(
-            connection.storeId,
-            connection.Id,
-            statuses,
-            query.Channel,
-            query.Search,
-            query.From,
-            query.To,
             ct);
         var items = rows.Select(_snapshots.ToExternalOrder).ToList();
         var hasMore = page * Math.Max(pageSize, 1) < total;
@@ -146,7 +152,7 @@ public class MarketplaceCommerceService
         var page = query.Page < 1 ? 1 : query.Page;
         var pageSize = query.PageSize;
         var statuses = MarketplaceOrderBuckets.StatusesForOverviewTab(tab);
-        var rows = await _snapshots.ListAsync(
+        var (rows, total) = await _snapshots.ListPageAsync(
             storeId,
             null,
             statuses,
@@ -156,15 +162,6 @@ public class MarketplaceCommerceService
             query.To,
             page,
             pageSize,
-            ct);
-        var total = await _snapshots.CountAsync(
-            storeId,
-            null,
-            statuses,
-            query.Channel,
-            query.Search,
-            query.From,
-            query.To,
             ct);
 
         var connectionIds = rows.Select(r => r.connectionId).Distinct().ToList();
@@ -188,6 +185,26 @@ public class MarketplaceCommerceService
 
         var hasMore = page * Math.Max(pageSize, 1) < total;
         return (items, total, hasMore, hasMore ? (page + 1).ToString() : null);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountStoredOverviewTabsAsync(
+        int storeId,
+        OrderQuery query,
+        CancellationToken ct)
+    {
+        var byStatus = await _snapshots.CountByStatusAsync(
+            storeId, null, query.Channel, query.Search, query.From, query.To, ct);
+        return MarketplaceOrderBuckets.CountOverviewTabs(byStatus);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountStoredMailboxesAsync(
+        MarketplaceConnection connection,
+        OrderQuery query,
+        CancellationToken ct)
+    {
+        var byStatus = await _snapshots.CountByStatusAsync(
+            connection.storeId, connection.Id, query.Channel, query.Search, query.From, query.To, ct);
+        return MarketplaceOrderBuckets.CountMailboxes(connection.adapterKey, byStatus);
     }
 
     public async Task<ExternalOrder?> GetStoredOrderAsync(
@@ -242,14 +259,32 @@ public class MarketplaceCommerceService
         };
 
     /// <summary>
-    /// Fills missing item photos from a key → URL map (marketplace id / SKU / offer).
-    /// Does not overwrite a URL the adapter already set.
+    /// Fills item photos from a key → URL map (marketplace id / SKU / offer).
+    /// A local catalog thumb wins over a marketplace CDN URL. Does not replace
+    /// an existing <c>/api/files/…</c> URL.
     /// </summary>
     public static void ApplyLocalOrderItemImages(
         IEnumerable<ExternalOrder> orders,
         IReadOnlyDictionary<string, string> imagesByKey)
     {
-        ApplyLocalOrderItemField(orders, imagesByKey, item => item.ImageUrl, (item, value) => item.ImageUrl = value);
+        foreach (var order in orders)
+        {
+            foreach (var item in order.Items)
+            {
+                if (OrderItemImageUrl.IsLocalCabinet(item.ImageUrl))
+                    continue;
+                foreach (var key in ItemImageKeys(item))
+                {
+                    if (imagesByKey.TryGetValue(key, out var value)
+                        && !string.IsNullOrWhiteSpace(value)
+                        && !OrderItemImageUrl.IsEphemeral(value))
+                    {
+                        item.ImageUrl = value;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -290,11 +325,12 @@ public class MarketplaceCommerceService
     }
 
     /// <summary>
-    /// True when the host should resolve a local catalog link (missing product id, photo, or title).
+    /// True when the host should resolve a local catalog link (missing product id,
+    /// missing title, or the photo is not already a cabinet <c>/api/files/…</c> URL).
     /// </summary>
     public static bool NeedsLocalOrderItemLookup(ExternalOrderItem item)
         => item.LocalProductId is not > 0
-           || string.IsNullOrWhiteSpace(item.ImageUrl)
+           || !OrderItemImageUrl.IsLocalCabinet(item.ImageUrl)
            || string.IsNullOrWhiteSpace(item.Name);
 
     private static void ApplyLocalOrderItemField(

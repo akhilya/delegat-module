@@ -134,6 +134,206 @@ public class YandexCommerceMapperTests
     }
 
     [Fact]
+    public void ApplyOfferPictures_FillsFromMediaFilesWhenPicturesEmpty()
+    {
+        const string json = """
+            {
+              "offer": {
+                "offerId": "hat-1",
+                "pictures": [],
+                "mediaFiles": {
+                  "pictures": [
+                    {
+                      "url": "https://avatars.mds.yandex.net/get-mpic/hosted.jpg",
+                      "uploadState": "UPLOADED"
+                    }
+                  ]
+                }
+              }
+            }
+            """;
+        var mapping = JsonSerializer.Deserialize<GetOfferMappingDto>(
+            json,
+            YandexRequestChunking.JsonOptions);
+        var order = new ExternalOrder
+        {
+            Items = [new ExternalOrderItem { OfferId = "hat-1" }]
+        };
+
+        YandexCommerceMapper.ApplyOfferPictures([order], [mapping!]);
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/hosted.jpg",
+            order.Items[0].ImageUrl);
+    }
+
+    [Fact]
+    public void FirstPictureUrl_SkipsPresignedSellerPictures_UsesMediaFiles()
+    {
+        const string json = """
+            {
+              "offerId": "hat-1",
+              "pictures": [
+                "https://storage.example/storage/stores/1/products/854/images/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=x%2F20260729%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260729T122814Z&X-Amz-Expires=7200&X-Amz-SignedHeaders=host&X-Amz-Signature=dead"
+              ],
+              "mediaFiles": {
+                "pictures": [
+                  {
+                    "url": "https://avatars.mds.yandex.net/get-mpic/hosted.jpg",
+                    "uploadState": "UPLOADED"
+                  }
+                ]
+              }
+            }
+            """;
+
+        var offer = JsonSerializer.Deserialize<GetOfferDto>(json, YandexRequestChunking.JsonOptions);
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/hosted.jpg",
+            YandexCommerceMapper.FirstPictureUrl(offer));
+    }
+
+    [Fact]
+    public void ApplyOfferPictures_ReplacesPresignedObjectStorageUrl()
+    {
+        var order = new ExternalOrder
+        {
+            Items =
+            [
+                new ExternalOrderItem
+                {
+                    OfferId = "hat-1",
+                    ImageUrl = "https://storage.example/x.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=dead"
+                }
+            ]
+        };
+
+        YandexCommerceMapper.ApplyOfferPictures(
+            [order],
+            [
+                new GetOfferMappingDto
+                {
+                    Offer = new GetOfferDto
+                    {
+                        OfferId = "hat-1",
+                        Pictures = ["https://avatars.mds.yandex.net/get-mpic/fresh.jpg"]
+                    }
+                }
+            ]);
+
+        Assert.Equal("https://avatars.mds.yandex.net/get-mpic/fresh.jpg", order.Items[0].ImageUrl);
+    }
+
+    [Fact]
+    public void FirstPictureUrl_ReadsMediaFilesFromPartnerJson()
+    {
+        const string json = """
+            {
+              "offerId": "hat-1",
+              "pictures": [],
+              "mediaFiles": {
+                "pictures": [
+                  {
+                    "url": "//avatars.mds.yandex.net/get-mpic/e.jpg",
+                    "uploadState": "UPLOADED"
+                  }
+                ]
+              }
+            }
+            """;
+
+        var offer = JsonSerializer.Deserialize<GetOfferDto>(json, YandexRequestChunking.JsonOptions);
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/e.jpg",
+            YandexCommerceMapper.FirstPictureUrl(offer));
+    }
+
+    [Fact]
+    public void FirstPictureUrl_ReadsOfferPicturesWhenTheyAreObjects()
+    {
+        const string json = """
+            {
+              "offerId": "hat-1",
+              "pictures": [
+                {
+                  "url": "https://avatars.mds.yandex.net/get-mpic/obj.jpg",
+                  "uploadState": "UPLOADED"
+                }
+              ]
+            }
+            """;
+
+        var offer = JsonSerializer.Deserialize<GetOfferDto>(json, YandexRequestChunking.JsonOptions);
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/obj.jpg",
+            YandexCommerceMapper.FirstPictureUrl(offer));
+    }
+
+    [Fact]
+    public void ApplyOfferPictures_MatchesShopSkuWhenOfferIdMissing()
+    {
+        const string json = """
+            {
+              "offer": {
+                "shopSku": "hat-1",
+                "mediaFiles": {
+                  "pictures": [
+                    { "url": "https://avatars.mds.yandex.net/get-mpic/sku.jpg", "uploadState": "UPLOADED" }
+                  ]
+                }
+              }
+            }
+            """;
+        var mapping = JsonSerializer.Deserialize<GetOfferMappingDto>(
+            json,
+            YandexRequestChunking.JsonOptions);
+        var order = new ExternalOrder
+        {
+            Items = [new ExternalOrderItem { OfferId = "hat-1" }]
+        };
+
+        YandexCommerceMapper.ApplyOfferPictures([order], [mapping!]);
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/sku.jpg",
+            order.Items[0].ImageUrl);
+    }
+
+    [Fact]
+    public void OfferMappingsResponse_ReadsRootOfferMappingsWithoutResultEnvelope()
+    {
+        const string json = """
+            {
+              "status": "OK",
+              "offerMappings": [
+                {
+                  "offer": {
+                    "offerId": "hat-1",
+                    "mediaFiles": {
+                      "pictures": [
+                        { "url": "https://avatars.mds.yandex.net/get-mpic/root.jpg", "uploadState": "UPLOADED" }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        var parsed = JsonSerializer.Deserialize<GetOfferMappingsResponse>(
+            json,
+            YandexRequestChunking.JsonOptions);
+        var offer = Assert.Single(parsed!.GetMappings()).Offer;
+
+        Assert.Equal(
+            "https://avatars.mds.yandex.net/get-mpic/root.jpg",
+            YandexCommerceMapper.FirstPictureUrl(offer));
+    }
+
+    [Fact]
     public void ApplyOfferPictures_PrefixesProtocolRelativeUrls()
     {
         var order = new ExternalOrder

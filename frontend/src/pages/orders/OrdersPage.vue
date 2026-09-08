@@ -44,6 +44,9 @@ import {
 } from "@/lib/adapterCapabilities";
 import {
   connectionNavLabel,
+  connectionIdOf,
+  adapterKeyOf,
+  isConnectionActive,
   formatOrderMoney,
   filterOrdersBySearch,
   mergeOrderLists,
@@ -71,9 +74,12 @@ import {
   marketplaceOrderLabelUrl,
   shouldFetchMailboxAfterRouteSync,
   statusesForBucket,
+  storedOrderListPageParams,
+  tabCountsFromPayload,
   writeStoredConnectionId,
   writeStoredMailbox,
 } from "@/lib/ordersUi";
+import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
   displaySonnerError,
@@ -83,13 +89,9 @@ import {
 import { mapActions } from "vuex";
 import {
   Barcode,
-  CheckCircle,
   ClipboardList,
-  MapPin,
-  Package,
   Plug,
   Search,
-  Truck,
   X,
   XCircle,
 } from "lucide-vue-next";
@@ -97,28 +99,6 @@ import {
 const CHANNEL_ALL = "__all__";
 const PAGE_SIZES = [25, 50, 100];
 const DEFAULT_PAGE_SIZE = 50;
-
-const ACTION_ICONS = {
-  confirm: CheckCircle,
-  pack: Package,
-  ship: Truck,
-  deliver: MapPin,
-  complete: CheckCircle,
-  cancel: XCircle,
-};
-
-function connectionIdOf(connection) {
-  return Number(connection?.id ?? connection?.Id ?? 0);
-}
-
-function adapterKeyOf(connection) {
-  return connection?.adapterKey ?? connection?.AdapterKey ?? "";
-}
-
-function isConnectionActive(connection) {
-  const active = connection?.isActive ?? connection?.IsActive;
-  return active !== false;
-}
 
 export default {
   components: {
@@ -150,13 +130,9 @@ export default {
     ContextMenuTrigger,
     LogTableFrame,
     Barcode,
-    CheckCircle,
     ClipboardList,
-    MapPin,
-    Package,
     Plug,
     Search,
-    Truck,
     X,
     XCircle,
   },
@@ -174,7 +150,7 @@ export default {
       orderStatusOf,
       orderStatusLabelKey,
       orderChannelLabelKey,
-      ACTION_ICONS,
+      ACTION_ICONS: ORDER_ACTION_ICONS,
       ACTION_LABEL: ORDER_ACTION_LABEL,
     };
   },
@@ -193,6 +169,7 @@ export default {
       channel: CHANNEL_ALL,
       pageSize: DEFAULT_PAGE_SIZE,
       statusPages: {},
+      mailboxCounts: {},
       fetchGen: 0,
       fetchedConnectionId: null,
       fetchedMailbox: "",
@@ -471,6 +448,10 @@ export default {
       }
     },
 
+    mailboxCount(id) {
+      return Number(this.mailboxCounts?.[id]) || 0;
+    },
+
     onMailboxTab(id) {
       const mailbox = String(id || "");
       if (!mailbox || mailbox === this.bucketId || !this.connectionId) return;
@@ -665,19 +646,15 @@ export default {
       };
       if (append && !prev.hasMore) return prev;
 
-      const params = {
-        status,
+      const params = storedOrderListPageParams({
+        append,
+        page: prev.page,
+        nextCursor: prev.nextCursor,
         pageSize: this.pageSize,
+        status,
         search: this.searchQuery.trim() || undefined,
         channel: this.channel !== CHANNEL_ALL ? this.channel : undefined,
-      };
-      if (append && prev.nextCursor) {
-        params.cursor = prev.nextCursor;
-      } else if (append) {
-        params.page = (prev.page || 1) + 1;
-      } else {
-        params.page = 1;
-      }
+      });
 
       const response = await http.get(
         `/marketplace/connections/${this.connectionId}/orders`,
@@ -685,6 +662,10 @@ export default {
       );
       const data = this.unwrapPage(response);
       const items = Array.isArray(data.items) ? data.items : [];
+      this.mailboxCounts = tabCountsFromPayload(
+        data,
+        this.mailboxes.map((box) => box.id),
+      );
       return {
         items: append ? [...(prev.items || []), ...items] : items,
         page: Number(data.page) || params.page || 1,
@@ -696,6 +677,7 @@ export default {
     async fetchOrders({ append = false, silent = false } = {}) {
       if (!this.connectionId || !this.canListOrders) {
         this.statusPages = {};
+        this.mailboxCounts = {};
         this.selectedIds = [];
         this.isLoading = false;
         this.isLoadingMore = false;
@@ -951,6 +933,10 @@ export default {
         <TabsList>
           <TabsTrigger v-for="box in mailboxes" :key="box.id" :value="box.id">
             {{ $t(box.labelKey) }}
+            <span
+              v-if="mailboxCount(box.id) > 0"
+              class="text-muted-foreground text-xs font-normal tabular-nums"
+            >{{ mailboxCount(box.id) }}</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>
