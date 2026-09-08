@@ -66,7 +66,6 @@ export const PAGE_NOTES = "/notes";
 export const PAGE_ORDERS = "/orders";
 export const PAGE_ORDERS_CONNECTION = "/orders/:connectionId";
 export const PAGE_ORDERS_MAILBOX = "/orders/:connectionId/:bucket";
-export const PAGE_ORDERS_BUCKET = PAGE_ORDERS_MAILBOX;
 export const PAGE_PRODUCT_GROUPS = "/product-groups";
 export const PAGE_PRODUCT_GROUP_CREATE = "/product-groups/create";
 export const PAGE_PRODUCT_GROUP_EDIT = "/product-groups/:id/edit";

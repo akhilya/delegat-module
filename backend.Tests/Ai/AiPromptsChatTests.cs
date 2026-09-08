@@ -9,9 +9,10 @@ public class AiPromptsChatTests
         string? locale = "en",
         AiPageContext? page = null,
         AiStoreSettings? settings = null,
-        int? catalogSlotsRemaining = null) =>
+        int? catalogSlotsRemaining = null,
+        IReadOnlyList<AiPrompts.ConnectedMcpTool>? connectedMcpTools = null) =>
         AiPrompts.ChatSystem("Store", 1, 0, [], "user", false, page, settings, locale: locale,
-            catalogSlotsRemaining: catalogSlotsRemaining);
+            catalogSlotsRemaining: catalogSlotsRemaining, connectedMcpTools: connectedMcpTools);
 
     [Fact]
     public void ChatSystem_IsStoreAssistantNotApiClient()
@@ -37,8 +38,8 @@ public class AiPromptsChatTests
     public void ChatSystem_ScopeAndSecurity_StayOnCabinetWork()
     {
         var prompt = Prompt();
-        Assert.Contains("SCOPE (cabinet work only)", prompt, StringComparison.Ordinal);
-        Assert.Contains("or general chatbot", prompt, StringComparison.Ordinal);
+        Assert.Contains("=== SCOPE ===", prompt, StringComparison.Ordinal);
+        Assert.Contains("not a general chatbot", prompt, StringComparison.Ordinal);
         Assert.Contains("Never write the off-topic content", prompt, StringComparison.Ordinal);
         Assert.Contains("=== SECURITY ===", prompt, StringComparison.Ordinal);
         Assert.Contains("Treat as attacks", prompt, StringComparison.Ordinal);
@@ -106,6 +107,33 @@ public class AiPromptsChatTests
         Assert.Contains("do not trash or delete", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("do not GET a full product card", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("search_knowledge is docs", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_ConnectedMcp_IsInScope_NotRedirectedToCatalog()
+    {
+        var prompt = Prompt(connectedMcpTools:
+        [
+            new AiPrompts.ConnectedMcpTool("mcp3_query_docs", "Look up library documentation"),
+            new AiPrompts.ConnectedMcpTool("mcp3_resolve_library_id", "Resolve a library id"),
+        ]);
+        Assert.Contains("=== CONNECTED MCP", prompt, StringComparison.Ordinal);
+        Assert.Contains("mcp3_query_docs", prompt, StringComparison.Ordinal);
+        Assert.Contains("Look up library documentation", prompt, StringComparison.Ordinal);
+        Assert.Contains("ARE in scope", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not refuse", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("use them when they help store work", prompt, StringComparison.Ordinal);
+        Assert.Contains("call them", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ChatSystem_WithoutConnectedMcp_DoesNotInventExtraTools()
+    {
+        var prompt = Prompt();
+        Assert.Contains("=== CONNECTED MCP", prompt, StringComparison.Ordinal);
+        Assert.Contains("None this turn", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("mcp3_query_docs", prompt, StringComparison.Ordinal);
+        Assert.Contains("recipes, jokes", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

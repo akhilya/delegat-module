@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
+using Delegat.Services.Ai.Agent;
 
 namespace Delegat.Controllers;
 
@@ -16,14 +17,20 @@ public class AiSettingsController : ControllerBase
     private readonly ICurrentUserService _currentUserService;
     private readonly AiModelConfigService _modelService;
     private readonly DataContext _context;
+    private readonly AiMcpServerService _mcpServers;
+    private readonly McpHttpClient _mcpHttp;
 
     public AiSettingsController(
         ICurrentUserService currentUserService,
         AiModelConfigService modelService,
+        AiMcpServerService mcpServers,
+        McpHttpClient mcpHttp,
         DataContext context)
     {
         _currentUserService = currentUserService;
         _modelService = modelService;
+        _mcpServers = mcpServers;
+        _mcpHttp = mcpHttp;
         _context = context;
     }
 
@@ -234,6 +241,106 @@ public class AiSettingsController : ControllerBase
         return Ok();
     }
 
+    [HttpGet("mcp-servers")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> GetMcpServers(CancellationToken ct)
+    {
+        var rows = await _mcpServers.GetAllAsync(ct);
+        return Ok(rows.Select(s => new
+        {
+            s.Id,
+            s.name,
+            s.url,
+            s.isEnabled,
+            s.createdAt,
+            hasApiKey = !string.IsNullOrEmpty(s.apiKeyEncrypted),
+        }));
+    }
+
+    [HttpPost("mcp-servers")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> CreateMcpServer([FromBody] SaveAiMcpServerRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.Url))
+            return BadRequest("name and url are required");
+        if (!UrlSafety.TryValidateHttpUrl(req.Url, out _, out var urlError, allowPrivateHosts: true))
+            return BadRequest($"url: {urlError}");
+        try
+        {
+            var row = await _mcpServers.CreateAsync(req.Name, req.Url, req.ApiKey, ct);
+            return Ok(new { row.Id, row.name, row.url, row.isEnabled });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("mcp-servers/{id:int}")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> UpdateMcpServer(int id, [FromBody] SaveAiMcpServerRequest req, CancellationToken ct)
+    {
+        var row = await _mcpServers.GetByIdAsync(id, ct);
+        if (row == null) return NotFound();
+        if (req.Url != null && !UrlSafety.TryValidateHttpUrl(req.Url, out _, out var urlError, allowPrivateHosts: true))
+            return BadRequest($"url: {urlError}");
+        try
+        {
+            await _mcpServers.UpdateAsync(row, req.Name, req.Url, req.ApiKey, ct);
+            return Ok(new { row.Id, row.name });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpDelete("mcp-servers/{id:int}")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> DeleteMcpServer(int id, CancellationToken ct)
+    {
+        var row = await _mcpServers.GetByIdAsync(id, ct);
+        if (row == null) return NotFound();
+        await _mcpServers.DeleteAsync(row, ct);
+        return Ok();
+    }
+
+    [HttpPost("mcp-servers/{id:int}/toggle-enabled")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> ToggleMcpServerEnabled(int id, CancellationToken ct)
+    {
+        var row = await _mcpServers.GetByIdAsync(id, ct);
+        if (row == null) return NotFound();
+        await _mcpServers.ToggleEnabledAsync(id, ct);
+        return Ok();
+    }
+
+    [HttpPost("mcp-servers/{id:int}/test")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public async Task<IActionResult> TestMcpServer(int id, CancellationToken ct)
+    {
+        var row = await _mcpServers.GetByIdAsync(id, ct);
+        if (row == null) return NotFound();
+        try
+        {
+            var tools = await _mcpHttp.ListToolsAsync(row.Id, row.url, _mcpServers.DecryptApiKey(row), ct);
+            return Ok(new
+            {
+                success = true,
+                message = tools.Count == 1 ? "1 tool" : $"{tools.Count} tools",
+                toolCount = tools.Count,
+            });
+        }
+        catch (Exception ex)
+        {
+            return Ok(new { success = false, message = ex.Message, toolCount = 0 });
+        }
+    }
+
     private static string MaskKey(string encrypted)
     {
         if (string.IsNullOrEmpty(encrypted)) return "";
@@ -294,4 +401,11 @@ public class DiscoverModelsRequest
         }
         return AiModelProvider.OpenAiCompatible;
     }
+}
+
+public class SaveAiMcpServerRequest
+{
+    public string Name { get; set; } = "";
+    public string Url { get; set; } = "";
+    public string? ApiKey { get; set; }
 }

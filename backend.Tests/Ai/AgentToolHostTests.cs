@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Delegat.Services;
+using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
@@ -15,6 +16,21 @@ namespace Delegat.Tests;
 
 public class AgentToolHostTests
 {
+    [Fact]
+    public async Task DispatchAsync_McpPrefixedTool_UsesGateway()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var mcp = new FakeMcpGateway();
+        var host = CreateHost(db, mcp: mcp);
+
+        var (result, summary) = await host.DispatchAsync("mcp4_get_weather", """{"location":"NYC"}""", 1, 1, default);
+
+        Assert.Equal("mcp4_get_weather", mcp.LastName);
+        Assert.Contains("NYC", mcp.LastInput);
+        Assert.Contains("ok", JsonSerializer.Serialize(result));
+        Assert.Equal("weather", summary);
+    }
+
     [Fact]
     public async Task DispatchAsync_UnknownTool_ReturnsError()
     {
@@ -318,7 +334,8 @@ public class AgentToolHostTests
         IHttpClientFactory? http = null,
         IStorageService? storage = null,
         ICabinetRequestInvoker? invoker = null,
-        IPermissionService? permissions = null)
+        IPermissionService? permissions = null,
+        IMcpToolGateway? mcp = null)
     {
         storage ??= new FakeStorage();
         var catalog = new CatalogSearchService(db);
@@ -337,7 +354,22 @@ public class AgentToolHostTests
             catalog, sql, knowledge, platform, python,
             permissions ?? new GrantAllPermissions(),
             db,
-            NullLogger<AgentToolHost>.Instance);
+            NullLogger<AgentToolHost>.Instance,
+            mcp);
+    }
+
+    private sealed class FakeMcpGateway : IMcpToolGateway
+    {
+        public string? LastName { get; private set; }
+        public string? LastInput { get; private set; }
+        public Task<IReadOnlyList<AiTool>> ListToolsAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<AiTool>>([]);
+        public Task<(object result, string summary)> CallAsync(string llmName, string inputJson, CancellationToken ct)
+        {
+            LastName = llmName;
+            LastInput = inputJson;
+            return Task.FromResult<(object, string)>((new { ok = true }, "weather"));
+        }
     }
 
     private sealed class QuotaInvoker : ICabinetRequestInvoker

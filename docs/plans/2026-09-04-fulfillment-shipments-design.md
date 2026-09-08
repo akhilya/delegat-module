@@ -47,7 +47,7 @@ Pack still creates a supply when `extra.supplyId` is omitted (Public API callers
 
 ## Host HTTP
 
-JWT [`MarketplaceCommerceController`](../../backend/Controllers/MarketplaceCommerceController.cs) and Public API [`PublicMarketplaceCommerceController`](../../backend/Controllers/PublicApi/PublicMarketplaceCommerceController.cs), permission `marketplace.manage`:
+JWT [`MarketplaceCommerceController`](../../backend/Controllers/MarketplaceCommerceController.cs) and Public API [`PublicMarketplaceCommerceController`](../../backend/Controllers/PublicApi/PublicMarketplaceCommerceController.cs), permission `orders.manage`:
 
 - `GET …/fulfillment/locations?kind=`
 - `GET/POST …/shipments`

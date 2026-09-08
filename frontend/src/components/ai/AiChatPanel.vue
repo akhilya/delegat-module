@@ -16,9 +16,7 @@ import {
   ChevronLeft,
   History,
   MessageSquare,
-  FolderOpen,
   Files,
-  FileText,
 } from "lucide-vue-next";
 import AiPlanCard from "./AiPlanCard.vue";
 import AiChatProcess from "./AiChatProcess.vue";
@@ -72,12 +70,6 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
 import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
@@ -108,7 +100,6 @@ const {
 loadMemberships();
 const messagesEl = ref(null);
 const inputEl = ref(null);
-const folderInputEl = ref(null);
 const filesInputEl = ref(null);
 const inputText = ref("");
 const isAtBottom = ref(true);
@@ -397,21 +388,8 @@ function onChatAsk(prompt) {
   store.dispatch("aiChat/sendMessage", prompt);
 }
 
-function pickFolder() {
-  folderInputEl.value?.click();
-}
-
 function pickFiles() {
   filesInputEl.value?.click();
-}
-
-function onFolderPicked(e) {
-  const extra = filesFromDirectoryInput(e.target?.files);
-  store.commit(
-    "aiChat/setAttachedFiles",
-    mergeAttachedFiles(attachedFiles.value, extra),
-  );
-  e.target.value = "";
 }
 
 function onFilesPicked(e) {
@@ -947,15 +925,6 @@ function isLatestTurn(msg) {
           multiple
           @change="onFilesPicked"
         />
-        <input
-          ref="folderInputEl"
-          type="file"
-          class="hidden"
-          webkitdirectory
-          directory
-          multiple
-          @change="onFolderPicked"
-        />
         <Transition name="ai-fade">
           <AiChatAttachmentList
             v-if="attachedCount"
@@ -981,30 +950,18 @@ function isLatestTurn(msg) {
           />
           <InputGroupAddon align="block-end" class="justify-between">
             <div class="flex min-w-0 items-center gap-1">
-              <DropdownMenu v-if="canAttach">
-                <DropdownMenuTrigger as-child>
-                  <InputGroupButton
-                    variant="ghost"
-                    size="icon-sm"
-                    class="rounded-full"
-                    :disabled="isLoading || !hasEnabledModels"
-                    :title="t('ai.attach')"
-                    :aria-label="t('ai.attach')"
-                  >
-                    <Files class="size-4" />
-                  </InputGroupButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top">
-                  <DropdownMenuItem @select="pickFiles">
-                    <FileText class="size-4" />
-                    {{ t("ai.attachFiles") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @select="pickFolder">
-                    <FolderOpen class="size-4" />
-                    {{ t("ai.attachFolder") }}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <InputGroupButton
+                v-if="canAttach"
+                variant="ghost"
+                size="icon-sm"
+                class="rounded-full"
+                :disabled="isLoading || !hasEnabledModels"
+                :title="t('ai.attach')"
+                :aria-label="t('ai.attach')"
+                @click="pickFiles"
+              >
+                <Files class="size-4" />
+              </InputGroupButton>
               <Select
                 v-if="enabledModels.length"
                 :model-value="effectiveModelId"

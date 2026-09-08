@@ -110,6 +110,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<AiSandboxRun> aiSandboxRuns { get; set; }
     public DbSet<AiAgentAudit> aiAgentAudits { get; set; }
     public DbSet<AiChatAttachment> aiChatAttachments { get; set; }
+    public DbSet<AiMcpServer> aiMcpServers { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
@@ -529,6 +530,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(a => new { a.storeId, a.createdAt });
         builder.Entity<AiChatAttachment>()
             .HasIndex(a => new { a.storeId, a.userId, a.sessionId });
+        builder.Entity<AiMcpServer>()
+            .HasIndex(s => s.isEnabled);
 
         // StoreBrandingSettings - one row per store
         builder.Entity<StoreBrandingSettings>()

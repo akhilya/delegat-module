@@ -74,4 +74,4 @@ Do not snapshot 84 tool shapes. Prefer Operations / service-level undo where it 
 
 ## EF
 
-New tables only via `dotnet ef migrations add`: `aiKnowledgeChunks`, `aiSandboxRuns`, `aiAgentAudits`, `aiChatAttachments`.
+New tables only via `dotnet ef migrations add`: `aiKnowledgeChunks`, `aiSandboxRuns`, `aiAgentAudits`, `aiChatAttachments`, `aiMcpServers`.

@@ -26,6 +26,9 @@ public class AiTool
     public string name { get; set; } = null!;
     public string? description { get; set; }
     public AiToolInputSchema input_schema { get; set; } = null!;
+
+    [JsonIgnore]
+    public string? McpRemoteName { get; set; }
 }
 
 public class AiToolInputSchema

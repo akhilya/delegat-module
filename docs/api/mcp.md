@@ -1,10 +1,14 @@
 # Operator MCP and Agent HTTP
 
-Machine surface for the cabinet AI agent and external clients (Cursor, Claude Desktop). **Not** partner Public API v1.
+Machine surface for the cabinet AI agent and external MCP clients. **Not** partner Public API v1.
 
 Gated by `AI_ENABLED` (process start). Independent of `API_USAGE_ENABLED` and the admin Public API toggle.
 
 Implementation is **stateless JSON-RPC over HTTP** (`POST /api/mcp`). Same tool host as the in-app agent (in-process, no self-HTTP). Do not commit `.mcp.json`.
+
+## Cabinet as MCP client
+
+Settings → AI can store HTTP MCP servers (`aiMcpServers`, optional bearer key). The cabinet assistant lists `tools/list` and calls them as `mcp{id}_{tool}`. That is **not** this operator surface: extra servers do not appear on `POST /api/mcp`. The same page can mint a Public API key and show a single `mcp.json` for `POST /api/mcp`.
 
 ## Base URLs
 
@@ -58,14 +62,17 @@ Resources:
 
 Upload is multipart (`files`). Same quotas as the cabinet (`MAX_FILES`, `MAX_STORAGE_GB`).
 
-## Cursor (local only)
+## Client config
 
-Do **not** commit `.mcp.json`. Example client config:
+Do **not** commit `mcp.json` with a real `dk_…` key.
+
+Standard Streamable HTTP entry (`type` is `http`):
 
 ```json
 {
   "mcpServers": {
     "delegat": {
+      "type": "http",
       "url": "https://YOUR_INSTANCE/api/mcp",
       "headers": {
         "Authorization": "Bearer dk_YOUR_KEY",
@@ -75,6 +82,8 @@ Do **not** commit `.mcp.json`. Example client config:
   }
 }
 ```
+
+Settings → AI mints a key named `MCP` and shows this JSON for the current origin and selected store. Local Vite (`:5173`) is the SPA; the MCP URL uses the API origin (`:5000` when the SPA is on the Vite port).
 
 Pair with a filesystem MCP on the same machine to match a local product-files folder, then `PUT` bytes via Agent HTTP (not through the model).
 

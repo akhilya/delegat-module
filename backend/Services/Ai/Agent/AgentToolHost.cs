@@ -19,6 +19,7 @@ public sealed class AgentToolHost
     private readonly IPermissionService _permissions;
     private readonly DataContext _db;
     private readonly ILogger<AgentToolHost> _logger;
+    private readonly IMcpToolGateway? _mcp;
 
     public AgentToolHost(
         CatalogSearchService catalog,
@@ -28,7 +29,8 @@ public sealed class AgentToolHost
         PythonSandboxClient python,
         IPermissionService permissions,
         DataContext db,
-        ILogger<AgentToolHost> logger)
+        ILogger<AgentToolHost> logger,
+        IMcpToolGateway? mcp = null)
     {
         _catalog = catalog;
         _sql = sql;
@@ -38,6 +40,7 @@ public sealed class AgentToolHost
         _permissions = permissions;
         _db = db;
         _logger = logger;
+        _mcp = mcp;
     }
 
     public async Task<(object result, string summary)> DispatchAsync(
@@ -52,17 +55,29 @@ public sealed class AgentToolHost
 
         try
         {
-            var (result, summary) = toolName switch
+            object result;
+            string summary;
+            if (McpToolNames.TryParse(toolName, out _, out _))
             {
-                "search_knowledge" => await SearchKnowledgeAsync(inputJson, ct),
-                "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
-                "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
-                "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
-                "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
-                "match_files" => await MatchFilesAsync(inputJson, storeId, ct),
-                "navigate_to" => NavigateTo(inputJson),
-                _ => ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}"),
-            };
+                if (_mcp == null)
+                    (result, summary) = ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}");
+                else
+                    (result, summary) = await _mcp.CallAsync(toolName, inputJson, ct);
+            }
+            else
+            {
+                (result, summary) = toolName switch
+                {
+                    "search_knowledge" => await SearchKnowledgeAsync(inputJson, ct),
+                    "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
+                    "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
+                    "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
+                    "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
+                    "match_files" => await MatchFilesAsync(inputJson, storeId, ct),
+                    "navigate_to" => NavigateTo(inputJson),
+                    _ => ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}"),
+                };
+            }
 
             _db.aiAgentAudits.Add(new AiAgentAudit
             {

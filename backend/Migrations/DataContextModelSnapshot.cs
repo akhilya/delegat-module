@@ -225,6 +225,40 @@ namespace Delegat.Migrations
                     b.ToTable("aiKnowledgeChunks");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Ai.AiMcpServer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("apiKeyEncrypted")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("isEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("isEnabled");
+
+                    b.ToTable("aiMcpServers");
+                });
+
             modelBuilder.Entity("Delegat.Models.Ai.AiModelConfig", b =>
                 {
                     b.Property<int>("Id")

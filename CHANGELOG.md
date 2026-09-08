@@ -12,10 +12,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Added
 
 - Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab
-- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and Cursor: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
+- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and external MCP clients: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
 - Cabinet assistant: category and store attributes (list/create), product `attributeValues` merge, `GET /products?categoryId=`, SQL on attribute tables plus `IN (...)` and `description`
 - Cabinet assistant: execution timeline interleaves thinking with each tool step instead of stacking tools above a single merged paragraph
-- Cabinet AI: attach files or a folder in chat. Bytes stay downloadable for 24 hours, then they are purged (names stay on the thread). The assistant decides what to do (including putting them on products) with the usual tools after you confirm a plan
+- Cabinet AI: attach files in chat (not folders). Bytes stay downloadable for 24 hours, then they are purged (names stay on the thread). The assistant decides what to do (including putting them on products) with the usual tools after you confirm a plan
+- Settings → AI: Connect mints a Public API key and shows one `mcp.json` for this instance’s operator MCP (`POST /api/mcp`). Distinct from HTTP MCP servers the cabinet assistant calls.
+- Settings → AI: add HTTP MCP servers (URL + optional bearer key). The cabinet assistant lists their tools and can call them in chat. Not the instance operator MCP (`POST /api/mcp`).
 - Knowledge corpus for the assistant (docs / MEMORY / PRODUCT / DESIGN), reindexed when the API starts. Optional Python sidecar (`SANDBOX_URL`) with pandas, Pillow, and openpyxl
 - Cabinet Orders: `/orders` has four all-marketplace tabs (To pack, Being packed, In delivery, Delivered). Connection mailboxes stay in the sidebar. Listed orders are stored snapshots; lists read that snapshot
 - Public API `GET …/orders` reads stored snapshots (`syncedAt`); status POST still hits the marketplace then upserts. Labels and shipments stay live
@@ -46,13 +48,14 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Cabinet assistant uses MCP servers enabled in Settings → AI for the job those tools describe (library docs, etc.). Still refuses jokes, recipes, homework, and jailbreaks; does not redirect that work to the catalog.
 - Catalog (and other) product thumbs load inside the cell spinner; the products table paints as soon as `/products` returns and does not wait for photos to decode
 - Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
 - Public API and cabinet product create/patch: characteristic `value` accepts JSON numbers, booleans, and arrays and stores them as text (same as the product form strings)
 - Cabinet assistant remaining catalog slots are in the chat context. At the cap it must not trash an existing product to free a slot. A confirmed plan that returns HTTP 4xx/5xx is a failure; if earlier steps already applied, the reply says so (including trash) instead of “nothing changed”. Oversized product cards are slimmed instead of dropped
 - Cabinet assistant `platform_request` calls the same cabinet JSON API as the SPA (permissions, store, quotas). Secrets, user admin, plugins, and irreversible actions (delete a store, permanent product delete) stay blocked. Product characteristics PATCH replaces `attributeValues` like the product form
 - Python sandbox Compose service starts only when AI is on (profile `ai`). `pnpm dev` follows `AI_ENABLED`; self-host `docker compose --profile ai` when the assistant is enabled
-- Cabinet assistant stays on store work: jokes, recipes, homework, general coding, and jailbreak/secret dumps are refused (mixed requests still answer the catalog part). Replies, plans, and thoughts stay in catalog language (products, characteristics, connections) and do not name SQL, HTTP, or tools
+- Cabinet assistant stays on store work: jokes, recipes, homework, and jailbreak/secret dumps are refused. Operator-enabled MCP tools (Settings → AI) are in scope for the job they describe. Replies, plans, and thoughts stay in catalog language (products, characteristics, connections) and do not name SQL, HTTP, or internal tool ids
 - Cabinet AI companion sheet fades as it slides; the latest turn, plan, and chat/history switch ease in (no thread stagger). After a turn, tool activity is a one-line disclosure; open it for thoughts, compact steps, and Python (script and output stay collapsed)
 - Cabinet assistant offers navigation as buttons on the reply (open a page and/or send a follow-up). It is prompted to put those buttons on the reply instead of only describing the path
 - Cabinet AI chat uses Apple inset chrome: history is Mail-style (title, count, date on the right). Replies strip emoji so Settings → Emoji: Don't use is visible in the thread

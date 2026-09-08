@@ -9,6 +9,9 @@ public static class AiServiceCollectionExtensions
     {
         services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient(nameof(PythonSandboxClient), c => c.Timeout = TimeSpan.FromMinutes(2));
+        services.AddHttpClient<McpHttpClient>(c => c.Timeout = TimeSpan.FromSeconds(45));
+        services.AddScoped<AiMcpServerService>();
+        services.AddScoped<IMcpToolGateway, McpToolGateway>();
         services.AddScoped<AiModelConfigService>();
         services.AddSingleton<AiLiveTurnHub>();
         services.AddScoped<AiChatService>();

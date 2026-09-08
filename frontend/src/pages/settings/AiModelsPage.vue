@@ -2,6 +2,8 @@
 import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
+import AiMcpServersPanel from "@/components/settings/AiMcpServersPanel.vue";
+import OperatorMcpConnectPanel from "@/components/settings/OperatorMcpConnectPanel.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
@@ -65,6 +67,8 @@ export default {
     Spinner,
     PageSection,
     SettingsFormField,
+    AiMcpServersPanel,
+    OperatorMcpConnectPanel,
     FieldGroup,
     Button,
     Input,
@@ -459,7 +463,7 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
     <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
       <Button variant="outline" @click="openPersonalSettings">
         <SlidersHorizontal class="mr-2 size-4" />
@@ -472,6 +476,7 @@ export default {
     </div>
 
     <PageSection
+      class="!flex-none"
       :loading="isLoading"
       :empty="!isLoading && models.length === 0"
       :empty-icon="Bot"
@@ -582,6 +587,10 @@ export default {
         </Table>
       </div>
     </PageSection>
+
+    <OperatorMcpConnectPanel class="mt-8" />
+
+    <AiMcpServersPanel class="mt-8" />
 
     <AlertDialog
       :open="confirmDialog.open"

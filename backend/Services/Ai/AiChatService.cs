@@ -21,6 +21,7 @@ public class AiChatService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly QuotaService _quota;
     private readonly ILogger<AiChatService> _logger;
+    private readonly IMcpToolGateway _mcpTools;
 
     private string ResolveLocale()
     {
@@ -49,7 +50,8 @@ public class AiChatService
         AgentToolHost toolHost,
         IHttpContextAccessor httpContextAccessor,
         QuotaService quota,
-        ILogger<AiChatService> logger)
+        ILogger<AiChatService> logger,
+        IMcpToolGateway mcpTools)
     {
         _modelService = modelService;
         _apiClient = apiClient;
@@ -58,6 +60,7 @@ public class AiChatService
         _httpContextAccessor = httpContextAccessor;
         _quota = quota;
         _logger = logger;
+        _mcpTools = mcpTools;
     }
 
     public async IAsyncEnumerable<string> StreamChatAsync(
@@ -103,13 +106,24 @@ public class AiChatService
                 .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
             var catalogSlotsRemaining = await _quota.GetRemainingProductSlotsAsync(storeId);
 
+            var extraMcp = new List<AiTool>();
+            try
+            {
+                extraMcp.AddRange(await _mcpTools.ListToolsAsync(ct));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Listing connected MCP tools failed");
+            }
+
             var systemPrompt = AiPrompts.ChatSystem(
                 storeName, storeId, productCount, connections
                     .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
                     .ToList(),
                 currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false,
                 pageContext, storeSettings, storeInfo?.timezone, localeCode,
-                catalogSlotsRemaining);
+                catalogSlotsRemaining,
+                AiPrompts.ConnectedMcpFromAiTools(extraMcp));
 
             var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))
@@ -127,6 +141,7 @@ public class AiChatService
             }
 
             var tools = AgentToolCatalog.Build();
+            tools.AddRange(extraMcp);
             var autoContinued = false;
 
             for (var iteration = 0; iteration < 20; iteration++)

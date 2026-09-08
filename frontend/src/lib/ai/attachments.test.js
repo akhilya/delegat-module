@@ -26,6 +26,20 @@ describe("ai attachments", () => {
     );
   });
 
+  it("uses the file name when the picker did not supply a folder path", () => {
+    const files = filesFromDirectoryInput([
+      { name: "SKU-HELLO.jpg", size: 40 },
+    ]);
+    assert.deepEqual(files, [
+      {
+        relativePath: "SKU-HELLO.jpg",
+        fileName: "SKU-HELLO.jpg",
+        size: 40,
+        file: { name: "SKU-HELLO.jpg", size: 40 },
+      },
+    ]);
+  });
+
   it("caps the manifest size", () => {
     const many = Array.from({ length: MAX_FOLDER_FILES + 20 }, (_, i) =>
       fakeFile(`f${i}.jpg`, `f${i}.jpg`),

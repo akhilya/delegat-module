@@ -125,5 +125,39 @@ export default {
         .then((r) => onSuccess(r))
         .catch((e) => onError(e));
     },
+
+    async getMcpServers(ctx, { onSuccess, onError }) {
+      return await useAxios("/ai/mcp-servers", { method: "GET", cache: false }, http, { immediate: true })
+        .then((r) => onSuccess(r))
+        .catch((e) => onError(e));
+    },
+
+    async createMcpServer(ctx, { data, onSuccess, onError }) {
+      return await useAxios("/ai/mcp-servers", { method: "POST", data }, http, { immediate: true })
+        .then((r) => onSuccess(r))
+        .catch((e) => onError(e));
+    },
+
+    async updateMcpServer(ctx, { id, data, onSuccess, onError }) {
+      return await useAxios(`/ai/mcp-servers/${id}`, { method: "PUT", data }, http, { immediate: true })
+        .then((r) => onSuccess(r))
+        .catch((e) => onError(e));
+    },
+
+    async deleteMcpServer(ctx, { id, onSuccess, onError }) {
+      return await useAxios(`/ai/mcp-servers/${id}`, { method: "DELETE" }, http, { immediate: true })
+        .then((r) => onSuccess(r))
+        .catch((e) => onError(e));
+    },
+
+    async toggleMcpServerEnabled(ctx, { id }) {
+      return await useAxios(`/ai/mcp-servers/${id}/toggle-enabled`, { method: "POST" }, http, { immediate: true });
+    },
+
+    async testMcpServer(ctx, { id, onSuccess, onError }) {
+      return await useAxios(`/ai/mcp-servers/${id}/test`, { method: "POST" }, http, { immediate: true })
+        .then((r) => onSuccess(r))
+        .catch((e) => onError(e));
+    },
   },
 };

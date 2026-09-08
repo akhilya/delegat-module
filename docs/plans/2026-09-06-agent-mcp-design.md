@@ -52,7 +52,7 @@ Sidecar (`sandbox/python`). Curated packages: pandas, pillow, openpyxl. No `pip 
 ## Local files (north-star)
 
 - **Cursor:** filesystem MCP on the PC + instance MCP (`search_catalog` / `match_files` / SQL → Agent HTTP upload).
-- **UI agent:** file or folder picker in the companion sheet; bytes stage on the server (`aiChatAttachments`, MinIO `__ai-chat-attach/`) for 24 hours, then purge. The assistant chooses what to do. Product photos go through `platform_request POST /products/{id}/files` `{ attachmentIds }` after confirm — not a dedicated browser upload step. The sandbox never sees `C:\Users\...`.
+- **UI agent:** multi-file picker in the companion sheet (files only, no folder); bytes stage on the server (`aiChatAttachments`, MinIO `__ai-chat-attach/`) for 24 hours, then purge. The assistant chooses what to do. Product photos go through `platform_request POST /products/{id}/files` `{ attachmentIds }` after confirm — not a dedicated browser upload step. The sandbox never sees `C:\Users\...`.
 
 ## UI
 
@@ -62,8 +62,12 @@ Keep the companion inset sheet (no overlay). Stream thinking as today (`text` / 
 
 ## EF
 
-New tables via `dotnet ef migrations add` only: `aiKnowledgeChunks`, `aiSandboxRuns`, `aiAgentAudits`, `aiChatAttachments`.
+New tables via `dotnet ef migrations add` only: `aiKnowledgeChunks`, `aiSandboxRuns`, `aiAgentAudits`, `aiChatAttachments`, `aiMcpServers`.
 
 ## Amendment (2026-09-06): cabinet controllers, not a second CRUD layer
 
 `platform_request` is still one thin tool (`method + path + json`). It must not grow a handwritten handler switch. The host invokes the same JWT cabinet controllers as the SPA (in-process nested pipeline, store cookie, CSRF header, permission hydration). A denylist blocks secrets (connection credential writes, API keys, auth, users, plugins, AI model keys), `/api/ai` / `/api/agent` / `/api/mcp` / `/api/v1`, dump/trim, delete-store, and permanent product delete. PATCH `attributeValues` follows the product form (replace, not merge). MCP `dk_…` is minted into a short-lived JWT because those controllers are JWT-only.
+
+## Amendment (2026-09-08): cabinet as MCP client
+
+Settings → AI stores Streamable HTTP MCP servers (`aiMcpServers`, optional bearer). The cabinet chat loop lists `tools/list` and calls them as `mcp{id}_{sanitized}` (max 20 servers, 32 tools each). Those tools are in the chat **scope** for the job they describe (not “catalog only”). That is not operator `POST /api/mcp` — extra tools are not advertised there. No stdio (the API runs in Docker).
