@@ -6,6 +6,9 @@ settings:
 
 overrides:
   nanoid@^3.0.0: 3.3.18
+  js-yaml: 4.3.2
+  decode-uri-component: 0.5.0
+  '@humanfs/node': 0.16.8
 
 importers:
 
@@ -20,9 +23,15 @@ importers:
       '@hugeicons/vue':
         specifier: ^1.0.7
         version: 1.0.7(vue@3.5.41)
+      '@lucide/vue':
+        specifier: ^1.43.0
+        version: 1.43.0(vue@3.5.41)
       '@microsoft/signalr':
         specifier: ^10.0.0
         version: 10.0.11
+      '@mingcute/vue':
+        specifier: ^3.0.2
+        version: 3.0.2(vue@3.5.41)
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0
@@ -84,8 +93,8 @@ importers:
         specifier: ^1.5.4
         version: 1.5.4
       reka-ui:
-        specifier: ^2.10.1
-        version: 2.10.1(vue@3.5.41)
+        specifier: ^2.10.4
+        version: 2.10.4(vue@3.5.41)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -451,8 +460,21 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@lucide/vue@1.43.0':
+    resolution: {integrity: sha512-Asq2HozXp4s7JxQVTVVeMo6WINVsJr477uNOafM3Qft1K1aDbbgkVuCP3X37UZXcVB4rEGXaIM//04Ndi2GJfQ==}
+    peerDependencies:
+      vue: '>=3.0.1'
+
   '@microsoft/signalr@10.0.11':
     resolution: {integrity: sha512-FulOJ2EEtKvLQcswe/U7v8pzyXyk7Jua5xgWJPPwyQU/2Z9ORvKcVjyO75VvLsem+CJ1ORRexJ+7Bz1FCei2aw==}
+
+  '@mingcute/icons@3.0.2':
+    resolution: {integrity: sha512-NuDZuZy0B/MmrdoVVOodOURS1qPqgcdSHFPKSG9gPEF6/dr0+zm5pfJs0U7Yta5jjoCdX0WZcVbZOov2tMMPTA==}
+
+  '@mingcute/vue@3.0.2':
+    resolution: {integrity: sha512-4OIdY5qMvyXV0NmVDzY+xtPNe2LSLWrUdVtCv/XoWolb7xn1D1t7XjRp5Wo46d7z1LCotutJMMfY07faStPQmA==}
+    peerDependencies:
+      vue: ^3.5.0
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -1170,6 +1192,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -1385,8 +1408,8 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
-  js-yaml@4.3.1:
-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
   jsbarcode@3.12.3:
@@ -1665,8 +1688,8 @@ packages:
   readable-stream@2.3.8:
     resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
 
-  reka-ui@2.10.1:
-    resolution: {integrity: sha512-drcOQ4rQtDYAcGCsyQBqQg8QQ+H3B+zDaMJU0h8KPEPMa7g9BHu3zcOi4OB39XJSWizceFoNO0Z9tctSGLOXqg==}
+  reka-ui@2.10.4:
+    resolution: {integrity: sha512-kbS5GAbkHkYj0EVKAg5ZPEPndhBjeUFSa1Aq5m5ftQwyHnB1v5tw8X6fcwfKH/ry3StPXblMWM1DW82MVS71cw==}
     peerDependencies:
       vue: '>= 3.4.0'
 
@@ -2100,7 +2123,7 @@ snapshots:
       globals: 14.0.0
       ignore: 5.3.2
       import-fresh: 3.3.1
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       minimatch: 3.1.5
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
@@ -2202,6 +2225,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@lucide/vue@1.43.0(vue@3.5.41)':
+    dependencies:
+      vue: 3.5.41
+
   '@microsoft/signalr@10.0.11':
     dependencies:
       abort-controller: 3.0.0
@@ -2213,6 +2240,13 @@ snapshots:
       - bufferutil
       - encoding
       - utf-8-validate
+
+  '@mingcute/icons@3.0.2': {}
+
+  '@mingcute/vue@3.0.2(vue@3.5.41)':
+    dependencies:
+      '@mingcute/icons': 3.0.2
+      vue: 3.5.41
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
@@ -3068,7 +3102,7 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  js-yaml@4.3.1:
+  js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 
@@ -3301,7 +3335,7 @@ snapshots:
       string_decoder: 1.1.1
       util-deprecate: 1.0.2
 
-  reka-ui@2.10.1(vue@3.5.41):
+  reka-ui@2.10.4(vue@3.5.41):
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@floating-ui/vue': 1.1.11(vue@3.5.41)
