@@ -50,6 +50,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Pin GitHub Dependabot patches: sandbox Pillow 12.3.0; frontend nested `js-yaml` 4.3.2, `decode-uri-component` 0.5.0, and `@humanfs/node` 0.16.8
 - Sidebar group for products, groups, trash, categories, barcodes, and notes is **Каталог** / Catalog. The products page stays **Товары** / Products.
 - Adapter connection Products tab fills the pane like catalog products (`table-scroll` XY scroller, sticky `bg-background` headers). Ids/SKU are plain mono, not muted chips. Status chips stay outline (Synced uses success-muted, unlinked is muted caption) instead of inverted primary or muddy secondary fills.
 - Tabs: in dark the selected pill is muted on a quiet muted well. The old shadcn `input/30` overlay matched `--muted` here and disappeared; the track is no longer a solid muted slab.
