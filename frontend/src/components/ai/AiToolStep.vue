@@ -8,6 +8,7 @@ import {
   Database,
   ExternalLink,
   Files,
+  KeyRound,
   Search,
 } from "lucide-vue-next";
 import AiRunStatus from "./AiRunStatus.vue";
@@ -32,6 +33,7 @@ const ICONS = {
   search_knowledge: BookOpen,
   match_files: Files,
   navigate_to: ExternalLink,
+  ask_form: KeyRound,
   propose_plan: ClipboardList,
 };
 

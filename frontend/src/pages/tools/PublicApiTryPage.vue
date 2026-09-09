@@ -10,7 +10,7 @@ import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { LogCodeBlock, LogStatusBadge } from "@/components/logs";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { loadMe } from "@/main";
-import { PAGE_ADMIN_API, PAGE_TOOLS } from "@/router";
+import { PAGE_ADMIN_API } from "@/router";
 import { Play } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import {
@@ -55,12 +55,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [
-        { label: this.$t("pages.toolsPage.breadcrumb"), to: PAGE_TOOLS },
-        { label: this.$t("pages.publicApiTry.breadcrumb") },
-      ];
-    },
     isCustom() {
       return this.endpointId === PUBLIC_API_TRY_CUSTOM_ID;
     },
@@ -125,7 +119,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
 
     <div v-else class="page-region-in flex w-full max-w-3xl flex-col">

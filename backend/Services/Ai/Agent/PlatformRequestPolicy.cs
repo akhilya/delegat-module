@@ -17,7 +17,7 @@ public static class PlatformRequestPolicy
         Lists are paged: startIndex, pageSize (not a fake stats endpoint). Search products with searchQuery.
 
         Catalog: GET/POST /products  GET/PATCH/DELETE /products/{id}  POST /products/{id}/restore
-          GET /products/trash  POST /products/bulk  PATCH /products/{id}/group
+          GET /products/trash  GET /products/trash/count  POST /products/bulk  PATCH /products/{id}/group
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
           GET /products/{id}/files  PUT /products/{id}/files is multipart (Agent HTTP, not JSON)
           GET/POST /categories  GET/PATCH /categories/{id}
@@ -30,9 +30,26 @@ public static class PlatformRequestPolicy
           shipments, boxes, promotions, prices on that connection (same as the order sheet)
 
         Marketplace (no secrets): GET /marketplace/connections  GET …/connections/{id}
-          GET …/capabilities  GET …/limits  GET …/mappings  GET …/graph
-          GET /marketplace/adapters  POST /tools/{id}/run  catalog-scrape search/apply
+          GET …/capabilities  GET …/limits  GET …/mappings
+          GET/PATCH …/mappings/{mappingId}/graph
+          GET …/external-products  GET …/products/import-preview
+          POST …/products/import-selected  POST …/products/import-unlinked
+          POST …/products/import-all (legacy; prefer import-unlinked or import-selected)
+          POST …/match/preview  POST …/match/apply  POST …/match/repair-mappings
+          GET /marketplace/catalog-connect/jobs  GET /marketplace/adapters
+          POST /tools/{id}/run  catalog-scrape search/apply
         Do not POST/PATCH connection credentials. Do not DELETE a store.
+        Do not tell the user to click a cabinet button for a write you can POST.
+        Link existing local cards to another marketplace: POST match/preview (optional
+        operationId only; host picks fromLocal/fromRemote). Poll jobs. Then POST match/apply
+        { items: [{ productId, externalProductId, externalCategoryId?, externalCategoryName? }] }
+        copying category fields from the preview row when present. If apply returns
+        mappingsCreated 0, POST match/repair-mappings (creates missing category mappings
+        and copies characteristics). HTTP 200 with mappingsCreated 0 still means no mapping —
+        do not claim characteristics imported. There is no GET …/connections/{id}/graph.
+        Further POSTs queue while another Catalog Connect job is running (HTTP 200 pending).
+        Do not GET import-preview to link. Do not invent extra catalog-connect URLs
+        or OpenAPI.
 
         Notes, folders, barcodes, operations, storage lists, and reference catalogs use the
         same /api paths as the cabinet. Prefer small pageSize.

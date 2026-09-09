@@ -3,6 +3,7 @@ import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import {
@@ -27,7 +28,6 @@ import {
   Save,
   Trash2,
   Coins,
-  Search,
 } from "lucide-vue-next";
 import BrandingForm from "@/components/settings/BrandingForm.vue";
 import { Switch } from "@/components/ui/switch";
@@ -51,6 +51,7 @@ export default {
     PageSection,
     Button,
     Input,
+    NavSearchField,
     FieldGroup,
     SettingsFormField,
     InsetGroup,
@@ -63,7 +64,6 @@ export default {
     Save,
     Trash2,
     Coins,
-    Search,
     BrandingForm,
     Dialog,
     DialogContent,
@@ -1064,17 +1064,11 @@ export default {
                 }}
               </p>
 
-              <div class="relative shrink-0">
-                <Search
-                  class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  v-model="memberQuery"
-                  class="pl-9"
-                  :placeholder="$t('pages.storesPage.memberSearchPlaceholder')"
-                  :disabled="isSaving"
-                />
-              </div>
+              <NavSearchField
+                v-model="memberQuery"
+                :placeholder="$t('pages.storesPage.memberSearchPlaceholder')"
+                :disabled="isSaving"
+              />
 
               <InsetGroup scrollable class="flex-1">
                 <InsetGroupItem

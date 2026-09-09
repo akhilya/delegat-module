@@ -1659,7 +1659,7 @@ const selectedFileCount = computed(
 </script>
 
 <template>
-  <div class="flex min-h-[inherit] flex-1 flex-col">
+  <div class="flex min-h-0 flex-1 flex-col">
     <!-- Path bar (Windows Explorer style) -->
     <div
       class="flex items-center gap-2 text-sm min-w-0 h-11 px-4 border-b cursor-text"
@@ -2364,7 +2364,7 @@ const selectedFileCount = computed(
     />
 
     <!-- Sticky bottom actions -->
-    <div class="sticky bottom-0 flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl">
+    <div class="flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl">
       <Button variant="outline" size="sm" @click="startInlineCreate">
         <Plus class="size-4 mr-1" />
         {{ t("products.productFileManager.folderTypeLabel") }}

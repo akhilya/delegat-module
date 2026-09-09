@@ -1,5 +1,10 @@
 import { createWebHistory, createRouter as _createRouter } from "vue-router";
-import { setPageTitleDetailProvider, syncDocumentTitle, setDocumentIconSuppressed } from "@/brand";
+import {
+  setPageTitleDetailProvider,
+  syncDocumentTitle,
+  setDocumentIconSuppressed,
+} from "@/brand";
+import { clearPageChromeState, pageTitleDetail } from "@/lib/pageChromeState";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { PERMS } from "@/lib/permissions";
@@ -99,7 +104,6 @@ export const PAGE_MARKETPLACE_FIELD_MAPPING =
   "/adapter/:connId/categories/:mappingId";
 
 // Track whether a page component set a custom title (prevents afterEach from overwriting it on tab/query changes)
-let _customTitle = null;
 
 export const routes = [
   {
@@ -461,9 +465,11 @@ routes.forEach((r) => (r.name = r.path));
  * @param {string} detail - e.g. product SKU, category name
  */
 export function setPageTitle(detail) {
-  _customTitle = detail || null;
-  syncDocumentTitle(_customTitle);
+  pageTitleDetail.value = detail || null;
+  syncDocumentTitle();
 }
+
+export { setBreadcrumbParentLabel } from "@/lib/pageChromeState";
 
 function resolveRouteTitle(to) {
   const mailbox = parseOrdersPath(to.path).bucket;
@@ -474,7 +480,7 @@ function resolveRouteTitle(to) {
 }
 
 function currentPageTitleDetail(route) {
-  if (_customTitle) return _customTitle;
+  if (pageTitleDetail.value) return pageTitleDetail.value;
   if (route) return resolveRouteTitle(route);
   return null;
 }
@@ -500,13 +506,13 @@ export function createRouter() {
 
   router.afterEach((to, from) => {
     setDocumentIconSuppressed(to.meta?.unbranded === true);
-    if (_customTitle && to.path === from.path) {
+    if (pageTitleDetail.value && to.path === from.path) {
       // Keep custom detail; still refresh brand suffix after store switch.
-      syncDocumentTitle(_customTitle);
+      syncDocumentTitle(pageTitleDetail.value);
       return;
     }
 
-    _customTitle = null;
+    clearPageChromeState();
     syncDocumentTitle(resolveRouteTitle(to));
   });
 

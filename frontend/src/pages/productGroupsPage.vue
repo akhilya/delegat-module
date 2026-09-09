@@ -62,7 +62,6 @@ export default {
       groupToDelete: null,
       selectedIds: {},
       isBulkDeleteDialogOpen: false,
-      breadcrumbs: [{ label: this.$t("pages.productGroupsPage.breadcrumb") }],
     };
   },
   computed: {
@@ -208,7 +207,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <div class="flex w-full max-w-xl flex-col">
       <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
         <Button @click="showCreateDialog = true">

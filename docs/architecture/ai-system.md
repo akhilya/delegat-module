@@ -24,14 +24,16 @@ Permission `ai.use` is required (or `workspace.view` for read-only). Resource gr
 
 | Tool | Role |
 |------|------|
-| `search_knowledge` | Lexical RAG over shipped docs / MEMORY / PRODUCT / DESIGN (table `aiKnowledgeChunks`, MinIO prefix `__ai-knowledge/`) |
+| `search_knowledge` | Lexical RAG over fetched product docs (`product-docs/…`) plus MEMORY / PRODUCT / DESIGN (table `aiKnowledgeChunks`, MinIO prefix `__ai-knowledge/`) |
+| `get_doc` | Full product article markdown by slug (cap ~32k); unknown slug is a tool error |
 | `search_catalog` | Live products (name / SKU / barcode) and file display names in **this** store |
 | `sql_readonly` | `SELECT` on allowlisted projections; host forces `storeId` |
 | `run_python` | Sandbox job (`SANDBOX_URL`); pandas / pillow / openpyxl |
 | `platform_request` | `method + path + json` against the same cabinet controllers as the SPA (denylist for secrets and irreversible actions) |
 | `match_files` | Optional: map filenames to products (SKU / barcode / name stem) |
 | `propose_plan` | UI confirmation before writes |
-| `navigate_to` | Reply buttons: safe in-app path and/or a tap-to-send follow-up (`items[]`, max 4) |
+| `navigate_to` | Reply buttons: open a path XOR send a follow-up (`items[]`, max 6); one action per button |
+| `ask_form` | Reply form: connection credentials in the browser, or a short questionnaire (up to 5 steps) as the next user message |
 
 Bytes never go through the model. Cabinet chat stages attachments for **24 hours** (download while live, then purge). Then `platform_request POST /products/{id}/files` with `attachmentIds` after confirm. Cursor / Agent HTTP still upload with multipart `PUT …/products/{id}/files`.
 

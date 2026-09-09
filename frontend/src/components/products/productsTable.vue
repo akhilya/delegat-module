@@ -98,18 +98,18 @@ export default {
     const draggedColumnId = ref(null);
     const dragOverColumnId = ref(null);
 
-    // Scroll shadow — page-scroll is the XY scroller (inner overflow-x would break sticky thead).
+    // Scroll shadow — table-scroll is the XY scroller (navbar lives outside page-scroll).
     const scrollContainerEl = ref(null);
     const canScrollRight = ref(false);
     let scrollResizeObserver = null;
-    let pageScrollBound = null;
+    let tableScrollBound = null;
 
-    function pageScrollEl() {
-      return document.querySelector('[data-slot="page-scroll"]');
+    function tableScrollEl() {
+      return scrollContainerEl.value;
     }
 
     function checkScroll() {
-      const el = pageScrollEl();
+      const el = tableScrollEl();
       if (!el) {
         canScrollRight.value = false;
         return;
@@ -120,14 +120,13 @@ export default {
     function observeScrollSources() {
       scrollResizeObserver?.disconnect();
       scrollResizeObserver = new ResizeObserver(checkScroll);
-      const page = pageScrollEl();
-      if (page && pageScrollBound !== page) {
-        pageScrollBound?.removeEventListener("scroll", checkScroll);
-        page.addEventListener("scroll", checkScroll, { passive: true });
-        pageScrollBound = page;
+      const scroller = tableScrollEl();
+      if (scroller && tableScrollBound !== scroller) {
+        tableScrollBound?.removeEventListener("scroll", checkScroll);
+        scroller.addEventListener("scroll", checkScroll, { passive: true });
+        tableScrollBound = scroller;
       }
-      if (page) scrollResizeObserver.observe(page);
-      if (scrollContainerEl.value) scrollResizeObserver.observe(scrollContainerEl.value);
+      if (scroller) scrollResizeObserver.observe(scroller);
       checkScroll();
     }
 
@@ -302,8 +301,8 @@ export default {
     onBeforeUnmount(() => {
       if (syncRaf != null) cancelAnimationFrame(syncRaf);
       resizeObserver?.disconnect();
-      pageScrollBound?.removeEventListener("scroll", checkScroll);
-      pageScrollBound = null;
+      tableScrollBound?.removeEventListener("scroll", checkScroll);
+      tableScrollBound = null;
       scrollResizeObserver?.disconnect();
     });
 
@@ -413,14 +412,19 @@ export default {
 </script>
 
 <template>
-  <div class="flex w-full flex-col">
+  <div class="flex min-h-0 w-full flex-1 flex-col">
     <EmptyState
       v-if="isLoading"
       loading
       :framed="false"
       class="min-h-0 flex-1"
     />
-    <div v-else ref="scrollContainerEl" class="min-w-0">
+    <div
+      v-else
+      ref="scrollContainerEl"
+      data-slot="table-scroll"
+      class="min-h-0 min-w-0 flex-1 overflow-auto"
+    >
       <div class="flex h-max min-w-full w-max items-start">
         <!-- Data table -->
         <Table
@@ -428,15 +432,15 @@ export default {
           :contain="false"
           class="table-fixed h-max grow shrink-0 self-start border-separate border-spacing-0"
         >
-          <TableHeader class="bg-card [&_th]:sticky [&_th]:top-[var(--app-navbar-height)] [&_th]:z-[var(--z-sticky)]">
-            <TableRow class="bg-card hover:bg-transparent">
+          <TableHeader class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)]">
+            <TableRow class="bg-background hover:bg-transparent">
               <TableHead
                 v-for="header in table.getHeaderGroups()[0]?.headers"
                 :key="header.id"
                 :style="{ width: header.getSize() + 'px' }"
                 :draggable="canDragColumn(header.column.id)"
                 :class="[
-                  'h-9 px-2 bg-card border-b group/th',
+                  'h-9 px-2 bg-background border-b group/th',
                   canDragColumn(header.column.id) ? 'cursor-grab active:cursor-grabbing' : '',
                   dragOverColumnId === header.column.id ? 'bg-muted/50' : '',
                   isSortable(header.column.id) ? 'select-none' : '',
@@ -531,9 +535,9 @@ export default {
         </Table>
 
         <!-- Actions column (OUTSIDE table, sticky right) -->
-        <div :class="['sticky right-0 z-[var(--z-sticky)] shrink-0 self-start flex flex-col bg-card transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
+        <div :class="['sticky right-0 z-[var(--z-sticky)] shrink-0 self-start flex flex-col bg-background transition-shadow duration-200', canScrollRight ? 'shadow-[-6px_0_8px_-2px_rgba(0,0,0,0.1)]' : '']">
           <!-- Header: ColumnSelector slot -->
-          <div class="sticky top-[var(--app-navbar-height)] z-[var(--z-sticky)] h-9 box-border flex items-center px-1 sm:px-3 bg-card border-b">
+          <div class="sticky top-0 z-[var(--z-sticky)] h-9 box-border flex items-center px-1 sm:px-3 bg-background border-b">
             <slot name="headerActions" />
           </div>
           <!-- Row action buttons -->

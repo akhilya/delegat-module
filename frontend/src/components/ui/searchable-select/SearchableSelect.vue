@@ -254,7 +254,7 @@ const closePopover = () => {
                   ? t('components.searchableSelect.searchPlaceholderLarge')
                   : t('components.searchableSelect.searchPlaceholder')
               "
-              class="h-8 bg-background pl-8"
+              class="h-8 pl-8"
               @click.stop
               @keydown.enter.prevent.stop="addCustom"
             />

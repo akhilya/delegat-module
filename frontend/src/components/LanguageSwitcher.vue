@@ -44,7 +44,7 @@ const isCorner = computed(() => props.variant === "corner");
     </span>
     <Select v-model="current">
       <SelectTrigger
-        class="h-8"
+        class="h-9"
         :class="isCorner
           ? 'w-auto min-w-[7.5rem] border-border/70 bg-card shadow-none'
           : 'w-full'"

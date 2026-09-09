@@ -27,6 +27,7 @@ using Delegat.Services.Marketplace;
 using Delegat.Services.Tools;
 using Delegat.Services.Plugins;
 using Delegat.Services.PlatformLink;
+using Delegat.Services.Docs;
 using Delegat.Marketplace.SDK;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -284,6 +285,9 @@ builder.Services.AddSingleton<AdapterHttpLogService>();
 builder.Services.AddSingleton<IAdapterHttpLogger>(sp => sp.GetRequiredService<AdapterHttpLogService>());
 builder.Services.AddSingleton<IAdapterHttpLogQueryService>(sp => sp.GetRequiredService<AdapterHttpLogService>());
 builder.Services.AddHostedService<AdapterHttpLogCleanupService>();
+
+// Public product docs (Control Plane /docs markdown). Used by the cabinet sheet and, when AI is on, knowledge reindex.
+builder.Services.AddPublicDocs();
 
 // AI services — registered only when AI_ENABLED is true at process start (restart to toggle).
 var aiEnabled = FeatureFlags.IsAiEnabled();

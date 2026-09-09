@@ -92,6 +92,7 @@
       <PluginProjects Include="..\plugins\Delegat.Marketplace.OpenCart\Delegat.Marketplace.OpenCart.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.WooCommerce\Delegat.Marketplace.WooCommerce.csproj" />
+      <PluginProjects Include="..\plugins\Delegat.Marketplace.Medusa\Delegat.Marketplace.Medusa.csproj" />
     </ItemGroup>
     <!-- SDK is already built via ProjectReference. Nested BuildProjectReferences=true races on deps.json. -->
     <MSBuild Projects="@(PluginProjects)" Targets="Build" BuildInParallel="false" Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=false" />
@@ -102,6 +103,7 @@
       <PluginDlls Include="..\plugins\Delegat.Marketplace.OpenCart\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.OpenCart.dll" />
       <PluginDlls Include="..\plugins\Delegat.Marketplace.YandexMarket\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.YandexMarket.dll" />
       <PluginDlls Include="..\plugins\Delegat.Marketplace.WooCommerce\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.WooCommerce.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.Medusa\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.Medusa.dll" />
       <StalePluginDlls Include="$(OutputPath)plugins\*.Tests.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />

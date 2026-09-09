@@ -35,6 +35,92 @@ public class AgentToolResultTests
     }
 
     [Fact]
+    public void IsFailure_QueuedCatalogConnectJob_IsNotFailed()
+    {
+        var json = """{"operationId":"abc","connectionId":1,"kind":"import","status":"pending","queuedCount":0,"error":null}""";
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(200, Encoding.UTF8.GetBytes(json));
+        Assert.Equal("HTTP 200 queued", summary);
+        Assert.False(AgentToolResult.IsFailure(result, summary));
+    }
+
+    [Fact]
+    public void IsFailure_PendingJobWithDomainError_IsNotFailed()
+    {
+        var json = """{"operationId":"abc","connectionId":1,"kind":"import","status":"pending","error":"Timed out"}""";
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(200, Encoding.UTF8.GetBytes(json));
+        Assert.False(AgentToolResult.IsFailure(result, summary));
+        Assert.False(AgentToolResult.IsFailure(
+            JsonDocument.Parse(json).RootElement, "HTTP 200"));
+    }
+
+    [Fact]
+    public void IsFailure_FailedJobStatus_IsFailed()
+    {
+        var json = """{"operationId":"abc","status":"failed","error":"Timed out"}""";
+        Assert.True(AgentToolResult.IsFailure(
+            JsonDocument.Parse(json).RootElement, "HTTP 200"));
+    }
+
+    [Fact]
+    public void IsFailure_RequestFailedWithoutHttpStatus_IsFailed()
+    {
+        Assert.True(AgentToolResult.IsFailure(new { error = "request_failed", message = "canceled" }, "canceled"));
+    }
+
+    [Fact]
+    public void InterpretResponse_ImportPreview_TruncatesItemsKeepsCounts()
+    {
+        var items = Enumerable.Range(1, 50).Select(i => new
+        {
+            externalId = $"wb-{i}",
+            name = $"Product {i}",
+            hasMapping = true,
+            isAlreadyLinked = false,
+        });
+        var json = JsonSerializer.Serialize(new
+        {
+            items,
+            hasMore = true,
+            totalNew = 50,
+            totalAlreadyLinked = 0,
+            totalWithMapping = 50,
+            totalWithoutMapping = 0,
+        });
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(200, Encoding.UTF8.GetBytes(json));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(CabinetRequestInvoker.MaxListItems, doc.RootElement.GetProperty("items").GetArrayLength());
+        Assert.Equal(50, doc.RootElement.GetProperty("totalNew").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("itemsTruncated").GetInt32() > 0);
+        Assert.Contains("trimmed", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.False(AgentToolResult.IsFailure(result, summary));
+    }
+
+    [Fact]
+    public void TruncateForModel_CapsHugeToolResult()
+    {
+        var huge = new string('x', AgentToolResult.MaxModelResultChars + 4000);
+        var clipped = AgentToolResult.TruncateForModel(huge);
+        Assert.True(clipped.Length < huge.Length);
+        Assert.Contains("truncated", clipped, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InterpretResponse_404_DoesNotAssumeCatalogConnect()
+    {
+        var json = """{"title":"Not Found","status":404}""";
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(404, Encoding.UTF8.GetBytes(json));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("not_found", doc.RootElement.GetProperty("error").GetString());
+        var hint = doc.RootElement.GetProperty("hint").GetString();
+        Assert.Contains("TOOLS", hint, StringComparison.Ordinal);
+        Assert.Contains("mappings/{mappingId}/graph", hint, StringComparison.Ordinal);
+        Assert.Contains("do not invent", hint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not exist", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Request failed (404)", summary, StringComparison.Ordinal);
+        Assert.True(AgentToolResult.IsFailure(result, summary));
+    }
+
+    [Fact]
     public void InterpretResponse_Conflict_SetsErrorFromCode()
     {
         var json = """{"title":"Product limit reached (MAX_PRODUCTS=11)","status":409,"code":"product_limit_reached","data":{"limit":11,"used":11,"remaining":0}}""";

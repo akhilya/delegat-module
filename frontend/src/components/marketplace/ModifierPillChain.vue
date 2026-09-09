@@ -179,7 +179,7 @@ export default {
                 type="button"
                 variant="outline"
                 :class="[
-                  'inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-full text-xs transition-colors',
+                  'inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-md text-xs transition-colors',
                   getCategoryColor(mod.type),
                   disabled ? 'opacity-50 pointer-events-none' : '',
                 ]"
@@ -244,7 +244,7 @@ export default {
         <Button
           type="button"
           variant="outline"
-          class="inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-full text-xs border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground/60 hover:text-foreground"
+          class="inline-flex items-center gap-1 px-2 py-0.5 h-auto rounded-md text-xs border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground/60 hover:text-foreground"
         >
           <Plus class="size-3" />
           <span v-if="modifiers.length === 0">{{ $t("marketplace.graph.modifierFallback") }}</span>

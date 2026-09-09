@@ -10,9 +10,12 @@ public class AiPromptsChatTests
         AiPageContext? page = null,
         AiStoreSettings? settings = null,
         int? catalogSlotsRemaining = null,
+        int? catalogProductLimit = null,
+        int? catalogProductsUsed = null,
         IReadOnlyList<AiPrompts.ConnectedMcpTool>? connectedMcpTools = null) =>
         AiPrompts.ChatSystem("Store", 1, 0, [], "user", false, page, settings, locale: locale,
-            catalogSlotsRemaining: catalogSlotsRemaining, connectedMcpTools: connectedMcpTools);
+            catalogSlotsRemaining: catalogSlotsRemaining, connectedMcpTools: connectedMcpTools,
+            catalogProductLimit: catalogProductLimit, catalogProductsUsed: catalogProductsUsed);
 
     [Fact]
     public void ChatSystem_IsStoreAssistantNotApiClient()
@@ -107,6 +110,67 @@ public class AiPromptsChatTests
         Assert.Contains("do not trash or delete", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("do not GET a full product card", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("search_knowledge is docs", prompt, StringComparison.Ordinal);
+        Assert.Contains("get_doc", prompt, StringComparison.Ordinal);
+        Assert.Contains("Product how-tos", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_Quota_StatesUsedLimitAndThatTrashOccupiesSlots()
+    {
+        var prompt = Prompt(catalogSlotsRemaining: 1, catalogProductLimit: 10, catalogProductsUsed: 9);
+        Assert.Contains("9 of 10", prompt, StringComparison.Ordinal);
+        Assert.Contains("1 slot", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trash", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/products/trash/count", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Catalog slots remaining: 1.", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_MarketplaceProductImport_IsAWriteTheAssistantRuns()
+    {
+        var prompt = Prompt();
+        Assert.Contains("import-unlinked", prompt, StringComparison.Ordinal);
+        Assert.Contains("import-selected", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not tell the user to click", prompt, StringComparison.Ordinal);
+        Assert.Contains("/tools/catalog-connect", prompt, StringComparison.Ordinal);
+        Assert.Contains("Marketplace category import", prompt, StringComparison.Ordinal);
+        Assert.Contains("returns immediately", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("status pending", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not GET import-preview first", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Marketplace product import is a cabinet Tools job",
+            prompt,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_CatalogConnectMatch_UsesPreviewThenApply()
+    {
+        var prompt = Prompt();
+        Assert.Contains("match/preview", prompt, StringComparison.Ordinal);
+        Assert.Contains("match/apply", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not GET import-preview to link", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not invent cabinet paths", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never match the connection you imported from", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Further POSTs queue", prompt, StringComparison.Ordinal);
+        Assert.Contains("repair-mappings", prompt, StringComparison.Ordinal);
+        Assert.Contains("externalCategoryId", prompt, StringComparison.Ordinal);
+        Assert.Contains("mappingsCreated", prompt, StringComparison.Ordinal);
+        Assert.Contains("mappings/<id>/graph", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("/marketplace/catalog-connect/match", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("GET …/graph", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_ReplyButtonsAndForms()
+    {
+        var prompt = Prompt();
+        Assert.Contains("ask_form", prompt, StringComparison.Ordinal);
+        Assert.Contains("never both", prompt, StringComparison.Ordinal);
+        Assert.Contains("kind=connection", prompt, StringComparison.Ordinal);
+        Assert.Contains("kind=questions", prompt, StringComparison.Ordinal);
+        Assert.Contains("max 6", prompt, StringComparison.Ordinal);
+        Assert.Contains("{key}", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

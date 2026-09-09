@@ -22,7 +22,7 @@ const { setListRef, indicatorStyle } = useTabsIndicator();
     v-bind="delegatedProps"
     :class="
       cn(
-        'relative isolate bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]',
+        'relative isolate bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px] dark:bg-muted/20',
         props.class,
       )
     "
@@ -30,7 +30,7 @@ const { setListRef, indicatorStyle } = useTabsIndicator();
     <span
       data-slot="tabs-indicator"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-0 rounded-md bg-background shadow-sm dark:border dark:border-input dark:bg-input/30 dark:shadow-none"
+      class="pointer-events-none absolute top-0 left-0 z-0 rounded-md bg-background shadow-sm dark:bg-muted dark:shadow-none"
       :style="indicatorStyle"
     />
     <slot />

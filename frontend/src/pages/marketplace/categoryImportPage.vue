@@ -20,7 +20,7 @@ import {
 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PAGE_MARKETPLACE, setPageTitle } from "@/router";
+import { PAGE_MARKETPLACE, setPageTitle, setBreadcrumbParentLabel } from "@/router";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 export default {
@@ -69,16 +69,6 @@ export default {
   computed: {
     connectionId() {
       return parseInt(this.$route.params.connId);
-    },
-    breadcrumbs() {
-      return [
-        { label: this.$t("marketplace.categoryImportPage.adapters"), to: PAGE_MARKETPLACE },
-        {
-          label: this.connection?.name || this.$t("marketplace.categoryImportPage.connection"),
-          to: `/adapter/${this.connectionId}?tab=mappings`,
-        },
-        { label: this.$t("marketplace.categoryImportPage.importCategory") },
-      ];
     },
     adapterLabel() {
       return this.connection?.adapterKey || this.$t("marketplace.categoryImportPage.adapterGenitive");
@@ -148,6 +138,7 @@ export default {
         onSuccess: (response) => {
           this.connection = extractResponseData(response);
           setPageTitle(`${this.$t("marketplace.categoryImportPage.importShort")} · ${this.connection.name}`);
+          setBreadcrumbParentLabel(this.connection.name);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -335,7 +326,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport>
     <PageSection
       :loading="isLoading"
       class="!mb-0 flex min-h-0 flex-1 flex-col"

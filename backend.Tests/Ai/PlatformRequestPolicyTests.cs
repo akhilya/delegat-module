@@ -25,6 +25,24 @@ public class PlatformRequestPolicyTests
         Assert.True(PlatformRequestPolicy.IsAllowed("GET", "/settings/branding"));
         Assert.True(PlatformRequestPolicy.IsAllowed("PATCH", "/settings/branding"));
         Assert.True(PlatformRequestPolicy.IsAllowed("DELETE", "/marketplace/connections/3"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/products/import-unlinked"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/products/import-selected"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "GET", "/marketplace/connections/1/products/import-preview"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "GET", "/marketplace/connections/1/external-products"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/products/import-all"));
+        Assert.True(PlatformRequestPolicy.IsAllowed("GET", "/marketplace/catalog-connect/jobs"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/match/preview"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/match/apply"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/1/match/repair-mappings"));
+        Assert.True(PlatformRequestPolicy.IsAllowed("GET", "/products/trash/count"));
     }
 
     [Fact]
@@ -70,5 +88,16 @@ public class PlatformRequestPolicyTests
         Assert.Contains("/marketplace/orders", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.DoesNotContain("/stats", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.DoesNotContain("GET /groups", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("import-unlinked", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("import-selected", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("import-preview", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("/marketplace/catalog-connect/jobs", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("match/preview", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("match/apply", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("repair-mappings", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("mappings/{mappingId}/graph", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("GET …/graph", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("/products/trash/count", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("Do not tell the user to click", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
     }
 }

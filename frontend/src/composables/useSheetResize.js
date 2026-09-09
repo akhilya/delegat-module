@@ -11,6 +11,7 @@ export const SHEET_WIDTH_STORAGE = {
   logs: "logs-sheet-width",
   mappingPreview: "mapping-preview-sheet-width",
   sidebar: "sidebar-width",
+  docs: "docs-sheet-width",
 };
 
 export const SHEET_WIDTH_DEFAULTS = {
@@ -21,6 +22,7 @@ export const SHEET_WIDTH_DEFAULTS = {
   logs: 672,
   mappingPreview: 672,
   sidebar: 256,
+  docs: 880,
 };
 
 /** Desktop nav: narrower than a sheet so the catalog keeps the page. */

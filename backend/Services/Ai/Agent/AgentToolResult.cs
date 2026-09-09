@@ -7,9 +7,16 @@ namespace Delegat.Services.Ai.Agent;
 /// <summary>
 /// Shared success/failure for cabinet tool results. Nested HTTP uses { title, status, code }
 /// without an <c>error</c> field — treat 4xx/5xx as failed so execute-plan cannot claim success.
+/// Catalog Connect jobs use a string <c>status</c> (pending/running/completed) and a domain
+/// <c>error</c> (lastError); HTTP 200 enqueue is not a failed write.
 /// </summary>
 public static class AgentToolResult
 {
+    public const int MaxModelResultChars = 24_000;
+    public const string ProviderErrorMessage = "Error requesting the AI API. Please try again.";
+    public const string TurnInterruptedMessage =
+        "Could not finish this reply. If a catalog action already started, check Operations.";
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -19,6 +26,13 @@ public static class AgentToolResult
     private static readonly Regex HttpErrorSummary = new(
         @"HTTP\s+[45]\d\d",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static string TruncateForModel(string json)
+    {
+        if (string.IsNullOrEmpty(json) || json.Length <= MaxModelResultChars)
+            return json;
+        return json[..MaxModelResultChars] + "…(truncated)";
+    }
 
     public static bool IsFailure(object? result, string? summary)
     {
@@ -41,12 +55,20 @@ public static class AgentToolResult
     {
         if (result.ValueKind != JsonValueKind.Object)
             return false;
+        if (result.TryGetProperty("status", out var st))
+        {
+            if (st.ValueKind == JsonValueKind.String)
+            {
+                var job = st.GetString();
+                return string.Equals(job, "failed", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(job, "cancelled", StringComparison.OrdinalIgnoreCase);
+            }
+            if (st.TryGetInt32(out var code) && code >= 400)
+                return true;
+        }
         if (result.TryGetProperty("error", out var err)
-            && err.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
-            return true;
-        if (result.TryGetProperty("status", out var st)
-            && st.TryGetInt32(out var code)
-            && code >= 400)
+            && err.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined
+            && !(err.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(err.GetString())))
             return true;
         return false;
     }

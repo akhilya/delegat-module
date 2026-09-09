@@ -56,6 +56,9 @@ export default {
     idPrefix: { type: String, default: "conn" },
     /** Hide plugin versions and schema jargon (setup wizard). */
     quiet: { type: Boolean, default: false },
+    initialAdapterKey: { type: String, default: "" },
+    initialName: { type: String, default: "" },
+    lockAdapter: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -127,6 +130,29 @@ export default {
       this.credentialValues = {};
       this.isActive = true;
     },
+    applyInitial() {
+      if (this.initialAdapterKey && this.adapterKey !== this.initialAdapterKey) {
+        this.onAdapterSelect(this.initialAdapterKey);
+      }
+      if (this.initialName && !this.name.trim()) {
+        this.name = this.initialName;
+      }
+    },
+  },
+  watch: {
+    adapters: {
+      immediate: true,
+      handler() {
+        this.applyInitial();
+      },
+    },
+    initialAdapterKey() {
+      this.applyInitial();
+    },
+    credentialFields(fields) {
+      if (!this.adapterKey || Object.keys(this.credentialValues).length) return;
+      this.credentialValues = defaultCredentialValues(fields);
+    },
   },
 };
 </script>
@@ -154,6 +180,7 @@ export default {
     </SettingsFormField>
 
     <SettingsFormField
+      v-if="!(lockAdapter && adapterKey)"
       :label="
         quiet
           ? $t('pages.setup.marketplaceLabel')

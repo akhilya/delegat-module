@@ -311,7 +311,7 @@ export default {
       <div class="min-w-0 space-y-8">
         <div v-if="showCompareLayout" class="relative min-w-0">
           <div
-            class="sticky top-14 z-10 border-b border-border/70 bg-background pb-3 pt-0.5"
+            class="sticky top-0 z-10 border-b border-border/70 bg-background pb-3 pt-0.5"
             :style="{ minWidth: compareGridStyle.minWidth }"
           >
             <div class="grid gap-x-5" :style="compareGridStyle">

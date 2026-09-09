@@ -8,6 +8,7 @@ using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Prompts;
+using Delegat.Services.Docs;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -86,6 +87,87 @@ public class AgentToolHostTests
         Assert.True(json.RootElement.GetProperty("navigate").GetBoolean());
         Assert.Equal("", json.RootElement.GetProperty("url").GetString());
         Assert.Equal("Put these photos on Hello soap", json.RootElement.GetProperty("actions")[0].GetProperty("prompt").GetString());
+    }
+
+    [Fact]
+    public void NavigateTo_UrlDropsPromptOnSameButton()
+    {
+        var (result, _) = AgentToolHost.NavigateTo(
+            """{"url":"/products/12/edit","label":"Hello soap","prompt":"hidden follow-up"}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var action = json.RootElement.GetProperty("actions")[0];
+        Assert.Equal("open", action.GetProperty("kind").GetString());
+        Assert.Equal("/products/12/edit", action.GetProperty("url").GetString());
+        Assert.False(action.TryGetProperty("prompt", out _));
+    }
+
+    [Fact]
+    public void NavigateTo_CapsAtSixButtons()
+    {
+        var items = string.Join(",", Enumerable.Range(1, 8).Select(i =>
+            $$"""{"url":"/products/{{i}}/edit","label":"P{{i}}"}"""));
+        var (result, _) = AgentToolHost.NavigateTo($$"""{"items":[{{items}}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(6, json.RootElement.GetProperty("actions").GetArrayLength());
+    }
+
+    [Fact]
+    public void AskForm_Connection_RequiresAdapterKey()
+    {
+        var (bad, _) = AgentToolHost.AskForm("""{"kind":"connection"}""");
+        using var badJson = JsonDocument.Parse(JsonSerializer.Serialize(bad));
+        Assert.False(badJson.RootElement.GetProperty("form").GetBoolean());
+
+        var (ok, summary) = AgentToolHost.AskForm(
+            """{"kind":"connection","adapterKey":"ozon","name":"Shop","title":"Connect Ozon"}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(ok));
+        Assert.True(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal("connection", json.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("ozon", json.RootElement.GetProperty("adapterKey").GetString());
+        Assert.Equal("Form", summary);
+    }
+
+    [Fact]
+    public void AskForm_Fields_DropsSecretsAndPasswords()
+    {
+        var (result, _) = AgentToolHost.AskForm(
+            """{"kind":"fields","followUp":"Shop is {shop}","fields":[{"key":"shop","label":"Shop URL","type":"text"},{"key":"apiKey","label":"Key","type":"password"},{"key":"token","label":"Token","secret":true}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal(1, json.RootElement.GetProperty("fields").GetArrayLength());
+        Assert.Equal("shop", json.RootElement.GetProperty("fields")[0].GetProperty("key").GetString());
+    }
+
+    [Fact]
+    public void AskForm_Questions_CapsAtFiveAndDropsSecrets()
+    {
+        var steps = string.Join(",", Enumerable.Range(1, 7).Select(i =>
+            $$"""{"key":"q{{i}}","title":"Q{{i}}","type":"single","choices":[{"value":"a","label":"A"}]}"""));
+        var (result, _) = AgentToolHost.AskForm(
+            $$"""{"kind":"questions","questions":[{"key":"secret","title":"Key","type":"password"},{{steps}}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal("questions", json.RootElement.GetProperty("kind").GetString());
+        Assert.Equal(5, json.RootElement.GetProperty("questions").GetArrayLength());
+        Assert.Equal("single", json.RootElement.GetProperty("questions")[0].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void AskForm_Questions_KeepsMultipleTextAndSkip()
+    {
+        var (result, _) = AgentToolHost.AskForm(
+            """{"kind":"questions","followUp":"Use {adapter} then {notes}","questions":[{"key":"adapter","title":"Which marketplace?","type":"single","choices":[{"value":"ozon","label":"Ozon"},{"value":"wb","label":"Wildberries"}]},{"key":"notes","title":"Anything else?","type":"text","required":false}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal(2, json.RootElement.GetProperty("questions").GetArrayLength());
+        Assert.False(json.RootElement.GetProperty("questions")[1].GetProperty("required").GetBoolean());
+        Assert.Equal("text", json.RootElement.GetProperty("questions")[1].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void ToolCatalog_IncludesAskForm()
+    {
+        Assert.Contains(AgentToolCatalog.Build(), t => t.name == "ask_form");
     }
 
     [Fact]
@@ -329,13 +411,44 @@ public class AgentToolHostTests
         }
     }
 
+    [Fact]
+    public async Task GetDoc_ReturnsArticleBody()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var docs = new StubPublicDocs();
+        var host = CreateHost(db, publicDocs: docs);
+
+        var (result, summary) = await host.DispatchAsync(
+            "get_doc", """{"slug":"workspace/products","locale":"ru"}""", 1, 1, default);
+
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("workspace/products", json);
+        Assert.Contains("Add SKUs", json);
+        Assert.Contains("doc workspace/products", summary);
+    }
+
+    [Fact]
+    public async Task GetDoc_UnknownSlug_ReturnsToolError()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var host = CreateHost(db, publicDocs: new StubPublicDocs());
+
+        var (result, summary) = await host.DispatchAsync(
+            "get_doc", """{"slug":"workspace/missing"}""", 1, 1, default);
+
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("docs_not_found", json);
+        Assert.Equal("docs_not_found", summary);
+    }
+
     private static AgentToolHost CreateHost(
         DataContext db,
         IHttpClientFactory? http = null,
         IStorageService? storage = null,
         ICabinetRequestInvoker? invoker = null,
         IPermissionService? permissions = null,
-        IMcpToolGateway? mcp = null)
+        IMcpToolGateway? mcp = null,
+        IPublicDocsClient? publicDocs = null)
     {
         storage ??= new FakeStorage();
         var catalog = new CatalogSearchService(db);
@@ -355,7 +468,8 @@ public class AgentToolHostTests
             permissions ?? new GrantAllPermissions(),
             db,
             NullLogger<AgentToolHost>.Instance,
-            mcp);
+            mcp,
+            publicDocs);
     }
 
     private sealed class FakeMcpGateway : IMcpToolGateway
@@ -450,5 +564,24 @@ public class AgentToolHostTests
     private sealed class CapturingFactory(CaptureHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    private sealed class StubPublicDocs : IPublicDocsClient
+    {
+        public Task<DocsCatalog> GetCatalogAsync(string locale, CancellationToken ct = default) =>
+            Task.FromResult(new DocsCatalog { Locale = locale, Groups = [] });
+
+        public Task<DocsPage> GetPageAsync(string slug, string locale, CancellationToken ct = default)
+        {
+            if (slug != "workspace/products")
+                throw new DocsClientException("docs_not_found", 404, "missing");
+            return Task.FromResult(new DocsPage
+            {
+                Slug = slug,
+                Locale = locale,
+                Title = "Products",
+                Markdown = "# Products\nAdd SKUs.",
+            });
+        }
     }
 }

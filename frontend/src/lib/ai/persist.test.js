@@ -9,6 +9,7 @@ import {
   mapStoredMessage,
   serializeToolCallsJson,
   toolResultFailed,
+  finalizeTurnTools,
 } from "./persist.js";
 
 describe("serializeToolCallsJson", () => {
@@ -254,5 +255,41 @@ describe("toolResultFailed", () => {
       true,
     );
     assert.equal(toolResultFailed({ id: 1, sku: "A" }, "HTTP 200"), false);
+  });
+
+  it("does not treat a queued Catalog Connect job as a failed write", () => {
+    assert.equal(
+      toolResultFailed(
+        {
+          operationId: "abc",
+          status: "pending",
+          error: "Timed out",
+        },
+        "HTTP 200 queued",
+      ),
+      false,
+    );
+    assert.equal(
+      toolResultFailed({ status: "failed", error: "Timed out" }, "HTTP 200"),
+      true,
+    );
+  });
+});
+
+describe("finalizeTurnTools", () => {
+  it("closes a running tool when the turn errors so the process is not left spinning", () => {
+    const msg = {
+      toolCalls: [
+        {
+          id: "t1",
+          name: "platform_request",
+          status: "running",
+          input: "{}",
+        },
+      ],
+    };
+    const out = finalizeTurnTools(msg);
+    assert.equal(out.toolCalls[0].status, "done");
+    assert.equal(out.toolCalls[0].summary, "interrupted");
   });
 });

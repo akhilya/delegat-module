@@ -1,5 +1,6 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import Input from "@/components/ui/input/Input.vue";
@@ -43,7 +44,7 @@ import {
   shouldRestorePreview,
   writeDismissedPreviewOpId,
 } from "@/lib/catalogConnectJobs";
-import { PAGE_MARKETPLACE, PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
+import { PAGE_MARKETPLACE, PAGE_PRODUCTS } from "@/router";
 import { getDocsPageUrl } from "@/utils/docsUrl";
 import { http } from "@/main";
 import { BookOpen, Cable, ExternalLink } from "lucide-vue-next";
@@ -62,6 +63,7 @@ const STEP_SUMMARY = "summary";
 export default {
   components: {
     AppPageChrome,
+    NavSearchField,
     Button,
     Checkbox,
     Input,
@@ -138,12 +140,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [
-        { label: this.$t("pages.toolsPage.breadcrumb"), to: PAGE_TOOLS },
-        { label: this.$t("pages.catalogConnect.breadcrumb") },
-      ];
-    },
     hasLocalProducts() {
       return this.localProductCount > 0;
     },
@@ -978,7 +974,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <EmptyState
       v-if="loading"
       loading
@@ -1432,10 +1428,10 @@ export default {
         <div v-if="searchForExternalId" class="mb-4 max-w-xl space-y-3">
           <p class="text-sm font-medium">{{ $t("pages.catalogConnect.searchLocal") }}</p>
           <div class="flex gap-2">
-            <Input
+            <NavSearchField
               v-model="searchQuery"
               :placeholder="$t('pages.productsPage.searchPlaceholder')"
-              @keyup.enter="searchProducts"
+              @submit="searchProducts"
             />
             <Button variant="outline" :disabled="searchBusy" @click="searchProducts">
               <Spinner v-if="searchBusy" />

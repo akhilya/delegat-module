@@ -15,7 +15,6 @@ import {
 } from "lucide-vue-next";
 import { setLocale, SUPPORTED_LOCALES } from "@/i18n";
 import { PAGE_SETTINGS_USER } from "@/router";
-import { getDocsPublicUrl } from "@/utils/docsUrl";
 import { isDark, toggleDark } from "@/theme";
 import LocaleFlag from "@/components/LocaleFlag.vue";
 import { Button } from "@/components/ui/button";
@@ -77,6 +76,10 @@ function goToUserSettings() {
   router.push(PAGE_SETTINGS_USER);
 }
 
+function openDocs() {
+  store.dispatch("docs/openHub");
+}
+
 function onLogout() {
   store.dispatch("postLogOut");
 }
@@ -97,7 +100,7 @@ function onLogout() {
       <Button
         v-else
         variant="ghost"
-        class="h-9 gap-1.5"
+        class="size-9 gap-1.5 p-0 sm:h-9 sm:w-auto sm:px-3"
       >
         <UserRound class="size-4" />
         <span class="hidden sm:inline max-w-[120px] truncate">{{
@@ -120,15 +123,9 @@ function onLogout() {
         {{ t("components.navigationBar.mySettings") }}
       </DropdownMenuItem>
 
-      <DropdownMenuItem as-child>
-        <a
-          :href="getDocsPublicUrl(locale)"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <BookOpen />
-          {{ t("components.userAccountMenu.documentation") }}
-        </a>
+      <DropdownMenuItem @select="openDocs">
+        <BookOpen />
+        {{ t("components.userAccountMenu.documentation") }}
       </DropdownMenuItem>
 
       <DropdownMenuSub>

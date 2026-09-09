@@ -18,7 +18,6 @@ import { FieldError, FieldLabel } from "@/components/ui/field";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { InsetGroupLabel } from "@/components/ui/inset-group";
 import { Plus } from "lucide-vue-next";
-import { PAGE_PRODUCTS } from "@/router";
 import { useStore } from "vuex";
 import { useRouter, useRoute } from "vue-router";
 import { ref, watch, computed, nextTick, onMounted, onUnmounted } from "vue";
@@ -104,15 +103,6 @@ export default {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-  },
-  data() {
-    return {
-      PAGE_PRODUCTS,
-      breadcrumbs: [
-        { label: this.$t("routes.products"), to: PAGE_PRODUCTS },
-        { label: this.$t("pages.productCreationPage.breadcrumbTitle") },
-      ],
-    };
   },
   setup() {
     const store = useStore();
@@ -863,7 +853,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <PageSection
       :loading="isLoadingCategories && categories.length === 0"
       :class="

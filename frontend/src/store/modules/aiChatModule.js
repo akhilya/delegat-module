@@ -12,6 +12,7 @@ import {
   isAiControlMessage,
   serializeToolCallsJson,
   toolResultFailed,
+  finalizeTurnTools,
 } from "@/lib/ai/persist";
 import { applyStagedIds, attachmentMetaList } from "@/lib/ai/attachments";
 
@@ -205,6 +206,7 @@ async function consumeSse(response, commit, dispatch) {
             commit("updateLastAssistantMessage", { plan: event.data });
             break;
           case "done": {
+            commit("finalizeRunningTools");
             const patch = {
               done: true,
               modelName: event.data?.modelName,
@@ -216,6 +218,7 @@ async function consumeSse(response, commit, dispatch) {
             break;
           }
           case "error":
+            commit("finalizeRunningTools");
             commit("updateLastAssistantMessage", {
               delta: `\n\n${event.data?.message}`,
             });
@@ -360,6 +363,11 @@ export default {
         last.done = true;
         if (last.planConfirmed && !last.planCancelled) last.planExecuted = true;
       }
+    },
+    finalizeRunningTools(state) {
+      const last = state.messages[state.messages.length - 1];
+      if (!last) return;
+      finalizeTurnTools(last);
     },
     updateToolCall(state, { id, name, status, summary, result }) {
       const last = state.messages[state.messages.length - 1];

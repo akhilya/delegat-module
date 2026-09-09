@@ -248,10 +248,11 @@ public class CatalogMatchService
         var skipped = 0;
         var attributesImported = 0;
         var mappingCache = new Dictionary<(int LocalCategoryId, string ExternalCategoryId), MappingEnsureResult>();
-        var mappingsCreated = await RepairLinksWithoutMappingAsync(
+        var repaired = await RepairLinksWithoutMappingAsync(
             connection, adapter, mappingCache, operationId, ct);
+        var mappingsCreated = repaired.MappingsCreated;
         var toImport = new List<(string ExternalId, string? Name, string? ExternalCategoryId, string? ExternalCategoryName)>();
-        var linkedPairs = new List<(int ProductId, string ExternalId)>();
+        var linkedPairs = new List<(int ProductId, string ExternalId)>(repaired.Pairs);
 
         var remotesById = await LoadRemotesByIdAsync(
             adapter,
@@ -264,6 +265,9 @@ public class CatalogMatchService
                 .ToList(),
             operationId,
             ct);
+
+        foreach (var kv in repaired.Remotes)
+            remotesById.TryAdd(kv.Key, kv.Value);
 
         foreach (var item in items)
         {
@@ -494,19 +498,23 @@ public class CatalogMatchService
             batchType: "catalog-match");
 
         var mappingCache = new Dictionary<(int LocalCategoryId, string ExternalCategoryId), MappingEnsureResult>();
-        var mappingsCreated = await RepairLinksWithoutMappingAsync(
+        var repaired = await RepairLinksWithoutMappingAsync(
             connection, adapter, mappingCache, operationId, ct);
+
+        var attributesImported = await ImportLinkedAttributesAsync(
+            connection, repaired.Remotes, repaired.Pairs, operationId, ct);
 
         await _operationLogger.FinishAsync(
             operationId,
             connection.storeId,
             "completed",
-            $"Created {mappingsCreated} mappings");
+            $"Created {repaired.MappingsCreated} mappings, copied {attributesImported} fields");
 
         return new CatalogMatchApplyResult
         {
             OperationId = operationId,
-            MappingsCreated = mappingsCreated,
+            MappingsCreated = repaired.MappingsCreated,
+            AttributesImported = attributesImported,
         };
     }
 
@@ -809,21 +817,34 @@ public class CatalogMatchService
         return (true, null, mappingCreated);
     }
 
-    private async Task<int> RepairLinksWithoutMappingAsync(
+    private async Task<MappingRepairBatch> RepairLinksWithoutMappingAsync(
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
         Dictionary<(int LocalCategoryId, string ExternalCategoryId), MappingEnsureResult> mappingCache,
         string operationId,
         CancellationToken ct)
     {
+        var empty = new MappingRepairBatch();
         var links = await _db.productMarketplaceLinks
             .Include(l => l.product)
             .Where(l => l.connectionId == connection.Id && l.categoryMappingId == null)
             .ToListAsync(ct);
         if (links.Count == 0)
-            return 0;
+            return empty;
+
+        var remotesById = await LoadRemotesByIdAsync(
+            adapter,
+            connection,
+            links
+                .Select(l => (l.externalProductId ?? "").Trim())
+                .Where(id => id.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            operationId,
+            ct);
 
         var created = 0;
+        var pairs = new List<(int ProductId, string ExternalId)>();
         foreach (var link in links)
         {
             if (link.product == null || link.product.storeId != connection.storeId)
@@ -831,25 +852,9 @@ public class CatalogMatchService
             if (await ProductNotTrashed.IsTrashedAsync(_db, link.productId, ct))
                 continue;
 
-            string? remoteCategoryId = null;
-            string? remoteCategoryName = null;
-            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
-            {
-                try
-                {
-                    var remote = await adapter.ImportProductAsync(connection, link.externalProductId, ct);
-                    if (remote == null)
-                        continue;
-                    remoteCategoryId = MarketplaceCategoryLabel.PreferMappableId(remote.CategoryId, null);
-                    remoteCategoryName = remote.CategoryName;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Catalog connect mapping repair lookup failed for {ExternalId}",
-                        link.externalProductId);
-                    continue;
-                }
-            }
+            remotesById.TryGetValue(link.externalProductId, out var remote);
+            var remoteCategoryId = MarketplaceCategoryLabel.PreferMappableId(remote?.CategoryId, null);
+            var remoteCategoryName = remote?.CategoryName;
 
             var (mappingId, mappingCreated) = await AttachMappingAsync(
                 connection,
@@ -866,6 +871,7 @@ public class CatalogMatchService
             if (mappingCreated)
                 created++;
             await _db.SaveChangesAsync(ct);
+            pairs.Add((link.productId, remote?.ExternalId ?? link.externalProductId));
         }
 
         if (created > 0)
@@ -874,7 +880,19 @@ public class CatalogMatchService
                 $"Created {created} missing category mappings");
         }
 
-        return created;
+        return new MappingRepairBatch
+        {
+            MappingsCreated = created,
+            Remotes = remotesById,
+            Pairs = pairs,
+        };
+    }
+
+    private sealed class MappingRepairBatch
+    {
+        public int MappingsCreated { get; init; }
+        public Dictionary<string, ExternalProduct> Remotes { get; init; } = new(StringComparer.Ordinal);
+        public List<(int ProductId, string ExternalId)> Pairs { get; init; } = [];
     }
 
     private async Task<(int? MappingId, bool Created)> AttachMappingAsync(

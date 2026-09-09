@@ -35,6 +35,7 @@ plugins/          — Marketplace adapter submodules (DLL)
   Delegat.Marketplace.OpenCart/     → delegat-adapter-opencart
   Delegat.Marketplace.YandexMarket/ → delegat-adapter-yandex-market
   Delegat.Marketplace.WooCommerce/  → delegat-adapter-woocommerce
+  Delegat.Marketplace.Medusa/       → shop (Medusa 2)
 sdk/              — SDK submodule → delegat-marketplace-sdk
 docs/             — Documentation
 ```

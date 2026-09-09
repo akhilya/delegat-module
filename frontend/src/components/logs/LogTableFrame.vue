@@ -37,7 +37,7 @@ const props = defineProps({
     </PageDockFooter>
     <div
       v-else-if="$slots.footer"
-      class="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-3 py-2 text-sm text-muted-foreground"
+      class="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-3 py-2 text-sm"
     >
       <slot name="footer" />
     </div>

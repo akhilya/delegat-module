@@ -32,7 +32,7 @@ function thumbSrc(element) {
   <div
     :class="[
       layout === 'sidebar'
-        ? 'product-gallery-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-14 h-[calc(100svh-3.5rem-1rem-4.75rem)]'
+        ? 'product-gallery-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-0 h-[var(--app-fill-pane-height)]'
         : 'flex w-full flex-col gap-3',
     ]"
   >
@@ -87,7 +87,7 @@ function thumbSrc(element) {
               type="button"
               variant="ghost"
               size="icon"
-              class="absolute top-1.5 right-1.5 z-20 size-6 rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
+              class="absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
               @click.stop="emit('remove', index)"
             >
               <X class="size-3" />

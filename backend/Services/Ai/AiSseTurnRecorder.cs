@@ -28,6 +28,7 @@ public static class AiSseTurnRecorder
         JsonElement? plan = null;
         string? modelName = null;
         var planFailed = false;
+        var turnEnded = false;
 
         foreach (var payload in SsePayloads(chunks))
         {
@@ -65,6 +66,7 @@ public static class AiSseTurnRecorder
                             plan = data.Clone();
                         break;
                     case SseEventType.Error:
+                        turnEnded = true;
                         if (data.ValueKind == JsonValueKind.Object
                             && data.TryGetProperty("message", out var msgEl))
                         {
@@ -76,6 +78,7 @@ public static class AiSseTurnRecorder
                         }
                         break;
                     case SseEventType.Done:
+                        turnEnded = true;
                         if (data.ValueKind == JsonValueKind.Object)
                         {
                             if (data.TryGetProperty("modelName", out var modelEl))
@@ -88,6 +91,9 @@ public static class AiSseTurnRecorder
                 }
             }
         }
+
+        if (turnEnded)
+            MarkInterruptedTools(tools);
 
         string? toolCallsJson = null;
         if (plan != null || tools.Count > 0)
@@ -200,6 +206,16 @@ public static class AiSseTurnRecorder
         }
 
         return AgentToolResult.IsFailure(result, summary);
+    }
+
+    private static void MarkInterruptedTools(List<Dictionary<string, object?>> tools)
+    {
+        foreach (var row in tools)
+        {
+            if (row.ContainsKey("summary") || row.ContainsKey("result"))
+                continue;
+            row["summary"] = "interrupted";
+        }
     }
 
     private static IEnumerable<string> SsePayloads(IEnumerable<string> chunks)

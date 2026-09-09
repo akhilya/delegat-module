@@ -36,6 +36,10 @@ public static class ConnectionRemoteIdentity
                 if (TryGet(merged, "apiBaseUrl", out var wooUrl))
                     parts.Add("apiBaseUrl=" + NormalizeEndpoint(wooUrl));
                 break;
+            case "medusa":
+                if (TryGet(merged, "apiBaseUrl", out var medusaUrl))
+                    parts.Add("apiBaseUrl=" + NormalizeEndpoint(medusaUrl));
+                break;
             case "opencart":
                 if (TryGet(merged, "apiBaseUrl", out var ocUrl))
                     parts.Add("apiBaseUrl=" + NormalizeEndpoint(ocUrl));

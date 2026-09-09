@@ -105,6 +105,35 @@ public class QuotaServiceTests
     }
 
     [Fact]
+    public async Task GetRemainingProductSlots_TrashedProductStillConsumesSlot()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "10");
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id);
+        data.AddProduct(store.Id, deletedAt: DateTime.UtcNow);
+        await data.SaveAsync();
+
+        Assert.Equal(8, await quota.GetRemainingProductSlotsAsync(store.Id));
+        var snapshot = await quota.GetUsageSnapshotAsync(false, null, null);
+        Assert.Equal(2, snapshot.Products.Used);
+    }
+
+    [Fact]
+    public async Task EnsureProductQuota_OnlyTrashAtLimit_ThrowsConflict()
+    {
+        using var _ = SetEnv("MAX_PRODUCTS", "1");
+        var (db, quota, data) = Create();
+        var store = data.AddStore();
+        data.AddProduct(store.Id, deletedAt: DateTime.UtcNow);
+        await data.SaveAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => quota.EnsureProductQuotaAsync(store.Id));
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Equal("product_limit_reached", ex.Code);
+    }
+
+    [Fact]
     public async Task EnsureConnectionQuota_AtLimit_ThrowsConflict()
     {
         using var _ = SetEnv("MAX_CONNECTIONS", "1");

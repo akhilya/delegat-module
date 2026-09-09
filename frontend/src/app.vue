@@ -4,6 +4,7 @@ import { RouterView, useRoute } from "vue-router";
 import { Toaster } from "@/components/ui/sonner";
 import "vue-sonner/style.css";
 import OperationsPanel from "@/components/operations/OperationsPanel.vue";
+import DocsSheet from "@/components/docs/DocsSheet.vue";
 import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -29,6 +30,7 @@ export default {
     RouterView,
     Toaster,
     OperationsPanel,
+    DocsSheet,
     LoadingBar,
     AppSidebar,
     SidebarInset,
@@ -135,6 +137,11 @@ export default {
     <AppSidebar />
     <SidebarInset class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div
+        id="app-navbar-host"
+        data-slot="app-navbar-host"
+        class="z-30 w-full min-w-0 shrink-0 bg-background"
+      />
+      <div
         data-slot="page-scroll"
         class="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-pb-[var(--page-scroll-end)]"
       >
@@ -153,6 +160,7 @@ export default {
   <ConfirmDialogHost />
   <template v-if="!isBareLayout">
     <OperationsPanel />
+    <DocsSheet />
     <AiChatPanel v-if="aiEnabled" :key="appKey" />
     <FabGroup :ai-enabled="aiEnabled" />
   </template>

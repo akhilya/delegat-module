@@ -1,5 +1,6 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
 import OrderItemsCell from "@/components/orders/OrderItemsCell.vue";
 import OrderRowContextMenu from "@/components/orders/OrderRowContextMenu.vue";
@@ -7,7 +8,6 @@ import OrderJobConfirmDialog from "@/components/orders/OrderJobConfirmDialog.vue
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
-import Input from "@/components/ui/input/Input.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
@@ -87,11 +87,11 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { mapActions } from "vuex";
+import { setBreadcrumbParentLabel } from "@/router";
 import {
   Barcode,
   ClipboardList,
   Plug,
-  Search,
   X,
   XCircle,
 } from "lucide-vue-next";
@@ -103,6 +103,7 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
+    NavSearchField,
     OrderDetailSheet,
     OrderItemsCell,
     OrderRowContextMenu,
@@ -110,7 +111,6 @@ export default {
     Button,
     Checkbox,
     Spinner,
-    Input,
     EmptyState,
     Select,
     SelectContent,
@@ -132,7 +132,6 @@ export default {
     Barcode,
     ClipboardList,
     Plug,
-    Search,
     X,
     XCircle,
   },
@@ -190,18 +189,6 @@ export default {
     mailboxes() {
       if (!this.selectedConnection) return [];
       return orderMailboxesForAdapter(adapterKeyOf(this.selectedConnection));
-    },
-    breadcrumbs() {
-      const items = [
-        {
-          label: this.$t("pages.ordersPage.breadcrumb"),
-          to: "/orders",
-        },
-      ];
-      if (this.selectedConnection) {
-        items.push({ label: this.connectionLabel(this.selectedConnection) });
-      }
-      return items;
     },
     storeId() {
       return getCachedMe()?.selectedStoreId ?? null;
@@ -323,7 +310,14 @@ export default {
     },
   },
   watch: {
+    selectedConnection: {
+      immediate: true,
+      handler() {
+        this.syncOrderBreadcrumbParent();
+      },
+    },
     "$route.fullPath"() {
+      this.syncOrderBreadcrumbParent();
       if (this.bootstrapping || this.syncingRoute) return;
       this.syncFromRoute();
     },
@@ -375,6 +369,14 @@ export default {
         connection,
         this.adapters,
         this.sameAdapterCount(connection),
+      );
+    },
+
+    syncOrderBreadcrumbParent() {
+      setBreadcrumbParentLabel(
+        this.selectedConnection
+          ? this.connectionLabel(this.selectedConnection)
+          : null,
       );
     },
 
@@ -925,7 +927,6 @@ export default {
 
 <template>
   <AppPageChrome
-    :breadcrumb-items="breadcrumbs"
     :has-nav-center="mailboxes.length > 0"
   >
     <template v-if="mailboxes.length > 0" #nav-center>
@@ -946,22 +947,12 @@ export default {
       v-if="orderConnections.length > 0"
       class="mb-3 flex shrink-0 flex-wrap items-center gap-2"
     >
-      <div class="relative h-9 min-w-0 flex-1 sm:max-w-sm">
-        <Input
-          v-model="searchQuery"
-          class="absolute h-full w-full pr-10"
-          :placeholder="$t('pages.ordersPage.searchPlaceholder')"
-          @keypress.enter="applySearch"
-        />
-        <Button
-          class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-          variant="link"
-          :aria-label="$t('pages.ordersPage.searchPlaceholder')"
-          @click="applySearch"
-        >
-          <Search class="size-4" />
-        </Button>
-      </div>
+      <NavSearchField
+        v-model="searchQuery"
+        class="min-w-0 flex-1 sm:max-w-sm"
+        :placeholder="$t('pages.ordersPage.searchPlaceholder')"
+        @submit="applySearch"
+      />
       <Select :model-value="channel" @update:model-value="onChannelChange">
         <SelectTrigger class="h-9 w-full sm:w-40">
           <SelectValue :placeholder="$t('pages.ordersPage.channelAll')" />
@@ -1039,7 +1030,7 @@ export default {
           <col class="w-36" />
         </colgroup>
         <TableHeader
-          class="bg-background [&_th]:sticky [&_th]:top-[var(--app-navbar-height)] [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
+          class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
         >
           <TableRow class="bg-background hover:bg-transparent">
             <TableHead class="w-10 px-3">

@@ -135,7 +135,7 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
   <!-- Always reserve column width on lg+ to avoid layout flicker while group loads. -->
   <div
     ref="rootRef"
-    class="product-group-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-14 h-[calc(100svh-3.5rem-1rem-4.75rem)]"
+    class="product-group-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-0 h-[var(--app-fill-pane-height)]"
     :class="compact ? 'product-group-sidebar--compact' : 'product-group-sidebar--full'"
     :data-compact="compact ? '' : undefined"
   >

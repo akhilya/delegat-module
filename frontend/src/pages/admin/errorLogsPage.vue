@@ -1,5 +1,5 @@
 <script>
-import Input from "@/components/ui/input/Input.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import {
   Table,
   TableBody,
@@ -32,7 +32,7 @@ import { AlertTriangle } from "lucide-vue-next";
 
 export default {
   components: {
-    Input,
+    NavSearchField,
     Table,
     TableBody,
     TableCell,
@@ -295,9 +295,9 @@ export default {
 <template>
   <div class="flex flex-col pb-4">
     <LogToolbar class="mb-3 shrink-0">
-      <Input
+      <NavSearchField
         v-model="query"
-        class="h-9 w-full min-w-0 sm:max-w-xs"
+        class="w-full min-w-0 sm:max-w-xs"
         :placeholder="$t('pages.errorLogsPage.searchPlaceholder')"
       />
       <template #actions>

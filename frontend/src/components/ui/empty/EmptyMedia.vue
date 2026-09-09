@@ -15,7 +15,7 @@ const props = defineProps({
       cn(
         'mb-1 flex shrink-0 items-center justify-center',
         variant === 'icon' &&
-          'grid size-12 place-items-center rounded-full border bg-muted/40 text-muted-foreground [&_svg]:size-6',
+          'grid size-12 place-items-center rounded-md border bg-muted/40 text-muted-foreground [&_svg]:size-6',
         props.class,
       )
     "

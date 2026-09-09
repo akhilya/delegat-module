@@ -94,6 +94,8 @@ public class AiChatService
             var storeName = storeInfo?.name ?? "Store";
             var productCount = await _context.products.AsNoTracking()
                 .CountAsync(p => p.storeId == storeId, ct);
+            var catalogProductsUsed = await _context.products.IgnoreQueryFilters().AsNoTracking()
+                .CountAsync(p => p.storeId == storeId, ct);
             var connections = await _context.marketplaceConnections.AsNoTracking()
                 .Where(c => c.storeId == storeId)
                 .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt })
@@ -105,6 +107,7 @@ public class AiChatService
             var storeSettings = await _context.aiStoreSettings.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
             var catalogSlotsRemaining = await _quota.GetRemainingProductSlotsAsync(storeId);
+            var catalogProductLimit = _quota.GetLimits().MaxProducts;
 
             var extraMcp = new List<AiTool>();
             try
@@ -123,7 +126,9 @@ public class AiChatService
                 currentUser?.UserName ?? "user", currentUser?.isAdmin ?? false,
                 pageContext, storeSettings, storeInfo?.timezone, localeCode,
                 catalogSlotsRemaining,
-                AiPrompts.ConnectedMcpFromAiTools(extraMcp));
+                AiPrompts.ConnectedMcpFromAiTools(extraMcp),
+                catalogProductLimit,
+                catalogProductsUsed);
 
             var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))
@@ -208,7 +213,12 @@ public class AiChatService
 
                 if (gotApiError)
                 {
-                    yield return Sse(SseEventType.Error, new { message = "Error requesting the AI API. Please try again." });
+                    yield return Sse(SseEventType.Error, new
+                    {
+                        message = iteration > 0
+                            ? AgentToolResult.TurnInterruptedMessage
+                            : AgentToolResult.ProviderErrorMessage,
+                    });
                     break;
                 }
 
@@ -264,8 +274,19 @@ public class AiChatService
                     }
 
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
-                    var (result, summary) = await _toolHost.DispatchAsync(toolName, toolInputJson, storeId, userId, ct);
-                    var resultJson = JsonSerializer.Serialize(result, _jsonOpts);
+                    object result;
+                    string summary;
+                    try
+                    {
+                        (result, summary) = await _toolHost.DispatchAsync(toolName, toolInputJson, storeId, userId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Agent tool {Tool} threw", toolName);
+                        result = new { error = ex.Message };
+                        summary = $"Error: {ex.Message}";
+                    }
+                    var resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                     _toolEffects.TryGetValue(toolName, out var effects);
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
                     toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = resultJson });
@@ -415,10 +436,20 @@ public class AiChatService
             }
             else
             {
-                var (result, s) = await _toolHost.DispatchAsync(tool, argsJson, storeId, userId, ct);
-                summary = s;
-                failed = AgentToolResult.IsFailure(result, s);
-                resultJson = JsonSerializer.Serialize(result, _jsonOpts);
+                try
+                {
+                    var (result, s) = await _toolHost.DispatchAsync(tool, argsJson, storeId, userId, ct);
+                    summary = s;
+                    failed = AgentToolResult.IsFailure(result, s);
+                    resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Plan tool {Tool} threw", tool);
+                    summary = $"Error: {ex.Message}";
+                    failed = true;
+                    resultJson = JsonSerializer.Serialize(new { error = ex.Message }, _jsonOpts);
+                }
             }
 
             _toolEffects.TryGetValue(tool, out var effects);

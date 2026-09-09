@@ -95,9 +95,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [{ label: this.$t("pages.toolsPage.breadcrumb") }];
-    },
     canManageMarketplace() {
       return hasPermission(getCachedMe(), PERMS.MarketplaceManage);
     },
@@ -219,7 +216,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
     <EmptyState
       v-else-if="tools.length === 0"

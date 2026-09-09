@@ -26,7 +26,7 @@ import { Wand2 } from "lucide-vue-next";
 import { mapActions } from "vuex";
 import { http } from "@/main";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
-import { PAGE_TOOLS } from "@/router";
+import { PAGE_TOOLS, setPageTitle } from "@/router";
 import {
   isQuickRunTool,
   toolConfirmTitleKey,
@@ -95,12 +95,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [
-        { label: this.$t("pages.toolsPage.breadcrumb"), to: PAGE_TOOLS },
-        { label: this.entry ? toolTitle(this.entry, this.$t) : this.$t("pages.toolJob.breadcrumb") },
-      ];
-    },
     matchingConnections() {
       const key = this.entry?.adapterKey;
       const cap = this.entry?.requiredCapability;
@@ -173,6 +167,9 @@ export default {
         const response = await http.get(`/tools/${encodeURIComponent(id)}`, { cache: false });
         const entry = extractResponseData({ data: response.data }, null);
         this.entry = entry?.value && typeof entry.value === "object" ? entry.value : entry;
+        if (this.entry) {
+          setPageTitle(toolTitle(this.entry, this.$t));
+        }
         if (this.entry?.mode === "page" && this.entry.path) {
           await this.$router.replace(this.entry.path);
           return;
@@ -264,7 +261,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <EmptyState
       v-if="loading"
       loading

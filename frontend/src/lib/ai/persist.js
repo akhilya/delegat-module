@@ -9,9 +9,25 @@ export const AI_CANCEL_PLAN =
 export function toolResultFailed(result, summary) {
   if (typeof summary === "string" && /HTTP\s+[45]\d\d/i.test(summary)) return true;
   if (!result || typeof result !== "object") return false;
-  if (result.error != null && result.error !== "") return true;
+  if (typeof result.status === "string") {
+    const s = result.status.toLowerCase();
+    return s === "failed" || s === "cancelled";
+  }
   if (typeof result.status === "number" && result.status >= 400) return true;
+  if (result.error != null && result.error !== "") return true;
   return false;
+}
+
+/** Close tools still spinning when the SSE turn ends without a tool-done event. */
+export function finalizeTurnTools(message) {
+  if (!message?.toolCalls) return message;
+  for (const tc of message.toolCalls) {
+    if (tc.status === "running") {
+      tc.status = "done";
+      if (!tc.summary) tc.summary = "interrupted";
+    }
+  }
+  return message;
 }
 
 export function emptyAssistantMessage() {

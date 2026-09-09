@@ -56,7 +56,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import AttributeGroupIconPicker from "@/components/products/AttributeGroupIconPicker.vue";
 import { suggestedGroupIcon } from "@/lib/attributeGroupIcon";
-import { PAGE_CATEGORIES, setPageTitle } from "@/router";
+import { setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import {
   ATTRIBUTE_GROUP_OPTIONS,
@@ -171,7 +171,6 @@ export default {
       defaultValueOptions: [],
       defaultValueOptionsReady: false,
       isLoadingDefaultValueOptions: false,
-      PAGE_CATEGORIES,
       ATTRIBUTE_TYPES,
       ATTRIBUTE_TYPE_VALUES,
       ATTRIBUTE_GROUP_OPTIONS,
@@ -179,19 +178,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      const items = [
-        { label: this.$t("routes.categories"), to: PAGE_CATEGORIES },
-      ];
-      if (this.category?.name) {
-        items.push({ label: this.category.name });
-      } else {
-        items.push({
-          label: this.$t("pages.categoryEditPage.breadcrumbEditing"),
-        });
-      }
-      return items;
-    },
     attributeTypeLabel() {
       const i18nKey =
         ATTRIBUTE_TYPES[this.attributeForm.type]?.i18nKey || "text";
@@ -1009,7 +995,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <PageSection :loading="isLoading" class="!min-h-0">
       <div v-if="category" class="max-w-2xl space-y-1">
         <SettingsFormSection>

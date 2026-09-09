@@ -46,6 +46,21 @@ public class OverageTrimSelectionTests
         Assert.Empty(OverageTrimService.SelectProductEntities(products, null));
     }
 
+    [Fact]
+    public void SelectProductEntities_TrashCountsTowardCap()
+    {
+        var products = new[]
+        {
+            P(1, 1),
+            P(2, 2),
+            P(3, 10, true),
+            P(4, 3, true),
+        };
+
+        var selected = OverageTrimService.SelectProductEntities(products, 3);
+        Assert.Equal(3, selected.Single().Id);
+    }
+
     private static Product P(int id, int daysAgo = 0, bool trashed = false)
     {
         return new Product

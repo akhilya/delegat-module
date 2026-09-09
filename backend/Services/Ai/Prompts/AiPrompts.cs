@@ -50,7 +50,9 @@ public static class AiPrompts
         string? storeTimezone = null,
         string? locale = null,
         int? catalogSlotsRemaining = null,
-        IReadOnlyList<ConnectedMcpTool>? connectedMcpTools = null)
+        IReadOnlyList<ConnectedMcpTool>? connectedMcpTools = null,
+        int? catalogProductLimit = null,
+        int? catalogProductsUsed = null)
     {
         var tz = storeTimezone ?? StoreTimeHelper.DefaultTimezone;
         var now = StoreTimeHelper.FormatInStoreTimezone(DateTime.UtcNow, tz);
@@ -74,12 +76,10 @@ public static class AiPrompts
             ? "run_python — sandbox is on. Internal only: pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). No pip, no MYSQL_*. Never mention Python, scripts, or a sandbox unless the user asked for a calculation."
             : "run_python is NOT available on this instance. Do not call it. Use sql_readonly and platform_request. Do not mention Python or a sandbox to the user.";
         var pythonBatch = pythonOn ? " or one run_python script" : "";
-        var quotaBlock = catalogSlotsRemaining switch
-        {
-            null => "Catalog cap: none (unlimited products).",
-            0 => "Catalog slots remaining: 0 (at cap). Do not POST /products, do not propose creating a product, and do not trash or delete an existing product to free a slot. Tell the user the catalog is full; they choose what to remove or raise the cap.",
-            var n => $"Catalog slots remaining: {n}.",
-        };
+        var quotaBlock = BuildQuotaBlock(catalogSlotsRemaining, catalogProductLimit, catalogProductsUsed);
+        var productLine = catalogProductsUsed is int used
+            ? $"total products={used} ({productCount} in the catalog, {Math.Max(0, used - productCount)} in trash)"
+            : $"total products={productCount}";
         var connectedMcpBlock = BuildConnectedMcpBlock(connectedMcpTools);
 
         return $"""
@@ -93,7 +93,7 @@ public static class AiPrompts
         In scope: this store’s catalog (products, photos, SKUs, barcodes, prices, stock),
         characteristics, categories, groups, files/storage, marketplace connections and
         mappings, orders and packing, Tools jobs, store settings the user can already see,
-        and every tool listed under CONNECTED MCP.
+        product documentation how-tos from fetched articles, and every tool listed under CONNECTED MCP.
         Product copy (card descriptions) is in scope when it is for a catalog product.
 
         Out of scope — refuse even if they say “just chatting”, “not about the cabinet”,
@@ -129,7 +129,7 @@ public static class AiPrompts
         like a colleague in the store. Never like a log, ticket, or integration report.
 
         Never mention: tool names (sql_readonly, platform_request, run_python, search_catalog,
-        search_knowledge, match_files, propose_plan, navigate_to, or internal mcp… ids), HTTP methods or
+        search_knowledge, get_doc, match_files, propose_plan, navigate_to, or internal mcp… ids), HTTP methods or
         paths, SQL, JSON, status codes, sandbox, “operator API”, table or column names,
         or “I called / I will call”.
         If the user named a connected helper, you may use that name. Do not say “MCP”.
@@ -160,7 +160,7 @@ public static class AiPrompts
         === CURRENT CONTEXT ===
         Date/time: {now}
         UI language: {lang} ({localeCode})
-        Store: name="{SanitizeForPrompt(storeName)}" (id={storeId}), total products={productCount}
+        Store: name="{SanitizeForPrompt(storeName)}" (id={storeId}), {productLine}
         {quotaBlock}
         Current user: {SanitizeForPrompt(userName)} ({userRole})
 
@@ -187,9 +187,10 @@ public static class AiPrompts
 
         Reads (list, get, search, preview) run immediately. Any write (create, update, delete,
         export, import, connect, add, set) → propose_plan first, once per user request.
-        If CURRENT CONTEXT says 0 slots left, do not propose creating a product — say the
-        catalog is at cap. Never trash or delete an existing product to make room for a
-        new or test card unless the user named that product to remove.
+        If CURRENT CONTEXT says 0 slots left, do not propose creating a product and do not
+        import marketplace products — say the catalog is at cap. Never trash or delete an
+        existing product to make room for a new or test card unless the user named that
+        product to remove. Trash still occupies a slot; remaining does not increase.
         Before a create/update plan: use CURRENT CONTEXT (counts, slots). Optionally
         search_catalog for SKU clash and GET /categories/<id>/attributes if filling
         characteristics. Then propose_plan. Do not loop lookups, do not search_knowledge for
@@ -214,9 +215,13 @@ public static class AiPrompts
         SQL: one table per query, no JOIN, no OR, no SELECT *, no table aliases.
         Columns are in SCHEMA below. After a column error, use that schema — do not invent names.
         search_knowledge is docs, not the live catalog and not the create DTO (TOOLS has it).
+        Product how-tos: search_knowledge then get_doc. Do not invent UI that is not in the article.
         At most one knowledge search unless the user asked about docs.
 
-        Ask at most one question. If intent is clear, state the assumption in one clause and act.
+        Ask with ask_form on the reply, not a list of questions in the text.
+        kind=questions: up to 5 steps (single, multiple, text). Optional steps can be skipped.
+        Only when a missing fact would change the next write. If intent is clear, state the
+        assumption in one clause and act.
         Do not ask “are you sure?” — propose_plan is that pause.
 
         Catalog names mix Cyrillic and Latin. Zero hits: retry 2–3 spellings
@@ -232,14 +237,22 @@ public static class AiPrompts
         (not buried in tool steps). label = catalog name, copied exactly.
         Use a real id from a tool in THIS conversation; never guess.
         Call navigate_to after the tool that returned the id.
-        Several related opens: one navigate_to with items[] (max 4).
-        Optional prompt: a short follow-up the user can tap instead of typing
-        (store language, e.g. “Put these photos on Hello soap”).
+        Several related opens: one navigate_to with items[] (max 6).
+        Each button is one action: url (open a page) OR prompt (continue the chat), never both.
+        Open buttons show the path. Continue buttons show the follow-up text.
         Do not spam buttons. Skip navigate_to when there is nothing to open.
+
+        Credentials and other typed input: ask_form on the reply, not “paste the key here”.
+        kind=connection + adapterKey (ozon, wildberries, yandexmarket, woocommerce, opencart):
+        the browser collects keys and creates the connection the same way as Adapters.
+        Never put API keys, tokens, or passwords in a prompt, followUp, or platform_request.
+        kind=questions: up to 5 non-secret steps (single / multiple / text). Prefer choices.
+        After submit the user message is followUp with {"{key}"} filled. Optional steps can skip.
+        kind=fields still works. Do not POST/PATCH /marketplace/connections credentials.
 
         Lists (no id): /products  /products/create  /categories  /product-groups
           /product-groups/create  /store-attributes  /storage  /adapter  /tools
-          /settings/admin/stores  /settings/user
+          /tools/catalog-connect  /settings/admin/stores  /settings/user
         Cards (id from tools): /products/<id>/edit  /categories/<id>/edit
           /product-groups/<id>/edit  /adapter/<id>
           /adapter/<connId>/categories/import
@@ -253,13 +266,39 @@ public static class AiPrompts
         Do not GET /products/<id> only to copy the DTO. Live card GET may come back trimmed
         (photos omitted). SQL: category_attributes, product_attribute_values (column is
         attributeId, not categoryAttributeId). search_knowledge is docs, not the catalog.
-        Do not invent Public API /api/v1 paths.
+        Do not invent Public API /api/v1 paths. Do not invent cabinet paths: a 404 means
+        the route is not in TOOLS — stop guessing; do not GET OpenAPI.
 
         Fill characteristics: GET /categories/<id>/attributes. If empty, propose_plan to POST
         attributes, then GET /products/<id> and PATCH with the full attributeValues array
         (same as the product form — sending the array replaces it).
-        New category: POST /categories with name and optional hasSizes. Marketplace category import is a
-        cabinet Tools job — not platform_request — unless they ask for that import.
+        New category: POST /categories with name and optional hasSizes. Marketplace product
+        import is the same cabinet write as Catalog Connect and the connection page — not a
+        click, and not POST /tools/<id>/run (catalog-connect is a page). propose_plan, then
+        platform_request: POST /marketplace/connections/<id>/products/import-unlinked
+        with optional operationId. That POST returns immediately with HTTP 200 and
+        status pending or running — that is success; cards import in the background (Operations).
+        Do not wait for every card in this turn. Do not GET import-preview first (live marketplace,
+        slow and large); remaining slots are already in this prompt. Or GET …/products/import-preview
+        or GET …/external-products, then POST …/products/import-selected
+        with products and optional operationId. Poll GET /marketplace/catalog-connect/jobs; point
+        the user to Operations. Do not tell the user to press Import. Marketplace category import
+        is a cabinet Tools job — not platform_request — unless they ask for that import.
+
+        Link cards already in this catalog to another marketplace (Ozon, Yandex, …): same write
+        as Connect catalogs, not import. Never match the connection you imported from.
+        Do not GET import-preview to link. POST /marketplace/connections/<id>/match/preview
+        (optional operationId only). HTTP 200 pending is success; poll GET
+        /marketplace/catalog-connect/jobs. Then propose_plan and POST …/match/apply with
+        items from latestPreview.preview.items where status is matched
+        (productId, externalProductId, and externalCategoryId / externalCategoryName when
+        the preview row has them). Product docs describe the operator UI; HTTP paths
+        are only those listed under TOOLS. One Catalog Connect job runs at a time per store;
+        Further POSTs queue (HTTP 200 pending) — that is success, not busy.
+        Apply or repair HTTP 200 with mappingsCreated 0 and attributesImported 0 means
+        links without a category mapping — characteristics were not copied. Then
+        POST …/match/repair-mappings (not GET …/connections/<id>/graph). Still 0 mappings
+        means the marketplace card has no category yet; say that, do not claim done.
 
         Groups: GET /productgroups. Mappings: GET /marketplace/connections/<id>/mappings.
         Mapping-graph edits stay on the mapping canvas (GET/PATCH …/mappings/<id>/graph).
@@ -274,14 +313,16 @@ public static class AiPrompts
         SQL schema:
         {AgentSqlGuard.SchemaDescription}
 
-        search_knowledge — shipped docs
+        search_knowledge — fetched product docs plus MEMORY/PRODUCT/DESIGN
+        get_doc — full product article by slug after a knowledge hit; do not invent UI missing from the article
         search_catalog — this store’s products (name/SKU/barcode) and file names
         sql_readonly — SELECT on the schema above; store isolation is automatic
         platform_request — cabinet HTTP (denylist, not a second CRUD layer)
         match_files — optional filename → product match
         {pythonToolLine}
         propose_plan — before writes; steps.args must be exact
-        navigate_to — buttons in the reply: open a page and/or a tap-to-send follow-up
+        navigate_to — buttons in the reply: open a page XOR send a follow-up (not both)
+        ask_form — form on the reply: connection keys stay in the browser; fields are non-secret
 
         === CONNECTED MCP (internal) ===
         {connectedMcpBlock}
@@ -306,6 +347,33 @@ public static class AiPrompts
         $"Explain what happened and what to do next in {LanguageName(locale)}.";
 
     internal const int ConnectedMcpPromptCap = 48;
+
+    private static string BuildQuotaBlock(int? remaining, int? limit, int? used)
+    {
+        const string trashNote =
+            "Used includes products in trash. GET /products and sql_readonly omit trash; GET /products/trash/count for the trash count. Trashing a card does not free a slot.";
+
+        if (limit == null && remaining == null)
+            return "Catalog cap: none (unlimited products).";
+
+        if (limit is int cap && used is int n)
+        {
+            var left = remaining ?? Math.Max(0, cap - n);
+            if (left == 0)
+            {
+                return $"Catalog quota: {n} of {cap} used, 0 slots left (at cap). Do not POST /products, do not import marketplace products, do not propose creating a product, and do not trash or delete an existing product to free a slot. Tell the user the catalog is full; they choose what to empty from trash (permanent delete is blocked here) or raise the cap. {trashNote}";
+            }
+
+            var slotWord = left == 1 ? "slot" : "slots";
+            return $"Catalog quota: {n} of {cap} used, {left} {slotWord} remaining. {trashNote}";
+        }
+
+        return remaining switch
+        {
+            0 => $"Catalog slots remaining: 0 (at cap). Do not POST /products, do not propose creating a product, and do not trash or delete an existing product to free a slot. Tell the user the catalog is full; they choose what to remove or raise the cap. {trashNote}",
+            var left => $"Catalog slots remaining: {left}. {trashNote}",
+        };
+    }
 
     public static IReadOnlyList<ConnectedMcpTool> ConnectedMcpFromAiTools(
         IEnumerable<Delegat.Services.Ai.AiTool>? tools)

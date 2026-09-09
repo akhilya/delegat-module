@@ -1,3 +1,7 @@
+import { askFormFromTool, chatActionsFromTool } from "./replyUi.js";
+
+export { chatActionsFromTool };
+
 /**
  * Build and split the assistant execution timeline so thinking, tools, and
  * the final reply stay in chronological order instead of "all tools on top".
@@ -39,37 +43,13 @@ function joinText(items) {
     .trim();
 }
 
-export function isNavigateTool(item) {
-  return item?.type === "tool" && item.tool?.name === "navigate_to";
+export function isReplyChromeTool(item) {
+  const name = item?.tool?.name;
+  return name === "navigate_to" || name === "ask_form";
 }
 
-export function chatActionsFromTool(tool) {
-  const result = tool?.result;
-  if (!result || typeof result !== "object") return [];
-  const raw = Array.isArray(result.actions) ? result.actions : null;
-  const list = raw?.length
-    ? raw
-    : result.navigate && (result.url || result.prompt)
-      ? [
-          {
-            url: result.url || "",
-            label: result.label || result.url || result.prompt,
-            prompt: result.prompt || "",
-          },
-        ]
-      : [];
-  return list
-    .map((a) => {
-      const url =
-        typeof a?.url === "string" && a.url.startsWith("/") ? a.url : "";
-      const prompt =
-        typeof a?.prompt === "string" ? a.prompt.trim().slice(0, 200) : "";
-      const label = String(a?.label || url || prompt || "")
-        .trim()
-        .slice(0, 80);
-      return { url, label, prompt };
-    })
-    .filter((a) => a.label && (a.url || a.prompt));
+export function isNavigateTool(item) {
+  return item?.type === "tool" && item.tool?.name === "navigate_to";
 }
 
 export function collectChatActions(timeline) {
@@ -87,6 +67,16 @@ export function collectChatActions(timeline) {
   return actions;
 }
 
+export function collectChatForms(timeline) {
+  const forms = [];
+  for (const item of timeline || []) {
+    if (item?.type !== "tool" || item.tool?.name !== "ask_form") continue;
+    const form = askFormFromTool(item.tool);
+    if (form) forms.push({ ...form, id: item.id || item.tool?.id || forms.length });
+  }
+  return forms.slice(0, 2);
+}
+
 /**
  * @param {Array} timeline
  * @param {{ done?: boolean }} [opts]
@@ -95,7 +85,8 @@ export function executionView(timeline, opts = {}) {
   const items = Array.isArray(timeline) ? timeline : [];
   const done = opts.done === true;
   const actions = collectChatActions(items);
-  if (!items.length) return { process: [], reply: "", actions };
+  const forms = collectChatForms(items);
+  if (!items.length) return { process: [], reply: "", actions, forms };
 
   let lastToolIdx = -1;
   for (let i = items.length - 1; i >= 0; i--) {
@@ -106,18 +97,19 @@ export function executionView(timeline, opts = {}) {
   }
 
   if (lastToolIdx < 0) {
-    if (!done) return { process: items, reply: "", actions };
-    return { process: [], reply: joinText(items), actions };
+    if (!done) return { process: items, reply: "", actions, forms };
+    return { process: [], reply: joinText(items), actions, forms };
   }
 
   return {
-    process: items.slice(0, lastToolIdx + 1).filter((item) => !isNavigateTool(item)),
+    process: items.slice(0, lastToolIdx + 1).filter((item) => !isReplyChromeTool(item)),
     reply: joinText(items.slice(lastToolIdx + 1)),
     actions,
+    forms,
   };
 }
 
-const emptyView = { process: [], reply: "", actions: [] };
+const emptyView = { process: [], reply: "", actions: [], forms: [] };
 
 /**
  * Keep the proposal (thinking / reply / plan) separate from tools that run after Execute.

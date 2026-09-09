@@ -1,6 +1,7 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
@@ -53,7 +54,7 @@ import {
   ChevronsRight,
 } from "lucide-vue-next";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PAGE_PRODUCT_GROUPS, setPageTitle } from "@/router";
+import { setPageTitle } from "@/router";
 import draggable from "vuedraggable";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import ProductImageCell from "@/components/products/ProductImageCell.vue";
@@ -62,6 +63,7 @@ export default {
   components: {
     Spinner,
     AppPageChrome,
+    NavSearchField,
     PageSection,
     Button,
     Input,
@@ -131,22 +133,10 @@ export default {
       availableProducts: [],
       isSearchingProducts: false,
       selectedProductsToAdd: [],
-      PAGE_PRODUCT_GROUPS,
       FIELD_LIMITS,
     };
   },
   computed: {
-    breadcrumbs() {
-      const items = [{ label: this.$t("routes.groups"), to: PAGE_PRODUCT_GROUPS }];
-      if (this.isCreateMode) {
-        items.push({ label: this.$t("pages.productGroupEditPage.breadcrumbNewGroup") });
-      } else if (this.group?.name) {
-        items.push({ label: this.group.name });
-      } else {
-        items.push({ label: this.$t("pages.productGroupEditPage.breadcrumbEditing") });
-      }
-      return items;
-    },
     availableProductsFiltered() {
       const memberIds = new Set(this.members.map((m) => m.product.id));
       return this.availableProducts.filter((p) => !memberIds.has(p.id));
@@ -583,7 +573,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <PageSection :loading="isLoading" class="!min-h-0">
       <div v-if="group" class="max-w-2xl space-y-1">
         <SettingsFormSection>
@@ -863,15 +853,12 @@ export default {
 
         <div class="space-y-3 px-6 py-5">
           <div class="flex gap-2">
-            <div class="relative min-w-0 flex-1">
-              <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                v-model="productSearchQuery"
-                :placeholder="$t('pages.productGroupEditPage.addProductsDialog.searchPlaceholder')"
-                class="pl-9"
-                @keyup.enter="searchProducts(true)"
-              />
-            </div>
+            <NavSearchField
+              v-model="productSearchQuery"
+              class="min-w-0 flex-1"
+              :placeholder="$t('pages.productGroupEditPage.addProductsDialog.searchPlaceholder')"
+              @submit="searchProducts(true)"
+            />
             <Button
               variant="outline"
               :disabled="isSearchingProducts"

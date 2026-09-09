@@ -1,6 +1,7 @@
 <script setup>
 import { Primitive } from "reka-ui";
 import { cn } from "@/lib/utils";
+import { useSidebar } from "./utils";
 
 const props = defineProps({
   as: { type: null, default: "a" },
@@ -9,6 +10,12 @@ const props = defineProps({
   isActive: { type: Boolean, default: false },
   class: { type: null, required: false },
 });
+
+const { isMobile, setOpenMobile } = useSidebar();
+
+function dismissMobile() {
+  if (isMobile.value) setOpenMobile(false);
+}
 </script>
 
 <template>
@@ -17,6 +24,7 @@ const props = defineProps({
     data-sidebar="menu-sub-button"
     :as="as"
     :as-child="asChild"
+    @click="dismissMobile"
     :data-size="size"
     :data-active="isActive"
     :class="

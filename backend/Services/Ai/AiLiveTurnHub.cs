@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Delegat.Models.Ai;
+using Delegat.Services.Ai.Agent;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Delegat.Services.Ai;
@@ -107,7 +108,7 @@ public sealed class AiLiveTurnHub
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Live AI turn failed for session {SessionId}", turn.SessionId);
-                turn.Publish(AiSseTurnRecorder.Format(SseEventType.Error, new { message = "Error requesting the AI API. Please try again." }));
+                turn.Publish(AiSseTurnRecorder.Format(SseEventType.Error, new { message = AgentToolResult.TurnInterruptedMessage }));
                 turn.Publish(AiSseTurnRecorder.Format(SseEventType.Done, new { }));
             }
             finally

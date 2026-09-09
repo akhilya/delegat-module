@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`
 - Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab
 - Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and external MCP clients: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
 - Cabinet assistant: category and store attributes (list/create), product `attributeValues` merge, `GET /products?categoryId=`, SQL on attribute tables plus `IN (...)` and `description`
@@ -45,9 +46,27 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Public API v1: product list `search` matches barcode, variant SKU/barcode, and marketplace ids (same as the catalog), and items include `variantCount`
 - Cabinet AI generation keeps running if you reload the page: reopen the companion sheet to watch the live turn (tools, thoughts, Stop). It does not survive an API process restart
 - Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
+- Cabinet assistant `ask_form`: a form on the reply. Marketplace keys stay in the browser and POST the same create-connection as Adapters (the model never sees the key). Clarifying questions are a short Questionnaire (up to 5 steps); answers become the next user message.
 
 ### Changed
 
+- Sidebar group for products, groups, trash, categories, barcodes, and notes is **Каталог** / Catalog. The products page stays **Товары** / Products.
+- Adapter connection Products tab fills the pane like catalog products (`table-scroll` XY scroller, sticky `bg-background` headers). Ids/SKU are plain mono, not muted chips. Status chips stay outline (Synced uses success-muted, unlinked is muted caption) instead of inverted primary or muddy secondary fills.
+- Tabs: in dark the selected pill is muted on a quiet muted well. The old shadcn `input/30` overlay matched `--muted` here and disappeared; the track is no longer a solid muted slab.
+- Dark theme: default buttons are inverted paper (light fill) with a **dark** top sheen. Branding no longer pins light `--primary` on `html`, which kept ink buttons on a dark page. Catalog search matches `Input` (`dark:bg-input/30`, not page paper). Flush product-table headers match the page. Page-size selects use field chrome, not `bg-primary-foreground`. Status captions (`success` / `warning` / muted) stay lighter than their fills. Scrollbars follow the theme (`color-scheme` on `.dark`, 6px thumb from muted foreground) instead of Chrome’s light overlay.
+- Navbar home crumb sits inside the trail (no negative pull), so the hover fill is not clipped by the bar.
+- Cabinet assistant marketplace product import is the same cabinet write as Catalog Connect and the connection page (`import-unlinked` / `import-selected`). It should run that write after you confirm, not ask you to click Import. `POST import-unlinked` queues a background job (HTTP 200 pending is success); the process must not treat that as a failed write or wait for every card in the same turn.
+- Cabinet assistant linking of existing cards to another marketplace is Catalog Connect match (`POST …/match/preview`, then `POST …/match/apply` with preview category ids). HTTP 200 with `mappingsCreated` 0 is not a finished mapping. Backfill is `POST …/match/repair-mappings` (also copies characteristics). Mapping canvas is `GET/PATCH …/mappings/{mappingId}/graph` — there is no `GET …/connections/{id}/graph`. A 404 names TOOLS paths instead of always pointing at match. A second Catalog Connect POST while one job is running **queues** (HTTP 200 pending) instead of `catalog_connect_busy`.
+- `MAX_PRODUCTS` usage includes cards in trash. Moving a product to trash does not free a slot (Settings → Administration, adapter import, and the assistant quota line).
+- Empty AI chat: catalog-sized title, three rotating starters (page-aware when the companion knows the card), docked above the composer instead of a centered “Hi!” list
+- Controls use the `--radius` token (`rounded-md`), not stadium `rounded-full`. Exceptions: circular operations and AI FABs (bottom-right), plus geometric circles (avatars, radios, switches, dots). Search magnifier is MingCute Core Regular (hollow), not filled
+- Cabinet UI icons are MingCute Core Filled (Apache-2.0) behind Lucide names — rounded filled glyphs that match `--radius`, not Phosphor. Square badges stay off the map (`CheckFilled`, `ArrowRightUpFilled`, `ClassifyFilled`, `StopCircleFilled`). Loaders stay Hugeicons `Loading03`
+- On touch/pen, a tap on a context-menu target opens the menu (Reka long-press never fired on a tap). The mobile sidebar sheet closes after a nav option or route change
+- Cabinet assistant `navigate_to` buttons are one action each: Open a path or Continue the chat, never both (max 6). Open shows the path; Continue shows the follow-up text.
+- The cabinet navbar sits above the page scroller (full inset width, not sticky inside it). Catalog table footer actions use foreground ink (the dock no longer paints the bar muted, which made outline buttons look disabled). Fill panes (catalog, store storage) and product-edit side columns share `--page-scroll-end` so content is not flush with the inset edge. Catalog products scroll inside the table; a wide row pans the table, not the bar. In-page list searches (orders, logs, connection products, category browser) use `NavSearchField`
+- Catalog navbar search matches the default input: `h-9` and `rounded-md` (not a taller pill). Select, searchable-select, and the sidebar store switcher use the same field corners. Focus on search still uses `border-ring`, not a 3px ring. The bar is `4rem`
+- Cabinet navbar stacks search/tabs under the title below `lg` so the bar fits a phone; the trail is the current page only
+- Cabinet page trail lives in the navbar left column. Tabs and search stay on the viewport midline (equal side columns; center track `minmax(20rem, 40rem)`). Catalog search and category sit in one `NavSearchField` with a hairline; barcode and notes search use the same field. Category picker rows stay truncated
 - Cabinet assistant uses MCP servers enabled in Settings → AI for the job those tools describe (library docs, etc.). Still refuses jokes, recipes, homework, and jailbreaks; does not redirect that work to the catalog.
 - Catalog (and other) product thumbs load inside the cell spinner; the products table paints as soon as `/products` returns and does not wait for photos to decode
 - Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
@@ -63,7 +82,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet sidebar and inset sheets keep the hairline ring and use a quiet drop shadow (no large ambient cloud)
 - Catalog and order mailbox pagination / bulk footers sit under the last row when the table fits the page; they pin to the inset bottom only when the page overflows. Hairline top border only (no ring, no rounding)
 - Cabinet order mailbox rows have a hairline under each row
-- Catalog, packing overview, and order mailboxes scroll with the page (tables and lists are not height-locked). Catalog and mailbox table headers stay under the page bar while the page scrolls. Pagination / bulk footers follow the last row unless the page overflows, then they pin to the inset bottom
+- Packing overview and order mailboxes scroll with the page. Catalog products scroll inside the table. Mailbox headers stick at the top of the page scroller. Pagination / bulk footers follow the last row unless the page overflows, then they pin to the inset bottom
 - Cabinet packing overview (`/orders`): each order is one Mail-style inset row (photo stack, product name, order id, amount). Line items stay on the sheet
 - Cabinet “Server temporarily unavailable” is a full-viewport system screen (large title, one Try again button, no store logo). Sign-in / sign-up also drop the store logo. The Control Plane square is no longer the default favicon; the store icon is the tab and sidebar mark, or the store’s initial if none is uploaded
 - Wildberries pack uses the supply in `extra.supplyId` when the caller passes one (the cabinet sheet does); omitting it still creates a supply so Public API callers keep working. Optional `extra.boxId` / `extra.createBox` assign the order to a TRBX. Order `extra` may include `boxId` when the box membership is known
@@ -119,9 +138,14 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Removed
 
 - Pause / Resume on background operations (jobs are running or stopped)
+- Unused `PageHeader` primitive — page titles are the navbar trail
 
 ### Fixed
 
+- Yandex Market Catalog Connect now reads the Market category from Partner API `mapping.marketCategoryId` when `offer.marketCategoryId` is missing or `0`, so linking can create a category mapping
+- Catalog Connect `repair-mappings` copies marketplace characteristics after it creates the missing mapping (same as apply)
+- Keyboard focus rings sit inside inputs, buttons, and dropdowns so the shell / navbar / sheet `overflow-hidden` no longer clips them
+- Cabinet Help catalog (`GET /api/docs/catalog`) no longer treats Control Plane SPA HTML as JSON. Public docs origin must serve `/docs/catalog.json` (and `/docs/en/catalog.json`) as JSON, not `index.html`
 - Order list thumbs for a linked catalog product use `/api/files/{id}/thumbnail`, not the marketplace URL (Yandex CDN / expired MinIO). Adapter photos stay only when the line has no local file
 - Order line photos no longer keep expired MinIO/S3 presigned URLs (mapping export used a 2-hour `storage.printo.studio` signature). Linked products get `/api/files/{id}/thumbnail`; Yandex skips those seller `pictures` and uses Market-hosted `mediaFiles` instead
 - Yandex Market offer-mappings photos: Partner API may send `pictures` as `{ url }` objects (not strings) and put `offerMappings` at the response root. Either used to drop the whole mapping, so order thumbs stayed empty. `shopSku` is used when `offerId` is missing

@@ -14,6 +14,7 @@ export const ADAPTER_ICON_URLS = {
   yandex: "/adapter-icons/yandex.webp",
   woocommerce: "/adapter-icons/woocommerce.webp",
   opencart: "/adapter-icons/opencart.webp",
+  medusa: "/adapter-icons/medusa.webp",
   avito: "/adapter-icons/avito.webp",
   "chestny-znak": "/adapter-icons/chestny-znak.webp",
 };

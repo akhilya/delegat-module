@@ -19,6 +19,11 @@ const props = defineProps({
     required: true,
     // Each item: { label: string, to?: string }
   },
+  /** Compact trail for the page navbar (single row, no wrap, no page margin). */
+  inset: {
+    type: Boolean,
+    default: false,
+  },
   class: { type: null, required: false },
 });
 
@@ -31,14 +36,16 @@ function navigate(to) {
 
 <template>
   <!-- Fixed row height (home size-7): link crumbs must not use default Button py-2/h-9 or the trail grows and looks «shifted». -->
-  <Breadcrumb :class="cn('mb-4', props.class)">
-    <BreadcrumbList class="min-h-7">
-      <BreadcrumbItem>
+  <Breadcrumb :class="cn(inset ? 'min-w-0' : 'mb-4', props.class)">
+    <BreadcrumbList
+      :class="cn('min-h-7', inset && 'flex-nowrap overflow-hidden')"
+    >
+      <BreadcrumbItem class="shrink-0 max-lg:hidden">
         <BreadcrumbLink as-child>
           <Button
             variant="ghost"
             size="icon"
-            class="-ml-1.5 size-7"
+            class="size-7"
             :aria-label="t('components.breadcrumbs.homeAriaLabel')"
             @click="navigate('/')"
           >
@@ -47,20 +54,28 @@ function navigate(to) {
         </BreadcrumbLink>
       </BreadcrumbItem>
       <template v-for="(item, index) in items" :key="index">
-        <BreadcrumbSeparator>
+        <BreadcrumbSeparator class="shrink-0 max-lg:hidden">
           <ChevronRight class="size-4" />
         </BreadcrumbSeparator>
-        <BreadcrumbItem>
+        <BreadcrumbItem
+          :class="
+            index < items.length - 1 ? 'min-w-0 max-lg:hidden' : 'min-w-0'
+          "
+        >
           <BreadcrumbLink v-if="item.to && index < items.length - 1" as-child>
             <Button
               variant="link"
-              class="h-7 px-0 py-0 text-sm font-normal text-muted-foreground"
+              class="h-7 max-w-full truncate px-0 py-0 text-sm font-normal text-muted-foreground"
               @click="navigate(item.to)"
             >
               {{ item.label }}
             </Button>
           </BreadcrumbLink>
-          <BreadcrumbPage v-else class="inline-flex h-7 items-center text-sm">
+          <BreadcrumbPage
+            v-else
+            class="inline-flex h-7 max-w-full min-w-0 items-center truncate text-sm max-lg:font-medium"
+            :title="item.label"
+          >
             {{ item.label }}
           </BreadcrumbPage>
         </BreadcrumbItem>

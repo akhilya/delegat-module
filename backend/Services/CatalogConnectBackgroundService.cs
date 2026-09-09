@@ -73,12 +73,18 @@ public sealed class CatalogConnectBackgroundService : BackgroundService
             await context.SaveChangesAsync(ct);
         }
 
-        var job = await context.pendingCatalogConnectJobs
-            .Where(j => j.status == CatalogConnectJobStatus.Pending)
-            .OrderBy(j => j.createdAt)
-            .FirstOrDefaultAsync(ct);
+        var snapshot = await context.pendingCatalogConnectJobs
+            .AsNoTracking()
+            .Where(j => j.status == CatalogConnectJobStatus.Pending
+                        || j.status == CatalogConnectJobStatus.InProgress)
+            .ToListAsync(ct);
+        var pick = PickNext(snapshot);
+        if (pick == null)
+            return;
 
-        if (job == null)
+        var job = await context.pendingCatalogConnectJobs
+            .FirstOrDefaultAsync(j => j.Id == pick.Id, ct);
+        if (job == null || job.status != CatalogConnectJobStatus.Pending)
             return;
 
         if (job.status == CatalogConnectJobStatus.Pending)
@@ -101,5 +107,21 @@ public sealed class CatalogConnectBackgroundService : BackgroundService
 
         _logger.LogInformation("Processing catalog connect job {JobId} ({Kind})", job.Id, job.kind);
         await jobService.ProcessJobAsync(job, ct);
+    }
+
+    /// <summary>
+    /// One Catalog Connect job runs at a time per store. Other stores can proceed.
+    /// </summary>
+    internal static PendingCatalogConnectJob? PickNext(IReadOnlyList<PendingCatalogConnectJob> jobs)
+    {
+        var busyStores = jobs
+            .Where(j => j.status == CatalogConnectJobStatus.InProgress)
+            .Select(j => j.storeId)
+            .ToHashSet();
+        return jobs
+            .Where(j => j.status == CatalogConnectJobStatus.Pending && !busyStores.Contains(j.storeId))
+            .OrderBy(j => j.createdAt)
+            .ThenBy(j => j.Id)
+            .FirstOrDefault();
     }
 }

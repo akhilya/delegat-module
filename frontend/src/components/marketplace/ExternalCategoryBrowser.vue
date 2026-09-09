@@ -1,7 +1,7 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import Input from "@/components/ui/input/Input.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   InsetGroup,
@@ -35,7 +35,7 @@ export default {
   components: {
     Spinner,
     Button,
-    Input,
+    NavSearchField,
     EmptyState,
     InsetGroup,
     InsetGroupItem,
@@ -118,18 +118,13 @@ export default {
 <template>
   <div :class="rootClass">
     <div class="flex shrink-0 gap-2">
-      <div class="relative min-w-0 flex-1">
-        <Search
-          class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          :model-value="search"
-          :placeholder="searchPlaceholder"
-          class="pl-9"
-          @update:model-value="onSearchInput"
-          @keyup.enter="emitSearchNow"
-        />
-      </div>
+      <NavSearchField
+        class="min-w-0 flex-1"
+        :model-value="search"
+        :placeholder="searchPlaceholder"
+        @update:model-value="onSearchInput"
+        @submit="emitSearchNow"
+      />
       <Button
         variant="outline"
         size="icon"

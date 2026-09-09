@@ -32,8 +32,7 @@ public class QuotaService
         if (maxProducts == null)
             return null;
 
-        var count = await _unitOfWork.Repository<Product>()
-            .CountAsync(p => p.storeId == storeId);
+        var count = await CountProductsIncludingTrashAsync(storeId);
         return Math.Max(0, maxProducts.Value - count);
     }
 
@@ -278,8 +277,8 @@ public class QuotaService
         QuotaLimitsDto limits,
         CancellationToken ct)
     {
-        // Active products only (matches EnsureProductQuotaAsync / query filter).
-        var productsUsed = await _db.products.CountAsync(p => p.storeId == storeId, ct);
+        // Soft-deleted (trash) rows still occupy MAX_PRODUCTS slots.
+        var productsUsed = await CountProductsIncludingTrashAsync(storeId, ct);
 
         var productFiles = await _db.files
             .AsNoTracking()
@@ -313,6 +312,10 @@ public class QuotaService
             Connections: connections,
             IsOverQuota: products.IsOver || files.IsOver || storage.IsOver || connections.IsOver);
     }
+
+    private Task<int> CountProductsIncludingTrashAsync(int storeId, CancellationToken ct = default) =>
+        _db.products.IgnoreQueryFilters().AsNoTracking()
+            .CountAsync(p => p.storeId == storeId, ct);
 
     private static QuotaMetricDto Metric(long used, long? limit)
     {

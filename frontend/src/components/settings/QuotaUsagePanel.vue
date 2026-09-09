@@ -232,11 +232,11 @@ onMounted(load);
             </template>
             <p>{{ $t(`pages.usagePage.metrics.${row.key}`) }}</p>
             <div
-              class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+              class="mt-1.5 h-1 overflow-hidden rounded-md bg-muted"
               aria-hidden="true"
             >
               <div
-                class="h-full rounded-full transition-[width] duration-300 ease-out"
+                class="h-full rounded-md transition-[width] duration-300 ease-out"
                 :class="row.metric?.isOver ? 'bg-destructive' : 'bg-primary'"
                 :style="{ width: `${metricPercent(row.metric)}%` }"
               />

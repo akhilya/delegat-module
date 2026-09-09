@@ -1,10 +1,13 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
-// NavigationBar - Page-level toolbar with mobile sidebar trigger, center slot, and user menu.
-// Height is locked to --app-navbar-height (single row) so breadcrumbs share one Y-offset on every page.
+// NavigationBar - Page-level toolbar. Below lg, search/tabs sit on a second
+// row so the title and actions stay usable on a phone.
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import FabGroup from "@/components/FabGroup.vue";
+import { BookOpen } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
+import { pageHelpSlug } from "@/lib/docsHelp";
 
 import { http } from "@/main";
 import { mapActions } from "vuex";
@@ -14,7 +17,6 @@ import { normalizeAppVersion, resolveDisplayVersion } from "@/lib/appVersion";
 
 export default {
   props: {
-    sticky: { type: Boolean, default: true },
     /** When true, render the center slot (search/tabs). Do not infer from $slots alone. */
     hasCenter: { type: Boolean, default: false },
   },
@@ -23,6 +25,8 @@ export default {
     SidebarTrigger,
     UserAccountMenu,
     FabGroup,
+    BookOpen,
+    Button,
   },
   data() {
     return {
@@ -36,9 +40,21 @@ export default {
     displayVersion() {
       return resolveDisplayVersion(this.platformVersion, this.appVersion);
     },
+    pageHelpSlug() {
+      return pageHelpSlug(
+        this.$route.path,
+        this.$store.state.docs?.catalog,
+      );
+    },
   },
   methods: {
     ...mapActions(["getMe"]),
+    openPageHelp() {
+      this.$store.dispatch("docs/openForRoute", {
+        path: this.$route.path,
+        connId: this.$route.params.connId,
+      });
+    },
   },
   async mounted() {
     this.isLoading = true;
@@ -65,47 +81,78 @@ export default {
 
 <template>
   <div
-    :class="[
-      'h-[var(--app-navbar-height)] w-full shrink-0 overflow-hidden bg-background',
-      sticky && 'sticky top-0 left-0 z-30 supports-[backdrop-filter]:bg-background/95 supports-[backdrop-filter]:backdrop-blur-sm',
-    ]"
+    data-slot="app-navbar"
+    class="min-h-[var(--app-navbar-row)] min-w-0 w-full shrink-0 overflow-hidden bg-background"
   >
     <template v-if="!isLoading">
-      <div class="flex h-full items-center gap-2">
-        <div class="md:hidden shrink-0">
-          <SidebarTrigger />
-        </div>
-
-        <div v-if="$slots.left" class="min-w-0 shrink">
-          <slot name="left" />
-        </div>
-
         <div
-          v-if="hasCenter"
-          class="flex min-w-0 flex-1 items-center justify-center"
+          :class="
+            hasCenter
+              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(20rem,40rem)_minmax(0,1fr)] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
+              : 'flex h-[var(--app-navbar-row)] items-center gap-2'
+          "
         >
-          <slot name="center" />
-        </div>
+          <div
+            :class="
+              hasCenter
+                ? 'col-start-1 row-start-1 flex h-[var(--app-navbar-row)] min-w-0 items-center gap-1.5'
+                : 'flex min-w-0 flex-1 items-center gap-1.5'
+            "
+          >
+            <div class="md:hidden shrink-0">
+              <SidebarTrigger />
+            </div>
+            <div v-if="$slots.left" class="min-w-0 flex-1">
+              <slot name="left" />
+            </div>
+          </div>
 
-        <div
-          v-if="$slots.right"
-          class="mr-1 hidden shrink-0 items-center gap-2 md:flex"
-        >
-          <slot name="right" />
-        </div>
+          <div
+            v-if="hasCenter"
+            class="col-span-2 row-start-2 flex min-w-0 w-full items-center pb-2.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:w-full lg:justify-self-stretch lg:pb-0"
+          >
+            <div
+              class="flex min-w-0 w-full items-center justify-start overflow-x-auto lg:justify-center"
+            >
+              <slot name="center" />
+            </div>
+          </div>
 
-        <div class="ml-auto flex shrink-0 items-center gap-0.5">
-          <FabGroup
-            placement="navbar"
-            :ai-enabled="me?.aiEnabled === true"
-          />
-          <UserAccountMenu
-            variant="navbar"
-            :user-name="me?.userName"
-            :version="displayVersion"
-          />
+          <div
+            :class="
+              hasCenter
+                ? 'col-start-2 row-start-1 flex h-[var(--app-navbar-row)] shrink-0 items-center justify-end gap-0.5 lg:col-start-3'
+                : 'ml-auto flex shrink-0 items-center gap-0.5'
+            "
+          >
+            <div
+              v-if="$slots.right"
+              class="mr-1 hidden shrink-0 items-center gap-2 md:flex"
+            >
+              <slot name="right" />
+            </div>
+            <Button
+              v-if="pageHelpSlug"
+              variant="ghost"
+              size="icon"
+              class="hidden size-9 shrink-0 md:inline-flex"
+              :title="$t('components.docsSheet.help')"
+              :aria-label="$t('components.docsSheet.help')"
+              @click="openPageHelp"
+            >
+              <BookOpen class="size-4" />
+            </Button>
+            <FabGroup
+              placement="navbar"
+              :ai-enabled="me?.aiEnabled === true"
+            />
+            <UserAccountMenu
+              variant="navbar"
+              :user-name="me?.userName"
+              :version="displayVersion"
+            />
+          </div>
         </div>
-      </div>
     </template>
 
     <template v-else>

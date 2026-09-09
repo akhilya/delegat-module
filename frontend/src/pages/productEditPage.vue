@@ -60,7 +60,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PAGE_PRODUCTS, setPageTitle } from "@/router";
+import { setPageTitle } from "@/router";
 import { useStore } from "vuex";
 import { useRoute, onBeforeRouteLeave } from "vue-router";
 import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
@@ -204,22 +204,8 @@ export default {
   },
   data() {
     return {
-      PAGE_PRODUCTS,
       tab: this.$route.query.tab ?? "properties",
     };
-  },
-  computed: {
-    breadcrumbs() {
-      const items = [{ label: this.$t("routes.products"), to: PAGE_PRODUCTS }];
-      if (this.productSKU) {
-        items.push({ label: this.productSKU });
-      } else {
-        items.push({
-          label: this.$t("pages.productEditPage.breadcrumbEditing"),
-        });
-      }
-      return items;
-    },
   },
   watch: {
     tab(newVal) {
@@ -1442,7 +1428,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <template #nav-center>
       <Tabs v-model="tab">
         <TabsList>
@@ -2262,8 +2248,7 @@ export default {
             <!-- Files tab -->
             <div
               v-show="tab == 'files'"
-              class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
-              style="height: calc(100vh - 8.5rem)"
+              class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border h-[var(--app-fill-pane-height)]"
             >
               <ProductFileManager
                 :files="files"
@@ -2452,7 +2437,7 @@ export default {
         <Button
           variant="outline"
           size="icon-lg"
-          class="absolute top-4 right-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute top-4 right-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
           :aria-label="$t('common.close')"
           @click="closeLightbox"
         >
@@ -2463,7 +2448,7 @@ export default {
           v-if="lightboxIndex > 0"
           variant="outline"
           size="icon-lg"
-          class="absolute left-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute left-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
           :aria-label="$t('pages.productEditPage.lightbox.prevPhoto')"
           @click="prevImage"
         >
@@ -2482,7 +2467,7 @@ export default {
           v-if="lightboxIndex < lightboxImages.length - 1"
           variant="outline"
           size="icon-lg"
-          class="absolute right-4 rounded-full bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute right-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
           :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')"
           @click="nextImage"
         >
@@ -2490,7 +2475,7 @@ export default {
         </Button>
         <!-- Counter -->
         <div
-          class="absolute bottom-4 rounded-full border bg-background/90 px-3 py-1 text-sm tabular-nums text-foreground shadow-xs supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute bottom-4 rounded-md border bg-background/90 px-3 py-1 text-sm tabular-nums text-foreground shadow-xs supports-backdrop-filter:backdrop-blur-xs"
         >
           {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}
         </div>

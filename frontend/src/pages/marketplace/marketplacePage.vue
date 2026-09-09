@@ -89,9 +89,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [{ label: this.$t("marketplace.marketplacePage.title") }];
-    },
     canOpenPlugins() {
       const me = getCachedMe();
       return me?.pluginsEnabled === true && hasPermission(me, PERMS.PluginsManage);
@@ -240,7 +237,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <div class="flex w-full max-w-xl flex-col">
     <p class="mb-4 text-sm text-muted-foreground">
       {{ $t("marketplace.marketplacePage.description") }}

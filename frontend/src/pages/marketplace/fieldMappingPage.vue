@@ -12,7 +12,7 @@ import {
   displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
-import { setPageTitle } from "@/router";
+import { setPageTitle, setBreadcrumbParentLabel } from "@/router";
 import {
   Plus,
 } from "lucide-vue-next";
@@ -154,27 +154,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      const items = [
-        { label: this.$t("marketplace.fieldMappingPage.adapters"), to: "/adapter" },
-        {
-          label: this.mappingInfo?.connectionName || this.$t("marketplace.fieldMappingPage.connection"),
-          to: `/adapter/${this.connectionId}`,
-        },
-        {
-          label: this.$t("marketplace.fieldMappingPage.mappings"),
-          to: `/adapter/${this.connectionId}?tab=mappings`,
-        },
-      ];
-      if (this.mappingInfo) {
-        items.push({
-          label:
-            mappingDisplayName(this.mappingInfo) ||
-            this.$t("marketplace.fieldMappingPage.category"),
-        });
-      }
-      return items;
-    },
     requiredFieldsMapped() {
       return this.fieldMappings.filter(
         (fm) => fm.isRequired && fm.isEnabled && this.hasValidSource(fm),
@@ -332,6 +311,7 @@ export default {
           setPageTitle(
             mappingDisplayName(data) || data.localCategoryName,
           );
+          setBreadcrumbParentLabel(data.connectionName);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -1129,7 +1109,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport>
     <PageSection
       :loading="isLoading"
       :loading-message="loadStatusText"

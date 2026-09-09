@@ -11,7 +11,10 @@ const emit = defineEmits(["ask"]);
 const router = useRouter();
 
 function run(action) {
-  if (action.url) router.push(action.url);
+  if (action.kind === "open" || action.url) {
+    if (action.url) router.push(action.url);
+    return;
+  }
   if (action.prompt) emit("ask", action.prompt);
 }
 </script>
@@ -19,19 +22,32 @@ function run(action) {
 <template>
   <div
     v-if="actions.length"
-    class="flex w-full min-w-0 flex-wrap gap-2"
+    class="flex w-full min-w-0 flex-col gap-2"
   >
     <Button
       v-for="(action, i) in actions"
       :key="i + action.label"
-      variant="outline"
+      :variant="action.kind === 'continue' ? 'secondary' : 'outline'"
       size="sm"
-      class="max-w-full"
+      class="h-auto max-w-full flex-col items-start gap-0.5 whitespace-normal py-2 text-left"
+      :aria-label="
+        action.kind === 'continue'
+          ? action.prompt
+          : action.url
+      "
       @click="run(action)"
     >
-      <ExternalLink v-if="action.url" />
-      <MessageSquare v-else />
-      <span class="truncate">{{ action.label }}</span>
+      <span class="flex min-w-0 items-center gap-1.5">
+        <MessageSquare v-if="action.kind === 'continue'" class="size-3.5 shrink-0" />
+        <ExternalLink v-else class="size-3.5 shrink-0" />
+        <span class="font-medium">{{ action.label }}</span>
+      </span>
+      <span
+        v-if="action.kind === 'continue' ? action.prompt : action.url"
+        class="pl-5 text-xs font-normal text-muted-foreground wrap-break-word"
+      >
+        {{ action.kind === "continue" ? action.prompt : action.url }}
+      </span>
     </Button>
   </div>
 </template>

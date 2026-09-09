@@ -2,7 +2,7 @@
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import Input from "@/components/ui/input/Input.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import {
   Select,
   SelectContent,
@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import {
   NotebookPen,
-  Search,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -41,7 +40,7 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    Input,
+    NavSearchField,
     Select,
     SelectContent,
     SelectItem,
@@ -50,7 +49,6 @@ export default {
     InsetGroup,
     InsetGroupItem,
     NotebookPen,
-    Search,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
@@ -79,7 +77,6 @@ export default {
       isLoading: false,
       sheetOpen: false,
       selectedNote: null,
-      breadcrumbs: [{ label: this.$t("pages.notesPage.breadcrumb") }],
       IMPORTANCE_ALL,
       AUTHOR_ALL,
       AUTHOR_UNKNOWN,
@@ -325,24 +322,13 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome fill-viewport :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport>
     <template #nav-center>
-      <div class="relative h-9 w-full">
-        <Input
-          v-model="searchQuery"
-          class="absolute h-full w-full pr-10"
-          :placeholder="$t('pages.notesPage.searchPlaceholder')"
-          @keypress.enter="applySearch"
-        />
-        <Button
-          class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-          variant="link"
-          :aria-label="$t('pages.notesPage.searchPlaceholder')"
-          @click="applySearch"
-        >
-          <Search class="size-4" />
-        </Button>
-      </div>
+      <NavSearchField
+        v-model="searchQuery"
+        :placeholder="$t('pages.notesPage.searchPlaceholder')"
+        @submit="applySearch"
+      />
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col">

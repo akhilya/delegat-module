@@ -29,12 +29,14 @@ import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { toast } from "vue-sonner";
 import { Button } from "@/components/ui/button";
+import NavSearchField from "@/components/NavSearchField.vue";
 import {
   Search,
   ChevronLeft,
   ChevronsLeft,
   ChevronRight,
   ChevronsRight,
+  ChevronDown,
   Pencil,
   Trash2,
   X,
@@ -43,7 +45,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Filter,
   Check,
   FileSpreadsheet,
   Undo2,
@@ -88,7 +89,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PAGE_PRODUCT_EDIT } from "@/router";
+import { PAGE_PRODUCT_EDIT, setPageTitle } from "@/router";
+import { MENU_ITEM_CHECK, MENU_ITEM_INDICATOR, MENU_SEPARATOR } from "@/lib/menuSurface";
 import { getCachedMe } from "@/lib/meCache";
 import {
   PRODUCTS_LIST_NS,
@@ -117,12 +119,14 @@ export default {
     BulkAdapterDialog,
     ImportExcelDialog,
     ProductTransferDialog,
+    NavSearchField,
     Button,
     Search,
     ChevronLeft,
     ChevronsLeft,
     ChevronRight,
     ChevronsRight,
+    ChevronDown,
     Pencil,
     Trash2,
     X,
@@ -131,7 +135,6 @@ export default {
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
-    Filter,
     Check,
     FileSpreadsheet,
     Undo2,
@@ -521,6 +524,25 @@ export default {
       });
     },
 
+    syncTrashTitle() {
+      if (!this.isTrashMode) {
+        setPageTitle(null);
+        return;
+      }
+      setPageTitle(
+        this.trashCount > 0
+          ? this.$t("pages.productsPage.breadcrumbTrashWithCount", {
+              count: this.trashCount,
+            })
+          : this.$t("pages.productsPage.breadcrumbTrash"),
+      );
+    },
+
+    selectCategoryFilter(id) {
+      this.filterCategoryId = id;
+      this.categoryFilterOpen = false;
+    },
+
     toggleTrashMode() {
       this.isTrashMode = !this.isTrashMode;
       this.clearSelection();
@@ -679,6 +701,11 @@ export default {
       filterCategoryId: this.$route.query.categoryId != null
         ? Number(this.$route.query.categoryId)
         : null,
+      categoryFilterOpen: false,
+      categoryMenuQuery: "",
+      MENU_ITEM_CHECK,
+      MENU_ITEM_INDICATOR,
+      MENU_SEPARATOR,
 
       // Multi-column sorting (restore from query)
       sortColumns: parseSortFromQuery(this.$route.query),
@@ -798,6 +825,17 @@ export default {
       if (this.page !== 1) this.page = 1;
       else this.fetchProducts();
     },
+    categoryFilterOpen(open) {
+      if (!open) this.categoryMenuQuery = "";
+    },
+    isTrashMode: {
+      handler() {
+        this.syncTrashTitle();
+      },
+    },
+    trashCount() {
+      this.syncTrashTitle();
+    },
     // Watch selected products to fetch category attributes
     selectedProducts: {
       handler(products) {
@@ -819,16 +857,25 @@ export default {
     },
   },
   computed: {
-    breadcrumbs() {
-      if (this.isTrashMode) {
-        return [
-          { label: this.$t("routes.products"), to: "/products" },
-          { label: this.trashCount > 0
-            ? this.$t("pages.productsPage.breadcrumbTrashWithCount", { count: this.trashCount })
-            : this.$t("pages.productsPage.breadcrumbTrash") },
-        ];
+    categoryFilterLabel() {
+      if (this.filterCategoryId == null) {
+        return this.$t("pages.productsPage.filters.allCategories");
       }
-      return [{ label: this.$t("routes.products") }];
+      if (this.filterCategoryId === -1) {
+        return this.$t("pages.productsPage.filters.noCategory");
+      }
+      const cat = this.categories.find((c) => c.id === this.filterCategoryId);
+      return cat?.name || this.$t("pages.productsPage.filters.allCategories");
+    },
+    filteredMenuCategories() {
+      const q = (this.categoryMenuQuery || "").trim().toLowerCase();
+      if (!q) return this.categories;
+      return this.categories.filter((cat) =>
+        String(cat.name || "").toLowerCase().includes(q),
+      );
+    },
+    showCategoryMenuSearch() {
+      return this.categories.length > 6;
     },
     // Dynamic columns including store attributes and preset
     productColumns() {
@@ -903,6 +950,8 @@ export default {
       this.isTrashMode = true;
     }
 
+    this.syncTrashTitle();
+
     // Meta (categories / attributes / …) must not block the list: otherwise a
     // cache hit on remount still waits on those APIs and feels like a full reload.
     const metaPromise = Promise.all([
@@ -928,83 +977,111 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome fill-viewport>
     <template #nav-center>
-        <div class="flex items-center gap-2 w-full">
-          <TooltipProvider :delay-duration="400">
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <div class="relative h-9 flex-1">
-                  <Input
-                    class="absolute h-full w-full"
-                    :placeholder="$t('common.search')"
-                    v-model="searchQuery"
-                    @keypress.enter="fetchProducts"
-                  />
-                  <Button
-                    class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-                    variant="link"
-                    @click="fetchProducts"
+      <TooltipProvider :delay-duration="400">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <NavSearchField
+              v-model="searchQuery"
+              :placeholder="$t('common.search')"
+              @submit="fetchProducts"
+            >
+              <template #trailing>
+                <Popover v-model:open="categoryFilterOpen">
+                  <PopoverTrigger as-child>
+                    <button
+                      type="button"
+                      class="inline-flex h-7 max-w-[8rem] cursor-pointer items-center gap-0.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/80 hover:text-foreground active:scale-[0.97]"
+                      :class="
+                        filterCategoryId != null
+                          ? 'bg-muted text-foreground shadow-none'
+                          : ''
+                      "
+                      :aria-label="categoryFilterLabel"
+                    >
+                      <span class="min-w-0 truncate">{{
+                        categoryFilterLabel
+                      }}</span>
+                      <ChevronDown class="size-3.5 shrink-0 opacity-60" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    class="flex w-56 max-w-[min(14rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"
                   >
-                    <Search class="size-4" />
-                  </Button>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" class="max-w-xs text-left">
-                {{ $t("pages.productsPage.searchHint") }}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <Popover>
-            <PopoverTrigger as-child>
-              <Button
-                variant="outline"
-                size="icon"
-                class="h-9 w-9 shrink-0"
-                :class="filterCategoryId != null ? 'border-primary text-primary' : ''"
-              >
-                <Filter class="size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" class="w-64 min-w-56 p-1">
-              <div class="max-h-64 overflow-y-auto">
-                <Button
-                  variant="ghost"
-                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm"
-                  :class="filterCategoryId == null ? 'bg-accent font-medium' : ''"
-                  @click="filterCategoryId = null"
-                >
-                  {{ $t("pages.productsPage.filters.allCategories") }}
-                  <Check v-if="filterCategoryId == null" class="size-4 shrink-0" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm"
-                  :class="filterCategoryId === -1 ? 'bg-accent font-medium' : ''"
-                  @click="filterCategoryId = -1"
-                >
-                  {{ $t("pages.productsPage.filters.noCategory") }}
-                  <Check v-if="filterCategoryId === -1" class="size-4 shrink-0" />
-                </Button>
-                <div class="h-px bg-border my-1" />
-                <Button
-                  v-for="cat in categories"
-                  :key="cat.id"
-                  variant="ghost"
-                  class="w-full h-auto justify-between text-left text-sm font-normal px-2 py-1.5 rounded-sm gap-2"
-                  :class="filterCategoryId === cat.id ? 'bg-accent font-medium' : ''"
-                  @click="filterCategoryId = cat.id"
-                >
-                  <span class="min-w-0 break-words text-left">{{ cat.name }}</span>
-                  <Check v-if="filterCategoryId === cat.id" class="size-4 shrink-0" />
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
+                    <div v-if="showCategoryMenuSearch" class="border-b p-1.5">
+                      <div class="relative">
+                        <Search
+                          class="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                          v-model="categoryMenuQuery"
+                          type="search"
+                          class="h-7 pl-7 text-sm"
+                          :placeholder="$t('common.search')"
+                          @click.stop
+                        />
+                      </div>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto p-1">
+                      <button
+                        type="button"
+                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
+                        @click="selectCategoryFilter(null)"
+                      >
+                        <span class="min-w-0 flex-1 truncate text-left">{{
+                          $t("pages.productsPage.filters.allCategories")
+                        }}</span>
+                        <Check
+                          v-if="filterCategoryId == null"
+                          :class="MENU_ITEM_CHECK + ' text-foreground'"
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
+                        @click="selectCategoryFilter(-1)"
+                      >
+                        <span class="min-w-0 flex-1 truncate text-left">{{
+                          $t("pages.productsPage.filters.noCategory")
+                        }}</span>
+                        <Check
+                          v-if="filterCategoryId === -1"
+                          :class="MENU_ITEM_CHECK + ' text-foreground'"
+                        />
+                      </button>
+                      <div :class="MENU_SEPARATOR" />
+                      <button
+                        v-for="cat in filteredMenuCategories"
+                        :key="cat.id"
+                        type="button"
+                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
+                        :title="cat.name"
+                        @click="selectCategoryFilter(cat.id)"
+                      >
+                        <span class="min-w-0 flex-1 truncate text-left">{{
+                          cat.name
+                        }}</span>
+                        <Check
+                          v-if="filterCategoryId === cat.id"
+                          :class="MENU_ITEM_CHECK + ' text-foreground'"
+                        />
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </template>
+            </NavSearchField>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" class="max-w-xs text-left">
+            {{ $t("pages.productsPage.searchHint") }}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </template>
 
-    <div class="flex w-full flex-col">
+    <div class="flex min-h-0 w-full flex-1 flex-col">
       <ProductsTable
         :data="isTrashMode ? trashProducts : products"
         :columns="productColumns"
@@ -1083,7 +1160,7 @@ export default {
               :model-value="String(pageSize)"
               @update:model-value="(val) => pageSize = Number(val)"
             >
-              <SelectTrigger class="h-8 w-[100px] bg-primary-foreground">
+              <SelectTrigger class="h-8 w-[100px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

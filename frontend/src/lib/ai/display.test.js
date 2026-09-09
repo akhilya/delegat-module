@@ -96,9 +96,30 @@ describe("AiChatPanel chrome", () => {
       new URL("../../components/ai/AiChatProcess.vue", import.meta.url),
       "utf8",
     );
+    assert.match(panel, /AiChatEmpty/);
     assert.match(panel, /AiChatProcess/);
     assert.match(panel, /AiChatActions/);
+    assert.match(panel, /AiChatForm/);
     assert.match(panel, /AiChatAttachmentList/);
+    const actions = readFileSync(
+      new URL("../../components/ai/AiChatActions.vue", import.meta.url),
+      "utf8",
+    );
+    assert.match(actions, /kind === 'continue' \? 'secondary' : 'outline'/);
+    assert.match(actions, /ExternalLink/);
+    assert.match(actions, /MessageSquare/);
+    assert.match(actions, /if \(action.kind === "open" \|\| action.url\)/);
+    assert.doesNotMatch(actions, /emit\("ask".*url/);
+    const form = readFileSync(
+      new URL("../../components/ai/AiChatForm.vue", import.meta.url),
+      "utf8",
+    );
+    assert.match(form, /ConnectionCreateForm/);
+    assert.match(form, /createConnection/);
+    assert.match(form, /secretsStayInBrowser/);
+    assert.match(form, /interpolateFollowUp/);
+    assert.match(form, /Questionnaire/);
+    assert.match(form, /answersFromFormData/);
     assert.match(panel, /:done="!!msg.done"/);
     assert.match(process, /processUsed/);
     assert.match(process, /v-model:open="detailsOpen"/);

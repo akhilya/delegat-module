@@ -24,7 +24,7 @@ import {
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import { adapterCanSearchPublicCatalog } from "@/lib/adapterCapabilities";
-import { PAGE_PRODUCTS, PAGE_TOOLS } from "@/router";
+import { PAGE_PRODUCTS } from "@/router";
 import { Search } from "lucide-vue-next";
 import { randomUuidCompact } from "@/utils/uuid";
 import ProductImageSizeMenu from "@/components/products/ProductImageSizeMenu.vue";
@@ -77,12 +77,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [
-        { label: this.$t("pages.toolsPage.breadcrumb"), to: PAGE_TOOLS },
-        { label: this.$t("pages.catalogScrape.breadcrumb") },
-      ];
-    },
     scrapeAdapters() {
       return this.adapters
         .filter((adapter) => adapterCanSearchPublicCatalog(adapter))
@@ -306,7 +300,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <EmptyState
       v-if="loading"
       loading

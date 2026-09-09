@@ -140,7 +140,7 @@ const SIDEBAR_GROUPS = [
   },
   {
     id: "products",
-    labelKey: "nav.products",
+    labelKey: "nav.catalog",
     icon: Boxes,
     defaultOpen: true,
     visible: (ctx) => Boolean(ctx.hasStore),

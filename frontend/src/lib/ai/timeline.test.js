@@ -90,6 +90,8 @@ describe("ai timeline", () => {
     assert.equal(view.actions.length, 2);
     assert.equal(view.actions[0].url, "/products/12/edit");
     assert.equal(view.actions[1].prompt, "Put these photos on Hello soap");
+    assert.equal(view.actions[1].kind, "continue");
+    assert.deepEqual(view.forms, []);
   });
 
   it("rebuilds a prompt-only navigate_to button from a legacy result", () => {
@@ -114,6 +116,68 @@ describe("ai timeline", () => {
     assert.equal(view.actions.length, 1);
     assert.equal(view.actions[0].prompt, "Put these photos on Hello soap");
     assert.equal(view.actions[0].url, "");
+    assert.equal(view.actions[0].kind, "continue");
+  });
+
+  it("lifts ask_form onto the reply and out of the process", () => {
+    const view = executionView(
+      [
+        { type: "text", text: "Need Ozon keys." },
+        {
+          type: "tool",
+          id: "t1",
+          tool: {
+            name: "ask_form",
+            result: {
+              form: true,
+              kind: "connection",
+              adapterKey: "ozon",
+              title: "Connect Ozon",
+            },
+          },
+        },
+        { type: "text", text: "Fill the form in this chat." },
+      ],
+      { done: true },
+    );
+    assert.equal(view.process.length, 1);
+    assert.equal(view.process[0].type, "text");
+    assert.equal(view.reply, "Fill the form in this chat.");
+    assert.equal(view.forms.length, 1);
+    assert.equal(view.forms[0].adapterKey, "ozon");
+  });
+
+  it("lifts a questions questionnaire onto the reply", () => {
+    const view = executionView(
+      [
+        {
+          type: "tool",
+          id: "t1",
+          tool: {
+            name: "ask_form",
+            result: {
+              form: true,
+              kind: "questions",
+              questions: [
+                {
+                  key: "adapter",
+                  title: "Which marketplace?",
+                  type: "single",
+                  choices: [{ value: "ozon", label: "Ozon" }],
+                },
+              ],
+            },
+          },
+        },
+        { type: "text", text: "Pick one." },
+      ],
+      { done: true },
+    );
+    assert.deepEqual(view.process, []);
+    assert.equal(view.reply, "Pick one.");
+    assert.equal(view.forms.length, 1);
+    assert.equal(view.forms[0].kind, "questions");
+    assert.equal(view.forms[0].questions[0].key, "adapter");
   });
 
   it("rebuilds a legacy tools-then-content message without dropping either", () => {

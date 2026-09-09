@@ -18,6 +18,7 @@ import referenceModule from "./modules/referenceModule";
 import errorLogModule from "./modules/errorLogModule";
 import adapterHttpLogModule from "./modules/adapterHttpLogModule";
 import operations from "./modules/operationsModule";
+import docs from "./modules/docsModule";
 
 /**
  * Creates and configures the Vuex store with all registered modules.
@@ -54,6 +55,7 @@ export function createStore() {
       errorLogModule,
       adapterHttpLogModule,
       operations,
+      docs,
       aiChat: aiChatModule,
       aiModels: aiModelsModule,
     },

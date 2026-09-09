@@ -85,22 +85,6 @@ export default {
     attributeId() {
       return parseInt(this.$route.params.id, 10);
     },
-    breadcrumbs() {
-      const items = [
-        {
-          label: this.$t("pages.storeAttributesPage.breadcrumb"),
-          to: PAGE_STORE_ATTRIBUTES,
-        },
-      ];
-      if (this.attribute?.name) {
-        items.push({ label: this.attribute.name });
-      } else {
-        items.push({
-          label: this.$t("pages.storeAttributesPage.breadcrumbEditing"),
-        });
-      }
-      return items;
-    },
     typeValue() {
       return resolveStoreAttributeTypeValue(this.attributeForm.type);
     },
@@ -442,7 +426,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <PageSection :loading="isLoading" class="!min-h-0">
       <EmptyState
         v-if="!isLoading && !attribute"

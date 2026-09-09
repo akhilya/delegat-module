@@ -8,13 +8,8 @@ const DEFAULT_LOGO = (import.meta.env.VITE_BRAND_LOGO || "").trim();
 const DEFAULT_DESCRIPTION =
   import.meta.env.VITE_BRAND_DESCRIPTION || `${DEFAULT_NAME} - ${t("common.brandDescription")}`;
 
-/** Design.css defaults — used when colors are cleared. */
-const CSS_DEFAULTS = {
-  primary: "oklch(0.205 0 0)",
-  primaryForeground: "oklch(0.985 0 0)",
-  accent: "oklch(0.97 0 0)",
-  accentForeground: "oklch(0.205 0 0)",
-};
+/** Light paper used when a custom brand ink is inverted in `.dark`. */
+const DARK_BRAND_FILL = "#FAFAFA";
 
 const LEGACY_LOGO = "/logo@0,25x.webp";
 
@@ -192,23 +187,47 @@ function foregroundFor(hex) {
   return relativeLuminance(hex) > 0.45 ? "#0A0A0A" : "#FAFAFA";
 }
 
+/**
+ * Custom brand hex on `html`. Defaults stay in `style.css` (`:root` / `.dark`) —
+ * inlining the light ink locked dark-theme buttons to a dark fill.
+ * Dark + a dark custom hex → light fill, brand ink as foreground.
+ */
+function paintBrandColor(root, colorVar, fgVar, hex, dark) {
+  if (dark && relativeLuminance(hex) <= 0.45) {
+    root.style.setProperty(colorVar, DARK_BRAND_FILL);
+    root.style.setProperty(fgVar, hex);
+    return;
+  }
+  root.style.setProperty(colorVar, hex);
+  root.style.setProperty(fgVar, foregroundFor(hex));
+}
+
 function applyThemeColors() {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
+  const dark = root.classList.contains("dark");
+
   if (state.primaryColor) {
-    root.style.setProperty("--primary", state.primaryColor);
-    root.style.setProperty("--primary-foreground", foregroundFor(state.primaryColor));
+    paintBrandColor(root, "--primary", "--primary-foreground", state.primaryColor, dark);
   } else {
-    root.style.setProperty("--primary", CSS_DEFAULTS.primary);
-    root.style.setProperty("--primary-foreground", CSS_DEFAULTS.primaryForeground);
+    root.style.removeProperty("--primary");
+    root.style.removeProperty("--primary-foreground");
   }
 
   if (state.accentColor) {
     root.style.setProperty("--accent", state.accentColor);
     root.style.setProperty("--accent-foreground", foregroundFor(state.accentColor));
   } else {
-    root.style.setProperty("--accent", CSS_DEFAULTS.accent);
-    root.style.setProperty("--accent-foreground", CSS_DEFAULTS.accentForeground);
+    root.style.removeProperty("--accent");
+    root.style.removeProperty("--accent-foreground");
   }
+}
+
+if (typeof document !== "undefined") {
+  new MutationObserver(() => applyThemeColors()).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
 }
 
 /**
@@ -227,6 +246,7 @@ export async function loadBranding(http) {
     .catch(() => {
       // Keep Vite/env defaults when API is offline (e.g. unavailable page).
       applyDocumentChrome();
+      applyThemeColors();
       return state;
     })
     .finally(() => {

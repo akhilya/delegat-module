@@ -32,7 +32,7 @@
             class="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2"
           >
             <div
-              class="flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-medium tabular-nums transition-colors"
+              class="flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-medium tabular-nums transition-colors"
               :class="stepTone(s.id)"
             >
               <Check v-if="isStepDone(s.id)" class="size-3.5" />
@@ -195,7 +195,7 @@
         >
           <template v-if="applyResult">
             <div
-              class="flex size-12 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10"
+              class="flex size-12 items-center justify-center rounded-md border border-emerald-500/40 bg-emerald-500/10"
             >
               <CheckCircle2 class="size-6 text-emerald-600 dark:text-emerald-400" />
             </div>
@@ -211,7 +211,7 @@
           </template>
           <template v-else-if="applyError">
             <div
-              class="flex size-12 items-center justify-center rounded-full border border-destructive/40 bg-destructive/5"
+              class="flex size-12 items-center justify-center rounded-md border border-destructive/40 bg-destructive/5"
             >
               <AlertCircle class="size-6 text-destructive" />
             </div>

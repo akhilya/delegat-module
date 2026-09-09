@@ -345,20 +345,15 @@ public sealed class CatalogConnectJobService
     {
         var existing = await _db.pendingCatalogConnectJobs
             .Where(j => j.storeId == connection.storeId
+                && j.connectionId == connection.Id
+                && j.kind == kind
                 && (j.status == CatalogConnectJobStatus.Pending
                     || j.status == CatalogConnectJobStatus.InProgress))
             .OrderBy(j => j.createdAt)
             .FirstOrDefaultAsync(ct);
 
         if (existing != null)
-        {
-            if (existing.connectionId == connection.Id && existing.kind == kind)
-                return ToDto(existing);
-
-            throw ApiException.Conflict(
-                "A Catalog Connect job is already running",
-                code: "catalog_connect_busy");
-        }
+            return ToDto(existing);
 
         var clientStarted = !string.IsNullOrWhiteSpace(operationId);
         operationId = clientStarted

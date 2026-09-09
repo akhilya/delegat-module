@@ -34,6 +34,31 @@ public class AiLiveTurnHubTests
     }
 
     [Fact]
+    public void Recorder_ApiErrorAfterRunningTool_DoesNotMarkPlanFailed()
+    {
+        var chunks = new[]
+        {
+            AiSseTurnRecorder.Format(SseEventType.Tool, new
+            {
+                id = "t1",
+                name = "platform_request",
+                status = "running",
+                input = """{"method":"POST","path":"/marketplace/connections/1/products/import-unlinked"}""",
+            }),
+            AiSseTurnRecorder.Format(SseEventType.Error, new
+            {
+                message = "Could not finish this reply. If a catalog action already started, check Operations.",
+            }),
+            AiSseTurnRecorder.Format(SseEventType.Done, new { }),
+        };
+
+        var snap = AiSseTurnRecorder.Fold(chunks);
+        Assert.DoesNotContain("planFailed", snap.ToolCallsJson);
+        Assert.Contains("interrupted", snap.ToolCallsJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("check Operations", snap.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Recorder_ExecutePlanHttpError_SetsPlanFailedWithoutClaimingSuccess()
     {
         var result = """{"error":"product_limit_reached","status":409,"title":"Product limit reached"}""";

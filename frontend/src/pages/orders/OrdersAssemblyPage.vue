@@ -1,5 +1,6 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
 import OrderAssemblyRow from "@/components/orders/OrderAssemblyRow.vue";
@@ -7,7 +8,6 @@ import OrderRowContextMenu from "@/components/orders/OrderRowContextMenu.vue";
 import OrderJobConfirmDialog from "@/components/orders/OrderJobConfirmDialog.vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import Input from "@/components/ui/input/Input.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -82,7 +82,6 @@ import {
   ChevronDown,
   Package,
   Plug,
-  Search,
 } from "lucide-vue-next";
 
 const CHANNEL_ALL = "__all__";
@@ -91,6 +90,7 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
+    NavSearchField,
     AdapterIcon,
     OrderDetailSheet,
     OrderAssemblyRow,
@@ -98,7 +98,6 @@ export default {
     OrderJobConfirmDialog,
     Button,
     Spinner,
-    Input,
     EmptyState,
     Select,
     SelectContent,
@@ -115,7 +114,6 @@ export default {
     ChevronDown,
     Package,
     Plug,
-    Search,
     Tabs,
     TabsList,
     TabsTrigger,
@@ -160,16 +158,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      const tab = ORDER_OVERVIEW_TABS.find((item) => item.id === this.overviewTab);
-      return [
-        {
-          label: this.$t("pages.ordersPage.breadcrumb"),
-          to: "/orders",
-        },
-        { label: this.$t(tab?.labelKey || "nav.ordersAssembly") },
-      ];
-    },
     overviewTab() {
       return parseOrdersOverviewTab(this.$route.query.tab);
     },
@@ -788,7 +776,6 @@ export default {
 
 <template>
   <AppPageChrome
-    :breadcrumb-items="breadcrumbs"
     :has-nav-center="orderConnections.length > 0"
   >
     <template v-if="orderConnections.length > 0" #nav-center>
@@ -812,22 +799,12 @@ export default {
       v-if="orderConnections.length > 0"
       class="mb-3 flex shrink-0 flex-wrap items-center gap-2"
     >
-      <div class="relative h-9 min-w-0 flex-1 sm:max-w-sm">
-        <Input
-          v-model="searchQuery"
-          class="absolute h-full w-full pr-10"
-          :placeholder="$t('pages.ordersPage.searchPlaceholder')"
-          @keypress.enter="applySearch"
-        />
-        <Button
-          class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-          variant="link"
-          :aria-label="$t('pages.ordersPage.searchPlaceholder')"
-          @click="applySearch"
-        >
-          <Search class="size-4" />
-        </Button>
-      </div>
+      <NavSearchField
+        v-model="searchQuery"
+        class="min-w-0 flex-1 sm:max-w-sm"
+        :placeholder="$t('pages.ordersPage.searchPlaceholder')"
+        @submit="applySearch"
+      />
       <Select :model-value="channel" @update:model-value="onChannelChange">
         <SelectTrigger class="h-9 w-full sm:w-40">
           <SelectValue :placeholder="$t('pages.ordersPage.channelAll')" />

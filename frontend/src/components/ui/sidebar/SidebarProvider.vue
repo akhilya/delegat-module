@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import {
   defaultDocument,
   useEventListener,
@@ -36,6 +37,7 @@ const emits = defineEmits(["update:open"]);
 
 const isMobile = useMediaQuery("(max-width: 768px)");
 const openMobile = ref(false);
+const route = useRoute();
 
 const open = useVModel(props, "open", emits, {
   defaultValue: props.defaultOpen ?? true,
@@ -56,6 +58,13 @@ function toggleSidebar() {
     ? setOpenMobile(!openMobile.value)
     : setOpen(!open.value);
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (isMobile.value) setOpenMobile(false);
+  },
+);
 
 useEventListener("keydown", (event) => {
   if (

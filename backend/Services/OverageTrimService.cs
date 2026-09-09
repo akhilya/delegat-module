@@ -127,8 +127,8 @@ public sealed class OverageTrimService : IOverageTrimService
     }
 
     /// <summary>
-    /// When active count exceeds the cap: soft-deleted products first (permanent cleanup),
-    /// then oldest active by <c>updatedAt</c> until enough active removals bring the store under the limit.
+    /// When used (active + trash) exceeds the cap: soft-deleted products first,
+    /// then oldest active by <c>updatedAt</c> until the store is at the limit.
     /// </summary>
     public static List<Product> SelectProductEntities(
         IEnumerable<Product> allForStore,
@@ -137,10 +137,9 @@ public sealed class OverageTrimService : IOverageTrimService
         if (maxProducts is null) return new List<Product>();
 
         var list = allForStore.ToList();
-        var activeCount = list.Count(p => p.deletedAt == null);
-        if (activeCount <= maxProducts.Value) return new List<Product>();
+        if (list.Count <= maxProducts.Value) return new List<Product>();
 
-        var activeToRemove = activeCount - maxProducts.Value;
+        var toRemove = list.Count - maxProducts.Value;
         var trash = list
             .Where(p => p.deletedAt != null)
             .OrderBy(p => p.updatedAt)
@@ -148,10 +147,9 @@ public sealed class OverageTrimService : IOverageTrimService
         var oldestActive = list
             .Where(p => p.deletedAt == null)
             .OrderBy(p => p.updatedAt)
-            .ThenBy(p => p.Id)
-            .Take(activeToRemove);
+            .ThenBy(p => p.Id);
 
-        return trash.Concat(oldestActive).ToList();
+        return trash.Concat(oldestActive).Take(toRemove).ToList();
     }
 
     private async Task<List<OverageTrimItemDto>> SelectProductsAsync(

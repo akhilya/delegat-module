@@ -18,4 +18,9 @@ describe("ProductGroupSidebar compact preview", () => {
     assert.match(memberBlock, /<TooltipTrigger as-child>\s*<router-link/);
     assert.doesNotMatch(memberBlock, /<TooltipTrigger as-child>\s*<ContextMenuTrigger/);
   });
+
+  it("locks pane height with the shared fill token so the bottom gap matches page-scroll-end", () => {
+    assert.match(source, /h-\[var\(--app-fill-pane-height\)\]/);
+    assert.doesNotMatch(source, /4\.75rem/);
+  });
 });

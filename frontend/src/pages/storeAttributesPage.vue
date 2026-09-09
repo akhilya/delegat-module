@@ -86,9 +86,6 @@ export default {
     };
   },
   computed: {
-    breadcrumbs() {
-      return [{ label: this.$t("pages.storeAttributesPage.breadcrumb") }];
-    },
     createTypeLabel() {
       return this.getAttributeTypeLabel(this.newAttributeType);
     },
@@ -263,7 +260,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <div class="flex w-full max-w-xl flex-col">
       <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
         <Dialog v-model:open="showCreateDialog">

@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
       :class="pinned ? 'adaptive-padding' : ''"
     >
       <div
-        class="flex items-center justify-between gap-3 border-t bg-background py-2 text-sm text-muted-foreground"
+        class="flex items-center justify-between gap-3 border-t bg-background py-2 text-sm"
       >
         <slot />
       </div>

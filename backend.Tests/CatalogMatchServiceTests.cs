@@ -423,6 +423,36 @@ public class CatalogMatchServiceTests
     }
 
     [Fact]
+    public async Task RepairMissingMappings_CopiesAttributesFromRemoteCard()
+    {
+        var (svc, connection, adapter, db, p1, _) = await SeedTwoAsync(secondProduct: false);
+        new TestDataBuilder(db).AddProductLink(connection.Id, p1.Id, "ym-1");
+        await db.SaveChangesAsync();
+        adapter.Add(new ExternalProduct(
+            "ym-1",
+            "ART-1",
+            "One",
+            CategoryId: "79461128",
+            CategoryName: "Hats",
+            Attributes: new Dictionary<string, object> { ["brand"] = "Acme" },
+            Brand: "Acme"));
+        adapter.Fields["79461128"] =
+        [
+            new ExternalField("sku", "SKU", true, "string"),
+            new ExternalField("name", "Name", true, "string"),
+            new ExternalField("brand", "Brand", false, "string"),
+        ];
+
+        var result = await svc.RepairMissingMappingsAsync(connection, userId: 1, CancellationToken.None);
+
+        Assert.Equal(1, result.MappingsCreated);
+        Assert.True(result.AttributesImported > 0);
+        Assert.Contains(
+            await db.productAttributeValues.ToListAsync(),
+            v => v.value == "Acme");
+    }
+
+    [Fact]
     public async Task QueueUnlinkedImport_CapsToRemainingSlots()
     {
         using var _ = SetEnv("MAX_PRODUCTS", "2");
@@ -496,15 +526,92 @@ public class CatalogMatchServiceTests
     }
 
     [Fact]
-    public async Task CatalogConnectJob_BusyOtherKind_Throws()
+    public async Task CatalogConnectJob_OtherKind_QueuesBehindActive()
     {
         var (svc, connection, _, db, _, _) = await SeedTwoAsync(secondProduct: false);
         var jobs = CreateJobService(db, svc);
-        await jobs.EnqueueImportAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        var import = await jobs.EnqueueImportAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        var match = await jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None);
+        Assert.NotEqual(import.OperationId, match.OperationId);
+        Assert.Equal(2, await db.pendingCatalogConnectJobs.CountAsync());
+        Assert.All(await db.pendingCatalogConnectJobs.ToListAsync(), j =>
+            Assert.Equal(CatalogConnectJobStatus.Pending, j.status));
+    }
 
-        var ex = await Assert.ThrowsAsync<ApiException>(() =>
-            jobs.EnqueueMatchAsync(connection, userId: 1, operationId: null, CancellationToken.None));
-        Assert.Equal("catalog_connect_busy", ex.Code);
+    [Fact]
+    public async Task CatalogConnectJob_OtherConnectionApply_QueuesWhileBusy()
+    {
+        var (svc, ozon, _, db, p1, _) = await SeedTwoAsync(secondProduct: false);
+        var yandex = new MarketplaceConnection
+        {
+            Id = ozon.Id + 10,
+            storeId = ozon.storeId,
+            adapterKey = "fake",
+            name = "Yandex",
+            credentialsJson = "{\"apiKey\":\"secret\"}",
+            isActive = true,
+            createdAt = DateTime.UtcNow,
+        };
+        db.marketplaceConnections.Add(yandex);
+        await db.SaveChangesAsync();
+        var jobs = CreateJobService(db, svc);
+        var first = await jobs.EnqueueApplyAsync(
+            ozon,
+            userId: 1,
+            [new CatalogMatchApplyItem { ProductId = p1.Id, ExternalProductId = "oz-1" }],
+            importUnmatched: false,
+            operationId: null,
+            CancellationToken.None);
+        var second = await jobs.EnqueueApplyAsync(
+            yandex,
+            userId: 1,
+            [new CatalogMatchApplyItem { ProductId = p1.Id, ExternalProductId = "ym-1" }],
+            importUnmatched: false,
+            operationId: null,
+            CancellationToken.None);
+        Assert.NotEqual(first.OperationId, second.OperationId);
+        Assert.Equal("pending", second.Status);
+        Assert.Equal(2, await db.pendingCatalogConnectJobs.CountAsync());
+    }
+
+    [Fact]
+    public void PickNext_SkipsPendingWhileStoreHasInProgress()
+    {
+        var running = new PendingCatalogConnectJob
+        {
+            Id = 1,
+            storeId = 9,
+            status = CatalogConnectJobStatus.InProgress,
+            createdAt = DateTime.UtcNow.AddMinutes(-2),
+        };
+        var queued = new PendingCatalogConnectJob
+        {
+            Id = 2,
+            storeId = 9,
+            status = CatalogConnectJobStatus.Pending,
+            createdAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+        Assert.Null(CatalogConnectBackgroundService.PickNext([running, queued]));
+    }
+
+    [Fact]
+    public void PickNext_RunsPendingOnIdleStore()
+    {
+        var running = new PendingCatalogConnectJob
+        {
+            Id = 1,
+            storeId = 9,
+            status = CatalogConnectJobStatus.InProgress,
+            createdAt = DateTime.UtcNow.AddMinutes(-2),
+        };
+        var other = new PendingCatalogConnectJob
+        {
+            Id = 3,
+            storeId = 10,
+            status = CatalogConnectJobStatus.Pending,
+            createdAt = DateTime.UtcNow,
+        };
+        Assert.Equal(3, CatalogConnectBackgroundService.PickNext([running, other])!.Id);
     }
 
     private static CatalogConnectJobService CreateJobService(DataContext db, CatalogMatchService match) =>

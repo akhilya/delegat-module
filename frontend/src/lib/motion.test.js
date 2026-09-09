@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const style = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const brand = readFileSync(new URL("../brand.js", import.meta.url), "utf8");
 const button = readFileSync(
   new URL("../components/ui/button/index.js", import.meta.url),
   "utf8",
@@ -201,6 +202,23 @@ describe("button lift (Control Plane)", () => {
     );
   });
 
+  it("uses a dark sheen on inverted (light) fills in dark", () => {
+    assert.match(
+      style,
+      /\.dark \[data-slot="button"\]\[data-variant="default"\][\s\S]*?oklch\(0 0 0 \/ 0\.12\)/,
+    );
+    assert.match(
+      style,
+      /\.dark \[data-slot="button"\]\[data-variant="outline"\][\s\S]*?oklch\(0 0 0 \/ 0\.16\)/,
+    );
+  });
+
+  it("does not pin light-theme primary on html so .dark can invert buttons", () => {
+    assert.match(brand, /removeProperty\("--primary"\)/);
+    assert.match(brand, /DARK_BRAND_FILL/);
+    assert.doesNotMatch(brand, /setProperty\("--primary", CSS_DEFAULTS/);
+  });
+
   it("keeps ghost and link without a drop shadow", () => {
     assert.match(
       style,
@@ -209,6 +227,47 @@ describe("button lift (Control Plane)", () => {
     assert.match(
       style,
       /\[data-slot="button"\]\[data-variant="ghost"\][\s\S]*background-image:\s*none/,
+    );
+  });
+});
+
+describe("tabs chrome", () => {
+  it("uses theme surfaces for the track and selected pill, not input/30 on muted", () => {
+    assert.match(tabsList, /isolate bg-muted text-muted-foreground/);
+    assert.match(tabsList, /dark:bg-muted\/20/);
+    assert.match(
+      tabsList,
+      /data-slot="tabs-indicator"[\s\S]*bg-background shadow-sm dark:bg-muted dark:shadow-none/,
+    );
+    assert.doesNotMatch(tabsList, /dark:bg-input\/30/);
+    assert.doesNotMatch(tabsList, /dark:border-input/);
+  });
+});
+
+describe("scrollbars", () => {
+  it("follows color-scheme and uses a 6px themed thumb on every scroller", () => {
+    assert.match(style, /:root\s*\{[\s\S]*?color-scheme:\s*light/);
+    assert.match(style, /\.dark \{\s*color-scheme:\s*dark/);
+    assert.match(style, /scrollbar-width:\s*thin/);
+    assert.match(style, /\*::-webkit-scrollbar \{\s*width:\s*6px/);
+    assert.match(style, /scrollbar-color:\s*color-mix\(in oklch, var\(--muted-foreground\)/);
+  });
+});
+
+describe("focus rings", () => {
+  it("draws the 3px ring inside the control so overflow-hidden chrome cannot clip it", () => {
+    assert.match(style, /:focus-visible\s*\{[^}]*--tw-ring-inset:\s*inset/);
+    assert.match(
+      style,
+      /\[data-slot="input-group"\]:has\(:focus-visible\)[\s\S]*?--tw-ring-inset:\s*inset/,
+    );
+    assert.match(
+      style,
+      /inset 0 0 0 3px color-mix\(in oklch, var\(--ring\) 50%, transparent\)/,
+    );
+    assert.match(
+      style,
+      /\[data-slot="nav-search"\]:has\(:focus-visible\)[\s\S]*?--tw-ring-shadow:\s*0 0 #0000/,
     );
   });
 });

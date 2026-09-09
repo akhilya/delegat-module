@@ -1,5 +1,5 @@
 <script>
-import Input from "@/components/ui/input/Input.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import {
   Table,
   TableBody,
@@ -44,7 +44,7 @@ export default {
   name: "ApiRequestLogsPanel",
   emits: ["loading"],
   components: {
-    Input,
+    NavSearchField,
     Table,
     TableBody,
     TableCell,
@@ -361,11 +361,11 @@ export default {
         @update:model-value="(v) => setFilter('statusClass', v)"
       />
 
-      <Input
+      <NavSearchField
         v-model="filters.q"
-        class="h-9 w-full min-w-0 sm:max-w-[14rem]"
+        class="w-full min-w-0 sm:max-w-[14rem]"
         :placeholder="$t('pages.apiPage.logs.searchPlaceholder')"
-        @keydown.enter="refresh"
+        @submit="refresh"
       />
       <template #actions>
         <LogRefreshButton :loading="isLoading" @click="refresh" />

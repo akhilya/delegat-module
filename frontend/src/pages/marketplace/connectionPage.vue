@@ -2,6 +2,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -48,7 +49,6 @@ import {
   Link,
   Link2,
   Home,
-  Search,
   Upload,
   Download,
   AlertTriangle,
@@ -149,6 +149,7 @@ export default {
     Spinner,
     AiErrorExplainer,
     AppPageChrome,
+    NavSearchField,
     PageSection,
     Button,
     Input,
@@ -177,7 +178,6 @@ export default {
     Link,
     Link2,
     Home,
-    Search,
     Upload,
     Download,
     X,
@@ -558,28 +558,6 @@ export default {
           "marketplace.connectionPage.capabilities.searchPublicCatalog",
         ),
       };
-    },
-    breadcrumbs() {
-      const tabLabels = {
-        settings: this.$t("marketplace.connectionPage.tabs.settings"),
-        mappings: this.$t("marketplace.connectionPage.tabs.mappings"),
-        products: this.$t("marketplace.connectionPage.tabs.products"),
-      };
-      return [
-        {
-          label: this.$t("marketplace.connectionPage.breadcrumbs.adapters"),
-          to: PAGE_MARKETPLACE,
-        },
-        {
-          label:
-            this.connection?.name ||
-            this.$t(
-              "marketplace.connectionPage.breadcrumbs.connectionFallback",
-            ),
-          to: this.$route.fullPath.split("?")[0],
-        },
-        { label: tabLabels[this.activeTab] || tabLabels.settings },
-      ];
     },
     selectedAdapterSchema() {
       if (!this.connection) return null;
@@ -2965,10 +2943,11 @@ export default {
     getStatusInfo(product) {
       if (!product.isLinked) {
         return {
-          variant: "secondary",
+          variant: "outline",
           icon: Package,
           label: this.$t("marketplace.connectionPage.status.unlinked"),
           color: "text-muted-foreground",
+          class: "text-muted-foreground",
         };
       }
       if (product.mappingMissing) {
@@ -2982,17 +2961,19 @@ export default {
       switch (product.linkStatus) {
         case "Synced":
           return {
-            variant: "default",
+            variant: "outline",
             icon: CheckCircle,
             label: this.$t("marketplace.connectionPage.status.synced"),
             color: "text-success",
+            class: "border-success/40 bg-success-muted/50 text-success",
           };
         case "NotSynced":
           return {
-            variant: "secondary",
+            variant: "outline",
             icon: AlertTriangle,
             label: this.$t("marketplace.connectionPage.status.notSynced"),
             color: "text-muted-foreground",
+            class: "text-muted-foreground",
           };
         case "SyncError":
           return {
@@ -3007,6 +2988,7 @@ export default {
             icon: AlertTriangle,
             label: this.$t("marketplace.connectionPage.status.modified"),
             color: "text-warning",
+            class: "border-warning/40 bg-warning-muted/50 text-warning",
           };
         case "RemoteMissing":
           return {
@@ -3017,10 +2999,11 @@ export default {
           };
         default:
           return {
-            variant: "secondary",
+            variant: "outline",
             icon: Package,
             label: product.linkStatus || this.$t("common.emDash"),
             color: "text-muted-foreground",
+            class: "text-muted-foreground",
           };
       }
     },
@@ -3145,7 +3128,7 @@ export default {
 
 <template>
   <AppPageChrome
-    :breadcrumb-items="breadcrumbs"
+    :fill-viewport="activeTab === 'products'"
     :has-nav-center="true"
   >
     <template #nav-center>
@@ -3166,14 +3149,29 @@ export default {
 
     <PageSection
       :loading="isLoading"
-      class="flex flex-col"
+      :class="
+        activeTab === 'products'
+          ? 'mb-0 min-h-0 flex-1 overflow-hidden'
+          : 'flex flex-col'
+      "
     >
       <div
         v-if="connection"
-        class="flex flex-col gap-4"
+        :class="
+          activeTab === 'products'
+            ? 'flex min-h-0 flex-1 flex-col'
+            : 'flex flex-col gap-4'
+        "
       >
-        <Tabs v-model="activeTab" class="w-full flex flex-col">
-          <TabsContent value="settings" class="mt-0">
+        <Tabs
+          v-model="activeTab"
+          :class="
+            activeTab === 'products'
+              ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden'
+              : 'flex w-full flex-col'
+          "
+        >
+          <TabsContent value="settings" class="mt-0 data-[state=inactive]:hidden">
             <div class="max-w-2xl">
               <SettingsFormSection
                 :title="
@@ -3495,11 +3493,11 @@ export default {
                               }}
                             </p>
                             <div
-                              class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+                              class="mt-1.5 h-1 overflow-hidden rounded-md bg-muted"
                               aria-hidden="true"
                             >
                               <div
-                                class="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
+                                class="bg-primary h-full rounded-md transition-[width] duration-300 ease-out"
                                 :style="{ width: `${rpsUsagePercent}%` }"
                               />
                             </div>
@@ -3555,11 +3553,11 @@ export default {
                             </p>
                             <div
                               v-if="quota.limit > 0"
-                              class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+                              class="mt-1.5 h-1 overflow-hidden rounded-md bg-muted"
                               aria-hidden="true"
                             >
                               <div
-                                class="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
+                                class="bg-primary h-full rounded-md transition-[width] duration-300 ease-out"
                                 :style="{
                                   width: `${getUsagePercent(quota.usage, quota.limit)}%`,
                                 }"
@@ -3637,7 +3635,7 @@ export default {
           <!-- Mappings Tab -->
           <TabsContent
             value="mappings"
-            class="mt-0 flex flex-col min-h-0 gap-3"
+            class="mt-0 flex min-h-0 flex-col gap-3 data-[state=inactive]:hidden"
           >
             <div
               class="flex flex-wrap items-center justify-between gap-2 shrink-0"
@@ -4311,7 +4309,7 @@ export default {
           <!-- Products Tab -->
           <TabsContent
             value="products"
-            class="mt-0 flex flex-col gap-3 data-[state=inactive]:hidden"
+            class="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden data-[state=inactive]:hidden"
           >
             <div class="flex flex-wrap items-center gap-2 shrink-0">
               <Tabs
@@ -4332,11 +4330,8 @@ export default {
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              <div class="relative min-h-9 flex-1 min-w-[12rem]">
-                <Search
-                  class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
-                />
-                <Input
+              <div class="min-w-0 min-h-9 flex-1 min-w-[12rem]">
+                <NavSearchField
                   v-if="productsViewMode === 'external'"
                   v-model="searchQuery"
                   :placeholder="
@@ -4344,9 +4339,8 @@ export default {
                       'marketplace.connectionPage.products.searchBySkuPlaceholder',
                     )
                   "
-                  class="pl-10"
                 />
-                <Input
+                <NavSearchField
                   v-else
                   v-model="localSearchQuery"
                   :placeholder="
@@ -4354,7 +4348,6 @@ export default {
                       'marketplace.connectionPage.products.searchByNameOrSkuPlaceholder',
                     )
                   "
-                  class="pl-10"
                 />
               </div>
               <div
@@ -4369,13 +4362,13 @@ export default {
               </div>
             </div>
 
-            <div class="flex flex-col">
+            <div class="flex min-h-0 flex-1 flex-col">
               <!-- ==================== EXTERNAL VIEW ==================== -->
               <template v-if="productsViewMode === 'external'">
                 <!-- Loading state -->
                 <div
                   v-if="isLoadingProducts"
-                  class="flex flex-1 items-center justify-center py-12"
+                  class="flex min-h-0 flex-1 items-center justify-center py-12"
                 >
                   <Spinner size="2xl" class="text-muted-foreground" />
                 </div>
@@ -4420,14 +4413,17 @@ export default {
                 <!-- Products table (scroll pane, not EmptyState) -->
                 <div
                   v-else
-                  class="flex flex-col"
+                  class="flex min-h-0 flex-1 flex-col"
                 >
-                  <div class="overflow-x-auto">
-                    <Table :contain="false" class="w-full">
+                  <div
+                    data-slot="table-scroll"
+                    class="min-h-0 min-w-0 flex-1 overflow-auto"
+                  >
+                    <Table :contain="false" class="w-full border-separate border-spacing-0">
                       <TableHeader
-                        class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"
+                        class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
                       >
-                        <TableRow class="hover:bg-transparent">
+                        <TableRow class="bg-background hover:bg-transparent">
                           <TableHead class="w-10">
                             <Checkbox
                               :model-value="allSelected"
@@ -4462,14 +4458,11 @@ export default {
                           }}</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
+                      <TableBody class="[&_td]:border-b">
                         <TableRow
                           v-for="product in filteredProducts"
                           :key="product.externalId"
-                          :class="[
-                            'cursor-pointer select-none',
-                            { 'bg-muted/30': !product.isLinked },
-                          ]"
+                          class="cursor-pointer select-none"
                           @click="handleExternalRowClick(product, $event)"
                         >
                           <TableCell>
@@ -4486,7 +4479,7 @@ export default {
                             <RouterLink
                               v-if="product.localProductId"
                               :to="`/products/${product.localProductId}/edit`"
-                              class="block truncate font-medium underline-offset-2 hover:underline"
+                              class="block truncate font-medium text-foreground underline-offset-2 hover:underline"
                               @click.stop
                               >{{ product.name }}</RouterLink
                             >
@@ -4510,12 +4503,12 @@ export default {
                               "
                               target="_blank"
                               rel="noopener"
-                              class="text-sm bg-muted px-1.5 py-0.5 rounded font-mono hover:underline underline-offset-2"
+                              class="font-mono text-sm text-foreground hover:underline underline-offset-2"
                               >{{ product.externalId }}</a
                             >
                             <code
                               v-else
-                              class="text-sm bg-muted px-1.5 py-0.5 rounded"
+                              class="font-mono text-sm text-muted-foreground"
                               >{{ product.externalId }}</code
                             >
                           </TableCell>
@@ -4524,7 +4517,7 @@ export default {
                               v-if="product.isLinked"
                               class="flex items-center gap-1.5"
                             >
-                              <Link2 class="size-3 text-success-foreground" />
+                              <Link2 class="size-3 text-success" />
                               <code class="text-sm">{{
                                 product.localProductSku
                               }}</code>
@@ -4578,14 +4571,15 @@ export default {
                           <TableCell>
                             <Badge
                               :variant="
-                                productStatusMap[product.externalId].variant
+                                productStatusMap[product.externalId]?.variant
                               "
+                              :class="productStatusMap[product.externalId]?.class"
                             >
                               <component
-                                :is="productStatusMap[product.externalId].icon"
+                                :is="productStatusMap[product.externalId]?.icon"
                                 class="size-3 mr-1"
                               />
-                              {{ productStatusMap[product.externalId].label }}
+                              {{ productStatusMap[product.externalId]?.label }}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -4832,7 +4826,7 @@ export default {
                 <!-- Loading state -->
                 <div
                   v-if="isLoadingLocalProducts && localProducts.length === 0"
-                  class="flex flex-1 items-center justify-center py-12"
+                  class="flex min-h-0 flex-1 items-center justify-center py-12"
                 >
                   <Spinner size="2xl" class="text-muted-foreground" />
                 </div>
@@ -4897,14 +4891,17 @@ export default {
                 <!-- Local products table (scroll pane, not EmptyState) -->
                 <div
                   v-else
-                  class="flex flex-col"
+                  class="flex min-h-0 flex-1 flex-col"
                 >
-                  <div class="overflow-x-auto">
-                    <Table :contain="false" class="w-full">
+                  <div
+                    data-slot="table-scroll"
+                    class="min-h-0 min-w-0 flex-1 overflow-auto"
+                  >
+                    <Table :contain="false" class="w-full border-separate border-spacing-0">
                       <TableHeader
-                        class="sticky top-0 z-10 bg-background [&_tr]:border-b [&_th]:bg-background"
+                        class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
                       >
-                        <TableRow class="hover:bg-transparent">
+                        <TableRow class="bg-background hover:bg-transparent">
                           <TableHead class="w-10">
                             <Checkbox
                               :model-value="allLocalSelected"
@@ -4929,7 +4926,7 @@ export default {
                           }}</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
+                      <TableBody class="[&_td]:border-b">
                         <TableRow
                           v-for="product in localProducts"
                           :key="product.id"
@@ -4949,15 +4946,14 @@ export default {
                           <TableCell class="max-w-0">
                             <RouterLink
                               :to="`/products/${product.id}/edit`"
-                              class="block truncate font-medium underline-offset-2 hover:underline"
+                              class="block truncate font-medium text-foreground underline-offset-2 hover:underline"
                               >{{ product.name }}</RouterLink
                             >
                           </TableCell>
                           <TableCell class="max-w-0">
-                            <code
-                              class="block truncate rounded bg-muted px-1.5 py-0.5 text-sm"
-                              >{{ product.sku }}</code
-                            >
+                            <span class="block truncate font-mono text-sm text-muted-foreground">{{
+                              product.sku
+                            }}</span>
                           </TableCell>
                           <TableCell class="text-right">
                             {{ formatPrice(product.price) }}
@@ -4998,7 +4994,7 @@ export default {
                           "
                         >
                           <SelectTrigger
-                            class="h-8 w-[100px] bg-primary-foreground"
+                            class="h-8 w-[100px]"
                           >
                             <SelectValue />
                           </SelectTrigger>

@@ -306,7 +306,7 @@ const clearAll = () => {
             v-model="searchQuery"
             type="search"
             :placeholder="isLargeList ? t('components.multiSelectDropdown.searchPlaceholderLarge') : t('components.multiSelectDropdown.searchPlaceholder')"
-            class="h-8 bg-background pl-8"
+            class="h-8 pl-8"
             @click.stop
             @keydown.enter.prevent.stop="addCustom"
           />

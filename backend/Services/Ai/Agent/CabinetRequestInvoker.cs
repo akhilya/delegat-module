@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Delegat.Infrastructure.Auth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -36,6 +37,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
 {
     public const string NestedItemKey = "delegat.agent.nested";
     public const int MaxResponseBytes = 256_000;
+    public const int MaxListItems = 12;
 
     private static readonly JsonSerializerOptions JsonRead = new()
     {
@@ -130,21 +132,34 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         if (status >= 400)
             return FailHttp(status, bytes);
 
-        if (bytes.Length > MaxResponseBytes)
+        var working = bytes;
+        var listNote = "";
+        var capped = TryCapLists(bytes);
+        if (capped != null)
         {
-            var slim = TrySlimJson(bytes);
+            working = capped;
+            listNote = " (trimmed list)";
+        }
+
+        if (working.Length > MaxResponseBytes)
+        {
+            var slim = TrySlimJson(working);
             if (slim != null && slim.Length <= MaxResponseBytes)
                 return (ParsePayload(slim, status), $"HTTP {status} (trimmed heavy fields)");
             return (new
             {
                 error = "response_too_large",
                 status,
-                bytes = bytes.Length,
+                bytes = working.Length,
                 hint = "Do not GET a full product card. Use category attributes or sql_readonly on one table.",
-            }, $"HTTP {status} too large ({bytes.Length} bytes)");
+            }, $"HTTP {status} too large ({working.Length} bytes)");
         }
 
-        return (ParsePayload(bytes, status), $"HTTP {status}");
+        var parsed = ParsePayload(working, status);
+        var summary = IsQueuedJob(working)
+            ? $"HTTP {status} queued"
+            : $"HTTP {status}";
+        return (parsed, summary + listNote);
     }
 
     private static (object, string) FailHttp(int status, byte[] bytes)
@@ -181,6 +196,11 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
 
         code ??= "http_error";
         title ??= $"Request failed ({status})";
+        if (status == 404)
+        {
+            code = "not_found";
+            title = "This path does not exist. Do not invent cabinet URLs.";
+        }
         var atCap = string.Equals(code, "product_limit_reached", StringComparison.OrdinalIgnoreCase);
         var summary = atCap
             ? "Product limit reached — nothing was created."
@@ -190,6 +210,9 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             error = code,
             status,
             title,
+            hint = status == 404
+                ? "Use paths listed under TOOLS. Mapping canvas: GET/PATCH /marketplace/connections/{id}/mappings/{mappingId}/graph. Link cards: POST …/match/preview then POST …/match/apply. Do not invent URLs or GET OpenAPI."
+                : null,
             data,
             body,
         }, summary);
@@ -240,6 +263,51 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         catch (JsonException)
         {
             return new { status, text = Encoding.UTF8.GetString(bytes) };
+        }
+    }
+
+    internal static byte[]? TryCapLists(byte[] bytes)
+    {
+        try
+        {
+            var node = JsonNode.Parse(Encoding.UTF8.GetString(bytes));
+            if (node is not JsonObject obj)
+                return null;
+            if (obj["items"] is not JsonArray items || items.Count <= MaxListItems)
+                return null;
+            var removed = items.Count - MaxListItems;
+            while (items.Count > MaxListItems)
+                items.RemoveAt(items.Count - 1);
+            obj["itemsTruncated"] = removed;
+            return Encoding.UTF8.GetBytes(node.ToJsonString());
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsQueuedJob(byte[] bytes)
+    {
+        if (bytes.Length == 0)
+            return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(bytes);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+            if (!doc.RootElement.TryGetProperty("status", out var st)
+                || st.ValueKind != JsonValueKind.String)
+                return false;
+            var s = st.GetString();
+            return s is not null
+                && (s.Equals("pending", StringComparison.OrdinalIgnoreCase)
+                    || s.Equals("running", StringComparison.OrdinalIgnoreCase)
+                    || s.Equals("queued", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

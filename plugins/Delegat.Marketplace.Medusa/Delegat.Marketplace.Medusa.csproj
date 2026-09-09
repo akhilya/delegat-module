@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Delegat.Marketplace.Medusa</RootNamespace>
+    <AssemblyName>Delegat.Marketplace.Medusa</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Condition="'$(DelegatSdkProject)' != ''" Include="$(DelegatSdkProject)">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <ProjectReference Condition="'$(DelegatSdkProject)' == ''" Include="sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Include="tests\**" />
+    <Compile Remove="sdk\**" />
+    <None Include="sdk\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

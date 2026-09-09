@@ -40,7 +40,7 @@ Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_re
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
-Tools: `search_knowledge`, `search_catalog`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (cabinet UI shows path/prompt buttons on the reply). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+Tools: `search_knowledge`, `get_doc`, `search_catalog`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
 
 Resources:
 
@@ -95,7 +95,7 @@ Denied: `/api/v1`, `/api/mcp`, `/api/agent`, `/api/ai`, `/api/auth`, `/api/users
 
 Staged cabinet attachments: `POST /products/{id}/files` `{ attachmentIds }`. Multipart product files stay `PUT …/products/{id}/files` on Agent HTTP.
 
-PATCH `/products/{id}` `attributeValues` replaces the list (GET the card first). Lists return `{ items, totalCount }` like the cabinet — there is no `/stats` shortcut. Groups are `/productgroups`. Orders: `GET /marketplace/orders?tab=` or `GET /marketplace/connections/{id}/orders`. Mappings: `GET /marketplace/connections/{id}/mappings`.
+PATCH `/products/{id}` `attributeValues` replaces the list (GET the card first). Lists return `{ items, totalCount }` like the cabinet — there is no `/stats` shortcut. Groups are `/productgroups`. Orders: `GET /marketplace/orders?tab=` or `GET /marketplace/connections/{id}/orders`. Mappings: `GET /marketplace/connections/{id}/mappings`. Mapping canvas: `GET/PATCH /marketplace/connections/{id}/mappings/{mappingId}/graph`. Marketplace product import is the same as the SPA: `POST /marketplace/connections/{id}/products/import-unlinked` (Catalog Connect; HTTP 200 with `status` pending/running queues background import) or `GET …/import-preview` then `POST …/import-selected`. Linking existing local cards to another marketplace: `POST …/match/preview`, poll `GET /marketplace/catalog-connect/jobs`, then `POST …/match/apply` (include preview `externalCategoryId`). Missing mappings after a link: `POST …/match/repair-mappings`. `GET /tools` page tools are not `POST /tools/{id}/run`. `MAX_PRODUCTS` used includes trash (`GET /products/trash/count`).
 
 ## SQL (`sql_readonly`)
 

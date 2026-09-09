@@ -23,12 +23,21 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Sticky page NavigationBar (h-14). Use when sizing fill layouts below the bar. */
-  --app-navbar-height: 3.5rem;
+  /* Sticky page NavigationBar. One row on desktop; tools stack under the
+     title below lg when `.has-nav-tools` is on the page chrome. */
+  --app-navbar-row: 4rem;
+  --app-navbar-tools: 3.25rem;
+  --app-navbar-height: var(--app-navbar-row);
   /* Breadcrumbs row (list min-h-7 + mb-4) — AppPageChrome / fill-height panes. */
   --app-breadcrumbs-height: 2.75rem;
   /* Space below the last row so it is not flush with the docked footer / inset edge. */
   --page-scroll-end: 1.25rem;
+  /* Sidebar inset m-2 on both ends (md+). Viewport-locked panes (product group,
+     gallery, files tab) subtract this plus --page-scroll-end. */
+  --app-inset-y: 1rem;
+  --app-fill-pane-height: calc(
+    100svh - var(--app-navbar-height) - var(--app-inset-y) - var(--page-scroll-end)
+  );
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -122,6 +131,26 @@ button {
   }
 }
 
+/* Focus rings sit inside the control. The shell, navbar, sheets, and inset
+   groups clip overflow; an outer 3px box-shadow halo is shaved. Same reason
+   InsetGroup uses ring-inset for its hairline. Input groups paint the ring
+   on the wrapper, not the focused child. */
+:focus-visible {
+  --tw-ring-inset: inset;
+  outline-offset: -1px;
+}
+
+[data-slot="input-group"]:has(:focus-visible) {
+  --tw-ring-inset: inset;
+}
+
+/* Toolbar search already has a hairline border. Kill the 3px focus ring so
+   the capsule does not get a clipped inner halo in the navbar. */
+[data-slot="nav-search"]:has(:focus-visible) {
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-inset-ring-shadow: 0 0 #0000;
+}
+
 /* Control Plane button lift: short white top sheen + hairline drop shadow
    on default / outline / secondary / destructive. Ghost and link stay flat.
    Grouped segments share one plane. */
@@ -194,6 +223,28 @@ button {
   );
 }
 
+/* Dark: inverted primary is paper. Sheen is a short dark overlay so it
+   still reads on a light fill (white-on-white vanished or striped). */
+.dark [data-slot="button"]:not([data-variant]),
+.dark [data-slot="button"][data-variant=""],
+.dark [data-slot="button"][data-variant="default"],
+.dark [data-slot="button"][data-variant="destructive"] {
+  background-image: linear-gradient(
+    180deg,
+    oklch(0 0 0 / 0.12),
+    oklch(0 0 0 / 0) 42%
+  );
+}
+
+.dark [data-slot="button"][data-variant="outline"],
+.dark [data-slot="button"][data-variant="secondary"] {
+  background-image: linear-gradient(
+    180deg,
+    oklch(0 0 0 / 0.16),
+    oklch(0 0 0 / 0) 40%
+  );
+}
+
 [data-slot="button"]:not([data-variant]):focus-visible,
 [data-slot="button"][data-variant=""]:focus-visible,
 [data-slot="button"][data-variant="default"]:focus-visible,
@@ -202,11 +253,11 @@ button {
 [data-slot="button"][data-variant="destructive"]:focus-visible {
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.1),
-    0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+    inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 [data-slot="button"][data-variant="ghost"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 [data-slot="button-group"] [data-slot="button"] {
@@ -214,7 +265,7 @@ button {
 }
 
 [data-slot="button-group"] [data-slot="button"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 /* Respect users who ask for less motion: collapse transitions/animations to a crossfade. */
@@ -243,6 +294,16 @@ button {
     max-[1281px]:pl-5 max-[1281px]:pr-20
     max-lg:pl-5 max-lg:pr-5
     max-sm:pl-3 max-sm:pr-3;
+}
+
+.has-nav-tools {
+  --app-navbar-height: calc(var(--app-navbar-row) + var(--app-navbar-tools));
+}
+
+@media (min-width: 1024px) {
+  .has-nav-tools {
+    --app-navbar-height: var(--app-navbar-row);
+  }
 }
 
 @theme inline {
@@ -298,6 +359,7 @@ button {
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.205 0 0);
   --foreground: oklch(0.965 0 0);
   --card: oklch(0.235 0 0);
@@ -309,7 +371,7 @@ button {
   --secondary: oklch(0.3 0 0);
   --secondary-foreground: oklch(0.965 0 0);
   --muted: oklch(0.3 0 0);
-  --muted-foreground: oklch(0.65 0 0);
+  --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.3 0 0);
   --accent-foreground: oklch(0.965 0 0);
   --destructive: oklch(0.5 0.155 27);
@@ -323,10 +385,10 @@ button {
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
   --warning: oklch(0.769 0.188 70.08);
-  --warning-foreground: oklch(0.55 0.14 55);
+  --warning-foreground: oklch(0.82 0.12 70);
   --warning-muted: oklch(0.3 0.06 70);
   --success: oklch(0.696 0.17 162.48);
-  --success-foreground: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.82 0.11 162);
   --success-muted: oklch(0.28 0.06 161);
   --error: var(--destructive);
   --error-foreground: var(--destructive);
@@ -344,6 +406,23 @@ button {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent)
+      transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
   }
   body {
     @apply bg-background text-foreground;
@@ -373,7 +452,7 @@ input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0px 1000px var(--shadow) inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--background) inset !important;
   -webkit-text-fill-color: var(--foreground) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
@@ -395,26 +474,8 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Thin scrollbar for custom scroll areas */
-.thin-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-.thin-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.thin-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
-  border-radius: 9999px;
-}
-.thin-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
-}
-.thin-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent)
-    transparent;
-}
+/* Scrollbars are platform-wide in @layer base (6px, theme tokens).
+   `.thin-scrollbar` remains a call-site marker; `no-scrollbar` still hides. */
 
 /* Sonner (vue-sonner): Catalog Workbench tokens — flat border surface, no soft float shadow.
    Mount via `@/components/ui/sonner` (not raw vue-sonner Toaster). Radius stays compact (--radius-md). */

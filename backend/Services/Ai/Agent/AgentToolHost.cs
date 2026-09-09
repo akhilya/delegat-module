@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Delegat.Infrastructure.Auth;
 using Delegat.Models.Ai;
+using Delegat.Services.Docs;
 
 namespace Delegat.Services.Ai.Agent;
 
@@ -20,6 +21,7 @@ public sealed class AgentToolHost
     private readonly DataContext _db;
     private readonly ILogger<AgentToolHost> _logger;
     private readonly IMcpToolGateway? _mcp;
+    private readonly IPublicDocsClient? _publicDocs;
 
     public AgentToolHost(
         CatalogSearchService catalog,
@@ -30,7 +32,8 @@ public sealed class AgentToolHost
         IPermissionService permissions,
         DataContext db,
         ILogger<AgentToolHost> logger,
-        IMcpToolGateway? mcp = null)
+        IMcpToolGateway? mcp = null,
+        IPublicDocsClient? publicDocs = null)
     {
         _catalog = catalog;
         _sql = sql;
@@ -41,6 +44,7 @@ public sealed class AgentToolHost
         _db = db;
         _logger = logger;
         _mcp = mcp;
+        _publicDocs = publicDocs;
     }
 
     public async Task<(object result, string summary)> DispatchAsync(
@@ -69,12 +73,14 @@ public sealed class AgentToolHost
                 (result, summary) = toolName switch
                 {
                     "search_knowledge" => await SearchKnowledgeAsync(inputJson, ct),
+                    "get_doc" => await GetDocAsync(inputJson, ct),
                     "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
                     "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
                     "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
                     "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
                     "match_files" => await MatchFilesAsync(inputJson, storeId, ct),
                     "navigate_to" => NavigateTo(inputJson),
+                    "ask_form" => AskForm(inputJson),
                     _ => ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}"),
                 };
             }
@@ -107,6 +113,29 @@ public sealed class AgentToolHost
         var hits = await _knowledge.SearchAsync(q, take, ct);
         return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = h.Body.Length > 600 ? h.Body[..600] : h.Body }) },
             $"{hits.Count} knowledge hits");
+    }
+
+    private async Task<(object, string)> GetDocAsync(string json, CancellationToken ct)
+    {
+        if (_publicDocs == null)
+            return (new { error = "docs_not_configured" }, "docs_not_configured");
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var slug = doc.RootElement.TryGetProperty("slug", out var se) ? se.GetString() ?? "" : "";
+        var locale = doc.RootElement.TryGetProperty("locale", out var le) ? le.GetString() ?? "ru" : "ru";
+        try
+        {
+            var page = await _publicDocs.GetPageAsync(slug, locale, ct);
+            var body = page.Markdown.Length > PublicDocsClient.MaxBodyChars
+                ? page.Markdown[..PublicDocsClient.MaxBodyChars]
+                : page.Markdown;
+            return (new { slug = page.Slug, locale = page.Locale, title = page.Title, markdown = body },
+                string.IsNullOrEmpty(page.Slug) ? "doc hub" : $"doc {page.Slug}");
+        }
+        catch (DocsClientException ex)
+        {
+            return (new { error = ex.Code }, ex.Code);
+        }
     }
 
     private Task<(object, string)> SearchCatalogAsync(string json, int storeId, CancellationToken ct)
@@ -173,17 +202,23 @@ public sealed class AgentToolHost
 
         void TryAdd(string? rawUrl, string? rawLabel, string? rawPrompt)
         {
-            if (actions.Count >= 4) return;
+            if (actions.Count >= 6) return;
             var prompt = (rawPrompt ?? "").Trim();
             if (prompt.Length > 200) prompt = prompt[..200];
             var url = (rawUrl ?? "").Trim();
             if (url.Length > 0 && !url.StartsWith('/')) url = "/" + url;
             var safeUrl = url.Length is > 0 and <= 180 && SafePathRx.IsMatch(url) ? url : "";
+            // One action per button: opening a page never also sends a hidden follow-up.
+            if (safeUrl.Length > 0) prompt = "";
             if (safeUrl.Length == 0 && prompt.Length == 0) return;
             var label = (rawLabel ?? "").Trim();
             if (label.Length == 0) label = safeUrl.Length > 0 ? safeUrl : prompt;
             if (label.Length > 80) label = label[..80];
-            var row = new Dictionary<string, string> { ["label"] = label };
+            var row = new Dictionary<string, string>
+            {
+                ["label"] = label,
+                ["kind"] = safeUrl.Length > 0 ? "open" : "continue",
+            };
             if (safeUrl.Length > 0) row["url"] = safeUrl;
             if (prompt.Length > 0) row["prompt"] = prompt;
             actions.Add(row);
@@ -218,6 +253,243 @@ public sealed class AgentToolHost
             label = firstLabel,
             actions,
         }, ok ? "Navigate" : "Unsafe path");
+    }
+
+    private static readonly Regex AdapterKeyRx = new(@"^[a-zA-Z0-9._-]{1,64}$", RegexOptions.Compiled);
+    private static readonly Regex FieldKeyRx = new(@"^[a-zA-Z][a-zA-Z0-9_]{0,39}$", RegexOptions.Compiled);
+
+    internal static (object, string) AskForm(string json)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var root = doc.RootElement;
+        var kind = (root.TryGetProperty("kind", out var kindEl) ? kindEl.GetString() : "")
+            ?.Trim().ToLowerInvariant() ?? "";
+        var title = Clip(root, "title", 80);
+        var submitLabel = Clip(root, "submitLabel", 40);
+
+        if (kind is "connection" or "connect")
+        {
+            var adapterKey = (root.TryGetProperty("adapterKey", out var ak) ? ak.GetString() : "")?.Trim() ?? "";
+            if (!AdapterKeyRx.IsMatch(adapterKey))
+                return (new { error = "adapter_required", form = false }, "Need an adapter");
+            var name = Clip(root, "name", 80);
+            return (new
+            {
+                form = true,
+                kind = "connection",
+                adapterKey,
+                name,
+                title,
+                submitLabel,
+            }, "Form");
+        }
+
+        if (kind is "questions" or "question")
+        {
+            var questions = ParseQuestionList(root);
+            if (questions.Count == 0)
+                return (new { error = "questions_required", form = false }, "Need questions");
+            return (new
+            {
+                form = true,
+                kind = "questions",
+                title,
+                submitLabel,
+                followUp = Clip(root, "followUp", 400),
+                questions,
+            }, "Form");
+        }
+
+        if (kind != "fields")
+            return (new { error = "unknown_form", form = false }, "Unknown form");
+
+        var fields = new List<object>();
+        if (root.TryGetProperty("fields", out var fieldsEl) && fieldsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in fieldsEl.EnumerateArray())
+            {
+                if (fields.Count >= 8) break;
+                var key = (el.TryGetProperty("key", out var k) ? k.GetString() : "")?.Trim() ?? "";
+                if (!FieldKeyRx.IsMatch(key)) continue;
+                var type = (el.TryGetProperty("type", out var t) ? t.GetString() : "text")
+                    ?.Trim().ToLowerInvariant() ?? "text";
+                if (type is "password" or "secret") continue;
+                if (el.TryGetProperty("secret", out var secretEl)
+                    && secretEl.ValueKind == JsonValueKind.True)
+                    continue;
+                if (el.TryGetProperty("isSecret", out var isSecretEl)
+                    && isSecretEl.ValueKind == JsonValueKind.True)
+                    continue;
+                if (type != "select") type = "text";
+                var label = (el.TryGetProperty("label", out var l) ? l.GetString() : "")?.Trim() ?? "";
+                if (label.Length == 0) label = key;
+                if (label.Length > 80) label = label[..80];
+                var required = true;
+                if (el.TryGetProperty("required", out var reqEl) && reqEl.ValueKind == JsonValueKind.False)
+                    required = false;
+                var placeholder = ClipEl(el, "placeholder", 80);
+                List<object>? options = null;
+                if (type == "select" && el.TryGetProperty("options", out var optEl)
+                    && optEl.ValueKind == JsonValueKind.Array)
+                {
+                    options = [];
+                    foreach (var opt in optEl.EnumerateArray())
+                    {
+                        if (options.Count >= 20) break;
+                        var value = (opt.TryGetProperty("value", out var v) ? v.GetString() : "")?.Trim() ?? "";
+                        if (value.Length == 0) continue;
+                        var optLabel = (opt.TryGetProperty("label", out var ol) ? ol.GetString() : "")?.Trim() ?? value;
+                        options.Add(new { value = value.Length > 80 ? value[..80] : value, label = optLabel.Length > 80 ? optLabel[..80] : optLabel });
+                    }
+                    if (options.Count == 0) continue;
+                }
+
+                fields.Add(new
+                {
+                    key,
+                    label,
+                    type,
+                    required,
+                    placeholder,
+                    options,
+                });
+            }
+        }
+
+        if (fields.Count == 0)
+            return (new { error = "fields_required", form = false }, "Need fields");
+
+        var followUp = Clip(root, "followUp", 400);
+        return (new
+        {
+            form = true,
+            kind = "fields",
+            title,
+            submitLabel,
+            followUp,
+            fields,
+        }, "Form");
+    }
+
+    private static List<object> ParseQuestionList(JsonElement root)
+    {
+        JsonElement listEl;
+        if (root.TryGetProperty("questions", out var questionsEl) && questionsEl.ValueKind == JsonValueKind.Array)
+            listEl = questionsEl;
+        else if (root.TryGetProperty("fields", out var fieldsEl) && fieldsEl.ValueKind == JsonValueKind.Array)
+            listEl = fieldsEl;
+        else
+            return [];
+
+        var questions = new List<object>();
+        foreach (var el in listEl.EnumerateArray())
+        {
+            if (questions.Count >= 5) break;
+            var parsed = ParseQuestion(el);
+            if (parsed != null) questions.Add(parsed);
+        }
+        return questions;
+    }
+
+    private static object? ParseQuestion(JsonElement el)
+    {
+        var key = (el.TryGetProperty("key", out var k) ? k.GetString() : null)
+            ?? (el.TryGetProperty("name", out var n) ? n.GetString() : "")
+            ?? "";
+        key = key.Trim();
+        if (!FieldKeyRx.IsMatch(key)) return null;
+        if (IsSecretFlag(el)) return null;
+
+        var rawType = (el.TryGetProperty("type", out var t) ? t.GetString() : "")
+            ?.Trim().ToLowerInvariant() ?? "";
+        if (rawType is "password" or "secret") return null;
+
+        var choices = ParseChoices(el);
+        var type = rawType switch
+        {
+            "multiple" or "multi" or "checkbox" => "multiple",
+            "text" or "freeform" or "input" or "textarea" => "text",
+            "select" or "choice" or "single" or "radio" => "single",
+            _ => choices.Count > 0 ? "single" : "text",
+        };
+
+        var allowOther = el.TryGetProperty("allowOther", out var otherEl)
+            && otherEl.ValueKind == JsonValueKind.True;
+        if (type == "text")
+        {
+            choices = [];
+            allowOther = false;
+        }
+        else if (choices.Count == 0 && !allowOther)
+        {
+            return null;
+        }
+
+        var title = ClipEl(el.TryGetProperty("title", out var titleEl) ? titleEl : default, "", 80);
+        if (title.Length == 0) title = ClipEl(el.TryGetProperty("label", out var labelEl) ? labelEl : default, "", 80);
+        if (title.Length == 0) title = key;
+        var required = true;
+        if (el.TryGetProperty("required", out var reqEl) && reqEl.ValueKind == JsonValueKind.False)
+            required = false;
+
+        return new
+        {
+            key,
+            title,
+            description = ClipEl(el.TryGetProperty("description", out var descEl) ? descEl : default, "", 160),
+            type,
+            required,
+            placeholder = ClipEl(el.TryGetProperty("placeholder", out var phEl) ? phEl : default, "", 80),
+            allowOther,
+            choices,
+        };
+    }
+
+    private static bool IsSecretFlag(JsonElement el)
+    {
+        if (el.TryGetProperty("secret", out var secretEl) && secretEl.ValueKind == JsonValueKind.True)
+            return true;
+        if (el.TryGetProperty("isSecret", out var isSecretEl) && isSecretEl.ValueKind == JsonValueKind.True)
+            return true;
+        return false;
+    }
+
+    private static List<object> ParseChoices(JsonElement el)
+    {
+        JsonElement optEl;
+        if (el.TryGetProperty("choices", out var choicesEl) && choicesEl.ValueKind == JsonValueKind.Array)
+            optEl = choicesEl;
+        else if (el.TryGetProperty("options", out var optionsEl) && optionsEl.ValueKind == JsonValueKind.Array)
+            optEl = optionsEl;
+        else
+            return [];
+
+        var choices = new List<object>();
+        foreach (var opt in optEl.EnumerateArray())
+        {
+            if (choices.Count >= 8) break;
+            var value = (opt.TryGetProperty("value", out var v) ? v.GetString() : "")?.Trim() ?? "";
+            if (value.Length == 0) continue;
+            if (value.Length > 80) value = value[..80];
+            var label = (opt.TryGetProperty("label", out var ol) ? ol.GetString() : "")?.Trim() ?? value;
+            if (label.Length == 0) label = value;
+            if (label.Length > 80) label = label[..80];
+            var description = ClipEl(opt.TryGetProperty("description", out var d) ? d : default, "", 120);
+            choices.Add(new { value, label, description });
+        }
+        return choices;
+    }
+
+    private static string Clip(JsonElement root, string name, int max)
+    {
+        if (!root.TryGetProperty(name, out var el)) return "";
+        return ClipEl(el, name, max);
+    }
+
+    private static string ClipEl(JsonElement el, string _, int max)
+    {
+        var text = el.ValueKind == JsonValueKind.String ? (el.GetString() ?? "").Trim() : "";
+        return text.Length > max ? text[..max] : text;
     }
 
     public static string HashScript(string script)

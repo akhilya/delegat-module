@@ -16,6 +16,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -40,6 +41,7 @@ const props = defineProps({
 
 const route = useRoute();
 const store = useStore();
+const { isMobile, setOpenMobile } = useSidebar();
 const savedOpen = getSidebarGroupOpen(props.groupId);
 const open = ref(savedOpen ?? props.defaultOpen);
 
@@ -63,9 +65,14 @@ function isItemActive(item) {
   return item.id === activeItemId.value;
 }
 
+function dismissMobile() {
+  if (isMobile.value) setOpenMobile(false);
+}
+
 function handleAction(action) {
   if (action === "toggleAi") store.commit("aiChat/toggle");
   if (action === "toggleOps") store.dispatch("operations/togglePanel");
+  dismissMobile();
 }
 
 function attentionLabel(item) {
@@ -106,7 +113,7 @@ watch(
                 : undefined
             "
           >
-            <RouterLink :to="singleLink.to">
+            <RouterLink :to="singleLink.to" @click="dismissMobile">
               <span
                 class="relative inline-flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
               >
@@ -187,7 +194,7 @@ watch(
                     as-child
                     :is-active="isItemActive(item)"
                   >
-                    <RouterLink :to="item.to">
+                    <RouterLink :to="item.to" @click="dismissMobile">
                       <component :is="item.icon" />
                       <span>{{ item.label }}</span>
                       <TooltipProvider

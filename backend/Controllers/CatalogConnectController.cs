@@ -103,7 +103,8 @@ public class CatalogConnectController : ControllerBase
     }
 
     /// <summary>
-    /// Create category mappings for existing links that were saved without one.
+    /// Create category mappings for existing links that were saved without one,
+    /// and copy marketplace fields into local attributes.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/match/repair-mappings")]

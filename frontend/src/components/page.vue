@@ -11,7 +11,7 @@ const props = defineProps({
     min-h-full: page fills the inset scroller and can grow with rows.
     Flex column so AppPageChrome can expand empty states without a nested table scroll.
   -->
-  <div :class="cn('flex min-h-full flex-col bg-background adaptive-padding', props.class)">
+  <div :class="cn('flex min-h-full min-w-0 w-full flex-col bg-background adaptive-padding', props.class)">
     <slot />
   </div>
 </template>

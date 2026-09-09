@@ -21,8 +21,14 @@ import {
 import AiPlanCard from "./AiPlanCard.vue";
 import AiChatProcess from "./AiChatProcess.vue";
 import AiChatActions from "./AiChatActions.vue";
+import AiChatForm from "./AiChatForm.vue";
 import OperationContextBubble from "./OperationContextBubble.vue";
 import AiChatAttachmentList from "./AiChatAttachmentList.vue";
+import AiChatEmpty from "./AiChatEmpty.vue";
+import {
+  emptyPromptScope,
+  pickEmptyPromptKeys,
+} from "@/lib/ai/emptyPrompts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -170,11 +176,13 @@ const effectiveModelId = computed(() => {
     : "";
 });
 
-const examplePrompts = computed(() => [
-  t("ai.exampleStats"),
-  t("ai.exampleFillMapping"),
-  t("ai.exampleFindNoPrice"),
-]);
+const emptyPromptKeys = computed(() =>
+  pickEmptyPromptKeys({
+    page: store.state.aiChat.pageContext?.page ?? null,
+    seed: `${sessionId.value}:${emptyPromptScope(store.state.aiChat.pageContext)}`,
+  }),
+);
+const examplePrompts = computed(() => emptyPromptKeys.value.map((key) => t(key)));
 
 const groupedConversations = computed(() => {
   const tz = storeTimezone.value;
@@ -494,6 +502,18 @@ function replyText(msg) {
   return hasPlanExec(msg) ? layout.execution.reply : layout.proposal.reply;
 }
 
+function chatForms(msg) {
+  const layout = turnLayout(msg);
+  const forms = [...(layout.proposal.forms || []), ...(layout.execution.forms || [])];
+  const seen = new Set();
+  return forms.filter((form) => {
+    const key = `${form.kind}|${form.adapterKey || ""}|${form.id || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function chatActions(msg) {
   const layout = turnLayout(msg);
   const actions = [...layout.proposal.actions, ...layout.execution.actions];
@@ -702,26 +722,17 @@ function isLatestTurn(msg) {
           class="h-full overflow-y-auto px-4 py-4"
           @scroll="onScroll"
         >
-          <EmptyState
+          <AiChatEmpty
             v-if="messages.length === 0"
-            :framed="false"
             :title="hasEnabledModels ? t('ai.greeting') : t('ai.unavailable')"
             :description="
               hasEnabledModels
                 ? t('ai.capabilitiesDescription')
                 : t('ai.noModelsEnabled')
             "
-          >
-            <InsetGroup v-if="hasEnabledModels" class="w-full max-w-[280px]">
-              <InsetGroupItem
-                v-for="example in examplePrompts"
-                :key="example"
-                @click="submitExample(example)"
-              >
-                {{ example }}
-              </InsetGroupItem>
-            </InsetGroup>
-          </EmptyState>
+            :prompts="hasEnabledModels ? examplePrompts : []"
+            @pick="submitExample"
+          />
 
           <div v-else class="ai-thread flex flex-col gap-4">
             <template v-for="msg in messages" :key="msg.id">
@@ -825,6 +836,19 @@ function isLatestTurn(msg) {
                     @ask="onChatAsk"
                   />
 
+                  <div
+                    v-if="msg.done && chatForms(msg).length"
+                    class="flex w-full min-w-0 flex-col gap-2"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                  >
+                    <AiChatForm
+                      v-for="form in chatForms(msg)"
+                      :key="form.id"
+                      :form="form"
+                      @ask="onChatAsk"
+                    />
+                  </div>
+
                   <Transition name="ai-fade">
                     <Marker
                       v-if="
@@ -903,7 +927,7 @@ function isLatestTurn(msg) {
             v-if="!isAtBottom && messages.length > 0"
             variant="outline"
             size="icon"
-            class="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 rounded-full"
+            class="absolute bottom-3 left-1/2 z-10 size-8 -translate-x-1/2 rounded-md"
             :title="t('ai.jumpToLatest')"
             :aria-label="t('ai.jumpToLatest')"
             @click="scrollToLatest"
@@ -934,7 +958,7 @@ function isLatestTurn(msg) {
             @clear="clearAttachments"
           />
         </Transition>
-        <InputGroup class="w-full rounded-xl">
+        <InputGroup class="w-full">
           <InputGroupTextarea
             ref="inputEl"
             v-model="inputText"
@@ -954,7 +978,7 @@ function isLatestTurn(msg) {
                 v-if="canAttach"
                 variant="ghost"
                 size="icon-sm"
-                class="rounded-full"
+                class="rounded-md"
                 :disabled="isLoading || !hasEnabledModels"
                 :title="t('ai.attach')"
                 :aria-label="t('ai.attach')"
@@ -999,7 +1023,7 @@ function isLatestTurn(msg) {
               v-if="isLoading"
               variant="secondary"
               size="icon-sm"
-              class="rounded-full"
+              class="rounded-md"
               :title="t('ai.stopGeneration')"
               :aria-label="t('ai.stopGeneration')"
               @click="stopGeneration"
@@ -1009,7 +1033,7 @@ function isLatestTurn(msg) {
             <InputGroupButton
               v-else
               size="icon-sm"
-              class="rounded-full"
+              class="rounded-md"
               :variant="
                 inputText.trim() || attachedCount ? 'default' : 'secondary'
               "

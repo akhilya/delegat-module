@@ -3,8 +3,8 @@ import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import Input from "@/components/ui/input/Input.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import NavSearchField from "@/components/NavSearchField.vue";
 import {
   Table,
   TableBody,
@@ -27,7 +27,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Download,
-  Search,
   X,
 } from "lucide-vue-next";
 
@@ -40,7 +39,7 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    Input,
+    NavSearchField,
     Checkbox,
     Table,
     TableBody,
@@ -56,7 +55,6 @@ export default {
     ChevronsLeft,
     ChevronsRight,
     Download,
-    Search,
     X,
   },
   data() {
@@ -70,7 +68,6 @@ export default {
       isDownloadingAll: false,
       /** @type {Record<string, object>} */
       selection: {},
-      breadcrumbs: [{ label: this.$t("pages.barcodesPage.breadcrumb") }],
     };
   },
   computed: {
@@ -272,24 +269,13 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome :breadcrumb-items="breadcrumbs">
+  <AppPageChrome>
     <template #nav-center>
-      <div class="relative h-9 w-full">
-        <Input
-          v-model="searchQuery"
-          class="absolute h-full w-full pr-10"
-          :placeholder="$t('pages.barcodesPage.searchPlaceholder')"
-          @keypress.enter="applySearch"
-        />
-        <Button
-          class="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-          variant="link"
-          :aria-label="$t('pages.barcodesPage.searchPlaceholder')"
-          @click="applySearch"
-        >
-          <Search class="size-4" />
-        </Button>
-      </div>
+      <NavSearchField
+        v-model="searchQuery"
+        :placeholder="$t('pages.barcodesPage.searchPlaceholder')"
+        @submit="applySearch"
+      />
     </template>
 
     <PageSection

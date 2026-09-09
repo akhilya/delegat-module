@@ -1,5 +1,6 @@
 using Delegat.Infrastructure.Storage;
 using Delegat.Models.Ai;
+using Delegat.Services.Docs;
 using Microsoft.EntityFrameworkCore;
 
 namespace Delegat.Services.Ai.Agent;
@@ -12,17 +13,20 @@ public sealed class KnowledgeIndexService
     private readonly IStorageService _storage;
     private readonly ILogger<KnowledgeIndexService> _logger;
     private readonly IWebHostEnvironment? _env;
+    private readonly IPublicDocsClient? _publicDocs;
 
     public KnowledgeIndexService(
         DataContext db,
         IStorageService storage,
         ILogger<KnowledgeIndexService> logger,
-        IWebHostEnvironment? env = null)
+        IWebHostEnvironment? env = null,
+        IPublicDocsClient? publicDocs = null)
     {
         _db = db;
         _storage = storage;
         _logger = logger;
         _env = env;
+        _publicDocs = publicDocs;
     }
 
     public async Task<IReadOnlyList<KnowledgeChunk>> SearchAsync(string query, int take, CancellationToken ct)
@@ -39,12 +43,6 @@ public sealed class KnowledgeIndexService
     public async Task ReindexAsync(CancellationToken ct = default)
     {
         var files = EnumerateCanonFiles().ToList();
-        if (files.Count == 0)
-        {
-            _logger.LogInformation("Knowledge index: no canon files found");
-            return;
-        }
-
         var rows = new List<AiKnowledgeChunk>();
         foreach (var file in files)
         {
@@ -77,6 +75,14 @@ public sealed class KnowledgeIndexService
             {
                 _logger.LogDebug(ex, "Knowledge MinIO copy skipped for {Path}", file.RelPath);
             }
+        }
+
+        await AppendProductDocsAsync(rows, ct);
+
+        if (rows.Count == 0)
+        {
+            _logger.LogInformation("Knowledge index: no canon files found");
+            return;
         }
 
         var existing = _db.aiKnowledgeChunks.Where(c => c.storeId == null);
@@ -130,7 +136,11 @@ public sealed class KnowledgeIndexService
                 if (Directory.Exists(docs))
                 {
                     foreach (var path in Directory.EnumerateFiles(docs, "*.md", SearchOption.AllDirectories))
-                        yield return ("docs/" + Path.GetRelativePath(docs, path).Replace('\\', '/'), path);
+                    {
+                        var rel = "docs/" + Path.GetRelativePath(docs, path).Replace('\\', '/');
+                        if (IsOperatorPlan(rel)) continue;
+                        yield return (rel, path);
+                    }
                 }
 
                 yield break;
@@ -161,6 +171,64 @@ public sealed class KnowledgeIndexService
         return ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
                || ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
                || ext.Equals(".txt", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOperatorPlan(string relPath) =>
+        relPath.Replace('\\', '/').StartsWith("docs/plans/", StringComparison.OrdinalIgnoreCase);
+
+    private async Task AppendProductDocsAsync(List<AiKnowledgeChunk> rows, CancellationToken ct)
+    {
+        if (_publicDocs == null) return;
+
+        foreach (var locale in new[] { "ru", "en" })
+        {
+            DocsCatalog catalog;
+            try
+            {
+                catalog = await _publicDocs.GetCatalogAsync(locale, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Product docs catalog {Locale} skipped", locale);
+                continue;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var group in catalog.Groups)
+            {
+                foreach (var item in group.Items)
+                {
+                    var slug = item.Slug ?? "";
+                    if (!seen.Add(slug)) continue;
+
+                    DocsPage page;
+                    try
+                    {
+                        page = await _publicDocs.GetPageAsync(slug, locale, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Skip product doc {Locale} {Slug}", locale, slug);
+                        continue;
+                    }
+
+                    var rel = string.IsNullOrEmpty(slug)
+                        ? $"product-docs/{locale}/index.md"
+                        : $"product-docs/{locale}/{slug}.md";
+                    foreach (var chunk in KnowledgeChunker.Chunk(rel, page.Markdown))
+                    {
+                        rows.Add(new AiKnowledgeChunk
+                        {
+                            sourcePath = chunk.SourcePath,
+                            title = chunk.Title.Length > 200 ? chunk.Title[..200] : chunk.Title,
+                            body = chunk.Body,
+                            storeId = null,
+                            createdAt = DateTime.UtcNow,
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 
