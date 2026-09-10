@@ -245,14 +245,25 @@ public class CategoryMappingController : ControllerBase
         if (category == null)
             throw ApiException.NotFound("Local category not found", code: "category_not_found");
 
+        var attributes = category.attributes.AsEnumerable();
+        if (input.selectedAttributeKeys != null)
+        {
+            var keys = new HashSet<string>(
+                input.selectedAttributeKeys
+                    .Where(k => !string.IsNullOrWhiteSpace(k))
+                    .Select(k => k.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            attributes = attributes.Where(a => keys.Contains(a.key ?? ""));
+        }
+
         var request = new Models.Marketplace.DTOs.CreateCategoryRequest
         {
             Name = string.IsNullOrWhiteSpace(input.externalCategoryName) ? category.name : input.externalCategoryName.Trim(),
-            Description = category.description,
+            Description = string.IsNullOrWhiteSpace(input.description) ? category.description : input.description.Trim(),
             ParentId = input.parentExternalCategoryId,
             StoreId = input.storeId,
             LanguageId = input.languageId,
-            Fields = category.attributes
+            Fields = attributes
                 .OrderBy(a => a.sortOrder)
                 .Select(a => new Models.Marketplace.DTOs.CreateCategoryField
                 {
@@ -298,7 +309,9 @@ public class CategoryMappingController : ControllerBase
         if (fields == null || fields.Count == 0)
             fields = await adapter.GetCategoryFieldsAsync(connection, result.ExternalCategoryId, ct);
 
-        var fieldsCreated = await CreateFieldMappingsAsync(mapping, connection, category.Id, fields, adapter, ct: ct);
+        var fieldsCreated = await CreateFieldMappingsAsync(
+            mapping, connection, category.Id, fields, adapter,
+            skipAutoMapping: input.skipAutoMapping == true, ct: ct);
 
         return Ok(new
         {
@@ -1321,10 +1334,13 @@ public class CategoryMappingController : ControllerBase
     {
         public int localCategoryId { get; set; }
         public string? externalCategoryName { get; set; }
+        public string? description { get; set; }
         public string? parentExternalCategoryId { get; set; }
         public string? mappingName { get; set; }
         public int? storeId { get; set; }
         public int? languageId { get; set; }
+        public List<string>? selectedAttributeKeys { get; set; }
+        public bool? skipAutoMapping { get; set; }
     }
 
     public struct UpdateMappingInput

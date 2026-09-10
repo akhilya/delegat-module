@@ -47,6 +47,8 @@ const MarketplaceConnectionPage = () =>
   import("./pages/marketplace/connectionPage.vue");
 const MarketplaceCategoryImportPage = () =>
   import("./pages/marketplace/categoryImportPage.vue");
+const MarketplaceCategoryCreatePage = () =>
+  import("./pages/marketplace/categoryCreatePage.vue");
 const MarketplaceFieldMappingPage = () =>
   import("./pages/marketplace/fieldMappingPage.vue");
 const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
@@ -100,6 +102,8 @@ export const PAGE_ADAPTER_LOGS = "/settings/adapter-logs";
 export const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
 export const PAGE_MARKETPLACE_CATEGORY_IMPORT =
   "/adapter/:connId/categories/import";
+export const PAGE_MARKETPLACE_CATEGORY_CREATE =
+  "/adapter/:connId/categories/create";
 export const PAGE_MARKETPLACE_FIELD_MAPPING =
   "/adapter/:connId/categories/:mappingId";
 
@@ -413,6 +417,14 @@ export const routes = [
     },
   },
   {
+    path: PAGE_MARKETPLACE_CATEGORY_CREATE,
+    component: MarketplaceCategoryCreatePage,
+    meta: {
+      titleKey: "routes.categoryCreate",
+      permissions: [PERMS.MarketplaceManage],
+    },
+  },
+  {
     path: PAGE_MARKETPLACE_FIELD_MAPPING,
     component: MarketplaceFieldMappingPage,
     meta: {
@@ -424,6 +436,13 @@ export const routes = [
     path: "/marketplace/:connId/categories/import",
     redirect: (to) => ({
       path: `/adapter/${to.params.connId}/categories/import`,
+      query: to.query,
+    }),
+  },
+  {
+    path: "/marketplace/:connId/categories/create",
+    redirect: (to) => ({
+      path: `/adapter/${to.params.connId}/categories/create`,
       query: to.query,
     }),
   },

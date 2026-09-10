@@ -54,7 +54,8 @@ export function estimateNodeHeight(node) {
 
   if (node.type === "adapterFields" || node.type === "adapterPriceFields") {
     const n = node.data?.fields?.length || 1;
-    return ADAPTER_HEADER + n * ADAPTER_ROW + 6;
+    const extra = node.type === "adapterFields" ? 1 : 0;
+    return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + 6;
   }
 
   if (node.data?.collapsed) return 44;

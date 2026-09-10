@@ -1307,7 +1307,7 @@ export default {
       this.isCreatingMapping = false;
     },
 
-    async handleCreateExternalCategoryMapping() {
+    goToCreateExternalCategory() {
       if (!this.newMapping.localCategoryId) {
         displaySonnerError(
           this.$t(
@@ -1317,7 +1317,7 @@ export default {
         return;
       }
 
-      if (!this.capabilities?.capabilities?.createCategory) {
+      if (!this.canCreateCategory) {
         displaySonnerError(
           this.$t(
             "marketplace.connectionPage.notifications.createCategoryUnsupported",
@@ -1326,33 +1326,16 @@ export default {
         return;
       }
 
-      this.isCreatingExternalCategory = true;
-      await this.createExternalCategoryMapping({
-        connectionId: this.connectionId,
-        data: {
-          localCategoryId: this.newMapping.localCategoryId,
-          externalCategoryName:
-            this.newMapping.externalCategoryName ||
-            this.selectedLocalCategory?.name,
-          parentExternalCategoryId: this.currentParentId,
-          mappingName: this.newMapping.name,
-        },
-        onSuccess: () => {
-          displaySonnerSuccess(
-            this.$t(
-              "marketplace.connectionPage.notifications.categoryCreatedAndLinked",
-            ),
-          );
-          this.showCreateMappingDialog = false;
-          this.resetNewMapping();
-          this.fetchMappings();
-          this.loadRootCategories();
-        },
-        onError: (error) => {
-          displaySonnerError(error);
+      const parent = this.categoryPath[this.categoryPath.length - 1];
+      this.showCreateMappingDialog = false;
+      this.$router.push({
+        path: `/adapter/${this.connectionId}/categories/create`,
+        query: {
+          localCategoryId: String(this.newMapping.localCategoryId),
+          parentId: this.currentParentId || undefined,
+          parentName: parent?.name || undefined,
         },
       });
-      this.isCreatingExternalCategory = false;
     },
 
     async handleDeleteMapping(mapping) {
@@ -2618,13 +2601,13 @@ export default {
     },
 
     goToMappingsForCreate() {
+      if (this.canCreateCategory) {
+        this.$router.push(`/adapter/${this.connectionId}/categories/create`);
+        return;
+      }
       this.activeTab = "mappings";
       this.$nextTick(() => {
-        if (this.canCreateCategory) {
-          this.openBulkCreateCategoriesDialog();
-        } else {
-          this.showCreateMappingDialog = true;
-        }
+        this.showCreateMappingDialog = true;
       });
     },
 
@@ -3071,20 +3054,8 @@ export default {
     }
 
     if (createFromLocal === "1" || createFromLocal === "true") {
-      this.activeTab = "mappings";
-      const waitForBulk = setInterval(() => {
-        if (!this.isLoading && this.capabilities) {
-          clearInterval(waitForBulk);
-          this.openBulkCreateCategoriesDialog();
-          this.$router.replace({
-            query: {
-              ...this.$route.query,
-              createFromLocal: undefined,
-            },
-          });
-        }
-      }, 100);
-      setTimeout(() => clearInterval(waitForBulk), 5000);
+      this.$router.replace(`/adapter/${this.connectionId}/categories/create`);
+      return;
     }
 
     if (createMapping === "true" && localCategoryId) {
@@ -3650,31 +3621,6 @@ export default {
                 </span>
               </p>
               <div class="flex shrink-0 flex-wrap gap-2">
-                <TooltipProvider v-if="canCreateCategory" :delay-duration="200">
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Button
-                        variant="outline"
-                        @click="openBulkCreateCategoriesDialog"
-                      >
-                        <Upload class="size-4 mr-2" />
-                        {{
-                          $t("marketplace.connectionPage.mappings.createShort")
-                        }}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" class="max-w-xs">
-                      <p>
-                        {{
-                          $t(
-                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
-                            { adapter: adapterDisplayName },
-                          )
-                        }}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
                 <Dialog
                   v-model:open="showCreateMappingDialog"
                   @update:open="$event && onCategoryDialogOpen()"
@@ -3858,26 +3804,14 @@ export default {
                               v-if="capabilities?.capabilities?.createCategory"
                               size="sm"
                               variant="outline"
-                              :disabled="
-                                !newMapping.localCategoryId ||
-                                isCreatingExternalCategory
-                              "
-                              @click="handleCreateExternalCategoryMapping"
+                              :disabled="!newMapping.localCategoryId"
+                              @click="goToCreateExternalCategory"
                             >
-                              <Spinner
-                                v-if="isCreatingExternalCategory"
-                                class="mr-2"
-                              />
-                              <FolderTree v-else class="size-4 mr-2" />
+                              <Upload class="size-4 mr-2" />
                               {{
-                                isCreatingExternalCategory
-                                  ? $t(
-                                      "marketplace.connectionPage.mappings.creating",
-                                    )
-                                  : $t(
-                                      "marketplace.connectionPage.mappings.createInAdapter",
-                                      { adapter: adapterDisplayName },
-                                    )
+                                $t(
+                                  "marketplace.connectionPage.mappings.exportCategory",
+                                )
                               }}
                             </Button>
                           </template>
@@ -3909,31 +3843,20 @@ export default {
                       <Button
                         v-if="capabilities?.capabilities?.createCategory"
                         variant="outline"
-                        @click="handleCreateExternalCategoryMapping"
-                        :disabled="
-                          !newMapping.localCategoryId ||
-                          isCreatingExternalCategory
-                        "
+                        @click="goToCreateExternalCategory"
+                        :disabled="!newMapping.localCategoryId"
                       >
-                        <Spinner
-                          v-if="isCreatingExternalCategory"
-                          class="mr-2"
-                        />
-                        <FolderTree v-else class="size-4 mr-2" />
+                        <Upload class="size-4 mr-2" />
                         {{
-                          isCreatingExternalCategory
-                            ? $t("marketplace.connectionPage.mappings.creating")
-                            : $t(
-                                "marketplace.connectionPage.mappings.createInAdapter",
-                                { adapter: adapterDisplayName },
-                              )
+                          $t(
+                            "marketplace.connectionPage.mappings.exportCategory",
+                          )
                         }}
                       </Button>
                       <Button
                         @click="handleCreateMapping"
                         :disabled="
                           isCreatingMapping ||
-                          isCreatingExternalCategory ||
                           !newMapping.localCategoryId ||
                           !newMapping.externalCategoryId ||
                           selectedExternalIsFolder
@@ -3950,14 +3873,31 @@ export default {
                   </DialogContent>
                 </Dialog>
 
-                <Button
-                  @click="
-                    $router.push(`/adapter/${connectionId}/categories/import`)
-                  "
-                >
-                  <Plus class="size-4 mr-2" />
-                  {{ $t("marketplace.connectionPage.mappings.importCategory") }}
-                </Button>
+                <ButtonGroup>
+                  <Button
+                    v-if="canCreateCategory"
+                    variant="outline"
+                    @click="
+                      $router.push(
+                        `/adapter/${connectionId}/categories/create`,
+                      )
+                    "
+                  >
+                    <Upload class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.mappings.exportCategory") }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    @click="
+                      $router.push(
+                        `/adapter/${connectionId}/categories/import`,
+                      )
+                    "
+                  >
+                    <Download class="size-4 mr-2" />
+                    {{ $t("marketplace.connectionPage.mappings.importCategory") }}
+                  </Button>
+                </ButtonGroup>
               </div>
             </div>
 
@@ -3987,87 +3927,44 @@ export default {
               <template #icon>
                 <FolderTree />
               </template>
-              <TooltipProvider :delay-duration="200">
-                <div class="inline-flex">
-                  <Tooltip v-if="canCreateCategory">
-                    <TooltipTrigger as-child>
-                      <Button
-                        class="rounded-r-none border-r-0"
-                        @click="openBulkCreateCategoriesDialog"
-                      >
-                        <Upload class="size-4 mr-1.5" />
-                        {{
-                          $t("marketplace.connectionPage.mappings.createShort")
-                        }}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" class="max-w-xs">
-                      <p>
-                        {{
-                          $t(
-                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
-                            { adapter: adapterDisplayName },
-                          )
-                        }}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Button
-                        :variant="canCreateCategory ? 'outline' : 'default'"
-                        :class="
-                          canCreateCategory
-                            ? 'rounded-none border-r-0'
-                            : 'rounded-r-none border-r-0'
-                        "
-                        @click="showCreateMappingDialog = true"
-                      >
-                        <Link class="size-4 mr-1.5" />
-                        {{
-                          $t("marketplace.connectionPage.mappings.linkShort")
-                        }}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" class="max-w-xs">
-                      <p>
-                        {{
-                          $t(
-                            "marketplace.connectionPage.mappings.createMapping",
-                          )
-                        }}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Button
-                        variant="outline"
-                        class="rounded-l-none"
-                        @click="
-                          $router.push(
-                            `/adapter/${connectionId}/categories/import`,
-                          )
-                        "
-                      >
-                        <Download class="size-4 mr-1.5" />
-                        {{
-                          $t("marketplace.connectionPage.mappings.importShort")
-                        }}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" class="max-w-xs">
-                      <p>
-                        {{
-                          $t(
-                            "marketplace.connectionPage.mappings.importCategory",
-                          )
-                        }}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </TooltipProvider>
+              <div class="flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  @click="showCreateMappingDialog = true"
+                >
+                  <Link class="size-4 mr-2" />
+                  {{ $t("marketplace.connectionPage.mappings.createMapping") }}
+                </Button>
+                <ButtonGroup>
+                  <Button
+                    v-if="canCreateCategory"
+                    variant="outline"
+                    @click="
+                      $router.push(
+                        `/adapter/${connectionId}/categories/create`,
+                      )
+                    "
+                  >
+                    <Upload class="size-4 mr-2" />
+                    {{
+                      $t("marketplace.connectionPage.mappings.exportCategory")
+                    }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    @click="
+                      $router.push(
+                        `/adapter/${connectionId}/categories/import`,
+                      )
+                    "
+                  >
+                    <Download class="size-4 mr-2" />
+                    {{
+                      $t("marketplace.connectionPage.mappings.importCategory")
+                    }}
+                  </Button>
+                </ButtonGroup>
+              </div>
             </EmptyState>
 
             <Dialog v-model:open="showBulkCreateCategoriesDialog">
@@ -4857,15 +4754,11 @@ export default {
                     <FolderTree />
                   </template>
                   <Button @click="goToMappingsForCreate">
-                    <Upload v-if="canCreateCategory" class="size-4 mr-2" />
-                    <FolderTree v-else class="size-4 mr-2" />
+                    <FolderTree class="size-4 mr-2" />
                     {{
                       canCreateCategory
                         ? $t(
-                            "marketplace.connectionPage.mappings.createCategoriesFromLocal",
-                            {
-                              adapter: adapterDisplayName,
-                            },
+                            "marketplace.connectionPage.mappings.exportCategory",
                           )
                         : $t("marketplace.connectionPage.products.goToMappings")
                     }}

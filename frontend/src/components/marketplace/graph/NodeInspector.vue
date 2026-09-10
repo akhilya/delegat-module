@@ -20,7 +20,13 @@ import TemplateEditor from "../TemplateEditor.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Trash2, X, Plus } from "lucide-vue-next";
-import { fieldPinsFor, mergeProductFieldSources, opLabel, opParamLabel } from "./graphModel.js";
+import {
+  appendCustomAdapterField,
+  fieldPinsFor,
+  mergeProductFieldSources,
+  opLabel,
+  opParamLabel,
+} from "./graphModel.js";
 import { localizeExternalFieldName, localizeStandardSourceName } from "./fieldLabels.js";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
@@ -182,6 +188,44 @@ const bindingDialogOpen = ref(false);
 const bindingDialogField = ref(null);
 /** While the binding dialog is open for a field that has no source yet, keep "bind" radio selected. */
 const pendingBindKey = ref(null);
+
+function addCustomAdapterField() {
+  if (type.value !== "adapterFields") return;
+  const { fields } = appendCustomAdapterField(adapterFields.value, {
+    label: t("marketplace.graph.customFieldDefault"),
+  });
+  emit("update", { fields });
+}
+
+function removeCustomAdapterField(fieldKey) {
+  emit("update", {
+    fields: adapterFields.value.filter((f) => f.fieldKey !== fieldKey),
+  });
+}
+
+function slugCustomKey(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9._-]/g, "");
+}
+
+function commitCustomName(field, raw) {
+  const label = String(raw || "").trim() || field.fieldKey;
+  let key = slugCustomKey(label) || field.fieldKey;
+  if (key === "__add__") key = field.fieldKey;
+  if (
+    key !== field.fieldKey &&
+    adapterFields.value.some((f) => f.fieldKey === key)
+  ) {
+    key = field.fieldKey;
+  }
+  emit("update", {
+    fields: adapterFields.value.map((f) =>
+      f.fieldKey === field.fieldKey ? { ...f, fieldKey: key, label } : f,
+    ),
+  });
+}
 
 const filteredAdapterFields = computed(() => {
   const q = adapterFieldFilter.value.trim().toLowerCase();
@@ -662,7 +706,32 @@ function resolvePreview(fieldKey, raw) {
               :class="['space-y-1.5 rounded-md border border-transparent px-1 py-1', highlightedField === f.fieldKey && 'vf-field-flash']"
             >
               <div class="min-w-0">
-                <Label class="text-xs" :title="adapterFieldTooltip(f)">
+                <div
+                  v-if="f.isCustom && type === 'adapterFields'"
+                  class="flex items-center gap-1"
+                >
+                  <Input
+                    class="h-7 text-xs"
+                    :model-value="f.label || f.fieldKey"
+                    :placeholder="t('marketplace.graph.customFieldLabelPlaceholder')"
+                    @blur="commitCustomName(f, $event.target.value)"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    :aria-label="t('marketplace.graph.removeCustomField')"
+                    @click="removeCustomAdapterField(f.fieldKey)"
+                  >
+                    <Trash2 class="size-3.5" />
+                  </Button>
+                </div>
+                <Label
+                  v-else
+                  class="text-xs"
+                  :title="adapterFieldTooltip(f)"
+                >
                   {{ adapterFieldLabel(f)
                   }}<span v-if="f.isRequired" class="text-destructive"> *</span>
                 </Label>
@@ -726,6 +795,7 @@ function resolvePreview(fieldKey, raw) {
               >
                 {{ resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]) }}
               </div>
+
             </div>
 
             <p
@@ -735,6 +805,18 @@ function resolvePreview(fieldKey, raw) {
               {{ t("marketplace.graph.inspector.fieldSearchEmpty") }}
             </p>
           </div>
+
+          <Button
+            v-if="type === 'adapterFields'"
+            type="button"
+            variant="outline"
+            size="sm"
+            class="h-8 w-full text-xs"
+            @click="addCustomAdapterField"
+          >
+            <Plus class="size-3.5" />
+            {{ t("marketplace.graph.addCustomField") }}
+          </Button>
 
           <AdapterFieldBindingDialog
             :open="bindingDialogOpen"

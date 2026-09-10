@@ -19,6 +19,7 @@ const PAGE_ORDERS_MAILBOX = "/orders/:connectionId/:bucket";
 const PAGE_MARKETPLACE = "/adapter";
 const PAGE_MARKETPLACE_CONNECTION = "/adapter/:connId";
 const PAGE_MARKETPLACE_CATEGORY_IMPORT = "/adapter/:connId/categories/import";
+const PAGE_MARKETPLACE_CATEGORY_CREATE = "/adapter/:connId/categories/create";
 const PAGE_MARKETPLACE_FIELD_MAPPING = "/adapter/:connId/categories/:mappingId";
 const PAGE_TOOLS = "/tools";
 const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
@@ -115,7 +116,10 @@ export function resolvePageBreadcrumbs({
     String(path || "")
       .split("?")[0]
       .replace(/\/+$/, "") || "/";
-  const routeName = name || pathname;
+  let routeName = name || pathname;
+  if (/\/adapter\/[^/]+\/categories\/create$/.test(pathname)) {
+    routeName = PAGE_MARKETPLACE_CATEGORY_CREATE;
+  }
   const connId = params?.connId ?? parseOrdersPath(pathname).connectionId;
 
   if (pathname === PAGE_SETTINGS || pathname.startsWith(`${PAGE_SETTINGS}/`)) {
@@ -205,6 +209,15 @@ export function resolvePageBreadcrumbs({
           `${PAGE_MARKETPLACE}/${connId}?tab=mappings`,
         ),
         crumb(t("marketplace.categoryImportPage.importCategory")),
+      ];
+    case PAGE_MARKETPLACE_CATEGORY_CREATE:
+      return [
+        adaptersCrumb(t),
+        crumb(
+          parentLabel || t("marketplace.categoryCreatePage.connection"),
+          `${PAGE_MARKETPLACE}/${connId}?tab=mappings`,
+        ),
+        crumb(t("marketplace.categoryCreatePage.createCategory")),
       ];
     case PAGE_MARKETPLACE_FIELD_MAPPING:
       return [

@@ -93,7 +93,6 @@ import {
 } from "@/components/ui/tooltip";
 import { PAGE_PRODUCT_EDIT, setPageTitle } from "@/router";
 import { MENU_ITEM_CHECK, MENU_ITEM_INDICATOR, MENU_SEPARATOR } from "@/lib/menuSurface";
-import { getCachedMe } from "@/lib/meCache";
 import {
   PRODUCTS_LIST_NS,
   PRODUCTS_TRASH_NS,

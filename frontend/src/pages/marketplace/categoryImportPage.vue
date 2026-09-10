@@ -365,10 +365,7 @@ export default {
                 <Button
                   v-if="isEmptyRemoteRoot && canCreateCategory"
                   @click="
-                    $router.push({
-                      path: `/adapter/${connectionId}`,
-                      query: { tab: 'mappings', createFromLocal: '1' },
-                    })
+                    $router.push(`/adapter/${connectionId}/categories/create`)
                   "
                 >
                   <FolderTree class="size-4 mr-2" />

@@ -155,6 +155,8 @@ public class AdapterField
     /// <summary>When true the field is excluded from export outputs and import projections.
     /// Mutually exclusive with <see cref="source"/> / <see cref="aliasOf"/> and graph wires.</summary>
     public bool omit { get; set; }
+    /// <summary>Mapping-local field the operator added on the canvas (not from the adapter schema).</summary>
+    public bool isCustom { get; set; }
 }
 
 /// <summary>A standard source bound directly to an adapter field (no node/wire).</summary>

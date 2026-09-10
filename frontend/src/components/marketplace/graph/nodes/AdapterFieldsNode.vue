@@ -1,8 +1,12 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
-import { mergeProductFieldSources, pinColor } from "../graphModel.js";
+import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight, Plus } from "lucide-vue-next";
+import {
+  ADD_ADAPTER_FIELD_HANDLE,
+  mergeProductFieldSources,
+  pinColor,
+} from "../graphModel.js";
 import {
   localizeExternalFieldName,
   localizeStandardSourceName,
@@ -126,6 +130,16 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
       }"
     />
 
+    <Handle
+      :id="ADD_ADAPTER_FIELD_HANDLE"
+      type="target"
+      :position="Position.Left"
+      :style="{
+        top: topFor(fields.length),
+        background: pinColor('any'),
+      }"
+    />
+
     <div class="vf-adapter__head">
       <Target class="size-3.5 text-primary" />
       <span class="vf-card__kind">{{ t("marketplace.graph.adapterHeader") }}</span>
@@ -179,6 +193,16 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           :title="sourceTitle(f)"
           @click.stop="data.openField?.(f.fieldKey)"
         >{{ boundLabel(f) }}</span>
+      </div>
+      <div
+        class="vf-adapter__row vf-adapter__row--add cursor-pointer"
+        :title="t('marketplace.graph.addCustomFieldHint')"
+        @click.stop="data.addCustomField?.()"
+      >
+        <Plus class="size-3 shrink-0 text-muted-foreground" />
+        <span class="vf-adapter__label text-muted-foreground">{{
+          t("marketplace.graph.addCustomField")
+        }}</span>
       </div>
     </div>
   </div>

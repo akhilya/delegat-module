@@ -22,6 +22,17 @@ import {
   OP_SPECS,
   OP_NODE_TYPES,
 } from "./graphTypes.js";
+import {
+  ADD_ADAPTER_FIELD_HANDLE,
+  appendCustomAdapterField,
+  nextCustomAdapterField,
+} from "./graphCustomFields.js";
+
+export {
+  ADD_ADAPTER_FIELD_HANDLE,
+  appendCustomAdapterField,
+  nextCustomAdapterField,
+};
 
 export {
   PIN_COLORS,
@@ -844,6 +855,7 @@ export function nodeInputType(node, handleId) {
     }
     case "adapterFields":
     case "adapterPriceFields": {
+      if (handleId === ADD_ADAPTER_FIELD_HANDLE) return null;
       const key = String(handleId || "").startsWith("f:")
         ? String(handleId).slice(2)
         : null;

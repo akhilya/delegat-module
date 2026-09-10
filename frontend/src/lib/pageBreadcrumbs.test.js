@@ -74,6 +74,22 @@ describe("resolvePageBreadcrumbs", () => {
     );
   });
 
+  it("nests category create under the connection", () => {
+    assert.deepEqual(
+      trail({
+        name: "/adapter/:connId/categories/create",
+        path: "/adapter/4/categories/create",
+        params: { connId: "4" },
+        parentLabel: "Medusa",
+      }),
+      [
+        { label: "routes.adapters", to: "/adapter" },
+        { label: "Medusa", to: "/adapter/4?tab=mappings" },
+        { label: "marketplace.categoryCreatePage.createCategory" },
+      ],
+    );
+  });
+
   it("nests category import under the connection", () => {
     assert.deepEqual(
       trail({

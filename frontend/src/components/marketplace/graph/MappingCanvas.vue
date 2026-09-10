@@ -99,6 +99,8 @@ import {
   firstInputHandle,
   ADAPTER_NODE_ID,
   ADAPTER_PRICE_NODE_ID,
+  ADD_ADAPTER_FIELD_HANDLE,
+  appendCustomAdapterField,
   sanitizeGraphNodes,
   sanitizeGraphEdges,
   mergeProductFieldSources,
@@ -454,6 +456,7 @@ function refreshAnalysis(options = {}) {
     setFieldSource,
     setFieldMode,
     openField: openAdapterField,
+    addCustomField: addCustomAdapterField,
   });
 
   const priceFieldOptionsMap = {};
@@ -961,29 +964,49 @@ watch(
   { immediate: true },
 );
 
+function addCustomAdapterField(opts = {}) {
+  const node = findNode(ADAPTER_NODE_ID);
+  if (!node) return null;
+  const { fields, created } = appendCustomAdapterField(node.data?.fields, opts);
+  updateNodeData(ADAPTER_NODE_ID, { fields });
+  dirty.value = true;
+  openAdapterField(created.fieldKey);
+  schedulePreview();
+  return created;
+}
+
 onConnect((conn) => {
   connectionMade.value = true;
-  const handle = conn.targetHandle || "in";
+  let next = { ...conn };
+  if (
+    next.target === ADAPTER_NODE_ID &&
+    next.targetHandle === ADD_ADAPTER_FIELD_HANDLE
+  ) {
+    const created = addCustomAdapterField();
+    if (!created) return;
+    next = { ...next, targetHandle: `f:${created.fieldKey}` };
+  }
+  const handle = next.targetHandle || "in";
   const dupes = edges.value.filter(
-    (e) => e.target === conn.target && (e.targetHandle || "in") === handle,
+    (e) => e.target === next.target && (e.targetHandle || "in") === handle,
   );
   if (dupes.length) removeEdges(dupes.map((e) => e.id));
-  addEdges([{ ...conn, id: genId("e") }]);
+  addEdges([{ ...next, id: genId("e") }]);
 
   // When a "standard value" node connects to an adapter field that has predefined
   // options, auto-populate the node's options and valueType from the field definition.
   if (
-    (conn.target === ADAPTER_NODE_ID || conn.target === ADAPTER_PRICE_NODE_ID) &&
-    conn.targetHandle?.startsWith("f:")
+    (next.target === ADAPTER_NODE_ID || next.target === ADAPTER_PRICE_NODE_ID) &&
+    next.targetHandle?.startsWith("f:")
   ) {
-    const fieldKey = conn.targetHandle.slice(2);
-    const src = nodes.value.find((n) => n.id === conn.source);
+    const fieldKey = next.targetHandle.slice(2);
+    const src = nodes.value.find((n) => n.id === next.source);
     const def =
-      conn.target === ADAPTER_PRICE_NODE_ID
+      next.target === ADAPTER_PRICE_NODE_ID
         ? props.priceFieldDefs[fieldKey]
         : props.externalFieldDefs[fieldKey];
 
-    syncMapModifiersForField(conn, fieldKey, def);
+    syncMapModifiersForField(next, fieldKey, def);
 
     if (src?.type === "static" && src.data?.isAdapterValue) {
       if (def?.options?.length) {
@@ -1612,6 +1635,36 @@ function onInspectorUpdate(patch) {
   // previously saved params/staticValue when patching (e.g. after collapse).
   const live = findNode(selected.value.id);
   const base = { ...(live?.data || selected.value.data || {}) };
+  if (
+    Array.isArray(patch.fields) &&
+    (selected.value.type === "adapterFields" ||
+      selected.value.type === "adapterPriceFields")
+  ) {
+    const oldKeys = new Set((base.fields || []).map((f) => f.fieldKey));
+    const newKeys = new Set(patch.fields.map((f) => f.fieldKey));
+    const removed = [...oldKeys].filter((k) => !newKeys.has(k));
+    const added = [...newKeys].filter((k) => !oldKeys.has(k));
+    if (removed.length === 1 && added.length === 1) {
+      const fromH = `f:${removed[0]}`;
+      const toH = `f:${added[0]}`;
+      const moved = edges.value.filter(
+        (e) => e.target === selected.value.id && e.targetHandle === fromH,
+      );
+      if (moved.length) {
+        removeEdges(moved.map((e) => e.id));
+        addEdges(
+          moved.map((e) => ({ ...e, id: genId("e"), targetHandle: toH })),
+        );
+      }
+    } else if (removed.length) {
+      const gone = edges.value.filter(
+        (e) =>
+          e.target === selected.value.id &&
+          removed.includes(String(e.targetHandle || "").slice(2)),
+      );
+      if (gone.length) removeEdges(gone.map((e) => e.id));
+    }
+  }
   const next = { ...base, ...patch };
   if (patch.params && typeof patch.params === "object") {
     next.params = { ...(base.params || {}), ...patch.params };
@@ -2562,6 +2615,10 @@ async function importMappingFile(event) {
 }
 .vf-adapter__row:hover {
   background: var(--accent);
+}
+.vf-adapter__row--add {
+  color: var(--muted-foreground);
+  border-top: 1px dashed var(--border);
 }
 .vf-adapter__label {
   flex: 1;

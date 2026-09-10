@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Mapping canvas: add unlimited mapping-local adapter fields (click «Add field» or drop a wire on that row). Custom sinks persist in the graph and go out on export.
+- Store-engine adapters (Medusa, WooCommerce, OpenCart) create a shop category on a dedicated page: name, parent folder, which local attributes become fields, and whether to auto-map. The mapping dialog opens that page instead of creating immediately.
 - Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
 - Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.
 - Navbar page Help is a labeled «Need help?» / «Нужна помощь?» control with a question-mark icon (same expand-from-icon pattern as the account button). It is no longer a book glyph hidden below `md`.
