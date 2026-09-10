@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const style = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const nginx = readFileSync(new URL("../../nginx.conf", import.meta.url), "utf8");
 const brand = readFileSync(new URL("../brand.js", import.meta.url), "utf8");
 const button = readFileSync(
   new URL("../components/ui/button/index.js", import.meta.url),
@@ -74,6 +75,13 @@ const tabsContent = readFileSync(
   "utf8",
 );
 
+describe("edge compression", () => {
+  it("gzips JSON API responses through nginx, not only static scripts", () => {
+    assert.match(nginx, /gzip_types[\s\S]*application\/json/);
+    assert.match(nginx, /gzip_proxied any/);
+  });
+});
+
 describe("product motion tokens", () => {
   it("defines one ease and the press/ui/overlay/drawer durations", () => {
     assert.match(
@@ -86,7 +94,12 @@ describe("product motion tokens", () => {
     assert.match(style, /--duration-drawer:\s*280ms/);
   });
 
-  it("fades region loaders without a card ring or page-load stagger", () => {
+  it("fades region loaders and route enters without a card ring or stagger", () => {
+    const app = readFileSync(new URL("../app.vue", import.meta.url), "utf8");
+    const settingsShell = readFileSync(
+      new URL("../layouts/SettingsShell.vue", import.meta.url),
+      "utf8",
+    );
     assert.match(style, /@keyframes page-region-in/);
     assert.match(style, /\.page-region-in/);
     assert.match(style, /animation: page-region-in var\(--duration-overlay\)/);
@@ -97,6 +110,8 @@ describe("product motion tokens", () => {
     );
     assert.match(emptyState, /props\.loading && "page-region-in"/);
     assert.match(emptyState, /data-slot="empty-state-loading"/);
+    assert.match(app, /enter-active-class="page-region-in"/);
+    assert.match(settingsShell, /page-region-in/);
   });
 
   it("presses buttons without bounce and keeps sheets under 300ms", () => {
@@ -164,7 +179,7 @@ describe("product motion tokens", () => {
     assert.match(aiChat, /AiChatProcess/);
     assert.match(aiChat, /AiChatActions/);
     assert.match(aiChat, /turnLayout/);
-    assert.match(aiChat, /isAiControlMessage/);
+    assert.match(aiChat, /isHiddenUserMessage/);
     assert.match(aiChat, /ai-thread/);
     assert.match(aiChat, /isLatestTurn/);
     assert.match(aiChat, /name="ai-fade"/);

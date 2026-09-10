@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onMounted, onUnmounted, ref, watch, Transition } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { loadMe } from "@/main";
@@ -15,6 +15,8 @@ const router = useRouter();
 const me = ref(getCachedMe() ?? null);
 
 const fillHeight = computed(() => route.meta.fillHeight === true);
+/** Skip the first child paint — the shell already fades in from the app RouterView. */
+const nestedEnter = ref(false);
 const isApiPage = computed(() => route.path === PAGE_ADMIN_API);
 
 const apiTab = computed(() => (route.query.tab === "logs" ? "logs" : "keys"));
@@ -56,6 +58,9 @@ function onMeUpdated(event) {
 
 onMounted(async () => {
   window.addEventListener(ME_UPDATED_EVENT, onMeUpdated);
+  requestAnimationFrame(() => {
+    nestedEnter.value = true;
+  });
   try {
     me.value = await loadMe();
   } catch {}
@@ -85,6 +90,10 @@ onUnmounted(() => {
         </TabsList>
       </Tabs>
     </template>
-    <RouterView />
+    <RouterView v-slot="{ Component, route: childRoute }">
+      <Transition :enter-active-class="nestedEnter ? 'page-region-in' : undefined">
+        <component :is="Component" :key="childRoute.path" />
+      </Transition>
+    </RouterView>
   </AppPageChrome>
 </template>

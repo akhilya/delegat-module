@@ -67,9 +67,14 @@ public class ProductSyncService
         if (await ProductNotTrashed.IsTrashedAsync(_context, productId, ct))
             return ProductExportResult.Failure(ProductNotTrashed.Message);
 
-        // Load the product with all relations
+        await Log("info", $"Loading product #{productId}");
+
+        // Split query: a category with 100+ attributes cartesian-explodes
+        // files/images/memberships into one JOIN (minutes, empty groups).
         var product = await _context.products
+            .AsSplitQuery()
             .Include(p => p.category)
+                .ThenInclude(c => c!.attributes)
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.attribute)
             .Include(p => p.storeAttributeValues)
@@ -198,6 +203,18 @@ public class ProductSyncService
                 if (endpointGroupValue is { Length: 0 }) endpointGroupValue = null;
             }
 
+            AttachLocalProductGroup(exportData, product, adapter.Key, endpointGroupValue);
+            if (exportData.TryGetValue("group_id", out var attachedGroupId) && attachedGroupId != null)
+            {
+                exportData.TryGetValue("group_name", out var attachedGroupName);
+                await Log("info",
+                    $"PIM group: {attachedGroupName ?? attachedGroupId} (id={attachedGroupId})");
+            }
+            else if (string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase))
+            {
+                await Log("info", "Product has no PIM group — Medusa collection will not be created");
+            }
+
             // Inject variants if product has them - join with links for this connection
             var variants = await _context.productVariants
                 .Where(v => v.productId == product.Id)
@@ -290,8 +307,10 @@ public class ProductSyncService
                 realExternalId = null;
 
             // Preflight: if linked remote product disappeared, mark broken and create a new listing.
+            // Medusa upsert is idempotent by SKU / external id — skip the extra GET.
             if (realExternalId != null &&
                 existingLink != null &&
+                !string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase) &&
                 adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
             {
                 try
@@ -468,8 +487,10 @@ public class ProductSyncService
                     ct);
             }
 
-            // Auto-export price after successful product export
-            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
+            // Auto-export price after successful product export.
+            // Medusa product upsert already writes prices and stock.
+            var skipFollowUp = string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase);
+            if (!skipFollowUp && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             {
                 var priceInfo = await _mappingService.BuildPriceInfoFromGraphAsync(
                     product,
@@ -499,7 +520,7 @@ public class ProductSyncService
             }
 
             // Auto-export stock after successful product export
-            if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks))
+            if (!skipFollowUp && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks))
             {
                 await Log("info", $"Automatic stock export: {product.storageQuantity ?? 0}");
                 try
@@ -566,6 +587,7 @@ public class ProductSyncService
         var products = await _context.products
             .AsSplitQuery()
             .Include(p => p.category)
+                .ThenInclude(c => c!.attributes)
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.attribute)
             .Include(p => p.storeAttributeValues)
@@ -702,13 +724,18 @@ public class ProductSyncService
 
                 // Endpoint grouping: pull the synthetic field's value out - it's consumed by the
                 // post-export group sync, the adapter must not receive it as a product attribute
+                string? groupValue = null;
                 if (endpointGrouping && exportData.TryGetValue(SyntheticGroupFieldKey, out var rawGroupValue))
                 {
                     exportData.Remove(SyntheticGroupFieldKey);
-                    var groupValue = rawGroupValue?.ToString()?.Trim();
-                    if (!string.IsNullOrEmpty(groupValue))
+                    groupValue = rawGroupValue?.ToString()?.Trim();
+                    if (string.IsNullOrEmpty(groupValue))
+                        groupValue = null;
+                    else
                         groupValueByProductId[productId] = groupValue;
                 }
+
+                AttachLocalProductGroup(exportData, product, adapter.Key, groupValue);
 
                 // Inject variants if present
                 if (variantsByProductId.TryGetValue(productId, out var prodVariants) && prodVariants.Count > 0)
@@ -975,6 +1002,60 @@ public class ProductSyncService
                : null);
 
     /// <summary>
+    /// Medusa collections are assigned at product upsert from the local PIM group.
+    /// Endpoint grouping otherwise only runs after the batch, and a stale
+    /// marketplace group id (after a catalog wipe) never recreates the collection.
+    /// </summary>
+    internal static void AttachLocalProductGroup(
+        Dictionary<string, object?> exportData,
+        Product product,
+        string adapterKey,
+        string? mappingGroupValue = null)
+    {
+        if (!string.Equals(adapterKey, "medusa", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var group = product.groupMemberships?
+            .Where(m => m.group != null)
+            .OrderBy(m => m.sortOrder)
+            .Select(m => m.group!)
+            .FirstOrDefault();
+        if (group != null)
+        {
+            exportData["group_id"] = group.Id.ToString();
+            exportData["group_name"] = group.name;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(mappingGroupValue))
+            return;
+        if (!HasNonEmpty(exportData, "group_name") && !HasNonEmpty(exportData, "groupName"))
+            exportData["group_name"] = mappingGroupValue.Trim();
+    }
+
+    private static bool HasNonEmpty(Dictionary<string, object?> data, string key)
+        => data.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value?.ToString());
+
+    private static async Task<bool> RecreateEndpointGroupAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        GroupValueMarketplaceLink link,
+        List<string> externalIds,
+        string groupValue,
+        CancellationToken ct)
+    {
+        var createResult = await adapter.CreateGroupAsync(connection, externalIds, groupValue, ct);
+        if (!createResult.Success || string.IsNullOrEmpty(createResult.ExternalGroupId))
+            return false;
+
+        link.externalGroupId = createResult.ExternalGroupId;
+        link.status = ProductMarketplaceStatus.Synced;
+        link.lastErrorMessage = null;
+        link.lastSyncAt = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
     /// After export, sync endpoint-based groups (e.g., WB merge groups) by the EVALUATED grouping
     /// value: products whose mapping produced the same value join one marketplace card. The mapping
     /// acts as a translation layer - local groups are not consulted directly (their names flow in
@@ -1044,12 +1125,24 @@ public class ProductSyncService
                             connection, link.externalGroupId, externalIds, ct);
 
                         if (!addResult.Success)
+                        {
                             _logger.LogWarning(
-                                "[GroupSync] AddProductsToGroupAsync failed for value '{Value}': {Error} (marketplace may limit group size, e.g. WB max 30 cards)",
+                                "[GroupSync] AddProductsToGroupAsync failed for value '{Value}': {Error}. Recreating group.",
                                 groupValue, addResult.ErrorMessage);
+                            var recreated = await RecreateEndpointGroupAsync(
+                                adapter, connection, link, externalIds, groupValue, ct);
+                            if (!recreated)
+                            {
+                                link.status = ProductMarketplaceStatus.SyncError;
+                                link.lastErrorMessage = addResult.ErrorMessage;
+                            }
+                        }
+                        else
+                        {
+                            link.status = ProductMarketplaceStatus.Synced;
+                            link.lastErrorMessage = null;
+                        }
 
-                        link.status = addResult.Success ? ProductMarketplaceStatus.Synced : ProductMarketplaceStatus.SyncError;
-                        link.lastErrorMessage = addResult.ErrorMessage;
                         link.lastSyncAt = DateTime.UtcNow;
                     }
                     catch (Exception ex)
@@ -1060,7 +1153,8 @@ public class ProductSyncService
                 }
                 else
                 {
-                    if (externalIds.Count < 2)
+                    if (externalIds.Count < 2 &&
+                        !string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase))
                     {
                         _logger.LogDebug(
                             "[GroupSync] Value '{Value}' has only {Count} exported product(s) and no existing group, skipping (need >= 2)",

@@ -150,6 +150,16 @@ describe("toolbar search", () => {
   });
 });
 
+describe("navbar help", () => {
+  it("shows a labeled question-mark control, including on small screens", () => {
+    assert.match(nav, /CircleHelp/);
+    assert.match(nav, /docsSheet\.needHelp/);
+    assert.match(nav, /hidden sm:inline/);
+    assert.doesNotMatch(nav, /BookOpen/);
+    assert.doesNotMatch(nav, /hidden size-9 shrink-0 md:inline-flex/);
+  });
+});
+
 describe("navbar compact chrome", () => {
   it("shows only the current page title in the trail below lg", () => {
     assert.match(breadcrumbs, /max-lg:hidden/);

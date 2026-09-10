@@ -5,6 +5,7 @@ import {
   interpolateFollowUp,
   normalizeAskForm,
   normalizeChatAction,
+  recapFormAnswers,
 } from "./replyUi.js";
 
 describe("reply UI", () => {
@@ -25,6 +26,19 @@ describe("reply UI", () => {
     assert.equal(cont.kind, "continue");
     assert.equal(cont.prompt, "Put these photos on Hello soap");
     assert.equal(cont.url, "");
+  });
+
+  it("keeps catalog query strings on open buttons", () => {
+    const open = normalizeChatAction({
+      url: "/products?page=2&pageSize=15",
+      label: "Catalog",
+    });
+    assert.equal(open.kind, "open");
+    assert.equal(open.url, "/products?page=2&pageSize=15");
+    assert.equal(
+      normalizeChatAction({ url: "/products?next=https://evil.example" }),
+      null,
+    );
   });
 
   it("reads navigate_to actions from the tool result", () => {
@@ -119,6 +133,26 @@ describe("reply UI", () => {
     assert.equal(form.questions[0].type, "text");
     assert.equal(form.questions[1].type, "single");
     assert.equal(form.questions[1].choices[0].value, "ozon");
+  });
+
+  it("recaps questionnaire answers with choice labels", () => {
+    const rows = recapFormAnswers(
+      [
+        {
+          key: "adapter",
+          title: "Which marketplace?",
+          choices: [
+            { value: "ozon", label: "Ozon" },
+            { value: "wb", label: "Wildberries" },
+          ],
+        },
+        { key: "note", title: "Note", choices: [] },
+      ],
+      { adapter: "ozon", note: "FBS" },
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].answer, "Ozon");
+    assert.equal(rows[1].answer, "FBS");
   });
 
   it("requires a real adapter key for a connection form", () => {

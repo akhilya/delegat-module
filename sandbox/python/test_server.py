@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 
 import sandbox_limits
@@ -31,6 +32,25 @@ class SandboxLimitTests(unittest.TestCase):
         self.assertEqual(env["OMP_NUM_THREADS"], "1")
         self.assertEqual(env["OPENBLAS_NUM_THREADS"], "1")
         os.environ.pop("SANDBOX_CPU_THREADS", None)
+
+    def test_health_log_is_quiet(self):
+        class Fake(server.Handler):
+            def __init__(self):
+                self.path = "/health"
+
+            def address_string(self):
+                return "test"
+
+        class Buf:
+            def write(self, _data):
+                raise AssertionError("health must not log")
+
+        original = sys.stderr
+        sys.stderr = Buf()
+        try:
+            Fake().log_message("%s", "GET /health")
+        finally:
+            sys.stderr = original
 
     def test_second_job_is_busy(self):
         self.assertTrue(server._JOBS.acquire(blocking=False))

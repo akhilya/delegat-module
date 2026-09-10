@@ -231,6 +231,12 @@ public class PluginVersionSyncService
 
         fields = fields.Where(f => f.Key != "_hasSizes").ToList();
 
+        if (LocalCategoryAdapterFields.ShouldExposeLocalAttributes(adapter.Key)
+            && mapping.localCategory?.attributes != null)
+        {
+            fields = LocalCategoryAdapterFields.Merge(fields, mapping.localCategory.attributes);
+        }
+
         // Already-mapped field keys come from the graph's adapter schema (single source of truth).
         var existingKeys = MappingService.SchemaFields(mapping.graphJson)
             .Select(f => f.fieldKey)

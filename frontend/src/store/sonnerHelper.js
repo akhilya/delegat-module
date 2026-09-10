@@ -1,5 +1,6 @@
 import { toast } from "vue-sonner";
 import { getLocale, t } from "@/i18n";
+import { formatAdapterError } from "@/lib/adapterErrorText";
 
 /** Stable API error code from an Axios error or payload. */
 export function apiErrorCode(errorOrPayload) {
@@ -96,6 +97,10 @@ function formatErrorDetails(payload) {
           (v) => typeof v === "string" && /^[a-z][a-z0-9_]*$/.test(v),
         );
       if (looksLikeCodes) return null;
+    }
+    if (details.response || details.body || details.statusCode) {
+      const human = formatAdapterError(details);
+      if (human) return truncateDetails(human);
     }
     try {
       return truncateDetails(JSON.stringify(details, null, 2));

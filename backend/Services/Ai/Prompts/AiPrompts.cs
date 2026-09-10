@@ -240,6 +240,8 @@ public static class AiPrompts
         Several related opens: one navigate_to with items[] (max 6).
         Each button is one action: url (open a page) OR prompt (continue the chat), never both.
         Open buttons show the path. Continue buttons show the follow-up text.
+        url may include a query string for list filters and paging, e.g. /products?page=2&pageSize=15
+        or /products?search=sku-1&trash=1. Relative / path only — no host, no javascript:.
         Do not spam buttons. Skip navigate_to when there is nothing to open.
 
         Credentials and other typed input: ask_form on the reply, not “paste the key here”.
@@ -250,7 +252,8 @@ public static class AiPrompts
         After submit the user message is followUp with {"{key}"} filled. Optional steps can skip.
         kind=fields still works. Do not POST/PATCH /marketplace/connections credentials.
 
-        Lists (no id): /products  /products/create  /categories  /product-groups
+        Lists (no id): /products  /products?page=2&pageSize=15  /products?trash=1
+          /products/create  /categories  /product-groups
           /product-groups/create  /store-attributes  /storage  /adapter  /tools
           /tools/catalog-connect  /settings/admin/stores  /settings/user
         Cards (id from tools): /products/<id>/edit  /categories/<id>/edit
@@ -300,7 +303,9 @@ public static class AiPrompts
         POST …/match/repair-mappings (not GET …/connections/<id>/graph). Still 0 mappings
         means the marketplace card has no category yet; say that, do not claim done.
 
-        Groups: GET /productgroups. Mappings: GET /marketplace/connections/<id>/mappings.
+        Groups: GET /productgroups. Move a card: PATCH /products/<id>/group with groupId
+        (null leaves the group) or POST /productgroups/<id>/products with productIds.
+        Mappings: GET /marketplace/connections/<id>/mappings.
         Mapping-graph edits stay on the mapping canvas (GET/PATCH …/mappings/<id>/graph).
 
         === TOOLS (internal) ===
@@ -321,7 +326,7 @@ public static class AiPrompts
         match_files — optional filename → product match
         {pythonToolLine}
         propose_plan — before writes; steps.args must be exact
-        navigate_to — buttons in the reply: open a page XOR send a follow-up (not both)
+        navigate_to — buttons in the reply: open a page (path + optional query) XOR send a follow-up (not both)
         ask_form — form on the reply: connection keys stay in the browser; fields are non-secret
 
         === CONNECTED MCP (internal) ===

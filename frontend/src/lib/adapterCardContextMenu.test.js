@@ -22,7 +22,7 @@ describe("shouldOpenAdapterCardContextMenu", () => {
     assert.equal(shouldOpenAdapterCardContextMenu(click(null, 2)), false);
   });
 
-  it("keeps mapping, sizes, marketplace, and ⋮ on their own controls", () => {
+  it("keeps ⋮ and the sizes disclosure on their own controls", () => {
     assert.equal(shouldOpenAdapterCardContextMenu(click("button")), false);
     assert.equal(shouldOpenAdapterCardContextMenu(click("a")), false);
   });

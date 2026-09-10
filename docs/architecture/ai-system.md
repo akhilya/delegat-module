@@ -32,8 +32,8 @@ Permission `ai.use` is required (or `workspace.view` for read-only). Resource gr
 | `platform_request` | `method + path + json` against the same cabinet controllers as the SPA (denylist for secrets and irreversible actions) |
 | `match_files` | Optional: map filenames to products (SKU / barcode / name stem) |
 | `propose_plan` | UI confirmation before writes |
-| `navigate_to` | Reply buttons: open a path XOR send a follow-up (`items[]`, max 6); one action per button |
-| `ask_form` | Reply form: connection credentials in the browser, or a short questionnaire (up to 5 steps) as the next user message |
+| `navigate_to` | Reply buttons: open a path (optional query) XOR send a follow-up (`items[]`, max 6); one action per button |
+| `ask_form` | Reply form: connection credentials in the browser, or a short questionnaire (up to 5 steps). Answers stay on the card; the model gets a hidden user turn |
 
 Bytes never go through the model. Cabinet chat stages attachments for **24 hours** (download while live, then purge). Then `platform_request POST /products/{id}/files` with `attachmentIds` after confirm. Cursor / Agent HTTP still upload with multipart `PUT …/products/{id}/files`.
 

@@ -118,6 +118,8 @@ describe("AiChatPanel chrome", () => {
     assert.match(form, /createConnection/);
     assert.match(form, /secretsStayInBrowser/);
     assert.match(form, /interpolateFollowUp/);
+    assert.match(form, /recapFormAnswers/);
+    assert.match(form, /emit\("submit"/);
     assert.match(form, /Questionnaire/);
     assert.match(form, /answersFromFormData/);
     assert.match(panel, /:done="!!msg.done"/);

@@ -30,6 +30,8 @@ import {
   hasMappingIssue,
   normalizeExportMode,
 } from "@/lib/adapterConnectionStatus";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 
 export default {
   name: "ProductAdaptersCell",
@@ -117,6 +119,9 @@ export default {
     },
     importIrreversibleFields() {
       return this.importPreviewData?.irreversibleFields || [];
+    },
+    canManageAdapters() {
+      return canAct(getCachedMe(), PERMS.MarketplaceManage);
     },
   },
   methods: {
@@ -691,7 +696,7 @@ export default {
     —
   </div>
   <ButtonGroup
-    v-else-if="disabled"
+    v-else-if="disabled || !canManageAdapters"
     class="max-w-full flex-nowrap overflow-hidden opacity-60"
     @click="stopRow"
   >

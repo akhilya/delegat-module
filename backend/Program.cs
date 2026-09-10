@@ -32,8 +32,10 @@ using Delegat.Marketplace.SDK;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using System.IO.Compression;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Delegat.Infrastructure.Security;
 using Delegat.Hubs;
@@ -68,7 +70,8 @@ builder.Services.AddSingleton(new EncryptionService(encryptionKey));
 var connectionString =
     $"Server={mysqlSettings.Server};Port={mysqlSettings.Port};Database={mysqlSettings.Database};" +
     $"User={mysqlSettings.User};Password={mysqlSettings.Password};" +
-    "AllowPublicKeyRetrieval=True;SslMode=None;Default Command Timeout=120;";
+    "AllowPublicKeyRetrieval=True;SslMode=None;Default Command Timeout=120;" +
+    "Pooling=true;Minimum Pool Size=0;Maximum Pool Size=50;";
 var serverVersion = new MySqlServerVersion(new Version(8, 4, 8));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseMySql(connectionString, serverVersion, mysqlOptions =>
@@ -517,6 +520,28 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartHeadersLengthLimit = int.MaxValue;
 });
 
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+    [
+        "application/json",
+        "application/problem+json",
+        "application/xml",
+        "image/svg+xml",
+    ]);
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
 // Controllers
 builder.Services.AddControllers(options =>
     {
@@ -681,6 +706,7 @@ if (aiEnabled)
     });
 }
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseResponseCompression();
 // Explicit so nested platform_request includes routing (auto-insert at the start would skip it).
 app.UseRouting();
 app.UseMiddleware<SecurityHeadersMiddleware>();

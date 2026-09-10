@@ -5,6 +5,11 @@ export function hasPermission(me, permission) {
   return Array.isArray(list) && list.includes(permission);
 }
 
+/** Write / mutate. Never use canBrowse for buttons that change data. */
+export function canAct(me, permission) {
+  return hasPermission(me, permission);
+}
+
 export function hasAnyPermission(me, permissions = []) {
   return permissions.some((p) => hasPermission(me, p));
 }

@@ -186,6 +186,8 @@ def _read_chunked(stream, max_bytes: int) -> bytes | None:
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
+        if self.path in ("/health", "/"):
+            return
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
     def do_GET(self) -> None:

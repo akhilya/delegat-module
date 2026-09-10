@@ -77,6 +77,13 @@ public class FieldMappingController : ControllerBase
                 _metadataCache.Set(cacheKey, fields, MarketplaceMetadataCache.CategoryFieldsTtl);
             }
 
+            if (LocalCategoryAdapterFields.ShouldExposeLocalAttributes(connection.adapterKey))
+            {
+                var attrs = await _unitOfWork.Repository<CategoryAttribute>()
+                    .FindAllAsync(a => a.categoryId == mapping.localCategoryId);
+                fields = LocalCategoryAdapterFields.Merge(fields, attrs);
+            }
+
             return Ok(fields.Select(f => new
             {
                 key = f.Key,

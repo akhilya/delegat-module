@@ -38,6 +38,8 @@ public class MedusaPluginTests
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.CreateCategory));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ImportGroups));
         Assert.False(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetOrders));
     }
 
@@ -88,6 +90,47 @@ public class MedusaPluginTests
     }
 
     [Fact]
+    public async Task ExportProduct_NewIdAfterWipe_SetsResolvedFrom()
+    {
+        var handler = new FakeHandler(_ =>
+            JsonResponse(new { success = true, product_id = "prod_NEW" }));
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.ExportProductAsync(
+            Context(),
+            new Dictionary<string, object> { ["name"] = "Cerberus", ["sku"] = "MI9" },
+            existingExternalId: "prod_OLD");
+
+        Assert.True(result.Success);
+        Assert.Equal("prod_NEW", result.ExternalProductId);
+        Assert.Equal("prod_OLD", result.Details?["resolvedFrom"]?.ToString());
+    }
+
+    [Fact]
+    public async Task ExportProductsBulk_NewIdAfterWipe_SetsResolvedFrom()
+    {
+        var handler = new FakeHandler(_ =>
+            JsonResponse(new
+            {
+                success = true,
+                results = new[]
+                {
+                    new { index = 0, success = true, product_id = "prod_NEW", local_product_id = 12 }
+                }
+            }));
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.ExportProductsBulkAsync(Context(), [
+            new BulkExportItem(12, new Dictionary<string, object> { ["name"] = "Cerberus" }, "prod_OLD")
+        ]);
+
+        var item = Assert.Single(result.Items!);
+        Assert.True(item.Success);
+        Assert.Equal("prod_NEW", item.ExternalProductId);
+        Assert.Equal("prod_OLD", item.Details?["resolvedFrom"]?.ToString());
+    }
+
+    [Fact]
     public async Task ExportProduct_UsesFieldLabelsAndJoinsListAttributeValues()
     {
         string? body = null;
@@ -127,6 +170,102 @@ public class MedusaPluginTests
         Assert.Equal("Китайская мифология, Фэнтези", attrs.GetProperty("Жанр").GetString());
         Assert.Equal("100мм", attrs.GetProperty("Масштаб").GetString());
         Assert.Equal("Серебристый", attrs.GetProperty("Цвет товара").GetString());
+    }
+
+    [Fact]
+    public async Task ExportProduct_PassesShopSpecsFromPim()
+    {
+        string? body = null;
+        var handler = new FakeHandler(req =>
+        {
+            body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return JsonResponse(new { success = true, product_id = "prod_specs" });
+        });
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.ExportProductAsync(Context(), new Dictionary<string, object>
+        {
+            ["name"] = "Nahida",
+            ["sku"] = "GE32",
+            ["price"] = 900m,
+            ["color"] = "green",
+            ["_shopSpecs"] = new List<object>
+            {
+                new Dictionary<string, object>
+                {
+                    ["key"] = "material",
+                    ["label"] = "Материал",
+                    ["value"] = "Фотополимер"
+                },
+                new Dictionary<string, object>
+                {
+                    ["key"] = "height",
+                    ["label"] = "Высота",
+                    ["value"] = "75 мм"
+                }
+            }
+        });
+
+        Assert.True(result.Success);
+        using var doc = JsonDocument.Parse(body!);
+        var specs = doc.RootElement.GetProperty("specs");
+        Assert.Equal(2, specs.GetArrayLength());
+        Assert.Equal("Материал", specs[0].GetProperty("label").GetString());
+        Assert.Equal("Фотополимер", specs[0].GetProperty("value").GetString());
+        Assert.False(doc.RootElement.GetProperty("attributes").TryGetProperty("_shopSpecs", out _));
+    }
+
+    [Fact]
+    public async Task ExportProduct_UsesLocalGroupIdAndName()
+    {
+        string? body = null;
+        var handler = new FakeHandler(req =>
+        {
+            body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return JsonResponse(new { success = true, product_id = "prod_g" });
+        });
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.ExportProductAsync(Context(), new Dictionary<string, object>
+        {
+            ["name"] = "Nahida",
+            ["sku"] = "GE32",
+            ["price"] = 900m,
+            ["_localGroupId"] = "12",
+            ["_localGroupName"] = "Genshin Impact",
+        });
+
+        Assert.True(result.Success);
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal("12", doc.RootElement.GetProperty("group_id").GetString());
+        Assert.Equal("Genshin Impact", doc.RootElement.GetProperty("group_name").GetString());
+        Assert.False(doc.RootElement.GetProperty("attributes").TryGetProperty("_localGroupId", out _));
+    }
+
+    [Fact]
+    public async Task ExportProduct_EmptyMappedGroupId_FallsBackToLocalGroup()
+    {
+        string? body = null;
+        var handler = new FakeHandler(req =>
+        {
+            body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return JsonResponse(new { success = true, product_id = "prod_g" });
+        });
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.ExportProductAsync(Context(), new Dictionary<string, object>
+        {
+            ["name"] = "Nahida",
+            ["sku"] = "GE32",
+            ["groupId"] = "",
+            ["_localGroupId"] = "16",
+            ["_localGroupName"] = "Genshin Impact",
+        });
+
+        Assert.True(result.Success);
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal("16", doc.RootElement.GetProperty("group_id").GetString());
+        Assert.Equal("Genshin Impact", doc.RootElement.GetProperty("group_name").GetString());
     }
 
     [Fact]
@@ -216,6 +355,26 @@ public class MedusaPluginTests
     }
 
     [Fact]
+    public async Task GetCategoryFields_KeepsBridgeFieldsWhenSuccessOmitted()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Contains("/categories/pcat_15/fields", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            return JsonResponse(new
+            {
+                fields = new[]
+                {
+                    new { key = "material", name = "Material", type = "string", group = "Attributes", sort_order = 10 }
+                }
+            });
+        });
+
+        var fields = await new TestPlugin(handler).GetCategoryFieldsAsync(Context(), "pcat_15");
+        Assert.Contains(fields, f => f.Key == "material" && f.Name == "Material");
+        Assert.Contains(fields, f => f.Key == "sku");
+    }
+
+    [Fact]
     public async Task GetPriceFields_ReturnsPriceAndSalePrice()
     {
         var fields = await new MedusaPlugin().GetPriceFieldsAsync(Context(), "pcat_15");
@@ -302,6 +461,30 @@ public class MedusaPluginTests
         Assert.Equal("pcat_15", product.CategoryId);
         Assert.Equal("Miniatures", product.CategoryName);
         Assert.Equal(1500m, product.Price);
+    }
+
+    [Fact]
+    public async Task CreateGroup_PostsUpsertWithNameAndProductIds()
+    {
+        string? body = null;
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Equal(HttpMethod.Post, req.Method);
+            Assert.Contains("/groups/upsert", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return JsonResponse(new { success = true, collection_id = "pcol_1", name = "Cerberus" });
+        });
+
+        var plugin = new TestPlugin(handler);
+        var result = await plugin.CreateGroupAsync(
+            Context(),
+            ["prod_a", "prod_b"],
+            "Cerberus");
+
+        Assert.True(result.Success);
+        Assert.Equal("pcol_1", result.ExternalGroupId);
+        Assert.Contains("Cerberus", body);
+        Assert.Contains("prod_a", body);
     }
 
     private static ConnectionContext Context() => new()

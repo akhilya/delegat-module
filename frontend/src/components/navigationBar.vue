@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import FabGroup from "@/components/FabGroup.vue";
-import { BookOpen } from "lucide-vue-next";
+import { CircleHelp } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { pageHelpSlug } from "@/lib/docsHelp";
 
@@ -25,7 +25,7 @@ export default {
     SidebarTrigger,
     UserAccountMenu,
     FabGroup,
-    BookOpen,
+    CircleHelp,
     Button,
   },
   data() {
@@ -134,13 +134,15 @@ export default {
             <Button
               v-if="pageHelpSlug"
               variant="ghost"
-              size="icon"
-              class="hidden size-9 shrink-0 md:inline-flex"
-              :title="$t('components.docsSheet.help')"
-              :aria-label="$t('components.docsSheet.help')"
+              class="size-9 shrink-0 gap-1.5 p-0 sm:h-9 sm:w-auto sm:px-3"
+              :title="$t('components.docsSheet.needHelp')"
+              :aria-label="$t('components.docsSheet.needHelp')"
               @click="openPageHelp"
             >
-              <BookOpen class="size-4" />
+              <CircleHelp class="size-4" />
+              <span class="hidden sm:inline">{{
+                $t("components.docsSheet.needHelp")
+              }}</span>
             </Button>
             <FabGroup
               placement="navbar"

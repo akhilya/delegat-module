@@ -171,7 +171,139 @@ public class MappingService
                 StringComparer.OrdinalIgnoreCase);
         // Option value→label maps for adapters that need human-readable attribute values (e.g. WooCommerce)
         result["_fieldOptions"] = BuildAttributeOptionLookups(product);
+        AddLocalGroup(product, result);
+        AddShopSpecs(product, result);
         return result;
+    }
+
+    internal static void AddLocalGroup(Product product, Dictionary<string, object?> result)
+    {
+        if (HasNonEmpty(result, "_localGroupId"))
+            return;
+
+        var group = product.groupMemberships?
+            .Where(m => m.group != null)
+            .OrderBy(m => m.sortOrder)
+            .Select(m => m.group!)
+            .FirstOrDefault();
+        if (group == null)
+            return;
+
+        result["_localGroupId"] = group.Id.ToString();
+        if (!HasNonEmpty(result, "_localGroupName"))
+            result["_localGroupName"] = group.name;
+    }
+
+    internal static bool HasNonEmpty(Dictionary<string, object?> data, string key)
+        => data.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value?.ToString());
+
+    /// <summary>
+    /// Shop specs come from filled PIM category attributes, not the marketplace mapping dump.
+    /// If any attribute is flagged <c>showInShop</c>, only those are sent. Otherwise every
+    /// filled value is sent so the storefront does not have to guess.
+    /// </summary>
+    private static void AddShopSpecs(Product product, Dictionary<string, object?> result)
+    {
+        var defined = (product.category?.attributes ?? Enumerable.Empty<CategoryAttribute>())
+            .Concat((product.attributeValues ?? Enumerable.Empty<ProductAttributeValue>())
+                .Select(av => av.attribute)
+                .Where(a => a != null)!)
+            .GroupBy(a => a.Id)
+            .Select(g => g.First())
+            .ToList();
+
+        var restrict = defined.Any(a => a.showInShop);
+        var valuesByAttrId = (product.attributeValues ?? Enumerable.Empty<ProductAttributeValue>())
+            .Where(av => av.attribute != null && (!restrict || av.attribute.showInShop))
+            .GroupBy(av => av.attributeId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var specs = new List<Dictionary<string, string>>();
+        foreach (var attr in defined
+            .Where(a => !restrict || a.showInShop)
+            .OrderBy(a => a.sortOrder)
+            .ThenBy(a => a.name, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!valuesByAttrId.TryGetValue(attr.Id, out var row))
+                continue;
+            var display = FormatShopSpecValue(row.value, attr);
+            if (string.IsNullOrWhiteSpace(display))
+                continue;
+            if (!restrict && display.Length > 200)
+                continue;
+            specs.Add(new Dictionary<string, string>
+            {
+                ["key"] = attr.key,
+                ["label"] = attr.name,
+                ["value"] = display
+            });
+        }
+
+        if (specs.Count > 0)
+            result["_shopSpecs"] = specs;
+    }
+
+    private static string FormatShopSpecValue(string? raw, CategoryAttribute attr)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "";
+        var trimmed = raw.Trim();
+        if (attr.type == AttributeType.Boolean)
+        {
+            if (trimmed.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || trimmed == "1"
+                || trimmed.Equals("да", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("yes", StringComparison.OrdinalIgnoreCase))
+                return "Да";
+            if (trimmed.Equals("false", StringComparison.OrdinalIgnoreCase)
+                || trimmed == "0"
+                || trimmed.Equals("нет", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("no", StringComparison.OrdinalIgnoreCase))
+                return "";
+        }
+
+        var options = BuildOptionValueLabelMap(attr.options);
+        var parts = SplitStoredAttributeValues(trimmed);
+        if (parts.Count == 0)
+            return trimmed;
+        return string.Join(", ", parts.Select(part =>
+            options.TryGetValue(part, out var label) && !string.IsNullOrWhiteSpace(label)
+                ? label
+                : part));
+    }
+
+    private static List<string> SplitStoredAttributeValues(string raw)
+    {
+        if (raw.Length >= 2 && raw[0] == '[')
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(raw);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    var list = new List<string>();
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var part = el.ValueKind switch
+                        {
+                            JsonValueKind.String => el.GetString(),
+                            JsonValueKind.Number => el.GetRawText(),
+                            JsonValueKind.True => "true",
+                            JsonValueKind.False => "false",
+                            _ => null
+                        };
+                        if (!string.IsNullOrWhiteSpace(part))
+                            list.Add(part);
+                    }
+                    return list;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return [raw];
     }
 
     /// <summary>
@@ -933,7 +1065,10 @@ public class MappingService
     private object? GetGroupNameValue(Product product)
     {
         // Get the first product group (a product can belong to multiple groups)
-        var groupMember = product.groupMemberships?.FirstOrDefault();
+        var groupMember = product.groupMemberships?
+            .Where(m => m.group != null)
+            .OrderBy(m => m.sortOrder)
+            .FirstOrDefault();
         if (groupMember?.group != null)
         {
             return groupMember.group.name;

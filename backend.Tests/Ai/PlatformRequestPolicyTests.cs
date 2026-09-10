@@ -81,6 +81,8 @@ public class PlatformRequestPolicyTests
     [Fact]
     public void SurfaceDescription_UsesRealCabinetPaths()
     {
+        Assert.Contains("PATCH /products/{id}/group { groupId }", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("POST /productgroups/{id}/products", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("POST /products/{id}/files", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("attachmentIds", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("searchQuery", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);

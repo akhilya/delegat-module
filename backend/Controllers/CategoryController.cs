@@ -310,6 +310,7 @@ public class CategoryController : ControllerBase
             isMultiline = input.isMultiline,
             allowCustomValues = input.allowCustomValues,
             showOnProductPage = input.showOnProductPage,
+            showInShop = input.showInShop,
             sortOrder = maxSortOrder + 1,
             options = input.options,
             defaultValue = input.defaultValue,

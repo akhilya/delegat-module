@@ -9,7 +9,7 @@ import LoadingBar from "@/components/LoadingBar.vue";
 import AppSidebar from "@/components/appSidebar.vue";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
-import { computed, defineAsyncComponent, ref } from "vue";
+import { computed, defineAsyncComponent, ref, Transition } from "vue";
 import { Button } from "@/components/ui/button";
 import {
   Monitor,
@@ -28,6 +28,7 @@ export default {
   components: {
     Spinner,
     RouterView,
+    Transition,
     Toaster,
     OperationsPanel,
     DocsSheet,
@@ -130,7 +131,9 @@ export default {
   <LoadingBar ref="loadingBar" />
   <RouterView v-if="isBareLayout" v-slot="{ Component, route }">
     <div class="h-svh overflow-y-auto">
-      <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+      <Transition enter-active-class="page-region-in">
+        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+      </Transition>
     </div>
   </RouterView>
   <SidebarProvider v-else :open="true" class="h-svh overflow-hidden">
@@ -146,7 +149,9 @@ export default {
         class="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-pb-[var(--page-scroll-end)]"
       >
         <RouterView v-slot="{ Component, route }">
-          <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+          <Transition enter-active-class="page-region-in">
+            <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+          </Transition>
         </RouterView>
       </div>
       <div

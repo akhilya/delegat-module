@@ -9,6 +9,18 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+### Changed
+
+- Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
+- Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.
+- Navbar page Help is a labeled «Need help?» / «Нужна помощь?» control with a question-mark icon (same expand-from-icon pattern as the account button). It is no longer a book glyph hidden below `md`.
+- Medusa mapping keeps the linked category’s attributes as adapter sinks. `GET /categories/{id}/fields` no longer drops the bridge list when `success` is omitted, and unmatched local category attributes are merged in (Ozon / Wildberries stay marketplace-only). Reopen the mapping after restarting the API.
+- Cabinet `PATCH /products/{id}/group { groupId }` moves a product into a group (or out, when `groupId` is null). The assistant was told this path existed; only GET was implemented, so plans failed with HTTP 405.
+- API JSON is compressed (Brotli/Gzip at Kestrel; nginx also gzips `application/json`). Vendor JS splits into vue / ui / http / signalr chunks. MySQL pool is capped at 50 connections. Sandbox health checks are not logged.
+- Cabinet route changes use the same `.page-region-in` fade as region loaders (opacity, `--duration-overlay`). Nested Settings pages fade on inner navigation.
+- Assistant questionnaire answers stay on the form card and survive reload. The follow-up still goes to the model but is not shown as a chat bubble.
+- Adapter credential help and Connect catalogs docs open the in-cabinet docs sheet instead of a new tab. The credentials control is a full inset row (title + adapter subtitle + chevron), same grouped list as the adapter picker. Page Help covers orders, notes, mapping, setup, settings sub-pages, catalog scrape, and Public API when those articles exist on the public docs site.
+
 ### Added
 
 - Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`
@@ -46,7 +58,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Public API v1: product list `search` matches barcode, variant SKU/barcode, and marketplace ids (same as the catalog), and items include `variantCount`
 - Cabinet AI generation keeps running if you reload the page: reopen the companion sheet to watch the live turn (tools, thoughts, Stop). It does not survive an API process restart
 - Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
-- Cabinet assistant `ask_form`: a form on the reply. Marketplace keys stay in the browser and POST the same create-connection as Adapters (the model never sees the key). Clarifying questions are a short Questionnaire (up to 5 steps); answers become the next user message.
+- Cabinet assistant `ask_form`: a form on the reply. Marketplace keys stay in the browser and POST the same create-connection as Adapters (the model never sees the key). Clarifying questions are a short Questionnaire (up to 5 steps); answers stay on the card and continue the model without a visible chat bubble.
 
 ### Changed
 
@@ -63,6 +75,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Controls use the `--radius` token (`rounded-md`), not stadium `rounded-full`. Exceptions: circular operations and AI FABs (bottom-right), plus geometric circles (avatars, radios, switches, dots). Search magnifier is MingCute Core Regular (hollow), not filled
 - Cabinet UI icons are MingCute Core Filled (Apache-2.0) behind Lucide names — rounded filled glyphs that match `--radius`, not Phosphor. Square badges stay off the map (`CheckFilled`, `ArrowRightUpFilled`, `ClassifyFilled`, `StopCircleFilled`). Loaders stay Hugeicons `Loading03`
 - On touch/pen, a tap on a context-menu target opens the menu (Reka long-press never fired on a tap). The mobile sidebar sheet closes after a nav option or route change
+- Cabinet assistant `navigate_to` open buttons may include a query string (`/products?page=2&pageSize=15`). External URLs and `javascript:` stay blocked.
 - Cabinet assistant `navigate_to` buttons are one action each: Open a path or Continue the chat, never both (max 6). Open shows the path; Continue shows the follow-up text.
 - The cabinet navbar sits above the page scroller (full inset width, not sticky inside it). Catalog table footer actions use foreground ink (the dock no longer paints the bar muted, which made outline buttons look disabled). Fill panes (catalog, store storage) and product-edit side columns share `--page-scroll-end` so content is not flush with the inset edge. Catalog products scroll inside the table; a wide row pans the table, not the bar. In-page list searches (orders, logs, connection products, category browser) use `NavSearchField`
 - Catalog navbar search matches the default input: `h-9` and `rounded-md` (not a taller pill). Select, searchable-select, and the sidebar store switcher use the same field corners. Focus on search still uses `border-ring`, not a 3px ring. The bar is `4rem`

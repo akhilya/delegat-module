@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getDocsPageUrl, getDocsPublicUrl, getDocsSiteOrigin } from "./docsUrl.js";
+import {
+  getAdapterCredentialsDocsSlug,
+  getDocsPageUrl,
+  getDocsPublicUrl,
+  getDocsSiteOrigin,
+} from "./docsUrl.js";
 
 describe("docsUrl", () => {
   it("builds public page URLs on the Control Plane docs origin", () => {
@@ -19,6 +24,8 @@ describe("docsUrl", () => {
       );
       assert.equal(getDocsPublicUrl("ru"), "https://module.delegat.pro/docs/");
       assert.equal(getDocsPageUrl("", "ru"), "https://module.delegat.pro/docs/");
+      assert.equal(getAdapterCredentialsDocsSlug("ozon"), "adapters/ozon");
+      assert.equal(getAdapterCredentialsDocsSlug("unknown"), null);
     } finally {
       delete globalThis.window;
     }

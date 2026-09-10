@@ -69,9 +69,9 @@ public static class AgentToolCatalog
                 },
             })),
         Prop("navigate_to",
-            "Show 1–6 buttons on the reply. Each button is one action: url (open a page) OR prompt (send a follow-up), never both. Only /relative paths with real IDs from tools. Prefer buttons over telling the user to go somewhere.",
+            "Show 1–6 buttons on the reply. Each button is one action: url (open a page) OR prompt (send a follow-up), never both. Only /relative paths (query string allowed, e.g. /products?page=2&pageSize=15) with real IDs from tools. Prefer buttons over telling the user to go somewhere.",
             Req([]),
-            ("url", Str("In-app path, e.g. /products/12/edit — open the page; do not also set prompt")),
+            ("url", Str("In-app path with optional query, e.g. /products/12/edit or /products?page=2&pageSize=15 — open the page; do not also set prompt")),
             ("label", Str("Button text — catalog name copied exactly")),
             ("prompt", Str("Follow-up the user sends by tapping (store language). Omit url on this button.")),
             ("items", new AiToolProperty
@@ -83,7 +83,7 @@ public static class AgentToolCatalog
                     type = "object",
                     properties = new Dictionary<string, AiToolProperty>
                     {
-                        ["url"] = Str("In-app path (open). Do not set prompt on the same item."),
+                        ["url"] = Str("In-app path with optional query (open), e.g. /products?page=2&pageSize=15. Do not set prompt on the same item."),
                         ["label"] = Str("Button text"),
                         ["prompt"] = Str("Follow-up to send. Do not set url on the same item."),
                     },

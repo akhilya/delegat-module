@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/inset-group";
 import Switch from "@/components/ui/switch/Switch.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
-import { BookOpen, ExternalLink } from "lucide-vue-next";
-import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
+import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
+import { getAdapterCredentialsDocsSlug } from "@/utils/docsUrl";
 import {
   FIELD_LIMITS,
   isNonEmptyWithinLimit,
@@ -41,8 +41,7 @@ export default {
     InsetGroupLabel,
     Switch,
     AdapterIcon,
-    BookOpen,
-    ExternalLink,
+    DocsHelpRow,
     Select,
     SelectContent,
     SelectItem,
@@ -80,9 +79,9 @@ export default {
     credentialFields() {
       return normalizeCredentialFields(this.selectedAdapterSchema);
     },
-    credentialsDocsUrl() {
+    credentialsDocsSlug() {
       if (!this.adapterKey) return null;
-      return getAdapterCredentialsDocsUrl(this.adapterKey, this.$i18n.locale);
+      return getAdapterCredentialsDocsSlug(this.adapterKey);
     },
     canSubmit() {
       if (
@@ -231,21 +230,20 @@ export default {
           }}
         </p>
       </div>
-      <a
-        v-if="credentialsDocsUrl"
-        :href="credentialsDocsUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-primary hover:underline"
-      >
-        <BookOpen class="size-3.5 shrink-0" />
-        {{
+      <DocsHelpRow
+        v-if="credentialsDocsSlug"
+        :slug="credentialsDocsSlug"
+        :title="
           quiet
-            ? $t("pages.setup.credentialsDocsLink")
-            : $t("marketplace.marketplacePage.credentialsDocsLink")
-        }}
-        <ExternalLink class="size-3 shrink-0 opacity-70" />
-      </a>
+            ? $t('pages.setup.credentialsDocsLink')
+            : $t('marketplace.marketplacePage.credentialsDocsLink')
+        "
+        :description="
+          $t('marketplace.marketplacePage.credentialsDocsHint', {
+            adapter: selectedAdapterMeta?.displayName || adapterKey,
+          })
+        "
+      />
       <FieldGroup class="gap-4">
         <SettingsFormField
           v-for="field in credentialFields"

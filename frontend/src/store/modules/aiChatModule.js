@@ -10,6 +10,7 @@ import {
   emptyAssistantMessage,
   hydrateConversation,
   isAiControlMessage,
+  isHiddenUserMessage,
   serializeToolCallsJson,
   toolResultFailed,
   finalizeTurnTools,
@@ -451,6 +452,18 @@ export default {
       }
       planMsg.done = false;
     },
+    setFormReply(state, { messageId, formId, answers }) {
+      const id = String(formId ?? "");
+      if (!id) return;
+      const msg =
+        state.messages.find((m) => m.id === messageId) ||
+        [...state.messages].reverse().find((m) => m.role === "assistant");
+      if (!msg || msg.role !== "assistant") return;
+      msg.formReplies = {
+        ...(msg.formReplies || {}),
+        [id]: { answers: answers && typeof answers === "object" ? answers : {} },
+      };
+    },
     setLastPlanCancelled(state) {
       const planMsg = [...state.messages]
         .reverse()
@@ -577,6 +590,10 @@ export default {
         typeof payload === "object" && payload?.contextCard
           ? payload.contextCard
           : null;
+      const formReply =
+        typeof payload === "object" && payload?.formReply
+          ? payload.formReply
+          : null;
       const attached = [...(state.attachedFiles || [])];
       const attachments = attachmentMetaList(attached);
       const text =
@@ -593,6 +610,7 @@ export default {
         content: text,
         attachments,
         ...(contextCard ? { contextCard } : {}),
+        ...(formReply ? { formReply } : {}),
       };
       commit("addMessage", userMsg);
       commit("setAttachedFiles", []);
@@ -771,7 +789,9 @@ export default {
         if (saved.length > 0) {
           commit("applyDbIds", saved);
           if (!state.conversationTitle) {
-            const firstUserMsg = state.messages.find((m) => m.role === "user");
+            const firstUserMsg = state.messages.find(
+              (m) => m.role === "user" && !isHiddenUserMessage(m),
+            );
             const seed = titleSeedFromUserMessage(firstUserMsg);
             if (seed) {
               dispatch("generateTitle", seed);

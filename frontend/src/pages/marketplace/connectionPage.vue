@@ -20,6 +20,8 @@ import { mapActions } from "vuex";
 import { http } from "@/main";
 import { confirm } from "@/composables/useConfirm";
 import { fillProductEditUrl } from "@/lib/productEditUrl";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 import { randomUuidCompact } from "@/utils/uuid";
 import { FIELD_LIMITS, clipToLimit, fieldLimitIssue } from "@/lib/fieldLimits";
 import { normalizeCredentialFields } from "@/lib/credentialFields";
@@ -65,8 +67,6 @@ import {
   ArrowRightLeft,
   Unlink,
   SearchCheck,
-  BookOpen,
-  ExternalLink,
   X,
 } from "lucide-vue-next";
 import {
@@ -141,7 +141,8 @@ import Progress from "@/components/ui/progress/Progress.vue";
 import { formatMoney } from "@/lib/currency";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
-import { getAdapterCredentialsDocsUrl } from "@/utils/docsUrl";
+import { getAdapterCredentialsDocsSlug } from "@/utils/docsUrl";
+import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
 
 export default {
@@ -236,8 +237,7 @@ export default {
     ArrowRightLeft,
     Unlink,
     SearchCheck,
-    BookOpen,
-    ExternalLink,
+    DocsHelpRow,
     FieldChangesPreviewDialog,
     PasswordInput,
     SettingsFormField,
@@ -478,6 +478,9 @@ export default {
     connectionId() {
       return parseInt(this.$route.params.connId);
     },
+    canManageAdapters() {
+      return canAct(getCachedMe(), PERMS.MarketplaceManage);
+    },
     capabilityLabels() {
       return {
         getCategories: this.$t(
@@ -576,10 +579,10 @@ export default {
       );
       return adapter?.displayName || this.connection.adapterKey;
     },
-    credentialsDocsUrl() {
+    credentialsDocsSlug() {
       const key = this.connection?.adapterKey;
       if (!key) return null;
-      return getAdapterCredentialsDocsUrl(key, this.$i18n.locale);
+      return getAdapterCredentialsDocsSlug(key);
     },
     canCreateCategory() {
       return !!this.capabilities?.capabilities?.createCategory;
@@ -3210,21 +3213,21 @@ export default {
                   $t('marketplace.connectionPage.settings.credentialsTitle')
                 "
               >
-                <a
-                  v-if="credentialsDocsUrl"
-                  :href="credentialsDocsUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-primary hover:underline"
-                >
-                  <BookOpen class="size-3.5 shrink-0" />
-                  {{
+                <DocsHelpRow
+                  v-if="credentialsDocsSlug"
+                  :slug="credentialsDocsSlug"
+                  :title="
                     $t(
-                      "marketplace.connectionPage.settings.credentialsDocsLink",
+                      'marketplace.connectionPage.settings.credentialsDocsLink',
                     )
-                  }}
-                  <ExternalLink class="size-3 shrink-0 opacity-70" />
-                </a>
+                  "
+                  :description="
+                    $t(
+                      'marketplace.connectionPage.settings.credentialsDocsHint',
+                      { adapter: adapterDisplayName },
+                    )
+                  "
+                />
                 <SettingsFormField
                   v-for="field in credentialFields"
                   :key="field.key"
@@ -4730,7 +4733,7 @@ export default {
                     <div class="flex flex-wrap items-center gap-2">
                       <!-- Create local products from unlinked -->
                       <Button
-                        v-if="hasSelectedUnlinked"
+                        v-if="canManageAdapters && hasSelectedUnlinked"
                         variant="outline"
                         size="sm"
                         class="h-8"
@@ -4749,7 +4752,7 @@ export default {
 
                       <!-- Import from marketplace for linked -->
                       <Button
-                        v-if="hasSelectedLinked"
+                        v-if="canManageAdapters && hasSelectedLinked"
                         variant="outline"
                         size="sm"
                         class="h-8"
@@ -4768,7 +4771,7 @@ export default {
 
                       <!-- Export to marketplace for linked -->
                       <Button
-                        v-if="hasSelectedLinked"
+                        v-if="canManageAdapters && hasSelectedLinked"
                         variant="outline"
                         size="sm"
                         class="h-8"
@@ -4787,7 +4790,7 @@ export default {
 
                       <!-- Export prices -->
                       <Button
-                        v-if="hasSelectedLinked"
+                        v-if="canManageAdapters && hasSelectedLinked"
                         variant="outline"
                         size="sm"
                         class="h-8"
@@ -4803,7 +4806,7 @@ export default {
 
                       <!-- Export stocks -->
                       <Button
-                        v-if="hasSelectedLinked"
+                        v-if="canManageAdapters && hasSelectedLinked"
                         variant="outline"
                         size="sm"
                         class="h-8"

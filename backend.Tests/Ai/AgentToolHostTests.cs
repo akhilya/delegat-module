@@ -57,12 +57,29 @@ public class AgentToolHostTests
 
     [Theory]
     [InlineData("""{"url":"/products/12","label":"Products"}""", true)]
+    [InlineData("""{"url":"/products?page=2&pageSize=15"}""", true)]
+    [InlineData("""{"url":"/products?trash=1&search=sku-1"}""", true)]
+    [InlineData("""{"url":"/products?search=hello%20soap"}""", true)]
     [InlineData("""{"url":"javascript:alert(1)"}""", false)]
+    [InlineData("""{"url":"/products?next=https://evil.example"}""", false)]
     public void NavigateTo_AcceptsOnlySafePaths(string input, bool expected)
     {
         var (result, _) = AgentToolHost.NavigateTo(input);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal(expected, json.RootElement.GetProperty("navigate").GetBoolean());
+    }
+
+    [Fact]
+    public void NavigateTo_KeepsCatalogQueryString()
+    {
+        var (result, _) = AgentToolHost.NavigateTo(
+            """{"url":"/products?page=2&pageSize=15","label":"Catalog"}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("navigate").GetBoolean());
+        Assert.Equal("/products?page=2&pageSize=15", json.RootElement.GetProperty("url").GetString());
+        Assert.Equal(
+            "/products?page=2&pageSize=15",
+            json.RootElement.GetProperty("actions")[0].GetProperty("url").GetString());
     }
 
     [Fact]

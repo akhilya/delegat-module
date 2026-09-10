@@ -582,6 +582,56 @@ public class ProductController : ControllerBase
     }
 
     /// <summary>
+    /// Sets the product's group. A product is in at most one group; a new
+    /// <c>groupId</c> moves it. Omit or null <c>groupId</c> to leave the group.
+    /// </summary>
+    [HttpPatch]
+    [Route("/products/{productId}/group")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> SetProductGroup(
+        int productId,
+        [FromBody] SetProductGroupInput input,
+        CancellationToken ct = default)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+
+        var product = await _context.products
+            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
+        if (product == null)
+            throw ApiException.NotFound("Product not found", code: "product_not_found");
+
+        if (input.groupId is int groupId && groupId > 0)
+        {
+            var groupExists = await _context.productGroups
+                .AnyAsync(g => g.Id == groupId && g.storeId == selectedStoreId.Value, ct);
+            if (!groupExists)
+                throw ApiException.NotFound("Group not found", code: "group_not_found");
+
+            await ProductGroupMembership.AddOrMoveToGroupAsync(
+                _context, selectedStoreId.Value, groupId, new[] { productId }, ct);
+            return Ok(new { productId, groupId, moved = true });
+        }
+
+        var memberships = await _context.productGroupMembers
+            .Where(m => m.productId == productId)
+            .ToListAsync(ct);
+        if (memberships.Count > 0)
+        {
+            _context.productGroupMembers.RemoveRange(memberships);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return Ok(new { productId, groupId = (int?)null, moved = memberships.Count > 0 });
+    }
+
+    public sealed class SetProductGroupInput
+    {
+        public int? groupId { get; set; }
+    }
+
+    /// <summary>
     /// Enqueues a bulk product update. Returns immediately with an operationId —
     /// <see cref="ProductBulkUpdateBackgroundService"/> applies changes and streams
     /// progress/logs through the operations side panel.

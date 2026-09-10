@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/context-menu";
 import { ArrowRight, ArrowRightLeft, Copy, Trash2 } from "lucide-vue-next";
 import ProductImageSizeContextSub from "./ProductImageSizeContextSub.vue";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 
 export default {
   name: "ProductRowActionMenuItems",
@@ -84,6 +86,9 @@ export default {
       if (sku === this.headerTitle) return "";
       return sku;
     },
+    canManageCatalog() {
+      return canAct(getCachedMe(), PERMS.CatalogManage);
+    },
   },
 };
 </script>
@@ -115,12 +120,17 @@ export default {
       <ArrowRight />
       {{ $t("productRowActions.goTo") }}
     </component>
-    <component :is="ui.Item" @click.stop="$emit('clone')">
+    <component
+      :is="ui.Item"
+      v-if="canManageCatalog"
+      @click.stop="$emit('clone')"
+    >
       <Copy />
       {{ $t("productRowActions.cloneToStore") }}
     </component>
     <component
       :is="ui.Item"
+      v-if="canManageCatalog"
       :disabled="!canMove"
       :title="!canMove ? $t('productRowActions.moveToStoreDisabledSingleStore') : undefined"
       @click.stop="canMove && $emit('move')"
@@ -130,9 +140,9 @@ export default {
     </component>
   </component>
 
-  <component :is="ui.Separator" />
+  <component :is="ui.Separator" v-if="canManageCatalog" />
 
-  <component :is="ui.Group">
+  <component :is="ui.Group" v-if="canManageCatalog">
     <component
       :is="ui.Label"
       class="text-xs font-medium text-muted-foreground"

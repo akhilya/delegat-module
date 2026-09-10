@@ -83,9 +83,16 @@ export function getDocsPageUrl(path, locale = "ru") {
   return `${base}/${normalized}`;
 }
 
-/** Credentials how-to for a known adapter key, or null if unsupported. */
-export function getAdapterCredentialsDocsUrl(adapterKey, locale = "ru") {
+/** Credentials article slug for a known adapter key, or null if unsupported. */
+export function getAdapterCredentialsDocsSlug(adapterKey) {
   const key = String(adapterKey || "").trim().toLowerCase();
   if (!ADAPTER_CREDENTIALS_DOC_KEYS.has(key)) return null;
-  return getDocsPageUrl(`adapters/${key}`, locale);
+  return `adapters/${key}`;
+}
+
+/** Credentials how-to for a known adapter key, or null if unsupported. */
+export function getAdapterCredentialsDocsUrl(adapterKey, locale = "ru") {
+  const slug = getAdapterCredentialsDocsSlug(adapterKey);
+  if (!slug) return null;
+  return getDocsPageUrl(slug, locale);
 }

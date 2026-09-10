@@ -43,6 +43,22 @@ export function emptyAssistantMessage() {
   };
 }
 
+function readFormReplies(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const next = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!key) continue;
+    const answers =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? value.answers && typeof value.answers === "object"
+          ? value.answers
+          : value
+        : {};
+    next[String(key)] = { answers };
+  }
+  return next;
+}
+
 function readAttachments(parsed) {
   if (!Array.isArray(parsed?.attachments)) return [];
   return parsed.attachments
@@ -67,6 +83,22 @@ export function parsePersistedMessageMeta(toolCallsJson) {
   }
   try {
     const parsed = JSON.parse(toolCallsJson);
+    if (parsed && parsed._ui === "formReply") {
+      return {
+        toolCalls: [],
+        contextCard: null,
+        attachments: [],
+        timeline: [],
+        plan: null,
+        formReply: {
+          formId: parsed.formId == null ? "" : String(parsed.formId),
+          answers:
+            parsed.answers && typeof parsed.answers === "object"
+              ? parsed.answers
+              : {},
+        },
+      };
+    }
     if (
       parsed &&
       (parsed._ui === "operationContext" || parsed._ui === "userAttachments")
@@ -97,6 +129,7 @@ export function parsePersistedMessageMeta(toolCallsJson) {
         planExecStart: Number.isInteger(parsed.planExecStart)
           ? parsed.planExecStart
           : undefined,
+        formReplies: readFormReplies(parsed.formReplies),
       };
     }
     if (Array.isArray(parsed)) {
@@ -126,6 +159,8 @@ export function mapStoredMessage(m) {
     planExecuted,
     planFailed,
     planExecStart,
+    formReply,
+    formReplies,
   } = parsePersistedMessageMeta(m.toolCallsJson);
   const content = m.content || "";
   const timeline = storedTimeline?.length
@@ -146,6 +181,8 @@ export function mapStoredMessage(m) {
     planExecuted: !!planExecuted,
     planFailed: !!planFailed,
     planExecStart,
+    formReply: formReply || null,
+    formReplies: formReplies || {},
     apiBlocks: [],
     done: m.role === "assistant",
     feedbackRating: m.feedbackRating ?? null,
@@ -153,6 +190,13 @@ export function mapStoredMessage(m) {
 }
 
 export function serializeToolCallsJson(m) {
+  if (m.formReply) {
+    return JSON.stringify({
+      _ui: "formReply",
+      formId: m.formReply.formId == null ? "" : String(m.formReply.formId),
+      answers: m.formReply.answers || {},
+    });
+  }
   const attachments = attachmentMetaList(m.attachments);
   if (m.contextCard || attachments.length) {
     return JSON.stringify({
@@ -168,7 +212,9 @@ export function serializeToolCallsJson(m) {
     summary: tc.summary,
     result: tc.result,
   }));
-  if (m.plan || m.timeline?.some((item) => item.type === "tool")) {
+  const formReplies = readFormReplies(m.formReplies);
+  const hasFormReplies = Object.keys(formReplies).length > 0;
+  if (m.plan || hasFormReplies || m.timeline?.some((item) => item.type === "tool")) {
     return JSON.stringify({
       _ui: "assistantTurn",
       tools,
@@ -183,6 +229,7 @@ export function serializeToolCallsJson(m) {
       planExecuted: m.planExecuted || undefined,
       planFailed: m.planFailed || undefined,
       planExecStart: Number.isInteger(m.planExecStart) ? m.planExecStart : undefined,
+      ...(hasFormReplies ? { formReplies } : {}),
     });
   }
   if (tools.length) {
@@ -196,6 +243,34 @@ export function serializeToolCallsJson(m) {
 export function isAiControlMessage(msg) {
   const text = typeof msg === "string" ? msg : msg?.content;
   return text === AI_CONFIRM_PLAN || text === AI_CANCEL_PLAN;
+}
+
+/** User turns that must reach the model but are not shown as a bubble. */
+export function isHiddenUserMessage(msg) {
+  if (!msg || msg.role !== "user") return isAiControlMessage(msg);
+  return isAiControlMessage(msg) || !!msg.formReply;
+}
+
+/** Stamp questionnaire answers from a hidden user turn onto the previous assistant card. */
+export function applyFormReplies(messages) {
+  const next = messages.map((m) => ({
+    ...m,
+    formReplies: { ...(m.formReplies || {}) },
+  }));
+  for (let i = 0; i < next.length; i++) {
+    const reply = next[i]?.formReply;
+    if (next[i]?.role !== "user" || !reply) continue;
+    const formId = String(reply.formId || "");
+    if (!formId) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      if (next[j].role !== "assistant") continue;
+      next[j].formReplies[formId] = {
+        answers: reply.answers && typeof reply.answers === "object" ? reply.answers : {},
+      };
+      break;
+    }
+  }
+  return next;
 }
 
 function mergePlanExecution(planMsg, execMsg) {
@@ -250,7 +325,9 @@ export function foldPlanTurns(messages) {
 }
 
 export function hydrateConversation(rows) {
-  return foldPlanTurns(applyPlanDecisions((rows || []).map(mapStoredMessage)));
+  return applyFormReplies(
+    foldPlanTurns(applyPlanDecisions((rows || []).map(mapStoredMessage))),
+  );
 }
 
 /** After reload, mark plans confirmed/cancelled from the following user line. */

@@ -45,9 +45,9 @@ import {
   writeDismissedPreviewOpId,
 } from "@/lib/catalogConnectJobs";
 import { PAGE_MARKETPLACE, PAGE_PRODUCTS } from "@/router";
-import { getDocsPageUrl } from "@/utils/docsUrl";
+import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
 import { http } from "@/main";
-import { BookOpen, Cable, ExternalLink } from "lucide-vue-next";
+import { Cable } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import { randomUuidCompact } from "@/utils/uuid";
 
@@ -88,8 +88,7 @@ export default {
     TableHeader,
     TableRow,
     Cable,
-    BookOpen,
-    ExternalLink,
+    DocsHelpRow,
     RouterLink,
   },
   data() {
@@ -142,9 +141,6 @@ export default {
   computed: {
     hasLocalProducts() {
       return this.localProductCount > 0;
-    },
-    docsHref() {
-      return getDocsPageUrl("workspace/catalog-connect", this.$i18n.locale);
     },
     sourceHint() {
       if (this.changingSource || this.hasLocalProducts) {
@@ -1086,16 +1082,11 @@ export default {
         >
           {{ $t("pages.catalogConnect.inactiveDescription") }}
         </p>
-        <a
-          :href="docsHref"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="mt-6 inline-flex items-center gap-1.5 self-start px-1 text-xs font-medium text-primary hover:underline"
-        >
-          <BookOpen class="size-3.5 shrink-0" />
-          {{ $t("pages.catalogConnect.docsLink") }}
-          <ExternalLink class="size-3 shrink-0 opacity-70" />
-        </a>
+        <DocsHelpRow
+          class="mt-6"
+          slug="workspace/catalog-connect"
+          :title="$t('pages.catalogConnect.docsLink')"
+        />
       </div>
     </template>
 
@@ -1189,16 +1180,11 @@ export default {
         >
           {{ $t("common.back") }}
         </Button>
-        <a
-          :href="docsHref"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="mt-6 inline-flex items-center gap-1.5 self-start px-1 text-xs font-medium text-primary hover:underline"
-        >
-          <BookOpen class="size-3.5 shrink-0" />
-          {{ $t("pages.catalogConnect.docsLink") }}
-          <ExternalLink class="size-3 shrink-0 opacity-70" />
-        </a>
+        <DocsHelpRow
+          class="mt-6"
+          slug="workspace/catalog-connect"
+          :title="$t('pages.catalogConnect.docsLink')"
+        />
       </div>
     </template>
 

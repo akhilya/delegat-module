@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   PERMS,
+  canAct,
   canBrowse,
   hasPermission,
   isCabinetViewOnly,
@@ -25,6 +26,15 @@ describe("isCabinetViewOnly", () => {
       }),
       false,
     );
+  });
+});
+
+describe("canAct", () => {
+  it("does not treat workspace.view as a write grant", () => {
+    const viewer = { permissions: [PERMS.WorkspaceView, PERMS.CatalogManage] };
+    assert.equal(canAct(viewer, PERMS.MarketplaceManage), false);
+    assert.equal(canBrowse(viewer, PERMS.MarketplaceManage), true);
+    assert.equal(canAct(viewer, PERMS.CatalogManage), true);
   });
 });
 

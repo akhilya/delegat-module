@@ -17,7 +17,9 @@ public static class PlatformRequestPolicy
         Lists are paged: startIndex, pageSize (not a fake stats endpoint). Search products with searchQuery.
 
         Catalog: GET/POST /products  GET/PATCH/DELETE /products/{id}  POST /products/{id}/restore
-          GET /products/trash  GET /products/trash/count  POST /products/bulk  PATCH /products/{id}/group
+          GET /products/trash  GET /products/trash/count  POST /products/bulk
+          PATCH /products/{id}/group { groupId } — move the card (null removes). Also
+          POST /productgroups/{id}/products { productIds }  DELETE /productgroups/{id}/products/{productId}
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
           GET /products/{id}/files  PUT /products/{id}/files is multipart (Agent HTTP, not JSON)
           GET/POST /categories  GET/PATCH /categories/{id}

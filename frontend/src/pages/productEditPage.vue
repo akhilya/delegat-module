@@ -67,6 +67,8 @@ import ProductGroupSidebar from "@/components/products/ProductGroupSidebar.vue";
 import ProductGallerySidebar from "@/components/products/ProductGallerySidebar.vue";
 import AppImage from "@/components/AppImage.vue";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 import { toTypedSchema } from "@vee-validate/zod";
 import { useForm } from "vee-validate";
 import { z } from "zod";
@@ -252,6 +254,9 @@ export default {
     );
     const visibleStoreAttributes = computed(() =>
       storeAttributes.value.filter((a) => a.showOnProductPage !== false),
+    );
+    const canManageCatalog = computed(() =>
+      canAct(getCachedMe(), PERMS.CatalogManage),
     );
 
     const {
@@ -1337,6 +1342,7 @@ export default {
       isSubmitting,
       isSaveDisabled,
       saveDisabledReasons,
+      canManageCatalog,
       isProductLoading,
       files,
       aiEnabled,
@@ -1464,7 +1470,7 @@ export default {
       </Tabs>
     </template>
     <template #nav-right>
-      <DropdownMenu>
+      <DropdownMenu v-if="canManageCatalog">
         <DropdownMenuTrigger as-child>
           <Button
             variant="ghost"
@@ -2332,7 +2338,7 @@ export default {
 
             <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
             <div
-              v-show="tab === 'properties' && productSKU"
+              v-show="tab === 'properties' && productSKU && canManageCatalog"
               class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <AlertDialog>

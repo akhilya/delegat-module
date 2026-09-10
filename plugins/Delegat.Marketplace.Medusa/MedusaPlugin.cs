@@ -9,7 +9,7 @@ namespace Delegat.Marketplace.Medusa;
 
 public class MedusaPlugin : MarketplacePluginBase
 {
-    private const int DefaultBulkChunkSize = 20;
+    private const int DefaultBulkChunkSize = 50;
     private const int MaxBulkChunkSize = 200;
 
     private static readonly HashSet<string> InternalKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -18,6 +18,9 @@ public class MedusaPlugin : MarketplacePluginBase
         "_fieldTypes",
         "_fieldLabels",
         "_fieldOptions",
+        "_shopSpecs",
+        "_localGroupId",
+        "_localGroupName",
         "_variants",
         "_imageUrls",
         "_imageStoragePaths",
@@ -30,7 +33,8 @@ public class MedusaPlugin : MarketplacePluginBase
         "price", "sale_price", "salePrice", "oldPrice", "old_price",
         "quantity", "stock", "storageQuantity", "barcode", "brand",
         "status", "delegat_product_id", "delegatProductId", "product_id", "productId",
-        "images", "image_urls", "imageUrls"
+        "images", "image_urls", "imageUrls",
+        "group_id", "groupId", "group_name", "groupName"
     };
 
     private static readonly HashSet<string> PriceFieldKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -44,7 +48,7 @@ public class MedusaPlugin : MarketplacePluginBase
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
-        "Medusa store via Delegat bridge: categories, products, prices, and stocks.";
+        "Medusa store via Delegat bridge: categories, product groups, products, prices, and stocks.";
     public override string? LogoUrl => "https://raw.githubusercontent.com/medusajs/medusa/develop/www/apps/book/app/images/logo.svg";
 
     public override MarketplaceCapabilities Capabilities =>
@@ -55,7 +59,10 @@ public class MedusaPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ExportProduct |
         MarketplaceCapabilities.ExportProductBulk |
         MarketplaceCapabilities.ExportPrices |
-        MarketplaceCapabilities.ExportStocks;
+        MarketplaceCapabilities.ExportStocks |
+        MarketplaceCapabilities.EndpointBasedGrouping |
+        MarketplaceCapabilities.ImportGroups |
+        MarketplaceCapabilities.DeleteGroups;
 
     public override CredentialsSchema GetCredentialsSchema()
     {
@@ -120,12 +127,7 @@ public class MedusaPlugin : MarketplacePluginBase
         {
             return new ConnectionTestResult(
                 false,
-                $"Medusa bridge error: {ex.Message}",
-                new Dictionary<string, object>
-                {
-                    ["statusCode"] = ex.StatusCode,
-                    ["response"] = ex.ResponseBody ?? ""
-                });
+                MarketplaceApiErrorText.Format("Medusa", ex.StatusCode, ex.Message, ex.ResponseBody));
         }
         catch (Exception ex)
         {
@@ -165,14 +167,15 @@ public class MedusaPlugin : MarketplacePluginBase
         try
         {
             var response = await client.GetCategoryFieldsAsync(externalCategoryId, ct);
-            if (response.Success && response.Fields is { Count: > 0 })
+            var rawFields = response.Fields;
+            if (rawFields is { Count: > 0 })
             {
-                var fromBridge = response.Fields
-                    .Where(f => !IsPriceFieldKey(f.Key))
+                var fromBridge = rawFields
+                    .Where(f => !string.IsNullOrWhiteSpace(f.Key) && !IsPriceFieldKey(f.Key))
                     .OrderBy(f => f.SortOrder)
                     .Select(f => new ExternalField(
                         f.Key,
-                        f.Name,
+                        string.IsNullOrWhiteSpace(f.Name) ? f.Key : f.Name,
                         f.IsRequired,
                         NormalizeFieldType(f.Type),
                         f.Options?.Select(o => new ExternalFieldOption(o.Value, o.Label)).ToList(),
@@ -180,7 +183,8 @@ public class MedusaPlugin : MarketplacePluginBase
                         Group: f.Group,
                         SortOrder: f.SortOrder))
                     .ToList();
-                return EnsureDefaultCardFields(fromBridge);
+                if (fromBridge.Count > 0)
+                    return EnsureDefaultCardFields(fromBridge);
             }
         }
         catch (MedusaApiException ex) when (ex.StatusCode is 404 or 405)
@@ -241,7 +245,7 @@ public class MedusaPlugin : MarketplacePluginBase
         }
         catch (MedusaApiException ex)
         {
-            return new CreateCategoryResult(false, ErrorMessage: ex.Message);
+            return new CreateCategoryResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex.StatusCode, ex.Message, ex.ResponseBody));
         }
     }
 
@@ -292,21 +296,20 @@ public class MedusaPlugin : MarketplacePluginBase
             using var client = CreateClient(context);
             var response = await client.UpsertProductAsync(payload, ct);
             if (!response.Success || string.IsNullOrWhiteSpace(response.ProductId))
-                return new ExportResult(false, ErrorMessage: response.Error ?? "Product upsert failed");
+                return new ExportResult(false, ErrorMessage: FormatBridgeError(response.Error) ?? "Product upsert failed");
 
-            Dictionary<string, object>? details = null;
-            if (response.VariantIds is { Count: > 0 })
-                details = new Dictionary<string, object> { ["variantIds"] = response.VariantIds };
-
-            return new ExportResult(true, response.ProductId, Details: details);
+            return new ExportResult(
+                true,
+                response.ProductId,
+                Details: ExportIdentityDetails(existingExternalId, response.ProductId, response.VariantIds));
         }
         catch (MedusaApiException ex)
         {
-            return new ExportResult(false, ErrorMessage: ex.Message);
+            return new ExportResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
         }
         catch (Exception ex)
         {
-            return new ExportResult(false, ErrorMessage: ex.Message);
+            return new ExportResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
         }
     }
 
@@ -344,7 +347,7 @@ public class MedusaPlugin : MarketplacePluginBase
                 }
                 catch (Exception ex)
                 {
-                    allResults.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: ex.Message));
+                    allResults.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex)));
                     failed++;
                 }
             }
@@ -365,11 +368,16 @@ public class MedusaPlugin : MarketplacePluginBase
                             ?? (result.Index >= 0 && result.Index < indexMap.Count
                                 ? indexMap[result.Index].LocalProductId
                                 : 0);
-                        Dictionary<string, object>? details = null;
-                        if (result.VariantIds is { Count: > 0 })
-                            details = new Dictionary<string, object> { ["variantIds"] = result.VariantIds };
+                        var existingId = indexMap.ElementAtOrDefault(result.Index)?.ExistingExternalId
+                            ?? indexMap.FirstOrDefault(i => i.LocalProductId == localId)?.ExistingExternalId;
                         allResults.Add(new ExportItemResult(
-                            localId, result.Success, result.ProductId, result.Error, details));
+                            localId,
+                            result.Success,
+                            result.ProductId,
+                            FormatBridgeError(result.Error),
+                            result.Success
+                                ? ExportIdentityDetails(existingId, result.ProductId, result.VariantIds)
+                                : null));
                         if (result.Success) success++;
                         else failed++;
                     }
@@ -381,7 +389,7 @@ public class MedusaPlugin : MarketplacePluginBase
                         allResults.Add(new ExportItemResult(
                             item.LocalProductId,
                             response.Success,
-                            ErrorMessage: response.Success ? null : response.Error ?? "Bulk export failed"));
+                            ErrorMessage: response.Success ? null : FormatBridgeError(response.Error) ?? "Bulk export failed"));
                         if (response.Success) success++;
                         else failed++;
                     }
@@ -391,7 +399,7 @@ public class MedusaPlugin : MarketplacePluginBase
             {
                 foreach (var item in indexMap)
                 {
-                    allResults.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: ex.Message));
+                    allResults.Add(new ExportItemResult(item.LocalProductId, false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex)));
                     failed++;
                 }
             }
@@ -461,6 +469,116 @@ public class MedusaPlugin : MarketplacePluginBase
         }
     }
 
+    public override async Task<CreateGroupResult> CreateGroupAsync(
+        ConnectionContext context,
+        List<string> productExternalIds,
+        string? groupName = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            using var client = CreateClient(context);
+            var response = await client.UpsertGroupAsync(new MedusaUpsertGroupRequest
+            {
+                Name = string.IsNullOrWhiteSpace(groupName) ? "Группа" : groupName.Trim(),
+                ProductIds = productExternalIds
+            }, ct);
+            if (!response.Success || string.IsNullOrWhiteSpace(response.CollectionId))
+                return new CreateGroupResult(false, ErrorMessage: response.Error ?? "Group upsert failed");
+            return new CreateGroupResult(true, response.CollectionId);
+        }
+        catch (Exception ex)
+        {
+            return new CreateGroupResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
+        }
+    }
+
+    public override async Task<GroupMembershipResult> AddProductsToGroupAsync(
+        ConnectionContext context,
+        string externalGroupId,
+        List<string> productExternalIds,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            using var client = CreateClient(context);
+            var response = await client.AddProductsToGroupAsync(
+                externalGroupId,
+                new MedusaGroupMembershipRequest { ProductIds = productExternalIds },
+                ct);
+            return new GroupMembershipResult(
+                response.Success,
+                AddedCount: response.Added,
+                FailedCount: response.Failed,
+                ErrorMessage: response.Error);
+        }
+        catch (Exception ex)
+        {
+            return new GroupMembershipResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
+        }
+    }
+
+    public override async Task<GroupMembershipResult> RemoveProductsFromGroupAsync(
+        ConnectionContext context,
+        string externalGroupId,
+        List<string> productExternalIds,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            using var client = CreateClient(context);
+            var response = await client.RemoveProductsFromGroupAsync(
+                externalGroupId,
+                new MedusaGroupMembershipRequest { ProductIds = productExternalIds },
+                ct);
+            return new GroupMembershipResult(
+                response.Success,
+                RemovedCount: response.Removed,
+                ErrorMessage: response.Error);
+        }
+        catch (Exception ex)
+        {
+            return new GroupMembershipResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
+        }
+    }
+
+    public override async Task<ExportResult> DeleteGroupAsync(
+        ConnectionContext context,
+        string externalGroupId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            using var client = CreateClient(context);
+            var response = await client.DeleteGroupAsync(externalGroupId, ct);
+            return new ExportResult(response.Success, response.CollectionId, response.Error);
+        }
+        catch (Exception ex)
+        {
+            return new ExportResult(false, ErrorMessage: MarketplaceApiErrorText.Format("Medusa", ex));
+        }
+    }
+
+    public override async Task<PagedResult<ExternalGroup>> ImportGroupsAsync(
+        ConnectionContext context,
+        int pageSize = 100,
+        string? cursor = null,
+        CancellationToken ct = default)
+    {
+        using var client = CreateClient(context);
+        var response = await client.GetGroupsAsync(ct);
+        if (!response.Success)
+            throw new MedusaApiException(response.Error ?? "Failed to list groups", 500);
+
+        var items = (response.Groups ?? [])
+            .Select(g => new ExternalGroup(
+                g.Id,
+                g.Name,
+                g.ProductIds ?? []))
+            .ToList();
+        return new PagedResult<ExternalGroup>(items, false, TotalCount: items.Count);
+    }
+
     private static ImportResult ToImportResult(MedusaBulkMutationResponse response, int total)
     {
         if (response.Results is { Count: > 0 })
@@ -517,8 +635,19 @@ public class MedusaPlugin : MarketplacePluginBase
         if (!string.IsNullOrWhiteSpace(categoryId))
             payload.CategoryIds = [categoryId];
 
+        payload.GroupId = FirstNonEmpty(
+            GetString(data, "group_id"),
+            GetString(data, "groupId"),
+            GetString(data, "_localGroupId"));
+        payload.GroupName = FirstNonEmpty(
+            GetString(data, "group_name"),
+            GetString(data, "groupName"),
+            GetString(data, "_localGroupName"));
+
         payload.ImageUrls = ExtractImageUrls(data);
+        payload.ImageKeys = ExtractImageKeys(data);
         payload.Variants = ExtractVariants(data);
+        payload.Specs = ExtractShopSpecs(data);
 
         var fieldLabels = ExtractFieldLabels(data);
         var fieldOptions = ExtractFieldOptions(data);
@@ -554,6 +683,29 @@ public class MedusaPlugin : MarketplacePluginBase
         }
 
         return payload;
+    }
+
+    private static List<MedusaSpecDto>? ExtractShopSpecs(Dictionary<string, object> data)
+    {
+        if (!data.TryGetValue("_shopSpecs", out var raw) || raw is null)
+            return null;
+
+        var specs = new List<MedusaSpecDto>();
+        foreach (var item in EnumerateObjects(raw))
+        {
+            var label = GetDictString(item, "label") ?? GetDictString(item, "Label");
+            var value = GetDictString(item, "value") ?? GetDictString(item, "Value");
+            if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(value))
+                continue;
+            specs.Add(new MedusaSpecDto
+            {
+                Key = GetDictString(item, "key") ?? GetDictString(item, "Key") ?? "",
+                Label = label,
+                Value = value
+            });
+        }
+
+        return specs;
     }
 
     private static Dictionary<string, string> ExtractFieldLabels(Dictionary<string, object> data)
@@ -660,6 +812,14 @@ public class MedusaPlugin : MarketplacePluginBase
         return null;
     }
 
+    private static List<string>? ExtractImageKeys(Dictionary<string, object> data)
+    {
+        if (!data.TryGetValue("_imageStoragePaths", out var raw) || raw is null)
+            return null;
+        var list = ToStringList(raw);
+        return list.Count > 0 ? list : null;
+    }
+
     private static List<MedusaVariantPayload>? ExtractVariants(Dictionary<string, object> data)
     {
         if (!data.TryGetValue("_variants", out var variantsObj) && !data.TryGetValue("variants", out variantsObj))
@@ -754,6 +914,14 @@ public class MedusaPlugin : MarketplacePluginBase
                 if (item is Dictionary<string, object?> dn)
                 {
                     yield return dn;
+                    continue;
+                }
+                if (item is Dictionary<string, string> ds)
+                {
+                    yield return ds.ToDictionary(
+                        kv => kv.Key,
+                        kv => (object?)kv.Value,
+                        StringComparer.OrdinalIgnoreCase);
                     continue;
                 }
                 if (item is JsonElement { ValueKind: JsonValueKind.Object } jel)
@@ -872,6 +1040,45 @@ public class MedusaPlugin : MarketplacePluginBase
         };
     }
 
+    private static string? FormatBridgeError(object? error)
+    {
+        if (error is null) return null;
+        if (error is string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            return MarketplaceApiErrorText.Format("Medusa", 0, s, s);
+        }
+        if (error is JsonElement json)
+        {
+            var raw = json.ValueKind == JsonValueKind.String ? json.GetString() : json.GetRawText();
+            return MarketplaceApiErrorText.Format("Medusa", 0, raw, raw);
+        }
+        var text = error.ToString();
+        return string.IsNullOrWhiteSpace(text) || text == error.GetType().ToString()
+            ? error.GetType().Name
+            : text;
+    }
+
+    private static Dictionary<string, object>? ExportIdentityDetails(
+        string? existingExternalId,
+        string? productId,
+        Dictionary<string, string>? variantIds)
+    {
+        Dictionary<string, object>? details = null;
+        void Set(string key, object value)
+        {
+            details ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            details[key] = value;
+        }
+        if (variantIds is { Count: > 0 })
+            Set("variantIds", variantIds);
+        if (!string.IsNullOrWhiteSpace(existingExternalId)
+            && !string.IsNullOrWhiteSpace(productId)
+            && !string.Equals(existingExternalId, productId, StringComparison.Ordinal))
+            Set("resolvedFrom", existingExternalId);
+        return details;
+    }
+
     protected virtual MedusaApiClient CreateClient(ConnectionContext context, HttpClient? httpClient = null)
     {
         var baseUrl = context.GetCredential("apiBaseUrl")?.Trim();
@@ -901,6 +1108,16 @@ public class MedusaPlugin : MarketplacePluginBase
                 chunk.Add(source[i + j]);
             yield return chunk;
         }
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+        return null;
     }
 
     private static string? GetString(Dictionary<string, object> data, string key)

@@ -12,16 +12,14 @@ import {
 } from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { GripVertical, Plus } from "lucide-vue-next";
+import { GripVertical, Plus, Trash2 } from "lucide-vue-next";
 import { useDebounceFn } from "@vueuse/core";
 import draggable from "vuedraggable";
 import { confirm } from "@/composables/useConfirm";
 import { t } from "@/i18n";
-
-const TRAILING_INPUT =
-  "h-9 w-[min(11rem,46vw)] border-0 bg-transparent p-0 text-right shadow-none focus-visible:border-transparent focus-visible:ring-0";
-const TRAILING_NUMBER =
-  "h-9 w-full border-0 bg-transparent p-0 text-right shadow-none focus-visible:border-transparent focus-visible:ring-0";
+import { Button } from "@/components/ui/button";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 
 export default {
   components: {
@@ -34,6 +32,8 @@ export default {
     InsetGroupItem,
     GripVertical,
     Plus,
+    Trash2,
+    Button,
     draggable,
   },
   props: {
@@ -49,13 +49,14 @@ export default {
       isAdding: false,
       deletingId: null,
       pendingSaves: {},
-      trailingInputClass: TRAILING_INPUT,
-      trailingNumberClass: TRAILING_NUMBER,
     };
   },
   computed: {
     isSaving() {
       return Object.keys(this.pendingSaves).length > 0;
+    },
+    canEdit() {
+      return canAct(getCachedMe(), PERMS.CatalogManage);
     },
   },
   methods: {
@@ -215,16 +216,19 @@ export default {
         item-key="id"
         handle=".drag-handle"
         ghost-class="opacity-50"
-        class="space-y-6"
+        class="space-y-3"
         @end="handleReorder"
       >
         <template #item="{ element: variant }">
           <InsetGroup>
-            <InsetGroupItem as="div" class="min-h-12 px-3.5 py-2">
+            <InsetGroupItem
+              as="div"
+              class="items-start gap-3 px-3.5 py-3 hover:bg-transparent"
+            >
               <template #leading>
                 <button
                   type="button"
-                  class="drag-handle text-muted-foreground cursor-grab active:cursor-grabbing"
+                  class="drag-handle text-muted-foreground mt-2 cursor-grab active:cursor-grabbing"
                   :aria-label="
                     $t('products.productVariantsEditor.reorderAria')
                   "
@@ -232,92 +236,108 @@ export default {
                   <GripVertical class="size-4" />
                 </button>
               </template>
-              {{ $t("products.productVariantsEditor.sizeHeader") }}
-              <template #trailing>
-                <Input
-                  :id="`product-variant-size-${variant.id}`"
-                  v-model="variant.size"
-                  :placeholder="
-                    $t('products.productVariantsEditor.sizePlaceholder')
-                  "
-                  :class="trailingInputClass"
-                  @input="onFieldChange(variant)"
-                />
-              </template>
-            </InsetGroupItem>
-            <InsetGroupItem as="div" class="min-h-12 px-3.5 py-2">
-              {{ $t("products.productVariantsEditor.skuHeader") }}
-              <template #trailing>
-                <Input
-                  v-model="variant.sku"
-                  :placeholder="$t('products.productVariantsEditor.skuPlaceholder')"
-                  :class="trailingInputClass"
-                  @input="onFieldChange(variant)"
-                />
-              </template>
-            </InsetGroupItem>
-            <InsetGroupItem
-              as="div"
-              class="min-h-12 items-start px-3.5 py-3"
-            >
-              <p>{{ $t("products.productVariantsEditor.barcodeHeader") }}</p>
-              <div class="mt-2">
-                <BarcodeInput
-                  :model-value="variant.barcode || ''"
-                  @update:model-value="
-                    variant.barcode = $event;
-                    onFieldChange(variant);
-                  "
-                />
+              <div class="space-y-3">
+                <label class="grid gap-1">
+                  <span class="text-xs text-muted-foreground">{{
+                    $t("products.productVariantsEditor.sizeHeader")
+                  }}</span>
+                  <Input
+                    :id="`product-variant-size-${variant.id}`"
+                    v-model="variant.size"
+                    autocomplete="off"
+                    :placeholder="
+                      $t('products.productVariantsEditor.sizePlaceholder')
+                    "
+                    :readonly="!canEdit"
+                    @input="onFieldChange(variant)"
+                  />
+                </label>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">{{
+                      $t("products.productVariantsEditor.skuHeader")
+                    }}</span>
+                    <Input
+                      v-model="variant.sku"
+                      autocomplete="off"
+                      :placeholder="
+                        $t('products.productVariantsEditor.skuPlaceholder')
+                      "
+                      :readonly="!canEdit"
+                      @input="onFieldChange(variant)"
+                    />
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">{{
+                      $t("products.productVariantsEditor.priceHeader")
+                    }}</span>
+                    <NumberField
+                      class="w-full"
+                      :disabled="!canEdit"
+                      :min="0"
+                      :step="0.01"
+                      :format-options="{
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2,
+                      }"
+                      :model-value="variant.price ?? undefined"
+                      @update:model-value="setPrice(variant, $event)"
+                    >
+                      <NumberFieldInput class="h-9 text-right" />
+                    </NumberField>
+                  </label>
+                  <label class="grid gap-1">
+                    <span class="text-xs text-muted-foreground">{{
+                      $t("products.productVariantsEditor.quantityHeader")
+                    }}</span>
+                    <NumberField
+                      class="w-full"
+                      :disabled="!canEdit"
+                      :min="0"
+                      :step="1"
+                      :model-value="variant.quantity ?? undefined"
+                      @update:model-value="setQuantity(variant, $event)"
+                    >
+                      <NumberFieldInput class="h-9 text-right" />
+                    </NumberField>
+                  </label>
+                </div>
+                <label class="grid gap-1">
+                  <span class="text-xs text-muted-foreground">{{
+                    $t("products.productVariantsEditor.barcodeHeader")
+                  }}</span>
+                  <BarcodeInput
+                    :model-value="variant.barcode || ''"
+                    @update:model-value="
+                      variant.barcode = $event;
+                      onFieldChange(variant);
+                    "
+                  />
+                </label>
               </div>
-            </InsetGroupItem>
-            <InsetGroupItem as="div" class="min-h-12 px-3.5 py-2">
-              {{ $t("products.productVariantsEditor.priceHeader") }}
               <template #trailing>
-                <NumberField
-                  class="w-[min(11rem,46vw)]"
-                  :min="0"
-                  :step="0.01"
-                  :format-options="{
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2,
-                  }"
-                  :model-value="variant.price ?? undefined"
-                  @update:model-value="setPrice(variant, $event)"
+                <Button
+                  v-if="canEdit"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  :disabled="deletingId === variant.id"
+                  :aria-label="
+                    $t('products.productVariantsEditor.deleteAction')
+                  "
+                  @click="handleDelete(variant)"
                 >
-                  <NumberFieldInput :class="trailingNumberClass" />
-                </NumberField>
+                  <Spinner v-if="deletingId === variant.id" />
+                  <Trash2 v-else class="size-4" />
+                </Button>
               </template>
-            </InsetGroupItem>
-            <InsetGroupItem as="div" class="min-h-12 px-3.5 py-2">
-              {{ $t("products.productVariantsEditor.quantityHeader") }}
-              <template #trailing>
-                <NumberField
-                  class="w-[min(11rem,46vw)]"
-                  :min="0"
-                  :step="1"
-                  :model-value="variant.quantity ?? undefined"
-                  @update:model-value="setQuantity(variant, $event)"
-                >
-                  <NumberFieldInput :class="trailingNumberClass" />
-                </NumberField>
-              </template>
-            </InsetGroupItem>
-            <InsetGroupItem
-              class="min-h-12 px-3.5 py-3.5 text-destructive"
-              :disabled="deletingId === variant.id"
-              @click="handleDelete(variant)"
-            >
-              <span class="flex items-center gap-2">
-                <Spinner v-if="deletingId === variant.id" />
-                {{ $t("products.productVariantsEditor.deleteAction") }}
-              </span>
             </InsetGroupItem>
           </InsetGroup>
         </template>
       </draggable>
 
-      <InsetGroup>
+      <InsetGroup v-if="canEdit">
         <InsetGroupItem
           :disabled="isAdding"
           :aria-label="$t('products.productVariantsEditor.addLink')"

@@ -219,14 +219,43 @@ public class GroupSyncService
         // If a link already exists - update group membership
         if (existingLink != null && !string.IsNullOrEmpty(existingLink.externalGroupId))
         {
-            // Get current products in the marketplace group
-            // TODO: can be optimized by comparing only changes
+            var addResult = await adapter.AddProductsToGroupAsync(
+                connection, existingLink.externalGroupId, productExternalIds, ct);
 
-            // For now just update the status
+            if (!addResult.Success)
+            {
+                _logger.LogWarning(
+                    "AddProductsToGroupAsync failed for group {GroupId} ({ExternalGroupId}): {Error}. Recreating.",
+                    group.Id, existingLink.externalGroupId, addResult.ErrorMessage);
+
+                var recreate = await adapter.CreateGroupAsync(
+                    connection, productExternalIds, group.name, ct);
+                if (!recreate.Success || string.IsNullOrEmpty(recreate.ExternalGroupId))
+                    return GroupExportResult.Failure(
+                        recreate.ErrorMessage ?? addResult.ErrorMessage ?? "Error updating group");
+
+                existingLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
+                {
+                    externalGroupId = recreate.ExternalGroupId,
+                    externalGroupName = group.name,
+                    status = ProductMarketplaceStatus.Synced,
+                    lastErrorMessage = null,
+                    lastSyncAt = DateTime.UtcNow
+                });
+                await _context.SaveChangesAsync(ct);
+
+                return GroupExportResult.Ok(
+                    existingLink.Id,
+                    recreate.ExternalGroupId,
+                    isNew: false,
+                    isFieldBased: false);
+            }
+
             existingLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
             {
                 externalGroupName = group.name,
                 status = ProductMarketplaceStatus.Synced,
+                lastErrorMessage = null,
                 lastSyncAt = DateTime.UtcNow
             });
             await _context.SaveChangesAsync(ct);

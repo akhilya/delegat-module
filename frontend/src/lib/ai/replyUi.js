@@ -6,10 +6,17 @@
 
 const FIELD_KEY = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 const ADAPTER_KEY = /^[a-zA-Z0-9._-]{1,64}$/;
+const SAFE_PATH = /^\/[a-zA-Z0-9\-/._]*(\?[A-Za-z0-9._~%=&+,-]*)?$/;
+
+function safeInAppPath(raw) {
+  if (typeof raw !== "string") return "";
+  const url = raw.trim();
+  if (!url.startsWith("/") || url.length > 180 || !SAFE_PATH.test(url)) return "";
+  return url;
+}
 
 export function normalizeChatAction(raw) {
-  const url =
-    typeof raw?.url === "string" && raw.url.startsWith("/") ? raw.url : "";
+  const url = safeInAppPath(raw?.url);
   const prompt =
     !url && typeof raw?.prompt === "string" ? raw.prompt.trim().slice(0, 200) : "";
   const label = String(raw?.label || url || prompt || "")
@@ -64,6 +71,31 @@ export function interpolateFollowUp(template, values) {
   return text.replace(/\{([a-zA-Z][a-zA-Z0-9_]{0,39})\}/g, (_, key) => {
     return normalized[key] ?? "";
   });
+}
+
+/** Labels for a submitted questionnaire — shown on the card, not as a chat bubble. */
+export function recapFormAnswers(questions, answers) {
+  const rows = [];
+  for (const question of questions || []) {
+    const raw = answers?.[question.key];
+    if (raw == null || raw === "") continue;
+    const values = Array.isArray(raw) ? raw : [raw];
+    const labels = values
+      .map((value) => {
+        const text = formatAnswerValue(value);
+        if (!text) return "";
+        const choice = (question.choices || []).find((item) => item.value === text);
+        return choice?.label || text;
+      })
+      .filter(Boolean);
+    if (!labels.length) continue;
+    rows.push({
+      key: question.key,
+      title: question.title || question.key,
+      answer: labels.join(", "),
+    });
+  }
+  return rows;
 }
 
 function clip(value, max) {

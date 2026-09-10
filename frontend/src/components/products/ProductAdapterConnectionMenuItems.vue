@@ -48,6 +48,8 @@ import {
   normalizeExportMode,
 } from "@/lib/adapterConnectionStatus";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 
 export default {
   name: "ProductAdapterConnectionMenuItems",
@@ -179,11 +181,15 @@ export default {
       return Boolean(this.connection.mappingMissing && maps.length > 0);
     },
     exportDisabled() {
+      if (!this.canManageAdapters) return true;
       if (this.exportBusy) return true;
       if (this.mode === "missingMapping") return true;
       if (this.connection.mappingMissing) return true;
       if (!this.connection.canExport && this.mode !== "ready") return true;
       return false;
+    },
+    canManageAdapters() {
+      return canAct(getCachedMe(), PERMS.MarketplaceManage);
     },
   },
   methods: {
@@ -226,7 +232,7 @@ export default {
     {{ $t("common.loading") }}
   </div>
 
-  <template v-else-if="mode === 'missingMapping'">
+  <template v-else-if="mode === 'missingMapping' && canManageAdapters">
     <component :is="ui.Group">
       <component :is="ui.Item" v-if="configureMappingTo" as-child>
         <RouterLink :to="configureMappingTo">
@@ -273,7 +279,7 @@ export default {
     </component>
   </template>
 
-  <template v-else-if="mode === 'ready'">
+  <template v-else-if="mode === 'ready' && canManageAdapters">
     <component :is="ui.Group">
       <component
         :is="ui.Item"
@@ -325,7 +331,7 @@ export default {
     </component>
   </template>
 
-  <template v-else>
+  <template v-else-if="canManageAdapters">
     <component :is="ui.Group">
       <component
         :is="ui.Label"
@@ -496,4 +502,19 @@ export default {
       {{ $t("productMarketplaceIntegrations.menuUnlink") }}
     </component>
   </template>
+
+  <component
+    :is="ui.Item"
+    v-else-if="marketplaceUrl"
+    as-child
+  >
+    <a
+      :href="marketplaceUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <ExternalLink />
+      {{ $t("productMarketplaceIntegrations.openOnAdapter") }}
+    </a>
+  </component>
 </template>

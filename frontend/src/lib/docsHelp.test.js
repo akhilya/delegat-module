@@ -47,7 +47,11 @@ describe("docsSlugForPath", () => {
     );
     assert.equal(
       docsSlugForPath("/adapter/9/categories/import", { adapterKey: "wildberries" }),
-      "adapters/wildberries",
+      "workspace/mapping",
+    );
+    assert.equal(
+      docsSlugForPath("/adapter/9/categories/4", { adapterKey: "ozon" }),
+      "workspace/mapping",
     );
     assert.equal(
       docsSlugForPath("/adapter/9", { adapterKey: "unknown" }),
@@ -62,18 +66,25 @@ describe("docsSlugForPath", () => {
     assert.equal(docsSlugForPath("/settings/admin/ai"), "workspace/ai");
     assert.equal(docsSlugForPath("/tools"), "workspace/tools");
     assert.equal(docsSlugForPath("/tools/catalog-connect"), "workspace/catalog-connect");
+    assert.equal(docsSlugForPath("/tools/catalog-scrape"), "workspace/catalog-scrape");
+    assert.equal(docsSlugForPath("/tools/public-api-try"), "workspace/public-api");
     assert.equal(docsSlugForPath("/tools/export-all-prices"), null);
+    assert.equal(docsSlugForPath("/settings/admin/api"), "workspace/public-api");
+    assert.equal(docsSlugForPath("/settings/admin/stores"), "workspace/settings");
+    assert.equal(docsSlugForPath("/settings/admin/users"), "workspace/settings");
+    assert.equal(docsSlugForPath("/settings/adapter-logs"), "workspace/settings");
+    assert.equal(docsSlugForPath("/setup"), "workspace/store");
+  });
+
+  it("maps orders and notes", () => {
+    assert.equal(docsSlugForPath("/orders"), "workspace/orders");
+    assert.equal(docsSlugForPath("/orders/3/pack"), "workspace/orders");
+    assert.equal(docsSlugForPath("/notes"), "workspace/notes");
   });
 
   it("returns null when there is no product article", () => {
-    assert.equal(docsSlugForPath("/orders"), null);
-    assert.equal(docsSlugForPath("/orders/3/pack"), null);
-    assert.equal(docsSlugForPath("/notes"), null);
-    assert.equal(docsSlugForPath("/settings/admin/stores"), null);
-    assert.equal(docsSlugForPath("/settings/admin/users"), null);
-    assert.equal(docsSlugForPath("/settings/admin/error-logs"), null);
-    assert.equal(docsSlugForPath("/tools/catalog-scrape"), null);
-    assert.equal(docsSlugForPath("/tools/public-api-try"), null);
+    assert.equal(docsSlugForPath("/signIn"), null);
+    assert.equal(docsSlugForPath("/tools/export-all-prices"), null);
   });
 });
 
@@ -82,6 +93,12 @@ describe("pageHelpSlug", () => {
     assert.equal(pageHelpSlug("/products", null), null);
     assert.equal(pageHelpSlug("/products", { groups: [] }), null);
     assert.equal(pageHelpSlug("/orders", catalog), null);
+    assert.equal(
+      pageHelpSlug("/orders", {
+        groups: [{ items: [{ slug: "workspace/orders" }] }],
+      }),
+      "workspace/orders",
+    );
     assert.equal(pageHelpSlug("/products", catalog), "workspace/products");
     assert.equal(
       pageHelpSlug("/adapter/2", catalog, { adapterKey: "ozon" }),

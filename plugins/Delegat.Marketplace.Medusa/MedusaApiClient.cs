@@ -82,6 +82,40 @@ public sealed class MedusaApiClient : IDisposable
         CancellationToken ct = default)
         => PostAsync<MedusaBulkStocksRequest, MedusaBulkMutationResponse>("stocks/bulk", request, ct);
 
+    public Task<MedusaUpsertGroupResponse> UpsertGroupAsync(
+        MedusaUpsertGroupRequest request,
+        CancellationToken ct = default)
+        => PostAsync<MedusaUpsertGroupRequest, MedusaUpsertGroupResponse>("groups/upsert", request, ct);
+
+    public Task<MedusaGroupsResponse> GetGroupsAsync(CancellationToken ct = default)
+        => GetAsync<MedusaGroupsResponse>("groups", ct);
+
+    public Task<MedusaGroupMembershipResponse> AddProductsToGroupAsync(
+        string collectionId,
+        MedusaGroupMembershipRequest request,
+        CancellationToken ct = default)
+        => PostAsync<MedusaGroupMembershipRequest, MedusaGroupMembershipResponse>(
+            $"groups/{Uri.EscapeDataString(collectionId)}/products",
+            request,
+            ct);
+
+    public Task<MedusaGroupMembershipResponse> RemoveProductsFromGroupAsync(
+        string collectionId,
+        MedusaGroupMembershipRequest request,
+        CancellationToken ct = default)
+        => PostAsync<MedusaGroupMembershipRequest, MedusaGroupMembershipResponse>(
+            $"groups/{Uri.EscapeDataString(collectionId)}/products/remove",
+            request,
+            ct);
+
+    public Task<MedusaDeleteGroupResponse> DeleteGroupAsync(
+        string collectionId,
+        CancellationToken ct = default)
+        => PostAsync<object, MedusaDeleteGroupResponse>(
+            $"groups/{Uri.EscapeDataString(collectionId)}/delete",
+            new { },
+            ct);
+
     public async Task<MedusaProductGetResponse?> GetProductAsync(string productId, CancellationToken ct = default)
     {
         try

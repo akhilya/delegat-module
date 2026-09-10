@@ -34,6 +34,7 @@ public class AiPromptsChatTests
         Assert.DoesNotContain("client_upload", prompt, StringComparison.Ordinal);
         Assert.Contains("Be bold", prompt, StringComparison.Ordinal);
         Assert.Contains("buttons in the reply", prompt, StringComparison.Ordinal);
+        Assert.Contains("/products?page=2&pageSize=15", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Match those names to products", prompt, StringComparison.Ordinal);
     }
 
@@ -165,6 +166,7 @@ public class AiPromptsChatTests
     public void ChatSystem_ReplyButtonsAndForms()
     {
         var prompt = Prompt();
+        Assert.Contains("PATCH /products/<id>/group", Prompt(), StringComparison.Ordinal);
         Assert.Contains("ask_form", prompt, StringComparison.Ordinal);
         Assert.Contains("never both", prompt, StringComparison.Ordinal);
         Assert.Contains("kind=connection", prompt, StringComparison.Ordinal);

@@ -56,6 +56,7 @@ import { http, loadMe } from "@/main";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { artifactDownloadUrl, triggerBrowserDownload } from "@/lib/artifactDownload";
 import { hasPermission, PERMS } from "@/lib/permissions";
+import { formatAdapterError } from "@/lib/adapterErrorText";
 import { canStopOperation } from "@/lib/operationsControl";
 
 const props = defineProps({
@@ -282,7 +283,6 @@ const showExplainAi = computed(() => aiAvailable.value);
 const MAX_LOG_CHARS = 48000;
 
 async function ensureLogsLoaded() {
-  if (!props.operation._fromHistory || props.operation._logsLoaded) return;
   loadingLogs.value = true;
   try {
     await store.dispatch("operations/loadOperationLogs", props.operation.id);
@@ -437,7 +437,7 @@ function onStop() {
             v-if="isFinished && operation.summary"
             class="mt-0.5 line-clamp-2 text-xs font-normal leading-snug text-muted-foreground"
           >
-            {{ operation.summary }}
+            {{ formatAdapterError(operation.summary) }}
           </p>
           <div
             v-if="showProgress"

@@ -21,14 +21,20 @@ import {
   QuestionnaireSubmit,
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
-import { answersFromFormData, interpolateFollowUp } from "@/lib/ai/replyUi.js";
+import {
+  answersFromFormData,
+  interpolateFollowUp,
+  recapFormAnswers,
+} from "@/lib/ai/replyUi.js";
 import { extractResponseData, displaySonnerError } from "@/store/sonnerHelper";
 
 const props = defineProps({
   form: { type: Object, required: true },
+  submitted: { type: Boolean, default: false },
+  answers: { type: Object, default: null },
 });
 
-const emit = defineEmits(["ask"]);
+const emit = defineEmits(["submit"]);
 const store = useStore();
 const { t } = useI18n();
 
@@ -36,6 +42,7 @@ const adapters = ref([]);
 const loadingAdapters = ref(false);
 const submitting = ref(false);
 const done = ref(false);
+const localAnswers = ref(null);
 const error = ref("");
 const createForm = ref(null);
 const skipped = reactive({});
@@ -56,9 +63,14 @@ const questionnaireItems = computed(() =>
     choices: question.choices?.map((choice) => ({ value: choice.value })),
   })),
 );
+const isSubmitted = computed(() => props.submitted || done.value);
+const recap = computed(() =>
+  recapFormAnswers(questions.value, props.answers || localAnswers.value || {}),
+);
 
 function resetState() {
-  done.value = false;
+  done.value = props.submitted;
+  if (!props.submitted) localAnswers.value = null;
   error.value = "";
   for (const key of Object.keys(skipped)) delete skipped[key];
 }
@@ -68,6 +80,14 @@ watch(
   () => {
     resetState();
   },
+);
+
+watch(
+  () => props.submitted,
+  (value) => {
+    if (value) done.value = true;
+  },
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -95,7 +115,7 @@ function onQuestionStatus(key, status) {
 
 function submitQuestions(event) {
   event.preventDefault();
-  if (submitting.value || done.value) return;
+  if (submitting.value || isSubmitted.value) return;
   const formEl = event.target;
   if (!(formEl instanceof HTMLFormElement)) return;
   const values = answersFromFormData(
@@ -103,12 +123,17 @@ function submitQuestions(event) {
     new FormData(formEl),
     skipped,
   );
+  localAnswers.value = values;
   done.value = true;
-  emit("ask", interpolateFollowUp(props.form.followUp, values));
+  emit("submit", {
+    formId: props.form.id,
+    answers: values,
+    prompt: interpolateFollowUp(props.form.followUp, values),
+  });
 }
 
 function submitConnection() {
-  if (submitting.value || done.value) return;
+  if (submitting.value || isSubmitted.value) return;
   const data = createForm.value?.payload?.();
   if (!data?.adapterKey || !createForm.value?.canSubmit) {
     error.value = t("marketplace.marketplacePage.enterCredentials");
@@ -122,14 +147,19 @@ function submitConnection() {
       submitting.value = false;
       const created = extractResponseData(response, {});
       done.value = true;
-      emit(
-        "ask",
-        t("ai.form.connectionFollowUp", {
+      emit("submit", {
+        formId: props.form.id,
+        answers: {
+          name: data.name,
+          adapter: data.adapterKey,
+          id: created.id ?? "",
+        },
+        prompt: t("ai.form.connectionFollowUp", {
           name: data.name,
           adapter: data.adapterKey,
           id: created.id ?? "",
         }),
-      );
+      });
     },
     onError: (err) => {
       submitting.value = false;
@@ -165,22 +195,38 @@ function submitConnection() {
         :initial-adapter-key="form.adapterKey"
         :initial-name="form.name"
         :lock-adapter="!!form.adapterKey"
-        :disabled="submitting || done"
+        :disabled="submitting || isSubmitted"
       />
       <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
       <Button
         type="submit"
         size="sm"
         class="self-start"
-        :disabled="submitting || done || loadingAdapters"
+        :disabled="submitting || isSubmitted || loadingAdapters"
       >
-        {{ done ? t("ai.form.connected") : submitLabel }}
+        {{ isSubmitted ? t("ai.form.connected") : submitLabel }}
       </Button>
     </form>
 
-    <p v-else-if="done" class="mt-2 text-xs text-muted-foreground">
-      {{ t("ai.form.sent") }}
-    </p>
+    <div
+      v-else-if="isSubmitted"
+      class="mt-3 flex flex-col gap-3"
+    >
+      <div
+        v-for="row in recap"
+        :key="row.key"
+        class="min-w-0"
+      >
+        <p class="text-xs text-muted-foreground">{{ row.title }}</p>
+        <p class="text-sm leading-snug">{{ row.answer }}</p>
+      </div>
+      <p
+        v-if="!recap.length"
+        class="text-xs text-muted-foreground"
+      >
+        {{ t("ai.form.answered") }}
+      </p>
+    </div>
 
     <Questionnaire
       v-else

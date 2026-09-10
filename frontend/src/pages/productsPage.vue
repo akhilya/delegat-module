@@ -27,6 +27,8 @@ import {
 } from "@/lib/productSort";
 import { mapActions } from "vuex";
 import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
+import { getCachedMe } from "@/lib/meCache";
+import { canAct, PERMS } from "@/lib/permissions";
 import { toast } from "vue-sonner";
 import { Button } from "@/components/ui/button";
 import NavSearchField from "@/components/NavSearchField.vue";
@@ -857,6 +859,12 @@ export default {
     },
   },
   computed: {
+    canManageCatalog() {
+      return canAct(getCachedMe(), PERMS.CatalogManage);
+    },
+    canManageAdapters() {
+      return canAct(getCachedMe(), PERMS.MarketplaceManage);
+    },
     categoryFilterLabel() {
       if (this.filterCategoryId == null) {
         return this.$t("pages.productsPage.filters.allCategories");
@@ -1184,7 +1192,7 @@ export default {
             </Button>
 
             <!-- Normal mode actions -->
-            <template v-if="!isTrashMode">
+            <template v-if="!isTrashMode && canManageCatalog">
               <div class="flex">
                 <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
                   <Pencil class="h-4 w-4 mr-1" />
@@ -1195,7 +1203,7 @@ export default {
                   {{ $t("pages.productsPage.bulkEditFromTable") }}
                 </Button>
               </div>
-              <Button variant="outline" size="sm" class="h-8" @click="isBulkAdapterDialogOpen = true">
+              <Button v-if="canManageAdapters" variant="outline" size="sm" class="h-8" @click="isBulkAdapterDialogOpen = true">
                 <RefreshCw class="h-4 w-4 mr-1" />
                 {{ $t("nav.adapters") }}
               </Button>

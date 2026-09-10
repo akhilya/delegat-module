@@ -91,7 +91,7 @@ import {
   splitPlanExecution,
   timelineFromLegacy,
 } from "@/lib/ai/timeline";
-import { isAiControlMessage } from "@/lib/ai/persist";
+import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
 import "./aiMessage.css";
 
@@ -394,6 +394,24 @@ async function submit() {
 function onChatAsk(prompt) {
   if (isLoading.value || !hasEnabledModels.value || !prompt) return;
   store.dispatch("aiChat/sendMessage", prompt);
+}
+
+function onFormSubmit(msg, payload) {
+  const prompt = payload?.prompt;
+  if (isLoading.value || !hasEnabledModels.value || !prompt) return;
+  store.commit("aiChat/setFormReply", {
+    messageId: msg.id,
+    formId: payload.formId,
+    answers: payload.answers || {},
+  });
+  store.dispatch("aiChat/syncHistory");
+  store.dispatch("aiChat/sendMessage", {
+    content: prompt,
+    formReply: {
+      formId: payload.formId,
+      answers: payload.answers || {},
+    },
+  });
 }
 
 function pickFiles() {
@@ -737,7 +755,7 @@ function isLatestTurn(msg) {
           <div v-else class="ai-thread flex flex-col gap-4">
             <template v-for="msg in messages" :key="msg.id">
               <Message
-                v-if="msg.role === 'user' && !isAiControlMessage(msg)"
+                v-if="msg.role === 'user' && !isHiddenUserMessage(msg)"
                 align="end"
               >
                 <MessageContent>
@@ -845,7 +863,9 @@ function isLatestTurn(msg) {
                       v-for="form in chatForms(msg)"
                       :key="form.id"
                       :form="form"
-                      @ask="onChatAsk"
+                      :submitted="!!msg.formReplies?.[String(form.id)]"
+                      :answers="msg.formReplies?.[String(form.id)]?.answers"
+                      @submit="onFormSubmit(msg, $event)"
                     />
                   </div>
 

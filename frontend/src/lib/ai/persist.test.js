@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AI_CONFIRM_PLAN,
+  applyFormReplies,
   applyPlanDecisions,
   foldPlanTurns,
   hydrateConversation,
   isAiControlMessage,
+  isHiddenUserMessage,
   mapStoredMessage,
   serializeToolCallsJson,
   toolResultFailed,
@@ -89,6 +91,74 @@ describe("user attachments", () => {
     });
     assert.equal(m.contextCard.title, "Import");
     assert.equal(m.attachments[0].fileName, "log.txt");
+  });
+});
+
+describe("form replies", () => {
+  it("round-trips answers on the assistant envelope", () => {
+    const json = serializeToolCallsJson({
+      toolCalls: [{ id: "ask1", name: "ask_form", result: { form: true } }],
+      timeline: [{ type: "tool", id: "ask1" }],
+      formReplies: { ask1: { answers: { adapter: "ozon" } } },
+    });
+    const parsed = JSON.parse(json);
+    assert.equal(parsed._ui, "assistantTurn");
+    assert.equal(parsed.formReplies.ask1.answers.adapter, "ozon");
+    const m = mapStoredMessage({
+      dbId: 3,
+      role: "assistant",
+      content: "Which marketplace?",
+      toolCallsJson: json,
+    });
+    assert.equal(m.formReplies.ask1.answers.adapter, "ozon");
+  });
+
+  it("hides the follow-up user turn and stamps the previous assistant card", () => {
+    const json = serializeToolCallsJson({
+      formReply: { formId: "ask1", answers: { adapter: "ozon" } },
+    });
+    const parsed = JSON.parse(json);
+    assert.equal(parsed._ui, "formReply");
+    const user = mapStoredMessage({
+      dbId: 4,
+      role: "user",
+      content: "Use ozon",
+      toolCallsJson: json,
+    });
+    assert.equal(user.formReply.formId, "ask1");
+    assert.equal(isHiddenUserMessage(user), true);
+    const messages = applyFormReplies([
+      { role: "assistant", formReplies: {} },
+      user,
+    ]);
+    assert.equal(messages[0].formReplies.ask1.answers.adapter, "ozon");
+  });
+
+  it("hydrates a submitted questionnaire after reload", () => {
+    const messages = hydrateConversation([
+      {
+        dbId: 1,
+        role: "assistant",
+        content: "Which marketplace?",
+        toolCallsJson: JSON.stringify({
+          _ui: "assistantTurn",
+          tools: [{ id: "ask1", name: "ask_form" }],
+          timeline: [{ type: "tool", id: "ask1" }],
+        }),
+      },
+      {
+        dbId: 2,
+        role: "user",
+        content: "Use ozon",
+        toolCallsJson: JSON.stringify({
+          _ui: "formReply",
+          formId: "ask1",
+          answers: { adapter: "ozon" },
+        }),
+      },
+    ]);
+    assert.equal(messages[0].formReplies.ask1.answers.adapter, "ozon");
+    assert.equal(messages[1].formReply.formId, "ask1");
   });
 });
 

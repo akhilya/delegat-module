@@ -104,8 +104,8 @@
   --duration-drawer-out: 210ms;
 }
 
-/* Region wait: spinner and the first paint of page body fade in.
-   Opacity only. Not route choreography and not a delayed entrance. */
+/* Region wait and route enter: spinner, first paint, and page swap.
+   Opacity only. No slide, no stagger. */
 @keyframes page-region-in {
   from {
     opacity: 0;

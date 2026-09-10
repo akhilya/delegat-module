@@ -60,6 +60,12 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
     public bool showOnProductPage { get; set; } = true;
 
     /// <summary>
+    /// Whether this attribute is shown as a spec on the public shop product page.
+    /// Independent of marketplace field mappings.
+    /// </summary>
+    public bool showInShop { get; set; } = false;
+
+    /// <summary>
     /// Display order within the category.
     /// </summary>
     public int sortOrder { get; set; } = 0;
@@ -152,6 +158,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         isMultiline = form.isMultiline;
         allowCustomValues = form.allowCustomValues;
         showOnProductPage = form.isRequired || form.showOnProductPage;
+        showInShop = form.showInShop;
         sortOrder = form.sortOrder;
         options = form.options;
         defaultValue = form.defaultValue;
@@ -189,6 +196,8 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         // Required attributes must always appear on the product page.
         if (isRequired)
             showOnProductPage = true;
+        if (form.showInShop.HasValue)
+            showInShop = form.showInShop.Value;
         if (form.sortOrder.HasValue)
             sortOrder = form.sortOrder.Value;
         options = form.options;
@@ -220,6 +229,7 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
             isMultiline = isMultiline,
             allowCustomValues = allowCustomValues,
             showOnProductPage = isRequired || showOnProductPage,
+            showInShop = showInShop,
             sortOrder = sortOrder,
             options = options,
             defaultValue = defaultValue,
@@ -322,6 +332,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Callers should set true for marketplace imports (entity default is true).
         /// </summary>
         public bool showOnProductPage { get; set; }
+
+        /// <summary>
+        /// Whether this attribute is shown as a spec on the public shop product page.
+        /// </summary>
+        public bool showInShop { get; set; }
 
         /// <summary>
         /// Display order within the category.
@@ -442,6 +457,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         public bool showOnProductPage { get; set; }
 
         /// <summary>
+        /// Whether this attribute is shown as a spec on the public shop product page.
+        /// </summary>
+        public bool showInShop { get; set; }
+
+        /// <summary>
         /// JSON-serialized list of allowed options.
         /// </summary>
         public string? options { get; set; }
@@ -548,6 +568,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Updated product page visibility flag.
         /// </summary>
         public bool? showOnProductPage { get; set; }
+
+        /// <summary>
+        /// Updated shop storefront visibility flag.
+        /// </summary>
+        public bool? showInShop { get; set; }
 
         /// <summary>
         /// Updated display order.
@@ -664,6 +689,11 @@ public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeD
         /// Whether this attribute is shown on the product edit page.
         /// </summary>
         public bool showOnProductPage { get; set; }
+
+        /// <summary>
+        /// Whether this attribute is shown as a spec on the public shop product page.
+        /// </summary>
+        public bool showInShop { get; set; }
 
         /// <summary>
         /// Display order within the category.

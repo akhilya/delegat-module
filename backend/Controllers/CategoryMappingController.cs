@@ -415,6 +415,12 @@ public class CategoryMappingController : ControllerBase
                     if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
                     {
                         var cardFields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
+                        if (LocalCategoryAdapterFields.ShouldExposeLocalAttributes(adapter.Key))
+                        {
+                            var attrs = await _unitOfWork.Repository<CategoryAttribute>()
+                                .FindAllAsync(a => a.categoryId == mapping.localCategoryId);
+                            cardFields = LocalCategoryAdapterFields.Merge(cardFields, attrs);
+                        }
                         var cardSpecs = cardFields.OrderBy(f => f.SortOrder).Select((field, index) =>
                         {
                             var (sourceType, sourceField, sourceAttributeId) =
@@ -1020,6 +1026,9 @@ public class CategoryMappingController : ControllerBase
     {
         var categoryAttributes = await _unitOfWork.Repository<CategoryAttribute>()
             .FindAllAsync(a => a.categoryId == localCategoryId);
+
+        if (LocalCategoryAdapterFields.ShouldExposeLocalAttributes(adapter.Key))
+            fields = LocalCategoryAdapterFields.Merge(fields.ToList(), categoryAttributes);
 
         var attributeMap = categoryAttributes
             .SelectMany(a => new[]

@@ -5,7 +5,7 @@ Validated in chat (2026-09-09). Implementation lives in `AgentToolHost` / `Agent
 ## Reply buttons (`navigate_to`)
 
 - Up to **6** buttons via `items[]`.
-- **One action per button:** `url` (open an in-app path) XOR `prompt` (send a follow-up). If both are set, keep `url` and drop `prompt`.
+- **One action per button:** `url` (open an in-app path, optional query e.g. `/products?page=2&pageSize=15`) XOR `prompt` (send a follow-up). If both are set, keep `url` and drop `prompt`.
 - Open and Continue are visually distinct. Open shows the **path**. Continue shows the **follow-up text**.
 - Chrome stays on the reply, not in the process disclosure.
 

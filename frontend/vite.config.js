@@ -225,6 +225,34 @@ export default defineConfig(({ command }) => {
         "lucide-vue-next": path.resolve(__dirname, "./src/lib/icons.js"),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            // Mapping canvas stays on its route chunk.
+            if (id.includes("@vue-flow") || id.includes("@dagrejs")) return;
+            if (
+              id.includes("vue-router") ||
+              id.includes("vuex") ||
+              id.includes("vue-i18n") ||
+              /[/\\]vue[/\\]/.test(id)
+            ) {
+              return "vue";
+            }
+            if (
+              id.includes("reka-ui") ||
+              id.includes("@vueuse") ||
+              id.includes("@tanstack")
+            ) {
+              return "ui";
+            }
+            if (id.includes("@microsoft/signalr")) return "signalr";
+            if (id.includes("axios")) return "http";
+          },
+        },
+      },
+    },
     preview: {
       allowedHosts: ["dashboard.your-domain.com"],
     },

@@ -44,11 +44,24 @@ export function docsSlugForPath(pathname, opts = {}) {
     return "workspace/attributes";
   }
 
+  if (path === "/orders" || path.startsWith("/orders/")) {
+    return "workspace/orders";
+  }
+  if (path === "/notes" || path.startsWith("/notes/")) {
+    return "workspace/notes";
+  }
+  if (path === "/setup" || path.startsWith("/setup/")) {
+    return "workspace/store";
+  }
+
   if (path === "/adapter/plugins" || path.startsWith("/adapter/plugins/")) {
     return "workspace/adapters";
   }
   const adapterMatch = path.match(/^\/adapter(?:\/(\d+))?(?:\/.*)?$/);
   if (adapterMatch) {
+    if (adapterMatch[1] && /\/categories\//.test(path)) {
+      return "workspace/mapping";
+    }
     if (adapterMatch[1]) {
       const key = String(opts.adapterKey || "")
         .trim()
@@ -61,16 +74,21 @@ export function docsSlugForPath(pathname, opts = {}) {
   if (path === "/settings/admin/ai" || path.startsWith("/settings/admin/ai/")) {
     return "workspace/ai";
   }
-  if (
-    path === "/settings" ||
-    path === "/settings/user" ||
-    path === "/settings/operations"
-  ) {
+  if (path === "/settings/admin/api" || path.startsWith("/settings/admin/api/")) {
+    return "workspace/public-api";
+  }
+  if (path === "/settings" || path.startsWith("/settings/")) {
     return "workspace/settings";
   }
 
   if (path === "/tools/catalog-connect") {
     return "workspace/catalog-connect";
+  }
+  if (path === "/tools/catalog-scrape") {
+    return "workspace/catalog-scrape";
+  }
+  if (path === "/tools/public-api-try") {
+    return "workspace/public-api";
   }
   if (path === "/tools") {
     return "workspace/tools";

@@ -170,6 +170,18 @@ public sealed class MedusaVariantPayload
     public Dictionary<string, string>? Attributes { get; set; }
 }
 
+public sealed class MedusaSpecDto
+{
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = "";
+
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = "";
+
+    [JsonPropertyName("value")]
+    public string Value { get; set; } = "";
+}
+
 public sealed class MedusaProductPayload
 {
     [JsonPropertyName("delegat_product_id")]
@@ -211,11 +223,23 @@ public sealed class MedusaProductPayload
     [JsonPropertyName("category_ids")]
     public List<string>? CategoryIds { get; set; }
 
+    [JsonPropertyName("group_id")]
+    public string? GroupId { get; set; }
+
+    [JsonPropertyName("group_name")]
+    public string? GroupName { get; set; }
+
     [JsonPropertyName("image_urls")]
     public List<string>? ImageUrls { get; set; }
 
+    [JsonPropertyName("image_keys")]
+    public List<string>? ImageKeys { get; set; }
+
     [JsonPropertyName("attributes")]
     public Dictionary<string, string>? Attributes { get; set; }
+
+    [JsonPropertyName("specs")]
+    public List<MedusaSpecDto>? Specs { get; set; }
 
     [JsonPropertyName("variants")]
     public List<MedusaVariantPayload>? Variants { get; set; }
@@ -363,6 +387,102 @@ public sealed class MedusaProductGetResponse
 
     [JsonPropertyName("category_name")]
     public string? CategoryName { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public sealed class MedusaUpsertGroupRequest
+{
+    [JsonPropertyName("collection_id")]
+    public string? CollectionId { get; set; }
+
+    [JsonPropertyName("delegat_group_id")]
+    public string? DelegatGroupId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("product_ids")]
+    public List<string>? ProductIds { get; set; }
+}
+
+public sealed class MedusaUpsertGroupResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("collection_id")]
+    public string? CollectionId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public sealed class MedusaGroupMembershipRequest
+{
+    [JsonPropertyName("product_ids")]
+    public List<string> ProductIds { get; set; } = new();
+}
+
+public sealed class MedusaGroupMembershipResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("added")]
+    public int Added { get; set; }
+
+    [JsonPropertyName("removed")]
+    public int Removed { get; set; }
+
+    [JsonPropertyName("failed")]
+    public int Failed { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public sealed class MedusaGroupDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("handle")]
+    public string? Handle { get; set; }
+
+    [JsonPropertyName("product_ids")]
+    public List<string>? ProductIds { get; set; }
+}
+
+public sealed class MedusaGroupsResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("groups")]
+    public List<MedusaGroupDto>? Groups { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public sealed class MedusaDeleteGroupResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("collection_id")]
+    public string? CollectionId { get; set; }
 
     [JsonPropertyName("error")]
     public string? Error { get; set; }

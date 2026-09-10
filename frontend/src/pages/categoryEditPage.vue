@@ -153,6 +153,7 @@ export default {
         isMultiline: false,
         allowCustomValues: false,
         showOnProductPage: true,
+        showInShop: false,
         options: "",
         defaultValue: "",
         description: "",
@@ -379,6 +380,7 @@ export default {
         isMultiline: false,
         allowCustomValues: false,
         showOnProductPage: true,
+        showInShop: false,
         options: "",
         defaultValue: "",
         description: "",
@@ -423,6 +425,7 @@ export default {
         allowCustomValues: attribute.allowCustomValues === true,
         showOnProductPage:
           attribute.isRequired || attribute.showOnProductPage !== false,
+        showInShop: attribute.showInShop === true,
         options:
           this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD
             ? ""
@@ -535,6 +538,21 @@ export default {
       this.attributeForm.showOnProductPage = !!value;
     },
 
+    async toggleShowInShop(attribute) {
+      const next = !attribute.showInShop;
+      attribute.showInShop = next;
+      await this.updateAttribute({
+        categoryId: this.categoryId,
+        attributeId: attribute.id,
+        attribute: { showInShop: next },
+        onSuccess: () => {},
+        onError: (error) => {
+          attribute.showInShop = !next;
+          displaySonnerError(error);
+        },
+      });
+    },
+
     async handleSaveAttribute() {
       const nameIssue = fieldLimitIssue(
         this.attributeForm.name,
@@ -615,6 +633,7 @@ export default {
           : false,
         showOnProductPage:
           this.attributeForm.isRequired || this.attributeForm.showOnProductPage,
+        showInShop: !!this.attributeForm.showInShop,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
         defaultValue: this.attributeForm.defaultValue.trim() || null,
         description: this.attributeForm.description.trim() || null,
@@ -1110,11 +1129,22 @@ export default {
                         class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
                         :title="$t('pages.categoryEditPage.uniqueFieldTitle')"
                       >{{ $t("pages.categoryEditPage.uniqueBadge") }}</span>
+                      <span
+                        v-if="attribute.showInShop"
+                        class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                        :title="$t('pages.categoryEditPage.showInShopLabel')"
+                      >{{ $t("pages.categoryEditPage.showInShopBadge") }}</span>
                     </p>
                     <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
                       {{ attributeRowSubtitle(attribute) }}
                     </p>
                     <template #trailing>
+                      <Switch
+                        :model-value="!!attribute.showInShop"
+                        :aria-label="$t('pages.categoryEditPage.showInShopLabel')"
+                        @click.stop
+                        @update:model-value="toggleShowInShop(attribute)"
+                      />
                       <AlertDialog>
                         <AlertDialogTrigger as-child>
                           <Button
@@ -1608,6 +1638,19 @@ export default {
                   "
                   :disabled="attributeForm.isRequired"
                   @update:model-value="setShowOnProductPage"
+                />
+              </SettingsFormField>
+
+              <SettingsFormField
+                :label="$t('pages.categoryEditPage.showInShopLabel')"
+                label-for="attr-shop"
+                inline
+                :description="$t('pages.categoryEditPage.showInShopHint')"
+              >
+                <Switch
+                  id="attr-shop"
+                  :model-value="!!attributeForm.showInShop"
+                  @update:model-value="attributeForm.showInShop = $event"
                 />
               </SettingsFormField>
 

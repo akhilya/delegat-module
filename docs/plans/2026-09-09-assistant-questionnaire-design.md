@@ -10,7 +10,9 @@ Step types: `single`, `multiple`, `text`. Optional steps can be skipped. Choices
 
 ## After submit
 
-One user message: `followUp` with `{key}` filled (multiple values joined with `, `). Skipped keys omitted. The card does not submit again.
+The model still gets one user turn: `followUp` with `{key}` filled (multiple values joined with `, `). Skipped keys omitted.
+
+That turn is **not shown as a chat bubble**. Answers stay on the questionnaire card (read-only recap) and in the assistant-turn envelope (`formReplies`) so a reload cannot ask again.
 
 ## When the model asks
 

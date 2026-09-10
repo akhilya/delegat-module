@@ -10,7 +10,9 @@ namespace Delegat.Services.Ai.Agent;
 
 public sealed class AgentToolHost
 {
-    private static readonly Regex SafePathRx = new(@"^/[a-zA-Z0-9\-/._]*$", RegexOptions.Compiled);
+    private static readonly Regex SafePathRx = new(
+        @"^/[a-zA-Z0-9\-/._]*(\?[A-Za-z0-9._~%=&+,-]*)?$",
+        RegexOptions.Compiled);
 
     private readonly CatalogSearchService _catalog;
     private readonly SqlReadonlyService _sql;

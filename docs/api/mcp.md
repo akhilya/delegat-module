@@ -40,7 +40,7 @@ Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_re
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
-Tools: `search_knowledge`, `get_doc`, `search_catalog`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+Tools: `search_knowledge`, `get_doc`, `search_catalog`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
 
 Resources:
 

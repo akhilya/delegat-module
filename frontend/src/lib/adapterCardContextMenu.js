@@ -1,8 +1,7 @@
 /**
- * Product Adapters tab: left-click on a connection card opens the same
+ * Product Adapters tab: left-click on a connection row opens the same
  * cursor-positioned context menu as right-click.
- * Mapping, marketplace links, sizes, and the ⋮ button keep their own actions
- * (those nodes are `a` / `button`, or the row uses @click.stop).
+ * The ⋮ menu and the sizes disclosure stay on their own buttons.
  */
 
 /**

@@ -611,6 +611,11 @@ namespace Delegat.Migrations
                     b.Property<string>("options")
                         .HasColumnType("longtext");
 
+                    b.Property<bool>("showInShop")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("showOnProductPage")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
