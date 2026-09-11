@@ -143,6 +143,15 @@ public sealed class MedusaApiClient : IDisposable
             new { refund },
             ct);
 
+    public Task<MedusaOrderGetResponse> UpdateOrderStatusAsync(
+        string orderId,
+        string action,
+        CancellationToken ct = default)
+        => PostAsync<object, MedusaOrderGetResponse>(
+            $"orders/{Uri.EscapeDataString(orderId)}/status",
+            new { action },
+            ct);
+
     public async Task<MedusaProductGetResponse?> GetProductAsync(string productId, CancellationToken ct = default)
     {
         try

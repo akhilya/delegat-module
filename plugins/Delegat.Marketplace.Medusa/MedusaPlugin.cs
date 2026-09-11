@@ -44,7 +44,7 @@ public class MedusaPlugin : MarketplacePluginBase
 
     public override string Key => "medusa";
     public override string DisplayName => "Medusa";
-    public override string Version => "0.2.0";
+    public override string Version => "0.2.1";
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
@@ -1118,18 +1118,23 @@ public class MedusaPlugin : MarketplacePluginBase
         OrderStatusUpdate update,
         CancellationToken ct = default)
     {
-        if (!string.Equals(update.Action, MarketplaceOrderActions.Cancel, StringComparison.OrdinalIgnoreCase))
+        var action = string.IsNullOrWhiteSpace(update.Action)
+            ? update.Status
+            : update.Action;
+        if (string.IsNullOrWhiteSpace(action))
         {
             return new OrderStatusUpdateResult
             {
                 Success = false,
-                ErrorMessage = "Medusa adapter supports only cancel for now."
+                ErrorMessage = "Medusa adapter needs an order action."
             };
         }
         using var client = CreateClient(context);
         try
         {
-            var response = await client.CancelOrderAsync(externalOrderId, refund: true, ct);
+            var response = string.Equals(action, MarketplaceOrderActions.Cancel, StringComparison.OrdinalIgnoreCase)
+                ? await client.CancelOrderAsync(externalOrderId, refund: true, ct)
+                : await client.UpdateOrderStatusAsync(externalOrderId, action, ct);
             return new OrderStatusUpdateResult
             {
                 Success = response.Success,

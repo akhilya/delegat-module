@@ -524,6 +524,29 @@ public class MedusaPluginTests
         Assert.Equal("WA150", order.Items[0].Sku);
     }
 
+    [Fact]
+    public async Task UpdateOrderStatus_ShipsViaBridge()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Contains("/orders/order_1/status", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            Assert.Equal(HttpMethod.Post, req.Method);
+            return JsonResponse(new
+            {
+                success = true,
+                order = new { external_id = "order_1", status = "delivering" }
+            });
+        });
+
+        var result = await new TestPlugin(handler).UpdateOrderStatusAsync(
+            Context(),
+            "order_1",
+            new OrderStatusUpdate { Action = MarketplaceOrderActions.Ship });
+
+        Assert.True(result.Success);
+        Assert.Equal("delivering", result.Order?.Status);
+    }
+
     private static ConnectionContext Context() => new()
     {
         ConnectionId = 1,
