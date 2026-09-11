@@ -44,11 +44,11 @@ public class MedusaPlugin : MarketplacePluginBase
 
     public override string Key => "medusa";
     public override string DisplayName => "Medusa";
-    public override string Version => "0.1.0";
+    public override string Version => "0.2.0";
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
-        "Medusa store via Delegat bridge: categories, product groups, products, prices, and stocks.";
+        "Medusa store via Delegat bridge: categories, product groups, products, prices, stocks, and orders.";
     public override string? LogoUrl => "https://raw.githubusercontent.com/medusajs/medusa/develop/www/apps/book/app/images/logo.svg";
 
     public override MarketplaceCapabilities Capabilities =>
@@ -62,7 +62,9 @@ public class MedusaPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ExportStocks |
         MarketplaceCapabilities.EndpointBasedGrouping |
         MarketplaceCapabilities.ImportGroups |
-        MarketplaceCapabilities.DeleteGroups;
+        MarketplaceCapabilities.DeleteGroups |
+        MarketplaceCapabilities.GetOrders |
+        MarketplaceCapabilities.UpdateOrderStatus;
 
     public override CredentialsSchema GetCredentialsSchema()
     {
@@ -1078,6 +1080,99 @@ public class MedusaPlugin : MarketplacePluginBase
             Set("resolvedFrom", existingExternalId);
         return details;
     }
+
+    public override async Task<PagedResult<ExternalOrder>> GetOrdersAsync(
+        ConnectionContext context,
+        OrderQuery? query = null,
+        CancellationToken ct = default)
+    {
+        using var client = CreateClient(context);
+        query ??= new OrderQuery();
+        var page = Math.Max(query.Page, 1);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var response = await client.ListOrdersAsync(page, pageSize, query.Status, query.Search, ct);
+        var items = (response.Items ?? []).Select(MapOrder).ToList();
+        return new PagedResult<ExternalOrder>(items, response.HasMore, response.HasMore ? (page + 1).ToString(CultureInfo.InvariantCulture) : null);
+    }
+
+    public override async Task<ExternalOrder?> GetOrderAsync(
+        ConnectionContext context,
+        string externalOrderId,
+        CancellationToken ct = default)
+    {
+        using var client = CreateClient(context);
+        try
+        {
+            var response = await client.GetOrderAsync(externalOrderId, ct);
+            return response.Order == null ? null : MapOrder(response.Order);
+        }
+        catch (MedusaApiException ex) when (ex.StatusCode == 404)
+        {
+            return null;
+        }
+    }
+
+    public override async Task<OrderStatusUpdateResult> UpdateOrderStatusAsync(
+        ConnectionContext context,
+        string externalOrderId,
+        OrderStatusUpdate update,
+        CancellationToken ct = default)
+    {
+        if (!string.Equals(update.Action, MarketplaceOrderActions.Cancel, StringComparison.OrdinalIgnoreCase))
+        {
+            return new OrderStatusUpdateResult
+            {
+                Success = false,
+                ErrorMessage = "Medusa adapter supports only cancel for now."
+            };
+        }
+        using var client = CreateClient(context);
+        try
+        {
+            var response = await client.CancelOrderAsync(externalOrderId, refund: true, ct);
+            return new OrderStatusUpdateResult
+            {
+                Success = response.Success,
+                ErrorMessage = response.Error,
+                Order = response.Order == null ? null : MapOrder(response.Order)
+            };
+        }
+        catch (MedusaApiException ex)
+        {
+            return new OrderStatusUpdateResult
+            {
+                Success = false,
+                ErrorMessage = MarketplaceApiErrorText.Format("Medusa", ex.StatusCode, ex.Message, ex.ResponseBody)
+            };
+        }
+    }
+
+    private static ExternalOrder MapOrder(MedusaOrderDto order)
+        => new()
+        {
+            ExternalId = order.ExternalId ?? "",
+            DisplayId = order.DisplayId,
+            Status = order.Status ?? MarketplaceOrderStatuses.Unknown,
+            RawStatus = order.RawStatus,
+            Channel = order.Channel ?? "shop",
+            CreatedAt = order.CreatedAt,
+            UpdatedAt = order.UpdatedAt,
+            Currency = order.Currency ?? "RUB",
+            Total = order.Total,
+            CustomerName = order.CustomerName,
+            CustomerPhone = order.CustomerPhone,
+            CustomerEmail = order.CustomerEmail,
+            ShippingAddress = order.ShippingAddress,
+            Items = (order.Items ?? []).Select(i => new ExternalOrderItem
+            {
+                ExternalProductId = i.ExternalProductId,
+                Sku = i.Sku,
+                Name = i.Name,
+                Quantity = i.Quantity,
+                Price = i.Price,
+                ImageUrl = OrderItemImageUrl.NeedsReplacement(i.ImageUrl) ? null : i.ImageUrl
+            }).ToList()
+        };
 
     protected virtual MedusaApiClient CreateClient(ConnectionContext context, HttpClient? httpClient = null)
     {

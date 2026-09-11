@@ -487,3 +487,96 @@ public sealed class MedusaDeleteGroupResponse
     [JsonPropertyName("error")]
     public string? Error { get; set; }
 }
+
+public sealed class MedusaOrderItemDto
+{
+    [JsonPropertyName("external_product_id")]
+    public string? ExternalProductId { get; set; }
+
+    [JsonPropertyName("sku")]
+    public string? Sku { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("quantity")]
+    public int Quantity { get; set; }
+
+    [JsonPropertyName("price")]
+    public decimal? Price { get; set; }
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+}
+
+public sealed class MedusaOrderDto
+{
+    [JsonPropertyName("external_id")]
+    public string? ExternalId { get; set; }
+
+    [JsonPropertyName("display_id")]
+    public string? DisplayId { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("raw_status")]
+    public string? RawStatus { get; set; }
+
+    [JsonPropertyName("channel")]
+    public string? Channel { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    [JsonPropertyName("updated_at")]
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    [JsonPropertyName("currency")]
+    public string? Currency { get; set; }
+
+    [JsonPropertyName("total")]
+    public decimal? Total { get; set; }
+
+    [JsonPropertyName("customer_email")]
+    public string? CustomerEmail { get; set; }
+
+    [JsonPropertyName("customer_name")]
+    public string? CustomerName { get; set; }
+
+    [JsonPropertyName("customer_phone")]
+    public string? CustomerPhone { get; set; }
+
+    [JsonPropertyName("shipping_address")]
+    public string? ShippingAddress { get; set; }
+
+    [JsonPropertyName("items")]
+    public List<MedusaOrderItemDto>? Items { get; set; }
+}
+
+public sealed class MedusaOrderListResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("items")]
+    public List<MedusaOrderDto>? Items { get; set; }
+
+    [JsonPropertyName("has_more")]
+    public bool HasMore { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public sealed class MedusaOrderGetResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("order")]
+    public MedusaOrderDto? Order { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}

@@ -116,6 +116,33 @@ public sealed class MedusaApiClient : IDisposable
             new { },
             ct);
 
+    public Task<MedusaOrderListResponse> ListOrdersAsync(
+        int page,
+        int pageSize,
+        string? status,
+        string? search,
+        CancellationToken ct = default)
+    {
+        var qs = $"page={page}&page_size={pageSize}";
+        if (!string.IsNullOrWhiteSpace(status))
+            qs += $"&status={Uri.EscapeDataString(status)}";
+        if (!string.IsNullOrWhiteSpace(search))
+            qs += $"&search={Uri.EscapeDataString(search)}";
+        return GetAsync<MedusaOrderListResponse>($"orders?{qs}", ct);
+    }
+
+    public Task<MedusaOrderGetResponse> GetOrderAsync(string orderId, CancellationToken ct = default)
+        => GetAsync<MedusaOrderGetResponse>($"orders/{Uri.EscapeDataString(orderId)}", ct);
+
+    public Task<MedusaOrderGetResponse> CancelOrderAsync(
+        string orderId,
+        bool refund,
+        CancellationToken ct = default)
+        => PostAsync<object, MedusaOrderGetResponse>(
+            $"orders/{Uri.EscapeDataString(orderId)}/cancel",
+            new { refund },
+            ct);
+
     public async Task<MedusaProductGetResponse?> GetProductAsync(string productId, CancellationToken ct = default)
     {
         try

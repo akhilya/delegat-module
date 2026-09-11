@@ -30,7 +30,7 @@ public class MedusaPluginTests
     }
 
     [Fact]
-    public void Capabilities_IncludeCatalogSync_NotOrders()
+    public void Capabilities_IncludeCatalogSyncAndOrders()
     {
         var plugin = new MedusaPlugin();
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct));
@@ -40,7 +40,8 @@ public class MedusaPluginTests
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportStocks));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.EndpointBasedGrouping));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ImportGroups));
-        Assert.False(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetOrders));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetOrders));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.UpdateOrderStatus));
     }
 
     [Fact]
@@ -485,6 +486,42 @@ public class MedusaPluginTests
         Assert.Equal("pcol_1", result.ExternalGroupId);
         Assert.Contains("Cerberus", body);
         Assert.Contains("prod_a", body);
+    }
+
+    [Fact]
+    public async Task GetOrders_MapsBridgePayload()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Contains("/orders?", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            return JsonResponse(new
+            {
+                success = true,
+                has_more = false,
+                items = new[]
+                {
+                    new
+                    {
+                        external_id = "order_1",
+                        display_id = "12",
+                        status = "awaiting_pack",
+                        customer_email = "a@test.ru",
+                        total = 1500,
+                        items = new[]
+                        {
+                            new { sku = "WA150", name = "Фигурка", quantity = 1, price = 1500 }
+                        }
+                    }
+                }
+            });
+        });
+
+        var page = await new TestPlugin(handler).GetOrdersAsync(Context(), new OrderQuery { Page = 1, PageSize = 20 });
+        var order = Assert.Single(page.Items);
+        Assert.Equal("order_1", order.ExternalId);
+        Assert.Equal("12", order.DisplayId);
+        Assert.Equal("awaiting_pack", order.Status);
+        Assert.Equal("WA150", order.Items[0].Sku);
     }
 
     private static ConnectionContext Context() => new()
