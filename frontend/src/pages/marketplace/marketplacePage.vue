@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/inset-group";
 import { PAGE_ADMIN_PLUGINS } from "@/router";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
+import { isExperimentalConnection } from "@/lib/adapterStage";
 import ConnectionCreateForm from "@/components/marketplace/ConnectionCreateForm.vue";
 import { getCachedMe } from "@/lib/meCache";
 import { hasPermission, PERMS } from "@/lib/permissions";
@@ -55,6 +57,7 @@ export default {
     Package,
     Trash2,
     AdapterIcon,
+    ExperimentalBadge,
     ConnectionCreateForm,
     InsetGroup,
     InsetGroupItem,
@@ -214,6 +217,10 @@ export default {
       return adapter?.displayName || adapterKey;
     },
 
+    isExperimentalConnection(connection) {
+      return isExperimentalConnection(connection, this.adapters);
+    },
+
     connectionRowSubtitle(connection) {
       return this.$t("marketplace.marketplacePage.connectionRowSubtitle", {
         adapter: this.getAdapterName(connection.adapterKey),
@@ -346,7 +353,13 @@ export default {
           <template #leading>
             <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
           </template>
-          <p class="truncate">{{ conn.name }}</p>
+          <p class="truncate">
+            {{ conn.name }}
+            <ExperimentalBadge
+              v-if="isExperimentalConnection(conn)"
+              class="ml-1.5"
+            />
+          </p>
           <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
             {{ connectionRowSubtitle(conn) }}
           </p>

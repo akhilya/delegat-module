@@ -143,7 +143,9 @@ import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { getAdapterCredentialsDocsSlug } from "@/utils/docsUrl";
 import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
+import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
+import { isExperimentalAdapter } from "@/lib/adapterStage";
 
 export default {
   components: {
@@ -238,6 +240,7 @@ export default {
     Unlink,
     SearchCheck,
     DocsHelpRow,
+    ExperimentalBadge,
     FieldChangesPreviewDialog,
     PasswordInput,
     SettingsFormField,
@@ -578,6 +581,13 @@ export default {
         (a) => a.key === this.connection.adapterKey,
       );
       return adapter?.displayName || this.connection.adapterKey;
+    },
+    isExperimentalAdapter() {
+      if (!this.connection) return false;
+      const adapter = this.adapters.find(
+        (a) => a.key === this.connection.adapterKey,
+      );
+      return isExperimentalAdapter(adapter);
     },
     credentialsDocsSlug() {
       const key = this.connection?.adapterKey;
@@ -3152,6 +3162,9 @@ export default {
                   $t('marketplace.connectionPage.settings.connectionTitle')
                 "
               >
+                <template v-if="isExperimentalAdapter" #actions>
+                  <ExperimentalBadge />
+                </template>
                 <SettingsFormField
                   :label="$t('common.name')"
                   label-for="connection-name"

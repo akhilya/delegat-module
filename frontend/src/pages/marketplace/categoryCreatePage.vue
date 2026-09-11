@@ -562,10 +562,6 @@ export default {
                         ·
                         {{ $t("marketplace.categoryCreatePage.requiredAbbr") }}
                       </template>
-                      <template v-if="attribute.showInShop">
-                        ·
-                        {{ $t("marketplace.categoryCreatePage.shopAbbr") }}
-                      </template>
                       <template v-if="optionsCount(attribute) > 0">
                         ·
                         {{

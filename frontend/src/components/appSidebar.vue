@@ -361,6 +361,7 @@ export default {
         :icon="group.icon"
         :items="group.resolvedItems"
         :default-open="group.defaultOpen"
+        :experimental="group.experimental === true"
       />
     </SidebarContent>
 

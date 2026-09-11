@@ -4,6 +4,8 @@ import PageSection from "@/components/pageSection.vue";
 
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
+import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
+import { isExperimentalAdapter } from "@/lib/adapterStage";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
@@ -67,6 +69,7 @@ export default {
     PageSection,
     Button,
     Badge,
+    ExperimentalBadge,
     AdapterIcon,
     InsetGroup,
     InsetGroupItem,
@@ -267,20 +270,7 @@ export default {
       }
     },
 
-    stabilityLabel(stability) {
-      const labels = {
-        Stable: "Stable",
-        Beta: "Beta",
-        Experimental: "Experimental",
-      };
-      return labels[stability] || stability || "Experimental";
-    },
-
-    stabilityVariant(stability) {
-      if (stability === "Stable") return "default";
-      if (stability === "Beta") return "secondary";
-      return "outline";
-    },
+    isExperimentalAdapter,
 
     formatLoadedAt(value) {
       return this.formatStoreDateTime(value);
@@ -558,12 +548,10 @@ export default {
                 </Badge>
               </TableCell>
               <TableCell class="px-3 align-top">
-                <Badge
-                  :variant="stabilityVariant(plugin.stability)"
-                  class="text-xs"
-                >
-                  {{ stabilityLabel(plugin.stability) }}
-                </Badge>
+                <ExperimentalBadge v-if="isExperimentalAdapter(plugin)" />
+                <span v-else class="text-muted-foreground">{{
+                  $t("common.emDash")
+                }}</span>
               </TableCell>
               <TableCell
                 class="hidden lg:table-cell px-3 align-top font-mono text-xs text-muted-foreground max-w-[12rem] truncate"

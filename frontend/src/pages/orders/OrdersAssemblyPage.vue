@@ -1,5 +1,7 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import { Alert } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-vue-next";
 import NavSearchField from "@/components/NavSearchField.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
@@ -54,6 +56,7 @@ import {
   mergeOrderLists,
   ORDER_OVERVIEW_TABS,
   tabCountsFromPayload,
+  statusesForOverviewTab,
   orderDisplayId,
   orderExternalId,
   orderMailboxPath,
@@ -90,6 +93,8 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
+    Alert,
+    AlertTriangle,
     NavSearchField,
     AdapterIcon,
     OrderDetailSheet,
@@ -146,6 +151,7 @@ export default {
       pagesByConnection: {},
       openByConnection: {},
       loadingMore: false,
+      loadingByConnection: {},
       fetchGen: 0,
       storePage: 1,
       storeHasMore: false,
@@ -194,6 +200,7 @@ export default {
             this.searchQuery,
           );
           const counts = assemblyCounts(orders);
+          const loading = this.loadingByConnection[id] === true;
           return {
             id,
             connection,
@@ -201,11 +208,12 @@ export default {
             label: this.connectionLabel(connection),
             orders,
             counts,
+            loading,
             hasMore: false,
             loadingMore: false,
           };
         })
-        .filter((group) => group.orders.length > 0);
+        .filter((group) => group.orders.length > 0 || group.loading);
       if (groups.length && this.storeHasMore) {
         const last = groups.length - 1;
         groups[last] = {
@@ -219,9 +227,15 @@ export default {
     totalOrders() {
       return this.groups.reduce((sum, group) => sum + group.counts.total, 0);
     },
+    anyConnectionLoading() {
+      return this.orderConnections.some(
+        (connection) =>
+          this.loadingByConnection[connectionIdOf(connection)] === true,
+      );
+    },
     emptyKind() {
       if (this.orderConnections.length === 0) return "noConnections";
-      if (this.totalOrders === 0) return "empty";
+      if (this.totalOrders === 0 && !this.anyConnectionLoading) return "empty";
       return "";
     },
     selectedOrderId() {
@@ -352,7 +366,11 @@ export default {
       return out;
     },
 
-    groupCaption(counts) {
+    groupCaption(group) {
+      if (group.loading && group.counts.total === 0) {
+        return this.$t("pages.ordersPage.assemblyLoadingGroup");
+      }
+      const counts = group.counts;
       if (this.overviewTab !== "assembly") {
         return this.$t("pages.ordersPage.overviewGroupCount", {
           count: counts.total,
@@ -423,8 +441,8 @@ export default {
           });
         }),
       ]);
-      await this.fetchOrders();
       this.bootstrapping = false;
+      await this.fetchOrders();
     },
 
     async fetchStorePage(page, { append = false } = {}) {
@@ -471,6 +489,7 @@ export default {
         this.pagesByConnection = {};
         this.storeHasMore = false;
         this.tabCounts = {};
+        this.loadingByConnection = {};
         this.isLoading = false;
         return;
       }
@@ -481,18 +500,99 @@ export default {
 
       try {
         await this.fetchStorePage(1);
-        if (gen !== this.fetchGen) return;
-        const sync = await http.post("/marketplace/orders/sync", null, {
-          params: { tab: this.overviewTab },
-          cache: false,
-        });
-        const syncData = extractResponseData(sync, {});
-        if (syncData?.pulled) await this.fetchStorePage(1);
       } catch (error) {
         if (gen === this.fetchGen) displaySonnerError(error);
       } finally {
         if (gen === this.fetchGen) this.isLoading = false;
       }
+      if (gen === this.fetchGen) this.syncConnections(gen);
+    },
+
+    syncConnections(gen) {
+      const loading = { ...this.loadingByConnection };
+      for (const connection of this.orderConnections) {
+        loading[connectionIdOf(connection)] = true;
+      }
+      this.loadingByConnection = loading;
+      for (const connection of this.orderConnections) {
+        this.syncOneConnection(connection, gen);
+      }
+    },
+
+    async syncOneConnection(connection, gen) {
+      const id = connectionIdOf(connection);
+      const statuses = statusesForOverviewTab(this.overviewTab);
+      try {
+        const syncSettled = await Promise.allSettled(
+          statuses.map((status) =>
+            http.post(
+              `/marketplace/connections/${id}/orders/sync`,
+              null,
+              { params: { status }, cache: false },
+            ),
+          ),
+        );
+        if (gen !== this.fetchGen) return;
+        const pulled = syncSettled.some((result) => {
+          if (result.status !== "fulfilled") return false;
+          const payload = extractResponseData(result.value, {});
+          return Boolean(payload?.pulled);
+        });
+        if (pulled || !(this.pagesByConnection[id]?.all?.items || []).length) {
+          await this.refreshConnectionOrders(id, gen);
+        }
+      } catch (error) {
+        if (gen === this.fetchGen) displaySonnerError(error);
+      } finally {
+        if (gen === this.fetchGen) {
+          this.loadingByConnection = {
+            ...this.loadingByConnection,
+            [id]: false,
+          };
+        }
+      }
+    },
+
+    async refreshConnectionOrders(connectionId, gen) {
+      const statuses = statusesForOverviewTab(this.overviewTab);
+      const paramsBase = {
+        page: 1,
+        pageSize: this.pageSize,
+        search: this.searchQuery.trim() || undefined,
+        channel: this.channel !== CHANNEL_ALL ? this.channel : undefined,
+      };
+      const settled = await Promise.allSettled(
+        statuses.map((status) =>
+          http.get(`/marketplace/connections/${connectionId}/orders`, {
+            params: { ...paramsBase, status },
+            cache: false,
+          }),
+        ),
+      );
+      if (gen !== this.fetchGen) return;
+      const lists = [];
+      let hasMore = false;
+      for (const result of settled) {
+        if (result.status !== "fulfilled") {
+          displaySonnerError(result.reason);
+          continue;
+        }
+        const data = this.unwrapPage(result.value);
+        const items = Array.isArray(data.items) ? data.items : [];
+        lists.push(items);
+        if (data.hasMore) hasMore = true;
+      }
+      this.pagesByConnection = {
+        ...this.pagesByConnection,
+        [connectionId]: {
+          all: {
+            items: mergeOrderLists(lists),
+            page: 1,
+            nextCursor: null,
+            hasMore,
+          },
+        },
+      };
     },
 
     async loadMore() {
@@ -795,6 +895,17 @@ export default {
         </TabsList>
       </Tabs>
     </template>
+    <Alert class="mb-4 px-3.5 py-3">
+      <AlertTriangle class="size-4 text-muted-foreground" />
+      <div class="space-y-1">
+        <p class="text-sm font-medium leading-snug">
+          {{ $t("common.stageExperimental") }}
+        </p>
+        <p class="text-xs leading-relaxed text-muted-foreground">
+          {{ $t("pages.ordersPage.experimentalDescription") }}
+        </p>
+      </div>
+    </Alert>
     <div
       v-if="orderConnections.length > 0"
       class="mb-3 flex shrink-0 flex-wrap items-center gap-2"
@@ -827,7 +938,7 @@ export default {
     </div>
 
     <EmptyState
-      v-if="bootstrapping || isLoading"
+      v-if="bootstrapping || (isLoading && groups.length === 0)"
       loading
       :framed="false"
       class="min-h-0 flex-1"
@@ -871,11 +982,15 @@ export default {
               </template>
               <p class="truncate">{{ group.label }}</p>
               <p class="mt-0.5 truncate text-xs font-normal text-muted-foreground">
-                {{ groupCaption(group.counts) }}
+                {{ groupCaption(group) }}
               </p>
               <template #trailing>
                 <span class="flex items-center gap-2">
-                  <span class="tabular-nums text-xs text-muted-foreground">
+                  <Spinner v-if="group.loading" size="sm" />
+                  <span
+                    v-else
+                    class="tabular-nums text-xs text-muted-foreground"
+                  >
                     {{ group.counts.total }}
                   </span>
                   <ChevronDown

@@ -43,7 +43,8 @@
     "copied": "Copied",
     "copyFailed": "Failed to copy",
     "tooLong": "At most {max} characters",
-    "resizeSheet": "Resize panel"
+    "resizeSheet": "Resize panel",
+    "stageExperimental": "Experimental"
   },
   "attributeGroups": {
     "core": "Basic",
@@ -1096,7 +1097,6 @@
       "pickLocalFirst": "Select a local category to choose its attributes.",
       "noAttributes": "This category has no attributes. Only the shop’s default fields will be created.",
       "requiredAbbr": "req.",
-      "shopAbbr": "shop",
       "optionsAbbrCount": "{count} opts.",
       "optionsTitle": "Options",
       "skipAutoMap": "Leave the field map empty",
@@ -2926,6 +2926,7 @@
         "unpaid": "Unpaid",
         "unknown": "Unknown"
       },
+      "experimentalDescription": "Order import, packing, and status updates are still being validated. Treat this as a preview.",
       "emptyNoConnectionsTitle": "No marketplace for orders",
       "emptyNoConnectionsDescription": "Connect an adapter that can list orders, then come back here.",
       "emptyUnsupportedTitle": "Orders are not available",
@@ -2952,6 +2953,7 @@
       "assemblyPacking": "{count} to pack",
       "assemblyWaitingAndPacking": "{waiting} waiting · {packing} to pack",
       "assemblyEmptyGroup": "Nothing to pack on this marketplace",
+      "assemblyLoadingGroup": "Loading orders…",
       "assemblyOpenMailbox": "Open mailbox",
       "assemblyRowMore": "{id} · {n} more",
       "openOrderAria": "Open order {id}",
@@ -3253,7 +3255,7 @@
       "hasSizesLabel": "Products have sizes",
       "hasSizesDescription": "Turns on the Sizes tab. Those rows export as marketplace variants, not as fields on the mapping graph.",
       "attributesCardTitle": "Category attributes",
-      "attributesOrderHint": "Row order is the order on the PIM product form and in the shop. The switch on the right shows the attribute on the storefront.",
+      "attributesOrderHint": "Row order is the order on the PIM product form. Drag rows to change it.",
       "noAttributesTitle": "No attributes",
       "noAttributesDescription": "Attributes define product properties - size, color, material and other characteristics",
       "addAttribute": "Add attribute",
@@ -3312,9 +3314,6 @@
       "showOnProductPageLabel": "On the product page",
       "showOnProductPageHint": "Show when editing a product",
       "showOnProductPageRequiredHint": "Required fields are always shown on the product page",
-      "showInShopLabel": "In the shop",
-      "showInShopHint": "Show this attribute on the storefront. If none are enabled for the category, the shop keeps its short built-in list.",
-      "showInShopBadge": "shop",
       "requiredFieldHint": "Require filling in when creating a product",
       "uniqueFieldTitle": "Unique value",
       "uniqueFieldHint": "Value must not repeat on other products in this category",

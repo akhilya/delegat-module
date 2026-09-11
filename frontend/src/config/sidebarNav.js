@@ -36,6 +36,7 @@ import { canBrowse, hasPermission, PERMS } from "@/lib/permissions";
 import { canShowNavLink, uniqueByNavTarget } from "@/lib/navAccess";
 import { adapterIconComponent } from "@/lib/adapterIcons";
 import { adapterCanGetOrders } from "@/lib/adapterCapabilities";
+import { isExperimentalAdapter, findAdapterByKey } from "@/lib/adapterStage";
 
 /**
  * @typedef {'link'|'action'} NavItemType
@@ -68,15 +69,13 @@ function hasGetOrdersConnection(ctx) {
   });
 }
 
-function getConnectionNavLabel(connection, adapters, activeConnections) {
-  const displayName = getAdapterDisplayName(connection.adapterKey, adapters);
-  const sameAdapterCount = activeConnections.filter(
-    (item) => item.adapterKey === connection.adapterKey,
-  ).length;
-  if (sameAdapterCount > 1 && connection.name) {
-    return `${displayName} · ${connection.name}`;
-  }
-  return displayName;
+function getConnectionNavLabel(connection, adapters) {
+  const name = String(connection.name ?? connection.Name ?? "").trim();
+  if (name) return name;
+  return getAdapterDisplayName(
+    connection.adapterKey ?? connection.AdapterKey,
+    adapters,
+  );
 }
 
 /** @type {NavGroup[]} */
@@ -85,6 +84,7 @@ const SIDEBAR_GROUPS = [
     id: "orders",
     labelKey: "nav.orders",
     icon: ClipboardList,
+    experimental: true,
     defaultOpen: true,
     visible: (ctx) =>
       Boolean(ctx.hasStore) &&
@@ -256,6 +256,9 @@ const SIDEBAR_GROUPS = [
             type: "link",
             to: `/adapter/${connId}`,
             icon: adapterIconComponent(adapterKey, Plug),
+            experimental: isExperimentalAdapter(
+              findAdapterByKey(ctx.adapters, adapterKey),
+            ),
           };
         }),
       ];

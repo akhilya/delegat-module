@@ -11,6 +11,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Sidebar Orders and Integrations list connections by connection name, not adapter display name.
+- Assembly overview loads each connection on its own: the first adapter to return paints immediately; others keep a spinner in their group. Orders experimental notice uses body type, not an h5 title.
+- Experimental badge uses the muted fill. Orders sidebar shows it only on the section, aligned right.
+- Dropped the category-attribute «In the shop» switch. Storefront specs follow the mapping graph; unwired fields are not sent.
 - Mapping canvas: add unlimited mapping-local adapter fields (click «Add field» or drop a wire on that row). Custom sinks persist in the graph and go out on export.
 - Store-engine adapters (Medusa, WooCommerce, OpenCart) create a shop category on a dedicated page: name, parent folder, which local attributes become fields, and whether to auto-map. The mapping dialog opens that page instead of creating immediately.
 - Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.

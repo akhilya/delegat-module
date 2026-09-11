@@ -199,8 +199,7 @@ public class MappingService
 
     /// <summary>
     /// Shop specs come from filled PIM category attributes, not the marketplace mapping dump.
-    /// If any attribute is flagged <c>showInShop</c>, only those are sent. Otherwise every
-    /// filled value is sent so the storefront does not have to guess.
+    /// What the storefront actually renders is decided by the mapping graph.
     /// </summary>
     private static void AddShopSpecs(Product product, Dictionary<string, object?> result)
     {
@@ -212,24 +211,22 @@ public class MappingService
             .Select(g => g.First())
             .ToList();
 
-        var restrict = defined.Any(a => a.showInShop);
         var valuesByAttrId = (product.attributeValues ?? Enumerable.Empty<ProductAttributeValue>())
-            .Where(av => av.attribute != null && (!restrict || av.attribute.showInShop))
+            .Where(av => av.attribute != null)
             .GroupBy(av => av.attributeId)
             .ToDictionary(g => g.Key, g => g.First());
 
         var specs = new List<Dictionary<string, string>>();
         foreach (var attr in defined
-            .Where(a => !restrict || a.showInShop)
             .OrderBy(a => a.sortOrder)
             .ThenBy(a => a.name, StringComparer.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(attr.key) || !result.ContainsKey(attr.key))
+                continue;
             if (!valuesByAttrId.TryGetValue(attr.Id, out var row))
                 continue;
             var display = FormatShopSpecValue(row.value, attr);
             if (string.IsNullOrWhiteSpace(display))
-                continue;
-            if (!restrict && display.Length > 200)
                 continue;
             specs.Add(new Dictionary<string, string>
             {

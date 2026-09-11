@@ -220,10 +220,6 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasDefaultValue(true);
 
         builder.Entity<CategoryAttribute>()
-            .Property(a => a.showInShop)
-            .HasDefaultValue(false);
-
-        builder.Entity<CategoryAttribute>()
             .Property(a => a.descriptionInTooltip)
             .HasDefaultValue(false);
 

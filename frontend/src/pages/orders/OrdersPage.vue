@@ -1,5 +1,7 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import { Alert } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-vue-next";
 import NavSearchField from "@/components/NavSearchField.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
 import OrderItemsCell from "@/components/orders/OrderItemsCell.vue";
@@ -103,6 +105,8 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
+    Alert,
+    AlertTriangle,
     NavSearchField,
     OrderDetailSheet,
     OrderItemsCell,
@@ -942,6 +946,18 @@ export default {
         </TabsList>
       </Tabs>
     </template>
+
+    <Alert class="mb-4 px-3.5 py-3">
+      <AlertTriangle class="size-4 text-muted-foreground" />
+      <div class="space-y-1">
+        <p class="text-sm font-medium leading-snug">
+          {{ $t("common.stageExperimental") }}
+        </p>
+        <p class="text-xs leading-relaxed text-muted-foreground">
+          {{ $t("pages.ordersPage.experimentalDescription") }}
+        </p>
+      </div>
+    </Alert>
 
     <div
       v-if="orderConnections.length > 0"

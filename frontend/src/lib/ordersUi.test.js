@@ -329,6 +329,9 @@ describe("assembly overview", () => {
     assert.doesNotMatch(assemblyPageSource, /group\.orders\.length === 0/);
     assert.match(assemblyPageSource, /tabCountsFromPayload/);
     assert.match(assemblyPageSource, /tabCount\(/);
+    assert.match(assemblyPageSource, /loadingByConnection/);
+    assert.match(assemblyPageSource, /syncOneConnection/);
+    assert.doesNotMatch(assemblyPageSource, /\/marketplace\/orders\/sync/);
   });
 
   it("summarizes an assembly row as one Mail-style cell", () => {

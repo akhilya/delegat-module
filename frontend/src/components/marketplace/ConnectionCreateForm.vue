@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/inset-group";
 import Switch from "@/components/ui/switch/Switch.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
+import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
+import { isExperimentalAdapter } from "@/lib/adapterStage";
 import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
 import { getAdapterCredentialsDocsSlug } from "@/utils/docsUrl";
 import {
@@ -41,6 +43,7 @@ export default {
     InsetGroupLabel,
     Switch,
     AdapterIcon,
+    ExperimentalBadge,
     DocsHelpRow,
     Select,
     SelectContent,
@@ -106,6 +109,7 @@ export default {
     },
   },
   methods: {
+    isExperimentalAdapter,
     onAdapterSelect(adapterKey) {
       this.adapterKey = adapterKey || "";
       this.credentialValues = {};
@@ -209,6 +213,9 @@ export default {
           >
             v{{ adapter.version }}
           </p>
+          <template v-if="isExperimentalAdapter(adapter)" #trailing>
+            <ExperimentalBadge />
+          </template>
         </InsetGroupItem>
       </InsetGroup>
       <template v-if="!quiet" #description>

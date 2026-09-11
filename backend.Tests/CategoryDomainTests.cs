@@ -86,7 +86,7 @@ public class CategoryDomainTests
         attribute.AddFill(new CategoryAttribute.AddForm
         {
             categoryId = 2, name = "Color", key = "color", type = AttributeType.Select,
-            isRequired = true, isMultiline = false, showOnProductPage = true, showInShop = true, sortOrder = 4,
+            isRequired = true, isMultiline = false, showOnProductPage = true, sortOrder = 4,
             options = "[\"red\"]", defaultValue = "red", description = "Main color",
             descriptionInTooltip = true, group = "Appearance", groupIcon = "Palette",
             maxValues = 3
@@ -98,20 +98,6 @@ public class CategoryDomainTests
         Assert.Equal("Appearance", attribute.group);
         Assert.Equal("Palette", attribute.groupIcon);
         Assert.Equal(3, attribute.maxValues);
-        Assert.True(attribute.showInShop);
-    }
-
-    [Fact]
-    public void CategoryAttributeAddFill_ShowInShopIsIndependentOfProductPage()
-    {
-        var attribute = new CategoryAttribute();
-        attribute.AddFill(new CategoryAttribute.AddForm
-        {
-            categoryId = 1, name = "TN VED", key = "tnved", type = AttributeType.Text,
-            showOnProductPage = true, showInShop = false
-        });
-        Assert.True(attribute.showOnProductPage);
-        Assert.False(attribute.showInShop);
     }
 
     [Fact]

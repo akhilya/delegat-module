@@ -30,6 +30,7 @@ import {
   setSidebarGroupOpen,
 } from "@/lib/sidebarNavState.js";
 import { t } from "@/i18n";
+import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
 
 const props = defineProps({
   groupId: { type: String, required: true },
@@ -37,6 +38,7 @@ const props = defineProps({
   icon: { type: [Object, Function], required: true },
   items: { type: Array, required: true },
   defaultOpen: { type: Boolean, default: false },
+  experimental: { type: Boolean, default: false },
 });
 
 const route = useRoute();
@@ -170,9 +172,11 @@ watch(
                     aria-hidden="true"
                   />
                 </span>
-                <span>{{ label }}</span>
+                <span class="min-w-0 truncate">{{ label }}</span>
+                <ExperimentalBadge v-if="experimental" class="ml-auto" />
                 <ChevronRight
-                  class="ml-auto size-3.5 text-muted-foreground transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none"
+                  class="size-3.5 shrink-0 text-muted-foreground transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none"
+                  :class="experimental ? null : 'ml-auto'"
                 />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -188,6 +192,10 @@ watch(
                   >
                     <component :is="item.icon" />
                     <span>{{ item.label }}</span>
+                    <ExperimentalBadge
+                      v-if="item.experimental"
+                      class="ml-auto truncate"
+                    />
                   </SidebarMenuSubButton>
                   <SidebarMenuSubButton
                     v-else
@@ -197,6 +205,10 @@ watch(
                     <RouterLink :to="item.to" @click="dismissMobile">
                       <component :is="item.icon" />
                       <span>{{ item.label }}</span>
+                      <ExperimentalBadge
+                        v-if="item.experimental"
+                        class="ml-auto truncate"
+                      />
                       <TooltipProvider
                         v-if="item.attention"
                         :delay-duration="300"
