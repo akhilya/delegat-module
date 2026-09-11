@@ -404,8 +404,8 @@ public class MedusaPluginTests
         using var doc = JsonDocument.Parse(body!);
         var item = doc.RootElement.GetProperty("prices")[0];
         Assert.Equal("prod_1", item.GetProperty("product_id").GetString());
-        Assert.Equal(1000, item.GetProperty("price").GetDecimal());
-        Assert.Equal(800, item.GetProperty("sale_price").GetDecimal());
+        Assert.Equal(800, item.GetProperty("price").GetDecimal());
+        Assert.Equal(1000, item.GetProperty("old_price").GetDecimal());
     }
 
     [Fact]

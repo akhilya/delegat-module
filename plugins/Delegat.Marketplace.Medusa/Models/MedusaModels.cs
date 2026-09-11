@@ -208,6 +208,9 @@ public sealed class MedusaProductPayload
     [JsonPropertyName("sale_price")]
     public decimal? SalePrice { get; set; }
 
+    [JsonPropertyName("old_price")]
+    public decimal? OldPrice { get; set; }
+
     [JsonPropertyName("quantity")]
     public int? Quantity { get; set; }
 
@@ -315,6 +318,9 @@ public sealed class MedusaPriceItem
 
     [JsonPropertyName("sale_price")]
     public decimal? SalePrice { get; set; }
+
+    [JsonPropertyName("old_price")]
+    public decimal? OldPrice { get; set; }
 }
 
 public sealed class MedusaStockItem

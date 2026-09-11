@@ -44,7 +44,7 @@ public class MedusaPlugin : MarketplacePluginBase
 
     public override string Key => "medusa";
     public override string DisplayName => "Medusa";
-    public override string Version => "0.2.1";
+    public override string Version => "0.2.2";
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
@@ -427,8 +427,9 @@ public class MedusaPlugin : MarketplacePluginBase
                 {
                     ProductId = p.ExternalProductId,
                     VariantId = p.VariantId,
-                    Price = p.OldPrice ?? p.Price,
-                    SalePrice = p.DiscountedPrice ?? (p.OldPrice.HasValue ? p.Price : null)
+                    Price = p.Price,
+                    OldPrice = p.OldPrice,
+                    SalePrice = p.DiscountedPrice
                 }).ToList()
             };
 
@@ -616,6 +617,8 @@ public class MedusaPlugin : MarketplacePluginBase
             SalePrice = GetDecimal(data, "sale_price")
                 ?? GetDecimal(data, "salePrice")
                 ?? GetDecimal(data, "discountedPrice"),
+            OldPrice = GetDecimal(data, "old_price")
+                ?? GetDecimal(data, "oldPrice"),
             Quantity = GetInt(data, "quantity") ?? GetInt(data, "stock") ?? GetInt(data, "storageQuantity"),
             Barcode = GetString(data, "barcode"),
             Brand = GetString(data, "brand"),
@@ -623,13 +626,6 @@ public class MedusaPlugin : MarketplacePluginBase
             Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             RawFields = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
         };
-
-        var oldPrice = GetDecimal(data, "oldPrice") ?? GetDecimal(data, "old_price");
-        if (oldPrice.HasValue && payload.Price.HasValue && oldPrice > payload.Price)
-        {
-            payload.SalePrice = payload.Price;
-            payload.Price = oldPrice;
-        }
 
         var categoryId = GetString(data, "_categoryId")
             ?? GetString(data, "category_id")
@@ -979,10 +975,10 @@ public class MedusaPlugin : MarketplacePluginBase
 
     private static List<ExternalField> GetPriceFields() =>
     [
-        new("price", "Price", true, "number",
-            Description: "Regular price", Group: "Prices", SortOrder: 0),
-        new("sale_price", "Sale price", false, "number",
-            Description: "Sale / discounted price", Group: "Prices", SortOrder: 1)
+        new("price", "Цена", true, "number",
+            Description: "Активная цена. На неё могут наложиться промокоды Medusa.", Group: "Prices", SortOrder: 0),
+        new("old_price", "Старая цена", false, "number",
+            Description: "Зачёркнутая цена на витрине, если больше активной.", Group: "Prices", SortOrder: 1)
     ];
 
     private static bool IsPriceFieldKey(string? key)
