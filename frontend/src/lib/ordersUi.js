@@ -134,6 +134,7 @@ const ADAPTER_ORDER_MAILBOXES = {
   ozon: ["pack", "ship", "delivery", "done", "closed"],
   wildberries: ["pack", "ship", "delivery", "done", "closed"],
   yandex: ["new", "pack", "ship", "delivery", "done", "closed"],
+  medusa: ["new", "pack", "ship", "delivery", "done", "closed"],
   woocommerce: ["new", "pack", "done", "closed"],
   opencart: ["new", "pack", "done", "closed"],
 };
@@ -716,6 +717,15 @@ export function primaryActionsForStatus(status, adapterKey, channel) {
     if (s === ORDER_STATUS.Delivering && (ch === "dbs" || ch === "express")) {
       return [ORDER_ACTION.Deliver];
     }
+    return [];
+  }
+
+  if (key === "medusa") {
+    if (s === ORDER_STATUS.Confirmed || s === ORDER_STATUS.AwaitingPack) {
+      return [ORDER_ACTION.Pack];
+    }
+    if (s === ORDER_STATUS.AwaitingDeliver) return [ORDER_ACTION.Ship];
+    if (s === ORDER_STATUS.Delivering) return [ORDER_ACTION.Complete];
     return [];
   }
 

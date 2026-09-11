@@ -168,6 +168,10 @@ describe("adapter order mailboxes", () => {
       orderMailboxesForAdapter("opencart").map((box) => box.id),
       ["new", "pack", "done", "closed"],
     );
+    assert.deepEqual(
+      orderMailboxesForAdapter("medusa").map((box) => box.id),
+      ["new", "pack", "ship", "delivery", "done", "closed"],
+    );
     assert.equal(defaultOrderMailbox("ozon"), "pack");
     assert.equal(defaultOrderMailbox("yandex"), "new");
     assert.equal(resolveOrderMailbox("ozon", "new"), "pack");
@@ -365,6 +369,9 @@ describe("order number search", () => {
       mailboxForOrderStatus("awaiting_deliver", "woocommerce"),
       null,
     );
+    assert.equal(mailboxForOrderStatus("awaiting_deliver", "medusa"), "ship");
+    assert.equal(mailboxForOrderStatus("awaiting_pack", "medusa"), "pack");
+    assert.equal(mailboxForOrderStatus("unpaid", "medusa"), "new");
   });
 
   it("does not keep a ship order on the pack mailbox after a number search", () => {
@@ -546,6 +553,16 @@ describe("status actions", () => {
       ORDER_ACTION.Complete,
     ]);
     assert.deepEqual(primaryActionsForStatus("delivered"), []);
+    assert.deepEqual(primaryActionsForStatus("unpaid", "medusa"), []);
+    assert.deepEqual(primaryActionsForStatus("awaiting_pack", "medusa"), [
+      ORDER_ACTION.Pack,
+    ]);
+    assert.deepEqual(primaryActionsForStatus("awaiting_deliver", "medusa"), [
+      ORDER_ACTION.Ship,
+    ]);
+    assert.deepEqual(primaryActionsForStatus("delivering", "medusa"), [
+      ORDER_ACTION.Complete,
+    ]);
     assert.equal(canCancelOrder("new"), true);
     assert.equal(canCancelOrder("delivered"), false);
     assert.equal(canCancelOrder("cancelled"), false);
