@@ -1163,6 +1163,7 @@ public class MedusaPlugin : MarketplacePluginBase
             CustomerPhone = order.CustomerPhone,
             CustomerEmail = order.CustomerEmail,
             ShippingAddress = order.ShippingAddress,
+            Comment = order.Comment,
             Items = (order.Items ?? []).Select(i => new ExternalOrderItem
             {
                 ExternalProductId = i.ExternalProductId,

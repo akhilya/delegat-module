@@ -550,6 +550,9 @@ public sealed class MedusaOrderDto
     [JsonPropertyName("shipping_address")]
     public string? ShippingAddress { get; set; }
 
+    [JsonPropertyName("comment")]
+    public string? Comment { get; set; }
+
     [JsonPropertyName("items")]
     public List<MedusaOrderItemDto>? Items { get; set; }
 }
