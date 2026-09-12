@@ -1,4 +1,5 @@
 <script setup>
+import { Wrench } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -8,8 +9,13 @@ defineProps({
 </script>
 
 <template>
-  <Badge variant="muted" :class="cn('font-normal', $props.class)">
-    {{ $t("common.stageExperimental") }}
+  <Badge
+    variant="muted"
+    :class="cn('size-5 p-0', $props.class)"
+    :title="$t('common.stageExperimental')"
+    :aria-label="$t('common.stageExperimental')"
+  >
+    <Wrench />
   </Badge>
 </template>
 

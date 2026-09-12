@@ -88,7 +88,7 @@ export default {
         <div
           :class="
             hasCenter
-              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(20rem,40rem)_minmax(0,1fr)] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
+              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_auto] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
               : 'flex h-[var(--app-navbar-row)] items-center gap-2'
           "
         >
@@ -134,13 +134,13 @@ export default {
             <Button
               v-if="pageHelpSlug"
               variant="ghost"
-              class="size-9 shrink-0 gap-1.5 p-0 sm:h-9 sm:w-auto sm:px-3"
+              class="size-9 shrink-0 gap-1.5 p-0 xl:h-9 xl:w-auto xl:px-3"
               :title="$t('components.docsSheet.needHelp')"
               :aria-label="$t('components.docsSheet.needHelp')"
               @click="openPageHelp"
             >
               <CircleHelp class="size-4" />
-              <span class="hidden sm:inline">{{
+              <span class="hidden xl:inline">{{
                 $t("components.docsSheet.needHelp")
               }}</span>
             </Button>

@@ -101,7 +101,7 @@ describe("navbar center", () => {
   it("keeps tabs and search on the viewport midline when breadcrumbs sit on the left", () => {
     assert.match(
       nav,
-      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(20rem,40rem\)_minmax\(0,1fr\)\]/,
+      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,16rem\)_auto\]/,
     );
     assert.match(nav, /justify-self-stretch|justify-center/);
   });
@@ -151,10 +151,11 @@ describe("toolbar search", () => {
 });
 
 describe("navbar help", () => {
-  it("shows a labeled question-mark control, including on small screens", () => {
+  it("keeps the help label off until xl so it does not cover search", () => {
     assert.match(nav, /CircleHelp/);
     assert.match(nav, /docsSheet\.needHelp/);
-    assert.match(nav, /hidden sm:inline/);
+    assert.match(nav, /hidden xl:inline/);
+    assert.doesNotMatch(nav, /hidden sm:inline/);
     assert.doesNotMatch(nav, /BookOpen/);
     assert.doesNotMatch(nav, /hidden size-9 shrink-0 md:inline-flex/);
   });
