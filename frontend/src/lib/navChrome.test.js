@@ -101,9 +101,9 @@ describe("navbar center", () => {
   it("keeps tabs and search on the viewport midline when breadcrumbs sit on the left", () => {
     assert.match(
       nav,
-      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,16rem\)_auto\]/,
+      /lg:grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/,
     );
-    assert.match(nav, /justify-self-stretch|justify-center/);
+    assert.match(nav, /justify-self-center|justify-center/);
   });
 
   it("stacks search and tabs under the title row below lg", () => {
@@ -137,8 +137,9 @@ describe("toolbar search", () => {
     );
   });
 
-  it("lets the catalog search fill the tools row and the wide center track", () => {
+  it("keeps catalog search at 16rem on lg so breadcrumbs keep room", () => {
     assert.match(search, /w-full min-w-0/);
+    assert.match(nav, /nav-search\]\]:w-64/);
     assert.doesNotMatch(search, /lg:w-64/);
     assert.doesNotMatch(products, /sm:w-72/);
     assert.doesNotMatch(products, /lg:w-\[min\(32rem/);
