@@ -9,8 +9,15 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+### Fixed
+
+- Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.
+- Cabinet assistant export of local products to a shop is `export-batch` (including `{ allMatching, skipWithoutImages }` so a full catalog does not need thousands of ids). Photos for that filter are gallery images, not any file attachment. Read-only SQL now honors `>=` `<=`, `NOT IN`, `SELECT DISTINCT` (including `contentType`), `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` / `SHOW COLUMNS`, `product_images`, and extra store tables (notes, variants, links, operations) instead of ignoring them. Chat tools stay one collapsed line unless you expand them. `get_doc` can open indexed instance docs (including `docs/ai/operator-playbook.md`).
+
 ### Changed
 
+- `/api/ai`, `/api/agent`, and `/api/mcp` are exempt from the SPA rate-limit bucket. Authenticated catalog traffic allows 2400 requests per minute per user (was 1200).
+- Docker Compose pulls MinIO from `quay.io/minio` (`minio` and `mc`). Docker Hub no longer serves those images (`pull access denied`).
 - Sidebar Orders and Integrations list connections by connection name, not adapter display name.
 - Assembly overview loads each connection on its own: the first adapter to return paints immediately; others keep a spinner in their group. Orders experimental notice uses body type, not an h5 title.
 - Experimental badge uses the muted fill. Orders sidebar shows it only on the section, aligned right.
@@ -33,6 +40,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Cabinet assistant `search_actions` looks up allowed cabinet HTTP (MVC routes plus operator aliases) so export/import/match do not need a prompt paragraph each, and Tools is not treated as the write catalog.
 - Corner FABs include Documentation. On desktop (`lg+`), while the assistant (or another companion sheet) is open, the buttons sit beside the stack; opening Operations or Docs places that sheet on the right and shifts the assistant left so the panels do not overlap.
 - Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`
 - Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab

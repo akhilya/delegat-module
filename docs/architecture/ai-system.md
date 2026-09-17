@@ -24,10 +24,11 @@ Permission `ai.use` is required (or `workspace.view` for read-only). Resource gr
 
 | Tool | Role |
 |------|------|
-| `search_knowledge` | Lexical RAG over fetched product docs (`product-docs/…`) plus MEMORY / PRODUCT / DESIGN (table `aiKnowledgeChunks`, MinIO prefix `__ai-knowledge/`) |
-| `get_doc` | Full product article markdown by slug (cap ~32k); unknown slug is a tool error |
+| `search_knowledge` | Lexical RAG over fetched product docs (`product-docs/…`) plus MEMORY / PRODUCT / DESIGN / `docs/ai/operator-playbook.md` (table `aiKnowledgeChunks`, MinIO prefix `__ai-knowledge/`) |
+| `get_doc` | Product article by slug **or** indexed instance `sourcePath` (cap ~32k) |
 | `search_catalog` | Live products (name / SKU / barcode) and file display names in **this** store |
-| `sql_readonly` | `SELECT` on allowlisted projections; host forces `storeId` |
+| `search_actions` | Lexical search over cabinet HTTP the assistant may call (MVC routes + body notes). Use instead of memorizing paths or `GET /tools` |
+| `sql_readonly` | `SELECT` on allowlisted projections; host forces `storeId`. Comparisons, `NOT IN`, subquery against `product_images` or `files`, `DISTINCT`, `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` |
 | `run_python` | Sandbox job (`SANDBOX_URL`); pandas / pillow / openpyxl |
 | `platform_request` | `method + path + json` against the same cabinet controllers as the SPA (denylist for secrets and irreversible actions) |
 | `match_files` | Optional: map filenames to products (SKU / barcode / name stem) |
@@ -44,7 +45,7 @@ Bytes never go through the model. Cabinet chat stages attachments for **24 hours
 
 ## SQL
 
-Host parser (`AgentSqlGuard`): `SELECT` / `WITH` only, no `SELECT *`, allowlisted tables/columns including category and store attributes. `WHERE` supports `IN`. `COUNT(*)` / `COUNT(DISTINCT col)` allowed without mixing row columns. Forbidden: users, tokens, API keys, connection `credentialsJson`, order `payloadJson`, other stores. PII the operator already sees (order buyer) follows `orders.manage`.
+Host parser (`AgentSqlGuard`): `SELECT` / `WITH` only, no `SELECT *`, allowlisted tables/columns including category and store attributes and `product_images`. `WHERE` supports `IN` / `NOT IN` and a single-table `NOT IN (SELECT productId FROM product_images|files)`. `COUNT(*)` / `COUNT(DISTINCT col)` / `MIN` / `MAX` allowed without mixing row columns. `SELECT DISTINCT col`. Forbidden: users, tokens, API keys, connection `credentialsJson`, order `payloadJson`, other stores. PII the operator already sees (order buyer) follows `orders.manage`.
 
 ## Python sandbox
 

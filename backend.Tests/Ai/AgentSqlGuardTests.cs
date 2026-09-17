@@ -127,4 +127,74 @@ public class AgentSqlGuardTests
         Assert.NotNull(parsed.Error);
         Assert.Contains("attributeId", parsed.Error, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Parses_Gte_NotInSelect_Min_Distinct_AndOffset()
+    {
+        var gte = AgentSqlGuard.Parse("SELECT id, name FROM products WHERE id >= 1230 LIMIT 10");
+        Assert.Null(gte.Error);
+        Assert.Equal(AgentSqlOp.Gte, gte.Where?[0].Op);
+
+        var notIn = AgentSqlGuard.Parse(
+            "SELECT id, name, sku FROM products WHERE id NOT IN (SELECT productId FROM product_images)");
+        Assert.Null(notIn.Error);
+        Assert.Equal(AgentSqlOp.NotInSelect, notIn.Where?[0].Op);
+        Assert.Equal("product_images", notIn.Where?[0].SubTable);
+
+        var min = AgentSqlGuard.Parse("SELECT MIN(productId) AS n FROM files");
+        Assert.Null(min.Error);
+        Assert.Equal(AgentSqlSelectKind.Min, min.Select[0].Kind);
+
+        var distinct = AgentSqlGuard.Parse("SELECT DISTINCT productId FROM files LIMIT 20 OFFSET 50");
+        Assert.Null(distinct.Error);
+        Assert.True(distinct.IsDistinct);
+        Assert.Equal(20, distinct.Limit);
+        Assert.Equal(50, distinct.Offset);
+
+        var contentType = AgentSqlGuard.Parse("SELECT DISTINCT contentType FROM files");
+        Assert.Null(contentType.Error);
+        Assert.True(contentType.IsDistinct);
+        Assert.Equal("contentType", contentType.Select[0].Column);
+
+        var notInFiles = AgentSqlGuard.Parse(
+            "SELECT id, name, sku FROM products WHERE id NOT IN (SELECT productId FROM files)");
+        Assert.Null(notInFiles.Error);
+        Assert.Equal(AgentSqlOp.NotInSelect, notInFiles.Where?[0].Op);
+        Assert.Equal("files", notInFiles.Where?[0].SubTable);
+
+        var isNull = AgentSqlGuard.Parse("SELECT id, sku FROM products WHERE barcode IS NULL");
+        Assert.Null(isNull.Error);
+        Assert.Equal(AgentSqlOp.IsNull, isNull.Where?[0].Op);
+    }
+
+    [Fact]
+    public void Parses_ShowTables_AndDescribeColumns()
+    {
+        var tables = AgentSqlGuard.Parse("SHOW TABLES");
+        Assert.Null(tables.Error);
+        Assert.True(tables.IsSchema);
+        Assert.Equal(new[] { "table_name" }, tables.Columns);
+        Assert.Null(tables.SchemaFilterTable);
+
+        var describe = AgentSqlGuard.Parse("DESCRIBE products");
+        Assert.Null(describe.Error);
+        Assert.True(describe.IsSchema);
+        Assert.Equal("products", describe.SchemaFilterTable);
+        Assert.Equal(new[] { "column_name" }, describe.Columns);
+        Assert.Contains("storageQuantity", AgentSqlGuard.ColumnsOf("products")!);
+
+        var fromSchema = AgentSqlGuard.Parse(
+            "SELECT table_name, column_name FROM schema WHERE table_name = 'category_attributes'");
+        Assert.Null(fromSchema.Error);
+        Assert.Equal("category_attributes", fromSchema.SchemaFilterTable);
+        Assert.Equal(new[] { "table_name", "column_name" }, fromSchema.Columns);
+    }
+
+    [Fact]
+    public void Rejects_SchemaOnUnknownTable_AndInformationSchema()
+    {
+        Assert.NotNull(AgentSqlGuard.Parse("SHOW COLUMNS FROM users").Error);
+        Assert.NotNull(AgentSqlGuard.Parse("SELECT table_name FROM information_schema.tables").Error);
+        Assert.NotNull(AgentSqlGuard.Parse("SELECT * FROM schema").Error);
+    }
 }

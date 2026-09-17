@@ -40,13 +40,14 @@ Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_re
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
-Tools: `search_knowledge`, `get_doc`, `search_catalog`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+Tools: `search_knowledge`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
 
 Resources:
 
 - `delegat://docs/{path}`
 - `delegat://openapi/operator.json`
 - `delegat://store/schema`
+- `delegat://cabinet/actions` (optional `?q=` search)
 
 ## Agent HTTP (selected)
 
@@ -99,7 +100,9 @@ PATCH `/products/{id}` `attributeValues` replaces the list (GET the card first).
 
 ## SQL (`sql_readonly`)
 
-Allowlisted projections (host forces `storeId`): products (incl. `description`), files, categories (`name`, `description`, `hasSizes`), `category_attributes`, `product_attribute_values`, `store_attributes`, `store_product_attribute_values`, groups, connections, mappings, orders. `WHERE` supports `=`, `!=`, `LIKE`, `IN (...)`. Aggregates: `COUNT(*)`, `COUNT(DISTINCT col)` (not mixed with row columns). No `SELECT *`. Resource `delegat://store/schema`.
+Allowlisted projections (host forces `storeId`): products (incl. `description`), files, `product_images`, categories (`name`, `description`, `hasSizes`), `category_attributes`, `product_attribute_values`, `store_attributes`, `store_product_attribute_values`, groups, connections, mappings, orders, plus notes, variants, group members, product links, store files/folders, operations, pending imports, adapter HTTP logs (no credential or body columns). `WHERE` supports `=`, `!=`, `<` `>` `<=` `>=`, `LIKE` / `NOT LIKE`, `IN` / `NOT IN (...)`, `IS NULL` / `IS NOT NULL`, and `NOT IN (SELECT productId FROM product_images|files)`. Aggregates: `COUNT(*)`, `COUNT(DISTINCT col)`, `MIN(col)`, `MAX(col)` (not mixed with row columns). `SELECT DISTINCT col`. `SHOW TABLES` / `SHOW COLUMNS` / `DESCRIBE`. `LIMIT` / `OFFSET`. No `SELECT *`. Resource `delegat://store/schema`.
+
+Mass catalog export: `POST /marketplace/connections/{id}/products/export-batch` `{ allMatching: true, skipWithoutImages: true }` (gallery photos). Named sets still send `productIds`.
 
 ## Python SDK (sandbox)
 

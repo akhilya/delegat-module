@@ -185,6 +185,7 @@ public class AgentToolHostTests
     public void ToolCatalog_IncludesAskForm()
     {
         Assert.Contains(AgentToolCatalog.Build(), t => t.name == "ask_form");
+        Assert.Contains(AgentToolCatalog.Build(), t => t.name == "search_actions");
     }
 
     [Fact]
@@ -445,6 +446,43 @@ public class AgentToolHostTests
     }
 
     [Fact]
+    public async Task GetDoc_ReadsIndexedInstancePlaybook()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.aiKnowledgeChunks.Add(new Delegat.Models.Ai.AiKnowledgeChunk
+        {
+            sourcePath = "docs/ai/operator-playbook.md",
+            title = "Cabinet assistant playbook",
+            body = "Export is local catalog to marketplace. export-batch.",
+            createdAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var host = CreateHost(db);
+
+        var (result, summary) = await host.DispatchAsync(
+            "get_doc", """{"slug":"docs/ai/operator-playbook.md"}""", 1, 1, default);
+
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("export-batch", json);
+        Assert.Contains("docs/ai/operator-playbook.md", summary);
+    }
+
+    [Fact]
+    public async Task SearchActions_FindsExportWithoutWanderingTools()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var host = CreateHost(db);
+        var (result, summary) = await host.DispatchAsync(
+            "search_actions",
+            """{"query":"экспорт всех товаров в medusa без фото"}""",
+            1, 1, default);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("export-batch", json, StringComparison.Ordinal);
+        Assert.Contains("allMatching", json, StringComparison.Ordinal);
+        Assert.Contains("actions", summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetDoc_UnknownSlug_ReturnsToolError()
     {
         await using var db = TestDbFactory.CreateDb();
@@ -456,6 +494,81 @@ public class AgentToolHostTests
         var json = JsonSerializer.Serialize(result);
         Assert.Contains("docs_not_found", json);
         Assert.Equal("docs_not_found", summary);
+    }
+
+    [Fact]
+    public async Task SqlReadonly_ProductsWithoutGalleryPhotos()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var store = data.AddStore();
+        var user = data.AddUser();
+        var withPhoto = data.AddProduct(store.Id, "Has photo", sku: "P1");
+        var withoutPhoto = data.AddProduct(store.Id, "No photo", sku: "P2");
+        db.files.Add(new Delegat.Models.File
+        {
+            Id = 1,
+            productId = withPhoto.Id,
+            authorUserId = user.Id,
+            filePath = "a.jpg",
+            displayName = "a.jpg",
+            contentType = "image/jpeg",
+            length = 10,
+        });
+        db.images.Add(new ImageReference { Id = 1, fileId = 1, productId = withPhoto.Id, index = 0 });
+        await data.SaveAsync();
+        var host = CreateHost(db);
+
+        var (result, _) = await host.DispatchAsync("sql_readonly",
+            """{"sql":"SELECT id, sku FROM products WHERE id NOT IN (SELECT productId FROM product_images)"}""",
+            store.Id, 1, default);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(1, json.RootElement.GetProperty("rows").GetArrayLength());
+        Assert.Equal(withoutPhoto.Id, json.RootElement.GetProperty("rows")[0].GetProperty("id").GetInt32());
+
+        var filesNotIn = await host.DispatchAsync("sql_readonly",
+            """{"sql":"SELECT id, sku FROM products WHERE id NOT IN (SELECT productId FROM files)"}""",
+            store.Id, 1, default);
+        using var filesJson = JsonDocument.Parse(JsonSerializer.Serialize(filesNotIn.result));
+        Assert.Equal(1, filesJson.RootElement.GetProperty("rows").GetArrayLength());
+
+        for (var i = 0; i < 25; i++)
+        {
+            db.files.Add(new Delegat.Models.File
+            {
+                Id = 10 + i,
+                productId = withPhoto.Id,
+                authorUserId = user.Id,
+                filePath = $"j{i}.jpg",
+                displayName = $"j{i}.jpg",
+                contentType = "image/jpeg",
+                length = 10,
+            });
+        }
+
+        db.files.Add(new Delegat.Models.File
+        {
+            Id = 99,
+            productId = withPhoto.Id,
+            authorUserId = user.Id,
+            filePath = "x.png",
+            displayName = "x.png",
+            contentType = "image/png",
+            length = 10,
+        });
+        await db.SaveChangesAsync();
+
+        var distinct = await host.DispatchAsync("sql_readonly",
+            """{"sql":"SELECT DISTINCT contentType FROM files LIMIT 20"}""",
+            store.Id, 1, default);
+        using var distinctJson = JsonDocument.Parse(JsonSerializer.Serialize(distinct.result));
+        Assert.Equal(2, distinctJson.RootElement.GetProperty("rows").GetArrayLength());
+
+        var show = await host.DispatchAsync("sql_readonly",
+            """{"sql":"SHOW TABLES"}""",
+            store.Id, 1, default);
+        using var showJson = JsonDocument.Parse(JsonSerializer.Serialize(show.result));
+        Assert.True(showJson.RootElement.GetProperty("rows").GetArrayLength() >= 10);
     }
 
     private static AgentToolHost CreateHost(

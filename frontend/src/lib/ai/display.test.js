@@ -45,6 +45,17 @@ describe("sqlResultParts", () => {
     assert.deepEqual(parts.columns, ["id", "name"]);
     assert.equal(parts.rows.length, 2);
   });
+
+  it("reads the SELECT from the tool input envelope", () => {
+    const parts = sqlResultParts({
+      input: JSON.stringify({
+        sql: "SELECT COUNT(*) AS n FROM products",
+      }),
+      result: { columns: ["n"], rows: [{ n: 918 }] },
+    });
+    assert.equal(parts.sql, "SELECT COUNT(*) AS n FROM products");
+    assert.equal(parts.rows[0].n, 918);
+  });
 });
 
 describe("groupProcessItems", () => {

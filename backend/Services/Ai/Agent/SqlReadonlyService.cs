@@ -1,3 +1,4 @@
+using System.Reflection;
 using Delegat.Infrastructure.Auth;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
@@ -22,13 +23,31 @@ public sealed class SqlReadonlyService
         if (parsed.Error != null)
             return (new { error = parsed.Error }, parsed.Error);
 
-        if (parsed.Table is "orders" && !AgentAccess.CanRead(permissions, Permissions.OrdersManage))
-            return (new { error = "orders.manage required" }, "orders.manage required");
-        if (parsed.Table is "connections" or "mappings"
-            && !AgentAccess.CanRead(permissions, Permissions.MarketplaceManage))
-            return (new { error = "marketplace.manage required" }, "marketplace.manage required");
-        if (parsed.Table == "files" && !AgentAccess.CanRead(permissions, Permissions.FilesManage))
-            return (new { error = "files.manage required" }, "files.manage required");
+        if (parsed.IsSchema)
+            return SchemaCatalog(parsed, permissions);
+
+        try
+        {
+            return await QueryCoreAsync(storeId, parsed, permissions, ct);
+        }
+        catch (AgentSqlFilterException ex)
+        {
+            return (new { error = ex.Message }, ex.Message);
+        }
+    }
+
+    private async Task<(object result, string summary)> QueryCoreAsync(
+        int storeId,
+        AgentSqlQuery parsed,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var need = AgentSqlGuard.RequiredPermission(parsed.Table);
+        if (need != null && !AgentAccess.CanRead(permissions, need))
+        {
+            var msg = PermissionError(parsed.Table);
+            return (new { error = msg }, msg);
+        }
 
         if (parsed.IsAggregate)
         {
@@ -40,6 +59,7 @@ public sealed class SqlReadonlyService
         {
             "products" => await QueryProductsAsync(storeId, parsed, ct),
             "files" => await QueryFilesAsync(storeId, parsed, ct),
+            "product_images" => await QueryImagesAsync(storeId, parsed, ct),
             "categories" => await QueryCategoriesAsync(storeId, parsed, ct),
             "category_attributes" => await QueryCategoryAttributesAsync(storeId, parsed, ct),
             "product_attribute_values" => await QueryProductAttributeValuesAsync(storeId, parsed, ct),
@@ -49,10 +69,98 @@ public sealed class SqlReadonlyService
             "connections" => await QueryConnectionsAsync(storeId, parsed, ct),
             "mappings" => await QueryMappingsAsync(storeId, parsed, ct),
             "orders" => await QueryOrdersAsync(storeId, parsed, ct),
-            _ => [],
+            "notes" => await QueryProjectedAsync(
+                _db.notes.AsNoTracking().Where(n => n.product.storeId == storeId && n.product.deletedAt == null),
+                parsed, ct),
+            "variants" => await QueryProjectedAsync(
+                _db.productVariants.AsNoTracking().Where(v => v.product.storeId == storeId && v.product.deletedAt == null),
+                parsed, ct),
+            "group_members" => await QueryProjectedAsync(
+                _db.productGroupMembers.AsNoTracking().Where(m => m.group.storeId == storeId),
+                parsed, ct),
+            "product_links" => await QueryProjectedAsync(
+                _db.productMarketplaceLinks.AsNoTracking()
+                    .Where(l => l.product.storeId == storeId && l.product.deletedAt == null),
+                parsed, ct),
+            "store_files" => await QueryProjectedAsync(
+                _db.storeFiles.AsNoTracking().Where(f => f.storeId == storeId), parsed, ct),
+            "store_folders" => await QueryProjectedAsync(
+                _db.storeFolders.AsNoTracking().Where(f => f.storeId == storeId), parsed, ct),
+            "operations" => await QueryProjectedAsync(
+                _db.operations.AsNoTracking().Where(o => o.storeId == storeId), parsed, ct),
+            "pending_imports" => await QueryProjectedAsync(
+                _db.pendingProductImports.AsNoTracking().Where(p => p.storeId == storeId), parsed, ct),
+            "adapter_http_logs" => await QueryProjectedAsync(
+                _db.adapterHttpLogs.AsNoTracking().Where(l => l.storeId == storeId), parsed, ct),
+            _ => throw new AgentSqlFilterException($"Table '{parsed.Table}' is not queryable"),
         };
 
         return (new { table = parsed.Table, columns = parsed.Columns, rows }, $"{rows.Count} rows");
+    }
+
+    private static bool CanReadTable(string table, IReadOnlySet<string> permissions)
+    {
+        var need = AgentSqlGuard.RequiredPermission(table);
+        return need == null || AgentAccess.CanRead(permissions, need);
+    }
+
+    private static string PermissionError(string table) =>
+        AgentSqlGuard.RequiredPermission(table) switch
+        {
+            Permissions.OrdersManage => "orders.manage required",
+            Permissions.MarketplaceManage => "marketplace.manage required",
+            Permissions.FilesManage => "files.manage required",
+            Permissions.OperationsManage => "operations.manage required",
+            _ => "permission required",
+        };
+
+    private static (object result, string summary) SchemaCatalog(
+        AgentSqlQuery parsed, IReadOnlySet<string> permissions)
+    {
+        if (parsed.SchemaFilterTable is { } one)
+        {
+            if (!CanReadTable(one, permissions))
+            {
+                var need = PermissionError(one);
+                return (new { error = need }, need);
+            }
+
+            var cols = AgentSqlGuard.ColumnsOf(one) ?? [];
+            var rows = cols.Select(c => ProjectSchemaRow(parsed.Columns, one, c)).ToList();
+            return (new { table = "schema", columns = parsed.Columns, rows }, $"{rows.Count} rows");
+        }
+
+        var tables = AgentSqlGuard.AllowlistedTables.Where(t => CanReadTable(t, permissions)).ToList();
+        var wantColumns = parsed.Columns.Any(c => c.Equals("column_name", StringComparison.OrdinalIgnoreCase));
+        if (!wantColumns)
+        {
+            var tableRows = tables.Select(t => ProjectSchemaRow(parsed.Columns, t, column: null)).ToList();
+            return (new { table = "schema", columns = parsed.Columns, rows = tableRows }, $"{tableRows.Count} rows");
+        }
+
+        var flat = new List<Dictionary<string, object?>>();
+        foreach (var t in tables)
+        {
+            foreach (var c in AgentSqlGuard.ColumnsOf(t) ?? [])
+                flat.Add(ProjectSchemaRow(parsed.Columns, t, c));
+        }
+
+        return (new { table = "schema", columns = parsed.Columns, rows = flat }, $"{flat.Count} rows");
+    }
+
+    private static Dictionary<string, object?> ProjectSchemaRow(
+        IReadOnlyList<string> columns, string table, string? column)
+    {
+        var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in columns)
+        {
+            if (col.Equals("table_name", StringComparison.OrdinalIgnoreCase))
+                row[col] = table;
+            else if (col.Equals("column_name", StringComparison.OrdinalIgnoreCase))
+                row[col] = column;
+        }
+
+        return row;
     }
 
     private async Task<Dictionary<string, object?>> AggregateRowAsync(
@@ -65,6 +173,8 @@ public sealed class SqlReadonlyService
             {
                 AgentSqlSelectKind.CountStar => await CountRowsAsync(storeId, q, ct),
                 AgentSqlSelectKind.CountDistinct => await CountDistinctAsync(storeId, q, item.Column!, ct),
+                AgentSqlSelectKind.Min => await MinMaxAsync(storeId, q, item.Column!, min: true, ct),
+                AgentSqlSelectKind.Max => await MinMaxAsync(storeId, q, item.Column!, min: false, ct),
                 _ => null,
             };
         }
@@ -77,6 +187,7 @@ public sealed class SqlReadonlyService
         {
             "products" => ProductSource(storeId, q).CountAsync(ct),
             "files" => FileSource(storeId, q).CountAsync(ct),
+            "product_images" => ImageSource(storeId, q).CountAsync(ct),
             "categories" => CategorySource(storeId, q).CountAsync(ct),
             "category_attributes" => CategoryAttributeSource(storeId, q).CountAsync(ct),
             "product_attribute_values" => ProductAttributeValueSource(storeId, q).CountAsync(ct),
@@ -86,6 +197,25 @@ public sealed class SqlReadonlyService
             "connections" => ConnectionSource(storeId).CountAsync(ct),
             "mappings" => MappingSource(storeId).CountAsync(ct),
             "orders" => OrderSource(storeId).CountAsync(ct),
+            "notes" => CountProjectedAsync(
+                _db.notes.AsNoTracking().Where(n => n.product.storeId == storeId && n.product.deletedAt == null), q, ct),
+            "variants" => CountProjectedAsync(
+                _db.productVariants.AsNoTracking().Where(v => v.product.storeId == storeId && v.product.deletedAt == null), q, ct),
+            "group_members" => CountProjectedAsync(
+                _db.productGroupMembers.AsNoTracking().Where(m => m.group.storeId == storeId), q, ct),
+            "product_links" => CountProjectedAsync(
+                _db.productMarketplaceLinks.AsNoTracking()
+                    .Where(l => l.product.storeId == storeId && l.product.deletedAt == null), q, ct),
+            "store_files" => CountProjectedAsync(
+                _db.storeFiles.AsNoTracking().Where(f => f.storeId == storeId), q, ct),
+            "store_folders" => CountProjectedAsync(
+                _db.storeFolders.AsNoTracking().Where(f => f.storeId == storeId), q, ct),
+            "operations" => CountProjectedAsync(
+                _db.operations.AsNoTracking().Where(o => o.storeId == storeId), q, ct),
+            "pending_imports" => CountProjectedAsync(
+                _db.pendingProductImports.AsNoTracking().Where(p => p.storeId == storeId), q, ct),
+            "adapter_http_logs" => CountProjectedAsync(
+                _db.adapterHttpLogs.AsNoTracking().Where(l => l.storeId == storeId), q, ct),
             _ => Task.FromResult(0),
         };
 
@@ -96,6 +226,7 @@ public sealed class SqlReadonlyService
         {
             "products" => CountDistinctProductsAsync(ProductSource(storeId, q), col, ct),
             "files" => CountDistinctFilesAsync(FileSource(storeId, q), col, ct),
+            "product_images" => CountDistinctImagesAsync(ImageSource(storeId, q), col, ct),
             "categories" => CountDistinctCategoriesAsync(CategorySource(storeId, q), col, ct),
             "category_attributes" => CountDistinctCategoryAttributesAsync(CategoryAttributeSource(storeId, q), col, ct),
             "product_attribute_values" => CountDistinctProductAttributeValuesAsync(
@@ -135,6 +266,55 @@ public sealed class SqlReadonlyService
             "contenttype" => src.Select(f => f.contentType).Distinct().CountAsync(ct),
             "length" => src.Select(f => f.length).Distinct().CountAsync(ct),
             _ => Task.FromResult(0),
+        };
+
+    private static Task<int> CountDistinctImagesAsync(IQueryable<ImageReference> src, string col, CancellationToken ct) =>
+        col switch
+        {
+            "id" => src.Select(i => i.Id).Distinct().CountAsync(ct),
+            "productid" => src.Select(i => i.productId).Distinct().CountAsync(ct),
+            "fileid" => src.Select(i => i.fileId).Distinct().CountAsync(ct),
+            "index" => src.Select(i => i.index).Distinct().CountAsync(ct),
+            _ => Task.FromResult(0),
+        };
+
+    private Task<int?> MinMaxAsync(int storeId, AgentSqlQuery q, string column, bool min, CancellationToken ct)
+    {
+        var col = column.ToLowerInvariant();
+        return q.Table switch
+        {
+            "products" => MinMaxProductsAsync(ProductSource(storeId, q), col, min, ct),
+            "files" => MinMaxFilesAsync(FileSource(storeId, q), col, min, ct),
+            "product_images" => MinMaxImagesAsync(ImageSource(storeId, q), col, min, ct),
+            _ => Task.FromResult<int?>(null),
+        };
+    }
+
+    private static Task<int?> MinMaxProductsAsync(IQueryable<Product> src, string col, bool min, CancellationToken ct) =>
+        col switch
+        {
+            "id" => min ? src.MinAsync(p => (int?)p.Id, ct) : src.MaxAsync(p => (int?)p.Id, ct),
+            "categoryid" => min ? src.MinAsync(p => p.categoryId, ct) : src.MaxAsync(p => p.categoryId, ct),
+            "storagequantity" => min ? src.MinAsync(p => (int?)p.storageQuantity, ct) : src.MaxAsync(p => (int?)p.storageQuantity, ct),
+            _ => Task.FromResult<int?>(null),
+        };
+
+    private static Task<int?> MinMaxFilesAsync(IQueryable<Delegat.Models.File> src, string col, bool min, CancellationToken ct) =>
+        col switch
+        {
+            "id" => min ? src.MinAsync(f => (int?)f.Id, ct) : src.MaxAsync(f => (int?)f.Id, ct),
+            "productid" => min ? src.MinAsync(f => (int?)f.productId, ct) : src.MaxAsync(f => (int?)f.productId, ct),
+            _ => Task.FromResult<int?>(null),
+        };
+
+    private static Task<int?> MinMaxImagesAsync(IQueryable<ImageReference> src, string col, bool min, CancellationToken ct) =>
+        col switch
+        {
+            "id" => min ? src.MinAsync(i => (int?)i.Id, ct) : src.MaxAsync(i => (int?)i.Id, ct),
+            "productid" => min ? src.MinAsync(i => (int?)i.productId, ct) : src.MaxAsync(i => (int?)i.productId, ct),
+            "fileid" => min ? src.MinAsync(i => (int?)i.fileId, ct) : src.MaxAsync(i => (int?)i.fileId, ct),
+            "index" => min ? src.MinAsync(i => (int?)i.index, ct) : src.MaxAsync(i => (int?)i.index, ct),
+            _ => Task.FromResult<int?>(null),
         };
 
     private static Task<int> CountDistinctCategoriesAsync(IQueryable<Category> src, string col, CancellationToken ct) =>
@@ -247,7 +427,7 @@ public sealed class SqlReadonlyService
     private IQueryable<Product> ProductSource(int storeId, AgentSqlQuery q)
     {
         var src = _db.products.AsNoTracking().Where(p => p.storeId == storeId && p.deletedAt == null);
-        return ApplyProductWhere(src, q);
+        return ApplyProductWhere(src, q, storeId);
     }
 
     private async Task<List<Dictionary<string, object?>>> QueryProductsAsync(
@@ -263,21 +443,32 @@ public sealed class SqlReadonlyService
             "id" => q.OrderDescending ? src.OrderByDescending(p => p.Id) : src.OrderBy(p => p.Id),
             _ => src.OrderBy(p => p.Id),
         };
-        var list = await src.Take(q.Limit).ToListAsync(ct);
-        return list.Select(p => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var list = await Page(src, q).ToListAsync(ct);
+        var rows = list.Select(p => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["id"] = p.Id,
             ["sku"] = p.sku,
             ["barcode"] = p.barcode,
             ["name"] = p.name,
             ["price"] = p.price,
+            ["oldprice"] = p.oldPrice,
+            ["minprice"] = p.minPrice,
+            ["netprice"] = p.netPrice,
+            ["discountedprice"] = p.discountedPrice,
+            ["discount"] = p.discount,
+            ["currency"] = p.currency,
             ["storagequantity"] = p.storageQuantity,
             ["categoryid"] = p.categoryId,
             ["description"] = p.description,
+            ["preferredexportallmode"] = p.preferredExportAllMode,
+            ["createdat"] = p.createdAt,
+            ["updatedat"] = p.updatedAt,
+            ["deletedat"] = p.deletedAt,
         })).ToList();
+        return q.IsDistinct ? DistinctRows(rows, q) : rows;
     }
 
-    private static IQueryable<Product> ApplyProductWhere(IQueryable<Product> src, AgentSqlQuery q)
+    private IQueryable<Product> ApplyProductWhere(IQueryable<Product> src, AgentSqlQuery q, int storeId)
     {
         if (q.Where == null) return src;
         foreach (var pred in q.Where)
@@ -285,36 +476,67 @@ public sealed class SqlReadonlyService
             var col = pred.Column.ToLowerInvariant();
             var val = pred.Value ?? "";
             var ids = IntValues(pred);
-            src = (col, pred.Op) switch
+            IQueryable<Product>? next = (col, pred.Op) switch
             {
                 ("sku", AgentSqlOp.Like) => src.Where(p => p.sku.Contains(val.Trim('%'))),
+                ("sku", AgentSqlOp.NotLike) => src.Where(p => !p.sku.Contains(val.Trim('%'))),
                 ("sku", AgentSqlOp.Eq) => src.Where(p => p.sku == val),
                 ("name", AgentSqlOp.Like) => src.Where(p => p.name.Contains(val.Trim('%'))),
+                ("name", AgentSqlOp.NotLike) => src.Where(p => !p.name.Contains(val.Trim('%'))),
                 ("name", AgentSqlOp.Eq) => src.Where(p => p.name == val),
                 ("description", AgentSqlOp.Like) => src.Where(p => p.description.Contains(val.Trim('%'))),
                 ("barcode", AgentSqlOp.Like) => src.Where(p => p.barcode != null && p.barcode.Contains(val.Trim('%'))),
                 ("barcode", AgentSqlOp.Eq) => src.Where(p => p.barcode == val),
                 ("id", AgentSqlOp.Eq) when TryInt(val, out var id) => src.Where(p => p.Id == id),
+                ("id", AgentSqlOp.Neq) when TryInt(val, out var idNeq) => src.Where(p => p.Id != idNeq),
+                ("id", AgentSqlOp.Lt) when TryInt(val, out var idLt) => src.Where(p => p.Id < idLt),
+                ("id", AgentSqlOp.Gt) when TryInt(val, out var idGt) => src.Where(p => p.Id > idGt),
+                ("id", AgentSqlOp.Lte) when TryInt(val, out var idLte) => src.Where(p => p.Id <= idLte),
+                ("id", AgentSqlOp.Gte) when TryInt(val, out var idGte) => src.Where(p => p.Id >= idGte),
                 ("id", AgentSqlOp.In) when ids.Count > 0 => src.Where(p => ids.Contains(p.Id)),
+                ("id", AgentSqlOp.NotIn) when ids.Count > 0 => src.Where(p => !ids.Contains(p.Id)),
+                ("id", AgentSqlOp.NotInSelect) => src.Where(p => !SubqueryProductIds(storeId, pred).Contains(p.Id)),
+                ("barcode", AgentSqlOp.IsNull) => src.Where(p => p.barcode == null),
+                ("barcode", AgentSqlOp.IsNotNull) => src.Where(p => p.barcode != null),
+                ("categoryid", AgentSqlOp.IsNull) => src.Where(p => p.categoryId == null),
+                ("categoryid", AgentSqlOp.IsNotNull) => src.Where(p => p.categoryId != null),
                 ("categoryid", AgentSqlOp.Eq) when TryInt(val, out var cid) => src.Where(p => p.categoryId == cid),
                 ("categoryid", AgentSqlOp.In) when ids.Count > 0 =>
                     src.Where(p => p.categoryId != null && ids.Contains(p.categoryId.Value)),
                 ("price", AgentSqlOp.Eq) when decimal.TryParse(val, out var price) => src.Where(p => p.price == price),
                 ("price", AgentSqlOp.Gt) when decimal.TryParse(val, out var priceGt) => src.Where(p => p.price > priceGt),
                 ("price", AgentSqlOp.Lt) when decimal.TryParse(val, out var priceLt) => src.Where(p => p.price < priceLt),
+                ("price", AgentSqlOp.Gte) when decimal.TryParse(val, out var priceGte) => src.Where(p => p.price >= priceGte),
+                ("price", AgentSqlOp.Lte) when decimal.TryParse(val, out var priceLte) => src.Where(p => p.price <= priceLte),
                 ("storagequantity", AgentSqlOp.Eq) when TryInt(val, out var qty) => src.Where(p => p.storageQuantity == qty),
                 ("storagequantity", AgentSqlOp.Gt) when TryInt(val, out var qtyGt) => src.Where(p => p.storageQuantity > qtyGt),
                 ("storagequantity", AgentSqlOp.Lt) when TryInt(val, out var qtyLt) => src.Where(p => p.storageQuantity < qtyLt),
-                _ => src,
+                ("storagequantity", AgentSqlOp.Gte) when TryInt(val, out var qtyGte) => src.Where(p => p.storageQuantity >= qtyGte),
+                ("storagequantity", AgentSqlOp.Lte) when TryInt(val, out var qtyLte) => src.Where(p => p.storageQuantity <= qtyLte),
+                _ => null,
             };
+            if (next == null)
+                throw new AgentSqlFilterException($"WHERE {pred.Column} is not supported on products");
+            src = next;
         }
 
         return src;
     }
 
+    private IQueryable<int> SubqueryProductIds(int storeId, AgentSqlPredicate pred)
+    {
+        var sub = new AgentSqlQuery { Table = pred.SubTable ?? "", Where = pred.SubWhere };
+        return (pred.SubTable ?? "") switch
+        {
+            "product_images" => ImageSource(storeId, sub).Select(i => i.productId),
+            "files" => FileSource(storeId, sub).Select(f => f.productId),
+            _ => _db.products.Where(_ => false).Select(p => p.Id),
+        };
+    }
+
     private IQueryable<Delegat.Models.File> FileSource(int storeId, AgentSqlQuery q)
     {
-        var src = _db.files.AsNoTracking().Where(f => f.product.storeId == storeId);
+        var src = _db.files.AsNoTracking().Where(f => f.product.storeId == storeId && f.product.deletedAt == null);
         foreach (var pred in q.Where ?? [])
         {
             var col = pred.Column.ToLowerInvariant();
@@ -323,10 +545,23 @@ public sealed class SqlReadonlyService
             src = (col, pred.Op) switch
             {
                 ("productid", AgentSqlOp.Eq) when TryInt(val, out var pid) => src.Where(f => f.productId == pid),
+                ("productid", AgentSqlOp.Neq) when TryInt(val, out var pidNeq) => src.Where(f => f.productId != pidNeq),
+                ("productid", AgentSqlOp.Lt) when TryInt(val, out var pidLt) => src.Where(f => f.productId < pidLt),
+                ("productid", AgentSqlOp.Gt) when TryInt(val, out var pidGt) => src.Where(f => f.productId > pidGt),
+                ("productid", AgentSqlOp.Lte) when TryInt(val, out var pidLte) => src.Where(f => f.productId <= pidLte),
+                ("productid", AgentSqlOp.Gte) when TryInt(val, out var pidGte) => src.Where(f => f.productId >= pidGte),
                 ("productid", AgentSqlOp.In) when ids.Count > 0 => src.Where(f => ids.Contains(f.productId)),
+                ("productid", AgentSqlOp.NotIn) when ids.Count > 0 => src.Where(f => !ids.Contains(f.productId)),
                 ("id", AgentSqlOp.Eq) when TryInt(val, out var id) => src.Where(f => f.Id == id),
                 ("id", AgentSqlOp.In) when ids.Count > 0 => src.Where(f => ids.Contains(f.Id)),
-                _ => src,
+                ("contenttype", AgentSqlOp.Eq) => src.Where(f => f.contentType == val),
+                ("contenttype", AgentSqlOp.Neq) => src.Where(f => f.contentType != val),
+                ("contenttype", AgentSqlOp.IsNull) => src.Where(f => f.contentType == null),
+                ("contenttype", AgentSqlOp.IsNotNull) => src.Where(f => f.contentType != null),
+                ("contenttype", AgentSqlOp.Like) => src.Where(f => f.contentType != null && f.contentType.Contains(val.Trim('%'))),
+                ("contenttype", AgentSqlOp.NotLike) => src.Where(f => f.contentType == null || !f.contentType.Contains(val.Trim('%'))),
+                ("displayname", AgentSqlOp.Like) => src.Where(f => f.displayName != null && f.displayName.Contains(val.Trim('%'))),
+                _ => throw new AgentSqlFilterException($"WHERE {pred.Column} is not supported on files"),
             };
         }
 
@@ -336,8 +571,16 @@ public sealed class SqlReadonlyService
     private async Task<List<Dictionary<string, object?>>> QueryFilesAsync(
         int storeId, AgentSqlQuery q, CancellationToken ct)
     {
-        var list = await FileSource(storeId, q).Take(q.Limit).ToListAsync(ct);
-        return list.Select(f => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var src = FileSource(storeId, q);
+        if (q.IsDistinct)
+            return await DistinctFileColumnAsync(src, q, ct);
+
+        var list = await Page(src.OrderBy(f => f.Id), q).ToListAsync(ct);
+        return list.Select(f => Project(q.Columns, FileRow(f))).ToList();
+    }
+
+    private static Dictionary<string, object?> FileRow(Delegat.Models.File f) =>
+        new(StringComparer.OrdinalIgnoreCase)
         {
             ["id"] = f.Id,
             ["productid"] = f.productId,
@@ -345,6 +588,84 @@ public sealed class SqlReadonlyService
             ["filepath"] = f.filePath,
             ["contenttype"] = f.contentType,
             ["length"] = f.length,
+            ["folderid"] = f.folderId,
+            ["ispublic"] = f.isPublic,
+            ["sourceurl"] = f.sourceUrl,
+            ["uploaddatetime"] = f.uploadDateTime,
+        };
+
+    private async Task<List<Dictionary<string, object?>>> DistinctFileColumnAsync(
+        IQueryable<Delegat.Models.File> src, AgentSqlQuery q, CancellationToken ct)
+    {
+        var col = q.Select[0].Column!.ToLowerInvariant();
+        var name = q.Select[0].OutputName;
+        List<object?> values = col switch
+        {
+            "contenttype" => (await Page(src.Select(f => f.contentType).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "productid" => (await Page(src.Select(f => f.productId).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "displayname" => (await Page(src.Select(f => f.displayName).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "filepath" => (await Page(src.Select(f => f.filePath).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "id" => (await Page(src.Select(f => f.Id).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "length" => (await Page(src.Select(f => f.length).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "folderid" => (await Page(src.Select(f => f.folderId).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "ispublic" => (await Page(src.Select(f => f.isPublic).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            "sourceurl" => (await Page(src.Select(f => f.sourceUrl).Distinct(), q).ToListAsync(ct))
+                .Select(v => (object?)v).ToList(),
+            _ => throw new AgentSqlFilterException($"SELECT DISTINCT {col} is not supported on files"),
+        };
+        return values.Select(v => new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            [name] = v,
+        }).ToList();
+    }
+
+    private IQueryable<ImageReference> ImageSource(int storeId, AgentSqlQuery q)
+    {
+        var src = _db.images.AsNoTracking().Where(i => i.product.storeId == storeId && i.product.deletedAt == null);
+        foreach (var pred in q.Where ?? [])
+        {
+            var col = pred.Column.ToLowerInvariant();
+            var val = pred.Value ?? "";
+            var ids = IntValues(pred);
+            src = (col, pred.Op) switch
+            {
+                ("productid", AgentSqlOp.Eq) when TryInt(val, out var pid) => src.Where(i => i.productId == pid),
+                ("productid", AgentSqlOp.In) when ids.Count > 0 => src.Where(i => ids.Contains(i.productId)),
+                ("id", AgentSqlOp.Eq) when TryInt(val, out var id) => src.Where(i => i.Id == id),
+                ("fileid", AgentSqlOp.Eq) when TryInt(val, out var fid) => src.Where(i => i.fileId == fid),
+                _ => throw new AgentSqlFilterException($"WHERE {pred.Column} is not supported on product_images"),
+            };
+        }
+
+        return src;
+    }
+
+    private async Task<List<Dictionary<string, object?>>> QueryImagesAsync(
+        int storeId, AgentSqlQuery q, CancellationToken ct)
+    {
+        var list = await Page(ImageSource(storeId, q).OrderBy(i => i.index).ThenBy(i => i.Id), q).ToListAsync(ct);
+        if (q.IsDistinct)
+            return DistinctRows(list.Select(i => new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["id"] = i.Id,
+                ["productid"] = i.productId,
+                ["fileid"] = i.fileId,
+                ["index"] = i.index,
+            }).ToList(), q);
+        return list.Select(i => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = i.Id,
+            ["productid"] = i.productId,
+            ["fileid"] = i.fileId,
+            ["index"] = i.index,
         })).ToList();
     }
 
@@ -504,6 +825,8 @@ public sealed class SqlReadonlyService
                 ("productid", AgentSqlOp.Eq) when TryInt(val, out var pid) => src.Where(v => v.productId == pid),
                 ("productid", AgentSqlOp.In) when ids.Count > 0 => src.Where(v => ids.Contains(v.productId)),
                 ("storeattributeid", AgentSqlOp.Eq) when TryInt(val, out var aid) => src.Where(v => v.storeAttributeId == aid),
+                ("value", AgentSqlOp.Eq) => src.Where(v => v.value == val),
+                ("value", AgentSqlOp.Like) => src.Where(v => v.value != null && v.value.Contains(val.Trim('%'))),
                 _ => src,
             };
         }
@@ -587,6 +910,57 @@ public sealed class SqlReadonlyService
             ["ordercreatedat"] = o.orderCreatedAt,
             ["connectionid"] = o.connectionId,
         })).ToList();
+    }
+
+    private static Task<int> CountProjectedAsync<T>(IQueryable<T> scoped, AgentSqlQuery q, CancellationToken ct) =>
+        AgentSqlWhere.Apply(scoped, q.Where).CountAsync(ct);
+
+    private async Task<List<Dictionary<string, object?>>> QueryProjectedAsync<T>(
+        IQueryable<T> scoped, AgentSqlQuery q, CancellationToken ct)
+    {
+        var src = AgentSqlWhere.Apply(scoped, q.Where);
+        src = AgentSqlWhere.Order(src, q);
+        if (string.IsNullOrEmpty(q.OrderByColumn))
+        {
+            var id = typeof(T).GetProperty("Id");
+            if (id != null && id.PropertyType == typeof(int))
+                src = src.OrderBy(e => EF.Property<int>(e, "Id"));
+        }
+
+        var list = await Page(src, q).ToListAsync(ct);
+        var rows = list.Select(e => ProjectObject(e!, q.Columns)).ToList();
+        return q.IsDistinct ? DistinctRows(rows, q) : rows;
+    }
+
+    private static Dictionary<string, object?> ProjectObject(object entity, IReadOnlyList<string> columns)
+    {
+        var type = entity.GetType();
+        var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in columns)
+        {
+            var prop = col.Equals("id", StringComparison.OrdinalIgnoreCase)
+                ? type.GetProperty("Id")
+                : type.GetProperty(col, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            var val = prop?.GetValue(entity);
+            if (val is Enum en)
+                val = en.ToString();
+            map[col] = val;
+        }
+
+        return Project(columns, map);
+    }
+
+    private static IQueryable<T> Page<T>(IQueryable<T> src, AgentSqlQuery q) =>
+        q.Offset > 0 ? src.Skip(q.Offset).Take(q.Limit) : src.Take(q.Limit);
+
+    private static List<Dictionary<string, object?>> DistinctRows(
+        List<Dictionary<string, object?>> rows, AgentSqlQuery q)
+    {
+        var col = q.Select[0].Column ?? q.Columns[0];
+        return rows
+            .GroupBy(r => r.TryGetValue(col, out var v) ? v : null)
+            .Select(g => Project(q.Columns, g.First()))
+            .ToList();
     }
 
     private static Dictionary<string, object?> Project(

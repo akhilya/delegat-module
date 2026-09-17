@@ -40,6 +40,61 @@ public sealed class KnowledgeIndexService
         return KnowledgeSearch.Search(chunks, query, take);
     }
 
+    public async Task<KnowledgeChunk?> ReadSourceAsync(string path, string locale, CancellationToken ct)
+    {
+        var keys = SourceKeys(path, locale);
+        var stored = await _db.aiKnowledgeChunks.AsNoTracking()
+            .Where(c => c.storeId == null)
+            .ToListAsync(ct);
+        var hits = stored
+            .Where(c => keys.Any(k => PathsEqual(c.sourcePath, k)))
+            .OrderBy(c => c.Id)
+            .Select(c => new KnowledgeChunk(c.sourcePath, c.title, c.body))
+            .ToList();
+        if (hits.Count == 0)
+        {
+            hits = LoadFromDisk()
+                .Where(c => keys.Any(k => PathsEqual(c.SourcePath, k)))
+                .ToList();
+        }
+
+        if (hits.Count == 0)
+            return null;
+
+        var body = string.Join("\n\n", hits.Select(h => h.Body).Where(b => !string.IsNullOrWhiteSpace(b)));
+        if (body.Length > 32_000)
+            body = body[..32_000];
+        return new KnowledgeChunk(hits[0].SourcePath, hits[0].Title, body);
+    }
+
+    public static bool IsInstanceDocPath(string path)
+    {
+        var p = (path ?? "").Replace('\\', '/').TrimStart('/');
+        return p.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+               || p.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)
+               || p.StartsWith("knowledge/", StringComparison.OrdinalIgnoreCase)
+               || p.Equals("MEMORY.md", StringComparison.OrdinalIgnoreCase)
+               || p.Equals("PRODUCT.md", StringComparison.OrdinalIgnoreCase)
+               || p.Equals("DESIGN.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string stored, string key) =>
+        stored.Replace('\\', '/').Equals(key.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<string> SourceKeys(string path, string locale)
+    {
+        var p = (path ?? "").Replace('\\', '/').TrimStart('/');
+        var keys = new List<string> { p };
+        if (!p.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && !p.Contains('/'))
+            keys.Add(p + ".md");
+        if (p.StartsWith("docs/", StringComparison.OrdinalIgnoreCase) && !p.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            keys.Add(p + ".md");
+        var loc = string.IsNullOrWhiteSpace(locale) ? "ru" : locale;
+        keys.Add($"product-docs/{loc}/{p}.md");
+        keys.Add($"product-docs/{loc}/{p}");
+        return keys;
+    }
+
     public async Task ReindexAsync(CancellationToken ct = default)
     {
         var files = EnumerateCanonFiles().ToList();
@@ -112,6 +167,7 @@ public sealed class KnowledgeIndexService
     {
         foreach (var root in CandidateRoots())
         {
+            var yielded = false;
             var knowledge = Path.Combine(root, "knowledge");
             if (Directory.Exists(knowledge))
             {
@@ -119,12 +175,13 @@ public sealed class KnowledgeIndexService
                 {
                     if (!IsCanon(path)) continue;
                     yield return (Path.GetRelativePath(knowledge, path).Replace('\\', '/'), path);
+                    yielded = true;
                 }
-                yield break;
             }
 
             var docs = Path.Combine(root, "docs");
-            if (Directory.Exists(docs) || System.IO.File.Exists(Path.Combine(root, "MEMORY.md")))
+            var hasCanon = Directory.Exists(docs) || System.IO.File.Exists(Path.Combine(root, "MEMORY.md"));
+            if (hasCanon)
             {
                 foreach (var name in new[] { "MEMORY.md", "PRODUCT.md", "DESIGN.md" })
                 {
@@ -145,6 +202,9 @@ public sealed class KnowledgeIndexService
 
                 yield break;
             }
+
+            if (yielded)
+                yield break;
         }
     }
 

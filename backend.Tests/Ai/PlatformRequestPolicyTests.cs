@@ -91,6 +91,10 @@ public class PlatformRequestPolicyTests
         Assert.DoesNotContain("/stats", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.DoesNotContain("GET /groups", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("import-unlinked", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("export-batch", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("allMatching", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("skipWithoutImages", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("hasImages=false", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("import-selected", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("import-preview", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("/marketplace/catalog-connect/jobs", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);

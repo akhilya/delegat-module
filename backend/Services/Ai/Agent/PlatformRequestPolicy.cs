@@ -37,6 +37,10 @@ public static class PlatformRequestPolicy
           GET …/external-products  GET …/products/import-preview
           POST …/products/import-selected  POST …/products/import-unlinked
           POST …/products/import-all (legacy; prefer import-unlinked or import-selected)
+          POST …/products/export-batch { productIds } — local catalog → this shop (Operations)
+          POST …/products/export-batch { allMatching: true, skipWithoutImages?: true } — whole catalog (skip cards with no gallery photos)
+          POST …/products/export-bulk { productIds } — same write, waits in-request (small sets only)
+          GET /marketplace/export-batches/{batchId}/status
           POST …/match/preview  POST …/match/apply  POST …/match/repair-mappings
           GET /marketplace/catalog-connect/jobs  GET /marketplace/adapters
           POST /tools/{id}/run  catalog-scrape search/apply

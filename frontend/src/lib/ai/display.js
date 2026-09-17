@@ -49,6 +49,18 @@ export function pythonRunParts(tool) {
   };
 }
 
+export function sqlQueryFromInput(input) {
+  if (input && typeof input === "object" && typeof input.sql === "string") {
+    return input.sql.trim();
+  }
+  const parsed = parseJsonObject(typeof input === "string" ? input : "");
+  if (typeof parsed?.sql === "string") return parsed.sql.trim();
+  if (typeof input === "string" && /^\s*(SELECT|SHOW|DESCRIBE)\b/i.test(input)) {
+    return input.trim();
+  }
+  return "";
+}
+
 export function sqlResultParts(tool) {
   const result =
     tool?.result && typeof tool.result === "object" ? tool.result : {};
@@ -59,7 +71,11 @@ export function sqlResultParts(tool) {
       : rows[0]
         ? Object.keys(rows[0])
         : [];
-  return { columns, rows: rows.slice(0, 30) };
+  return {
+    sql: sqlQueryFromInput(tool?.input),
+    columns,
+    rows: rows.slice(0, 30),
+  };
 }
 
 /**

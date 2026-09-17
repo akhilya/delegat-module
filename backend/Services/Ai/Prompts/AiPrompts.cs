@@ -213,9 +213,29 @@ public static class AiPrompts
         Background jobs: point the user to Operations.
 
         SQL: one table per query, no JOIN, no OR, no SELECT *, no table aliases.
-        Columns are in SCHEMA below. After a column error, use that schema — do not invent names.
-        search_knowledge is docs, not the live catalog and not the create DTO (TOOLS has it).
-        Product how-tos: search_knowledge then get_doc. Do not invent UI that is not in the article.
+        Columns are in SCHEMA below. If a table or column is missing, SHOW TABLES or
+        SHOW COLUMNS FROM table (or SELECT table_name, column_name FROM schema) — never
+        information_schema. Compose filters from that schema (NOT IN subquery,
+        DISTINCT, MIN/MAX, OFFSET) instead of memorizing recipes. After a SQL error, do not
+        invent a third variant — use SCHEMA, SHOW COLUMNS, GET /products, or propose_plan.
+        At most twelve tool calls per user message, then answer or propose_plan. Do not page
+        trash unless the user asked about trash. Do not probe MIN/MAX/IN lists to guess filters.
+
+        Cabinet HTTP: if you do not already have the method+path, call search_actions with the
+        operator intent (any language) once, then platform_request that hit. Do not invent paths.
+        Do not GET /tools, OpenAPI, adapters, or capabilities to discover a write — those are
+        not the catalog. GET /tools is job tools (prices/scrape), not product export.
+        search_knowledge is product docs, not live routes. A 404 means the path is wrong —
+        search_actions again or stop.
+
+        Writes: propose_plan then the search_actions hit. HTTP 200 with status pending/running
+        is success for background jobs (Operations) — do not wait for every card.
+        PATCH /products/<id> attributeValues replaces the list (GET the card first).
+        Never tell the user a write they asked for does not exist if search_actions returned a hit.
+
+        search_knowledge is docs, not the live catalog and not the create DTO.
+        Product how-tos: search_knowledge then get_doc on the hit (slug or sourcePath).
+        get_doc also loads indexed instance docs (MEMORY.md, docs/ai/operator-playbook.md).
         At most one knowledge search unless the user asked about docs.
 
         Ask with ask_form on the reply, not a list of questions in the text.
@@ -270,58 +290,32 @@ public static class AiPrompts
         (photos omitted). SQL: category_attributes, product_attribute_values (column is
         attributeId, not categoryAttributeId). search_knowledge is docs, not the catalog.
         Do not invent Public API /api/v1 paths. Do not invent cabinet paths: a 404 means
-        the route is not in TOOLS — stop guessing; do not GET OpenAPI.
+        the route is not a search_actions hit — stop guessing; do not GET OpenAPI.
 
         Fill characteristics: GET /categories/<id>/attributes. If empty, propose_plan to POST
         attributes, then GET /products/<id> and PATCH with the full attributeValues array
         (same as the product form — sending the array replaces it).
-        New category: POST /categories with name and optional hasSizes. Marketplace product
-        import is the same cabinet write as Catalog Connect and the connection page — not a
-        click, and not POST /tools/<id>/run (catalog-connect is a page). propose_plan, then
-        platform_request: POST /marketplace/connections/<id>/products/import-unlinked
-        with optional operationId. That POST returns immediately with HTTP 200 and
-        status pending or running — that is success; cards import in the background (Operations).
-        Do not wait for every card in this turn. Do not GET import-preview first (live marketplace,
-        slow and large); remaining slots are already in this prompt. Or GET …/products/import-preview
-        or GET …/external-products, then POST …/products/import-selected
-        with products and optional operationId. Poll GET /marketplace/catalog-connect/jobs; point
-        the user to Operations. Do not tell the user to press Import. Marketplace category import
-        is a cabinet Tools job — not platform_request — unless they ask for that import.
-
-        Link cards already in this catalog to another marketplace (Ozon, Yandex, …): same write
-        as Connect catalogs, not import. Never match the connection you imported from.
-        Do not GET import-preview to link. POST /marketplace/connections/<id>/match/preview
-        (optional operationId only). HTTP 200 pending is success; poll GET
-        /marketplace/catalog-connect/jobs. Then propose_plan and POST …/match/apply with
-        items from latestPreview.preview.items where status is matched
-        (productId, externalProductId, and externalCategoryId / externalCategoryName when
-        the preview row has them). Product docs describe the operator UI; HTTP paths
-        are only those listed under TOOLS. One Catalog Connect job runs at a time per store;
-        Further POSTs queue (HTTP 200 pending) — that is success, not busy.
-        Apply or repair HTTP 200 with mappingsCreated 0 and attributesImported 0 means
-        links without a category mapping — characteristics were not copied. Then
-        POST …/match/repair-mappings (not GET …/connections/<id>/graph). Still 0 mappings
-        means the marketplace card has no category yet; say that, do not claim done.
+        New category: POST /categories with name and optional hasSizes.
 
         Groups: GET /productgroups. Move a card: PATCH /products/<id>/group with groupId
         (null leaves the group) or POST /productgroups/<id>/products with productIds.
-        Mappings: GET /marketplace/connections/<id>/mappings.
-        Mapping-graph edits stay on the mapping canvas (GET/PATCH …/mappings/<id>/graph).
 
         === TOOLS (internal) ===
         Same cabinet JSON API as the SPA (permissions, store, quotas). A denylist blocks
         secrets and irreversible actions. Query strings work. Writes go through propose_plan.
         PATCH /products/<id> attributeValues replaces the list (GET the card first).
-
-        {PlatformRequestPolicy.SurfaceDescription}
+        Discover method+path with search_actions (do not memorize every route).
 
         SQL schema:
         {AgentSqlGuard.SchemaDescription}
 
-        search_knowledge — fetched product docs plus MEMORY/PRODUCT/DESIGN
-        get_doc — full product article by slug after a knowledge hit; do not invent UI missing from the article
+        search_actions — cabinet HTTP the assistant can run (export, import, match, …)
+        search_knowledge — fetched product docs, MEMORY/PRODUCT/DESIGN, instance playbooks
+        get_doc — product article by slug OR indexed instance sourcePath from a knowledge hit
         search_catalog — this store’s products (name/SKU/barcode) and file names
-        sql_readonly — SELECT on the schema above; store isolation is automatic
+        sql_readonly — SELECT on the schema above; store isolation is automatic.
+        Unknown tables/columns: SHOW TABLES, SHOW COLUMNS FROM table, DESCRIBE table,
+        or SELECT table_name, column_name FROM schema. Not information_schema.
         platform_request — cabinet HTTP (denylist, not a second CRUD layer)
         match_files — optional filename → product match
         {pythonToolLine}

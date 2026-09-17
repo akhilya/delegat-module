@@ -15,6 +15,7 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AiModelConfigService>();
         services.AddSingleton<AiLiveTurnHub>();
         services.AddScoped<AiChatService>();
+        services.AddSingleton<CabinetActionCatalog>();
         services.AddScoped<CatalogSearchService>();
         services.AddScoped<SqlReadonlyService>();
         services.AddScoped<KnowledgeIndexService>();

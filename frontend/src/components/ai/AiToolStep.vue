@@ -48,7 +48,9 @@ const summary = computed(() => stripDisplayEmoji(props.tool.summary || ""));
 const sql = computed(() =>
   props.tool.name === "sql_readonly" ? sqlResultParts(props.tool) : null,
 );
+const sqlLine = computed(() => (sql.value?.sql || "").replace(/\s+/g, " "));
 const inputPreview = computed(() => {
+  if (sql.value?.sql) return "";
   const raw = props.tool.input || "";
   if (!raw) return "";
   const clipped = raw.length > 400 ? `${raw.slice(0, 400)}…` : raw;
@@ -56,7 +58,12 @@ const inputPreview = computed(() => {
 });
 const expandable = computed(
   () =>
-    !!(sql.value?.rows?.length || inputPreview.value || props.tool.result?.url),
+    !!(
+      sql.value?.sql ||
+      sql.value?.rows?.length ||
+      inputPreview.value ||
+      props.tool.result?.url
+    ),
 );
 </script>
 
@@ -66,7 +73,15 @@ const expandable = computed(
       class="flex w-full items-center gap-2 rounded-md py-0.5 text-left text-xs outline-none transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:[&_svg.tool-chevron]:rotate-180"
     >
       <component :is="icon" class="size-3.5 shrink-0 text-muted-foreground" />
-      <span class="min-w-0 flex-1 truncate">{{ label }}</span>
+      <span class="min-w-0 flex-1 truncate">
+        {{ label
+        }}<template v-if="sqlLine">
+          <span class="text-muted-foreground"> · </span>
+          <span class="font-mono text-[11px] text-muted-foreground">{{
+            sqlLine
+          }}</span>
+        </template>
+      </span>
       <AiRunStatus :running="running" />
       <ChevronDown
         class="tool-chevron size-3 shrink-0 text-muted-foreground transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
@@ -74,6 +89,10 @@ const expandable = computed(
     </CollapsibleTrigger>
     <CollapsibleContent class="duration-[var(--duration-ui)]">
       <div class="pb-1 pl-5">
+        <pre
+          v-if="sql?.sql"
+          class="mb-1 max-h-28 overflow-auto rounded-md bg-muted/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-all"
+          >{{ sql.sql }}</pre>
         <p
           v-if="summary"
           class="mb-1 truncate text-[11px] text-muted-foreground"
@@ -126,7 +145,15 @@ const expandable = computed(
   </Collapsible>
   <div v-else class="flex items-center gap-2 py-0.5 text-xs">
     <component :is="icon" class="size-3.5 shrink-0 text-muted-foreground" />
-    <span class="min-w-0 flex-1 truncate">{{ label }}</span>
+    <span class="min-w-0 flex-1 truncate">
+      {{ label
+      }}<template v-if="sqlLine">
+        <span class="text-muted-foreground"> · </span>
+        <span class="font-mono text-[11px] text-muted-foreground">{{
+          sqlLine
+        }}</span>
+      </template>
+    </span>
     <AiRunStatus :running="running" />
   </div>
 </template>

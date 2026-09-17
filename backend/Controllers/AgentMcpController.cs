@@ -21,12 +21,18 @@ public class AgentMcpController : ControllerBase
     private readonly AgentSessionResolver _session;
     private readonly AgentToolHost _tools;
     private readonly KnowledgeIndexService _knowledge;
+    private readonly CabinetActionCatalog _actions;
 
-    public AgentMcpController(AgentSessionResolver session, AgentToolHost tools, KnowledgeIndexService knowledge)
+    public AgentMcpController(
+        AgentSessionResolver session,
+        AgentToolHost tools,
+        KnowledgeIndexService knowledge,
+        CabinetActionCatalog actions)
     {
         _session = session;
         _tools = tools;
         _knowledge = knowledge;
+        _actions = actions;
     }
 
     [HttpPost]
@@ -69,6 +75,7 @@ public class AgentMcpController : ControllerBase
                     {
                         new { uri = "delegat://openapi/operator.json", name = "Cabinet API denylist", mimeType = "application/json" },
                         new { uri = "delegat://store/schema", name = "SQL schema", mimeType = "text/plain" },
+                        new { uri = "delegat://cabinet/actions", name = "Cabinet actions", mimeType = "application/json" },
                         new { uri = "delegat://docs/index", name = "Knowledge search", mimeType = "text/markdown" },
                     },
                 },
@@ -117,6 +124,18 @@ public class AgentMcpController : ControllerBase
         if (uri == "delegat://store/schema")
         {
             return new { contents = new[] { new { uri, mimeType = "text/plain", text = AgentSqlGuard.SchemaDescription } } };
+        }
+
+        if (uri.StartsWith("delegat://cabinet/actions", StringComparison.Ordinal))
+        {
+            var q = uri.Contains('?') ? uri[(uri.IndexOf('?') + 1)..] : "";
+            if (q.StartsWith("q=", StringComparison.OrdinalIgnoreCase))
+                q = Uri.UnescapeDataString(q[2..]);
+            var hits = _actions.Search(q);
+            var json = JsonSerializer.Serialize(
+                hits.Select(h => new { method = h.Method, path = h.Path, write = h.Write, note = h.Note }),
+                JsonOpts);
+            return new { contents = new[] { new { uri, mimeType = "application/json", text = json } } };
         }
 
         if (uri.StartsWith("delegat://docs/", StringComparison.Ordinal))

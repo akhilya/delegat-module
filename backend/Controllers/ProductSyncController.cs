@@ -590,11 +590,21 @@ public class ProductSyncController : ControllerBase
         [FromBody] ExportBulkInput input,
         CancellationToken ct)
     {
-        if (input.productIds == null || input.productIds.Count == 0)
+        if ((input.productIds == null || input.productIds.Count == 0) && !input.allMatching)
             throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
-        await ProductNotTrashed.EnsureNoneAsync(_context, input.productIds, ct);
+        var productIds = await ExportBatchSelection.ResolveProductIdsAsync(
+            _context,
+            connection.storeId,
+            input.productIds,
+            input.allMatching,
+            input.skipWithoutImages,
+            ct);
+        if (productIds.Count == 0)
+            throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
+
+        await ProductNotTrashed.EnsureNoneAsync(_context, productIds, ct);
 
         var batchId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -603,10 +613,10 @@ public class ProductSyncController : ControllerBase
         // Batch-load product names
         var productNames = await _context.products
             .AsNoTracking()
-            .Where(p => input.productIds.Contains(p.Id))
+            .Where(p => productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.name, ct);
 
-        foreach (var productId in input.productIds)
+        foreach (var productId in productIds)
         {
             var pending = new PendingProductExport
             {
@@ -626,15 +636,15 @@ public class ProductSyncController : ControllerBase
         await _context.SaveChangesAsync(ct);
 
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-export",
-            $"Export {input.productIds.Count} products",
+            $"Export {productIds.Count} products",
             connectionId: connectionId, connectionName: connection.name,
-            batchId: batchId, batchType: "export", totalItems: input.productIds.Count);
+            batchId: batchId, batchType: "export", totalItems: productIds.Count);
 
         return Ok(new
         {
             batchId,
-            queued = input.productIds.Count,
-            message = $"Added {input.productIds.Count} products to the export queue"
+            queued = productIds.Count,
+            message = $"Added {productIds.Count} products to the export queue"
         });
     }
 
@@ -3369,7 +3379,11 @@ public class ProductSyncController : ControllerBase
 
     public struct ExportBulkInput
     {
-        public List<int> productIds { get; set; }
+        public List<int>? productIds { get; set; }
+        /// <summary>When true and productIds is empty, queue every live catalog card.</summary>
+        public bool allMatching { get; set; }
+        /// <summary>Drop cards that have no gallery photos (product_images).</summary>
+        public bool skipWithoutImages { get; set; }
     }
 
     public struct ImportProductInput

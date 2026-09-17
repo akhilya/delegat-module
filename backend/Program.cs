@@ -456,6 +456,12 @@ builder.Services.AddRateLimiter(options =>
         if (httpContext.Items.ContainsKey(CabinetRequestInvoker.NestedItemKey))
             return RateLimitPartition.GetNoLimiter("exempt-agent-nested");
 
+        if (path.StartsWithSegments("/api/ai")
+            || path.StartsWithSegments("/api/agent")
+            || path.StartsWithSegments("/api/mcp")
+            || path.StartsWithSegments("/mcp"))
+            return RateLimitPartition.GetNoLimiter("exempt-ai");
+
         // Probes and SignalR must not share the SPA bucket — 429 here causes reconnect storms.
         if (path.StartsWithSegments("/api/health") || path.StartsWithSegments("/hubs"))
             return RateLimitPartition.GetNoLimiter("exempt-infra");
@@ -467,16 +473,16 @@ builder.Services.AddRateLimiter(options =>
         var userId = httpContext.User?.FindFirst("userId")?.Value;
         if (!string.IsNullOrEmpty(userId))
         {
-            // Authenticated SPA: partition per user; generous window for catalog work
-            // (exports, navigation, parallel list loads).
-            return RateLimitPartition.GetFixedWindowLimiter(
-                $"user:{userId}",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 1200,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0
-                });
+                // Authenticated SPA: partition per user; generous window for catalog work
+                // (exports, navigation, parallel list loads). AI chat is exempt (exempt-ai).
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    $"user:{userId}",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 2400,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    });
         }
 
         return RateLimitPartition.GetFixedWindowLimiter(

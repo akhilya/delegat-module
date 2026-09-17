@@ -2,6 +2,7 @@ using Delegat.Enums;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
+using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
@@ -403,5 +404,34 @@ public class ProductSyncPendingDomainTests
         await db.SaveChangesAsync();
 
         Assert.Empty(await db.productVariants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ExportBatchSelection_AllMatchingSkipsCardsWithoutGallery()
+    {
+        var (db, data, _) = Create();
+        var store = data.AddStore();
+        var user = data.AddUser();
+        var withPhoto = data.AddProduct(store.Id, "Has photo", sku: "P1");
+        data.AddProduct(store.Id, "No photo", sku: "P2");
+        db.files.Add(new Delegat.Models.File
+        {
+            productId = withPhoto.Id,
+            authorUserId = user.Id,
+            filePath = "a.jpg",
+            contentType = "image/jpeg",
+            length = 10,
+        });
+        db.images.Add(new ImageReference { fileId = 1, productId = withPhoto.Id, index = 0 });
+        await db.SaveChangesAsync();
+        var fileId = await db.files.Select(f => f.Id).SingleAsync();
+        var image = await db.images.SingleAsync();
+        image.fileId = fileId;
+        await db.SaveChangesAsync();
+
+        var ids = await ExportBatchSelection.ResolveProductIdsAsync(
+            db, store.Id, productIds: null, allMatching: true, skipWithoutImages: true, default);
+
+        Assert.Equal(new[] { withPhoto.Id }, ids);
     }
 }

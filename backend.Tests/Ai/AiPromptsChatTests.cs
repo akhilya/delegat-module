@@ -130,14 +130,11 @@ public class AiPromptsChatTests
     public void ChatSystem_MarketplaceProductImport_IsAWriteTheAssistantRuns()
     {
         var prompt = Prompt();
-        Assert.Contains("import-unlinked", prompt, StringComparison.Ordinal);
-        Assert.Contains("import-selected", prompt, StringComparison.Ordinal);
-        Assert.Contains("Do not tell the user to click", prompt, StringComparison.Ordinal);
-        Assert.Contains("/tools/catalog-connect", prompt, StringComparison.Ordinal);
-        Assert.Contains("Marketplace category import", prompt, StringComparison.Ordinal);
-        Assert.Contains("returns immediately", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("status pending", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not GET import-preview first", prompt, StringComparison.Ordinal);
+        Assert.Contains("search_actions", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not GET /tools", prompt, StringComparison.Ordinal);
+        Assert.Contains("HTTP 200 with status pending", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Never tell the user a write they asked for does not exist", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("hasImages=false", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "Marketplace product import is a cabinet Tools job",
             prompt,
@@ -148,16 +145,8 @@ public class AiPromptsChatTests
     public void ChatSystem_CatalogConnectMatch_UsesPreviewThenApply()
     {
         var prompt = Prompt();
-        Assert.Contains("match/preview", prompt, StringComparison.Ordinal);
-        Assert.Contains("match/apply", prompt, StringComparison.Ordinal);
-        Assert.Contains("Do not GET import-preview to link", prompt, StringComparison.Ordinal);
+        Assert.Contains("search_actions", prompt, StringComparison.Ordinal);
         Assert.Contains("Do not invent cabinet paths", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("never match the connection you imported from", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Further POSTs queue", prompt, StringComparison.Ordinal);
-        Assert.Contains("repair-mappings", prompt, StringComparison.Ordinal);
-        Assert.Contains("externalCategoryId", prompt, StringComparison.Ordinal);
-        Assert.Contains("mappingsCreated", prompt, StringComparison.Ordinal);
-        Assert.Contains("mappings/<id>/graph", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("/marketplace/catalog-connect/match", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("GET …/graph", prompt, StringComparison.Ordinal);
     }

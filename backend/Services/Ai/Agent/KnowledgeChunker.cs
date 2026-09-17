@@ -68,7 +68,7 @@ public static class KnowledgeSearch
             .Select(c => (chunk: c, score: Score(c, terms)))
             .Where(x => x.score > 0)
             .OrderByDescending(x => x.score)
-            .Take(Math.Clamp(take, 1, 20))
+            .Take(Math.Clamp(take, 1, 32))
             .Select(x => x.chunk)
             .ToList();
     }

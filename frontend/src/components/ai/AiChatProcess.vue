@@ -13,6 +13,7 @@ import {
   groupProcessItems,
   processTools,
   runningProcessTool,
+  sqlQueryFromInput,
 } from "@/lib/ai/display";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
@@ -43,7 +44,12 @@ const headline = computed(() => {
   if (running) {
     const key = `ai.toolNames.${running.name}`;
     const translated = t(key);
-    return translated === key ? running.name : translated;
+    const name = translated === key ? running.name : translated;
+    if (running.name === "sql_readonly") {
+      const sql = sqlQueryFromInput(running.input).replace(/\s+/g, " ");
+      if (sql) return `${name} · ${sql}`;
+    }
+    return name;
   }
   return t("ai.processUsed", tools.value.length);
 });

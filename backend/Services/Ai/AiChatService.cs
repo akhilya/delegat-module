@@ -149,7 +149,7 @@ public class AiChatService
             tools.AddRange(extraMcp);
             var autoContinued = false;
 
-            for (var iteration = 0; iteration < 20; iteration++)
+            for (var iteration = 0; iteration < 10; iteration++)
             {
                 var request = new AiRequest
                 {

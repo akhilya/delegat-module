@@ -62,6 +62,7 @@ public class ProductController : ControllerBase
     /// </summary>
     /// <param name="searchQuery">Optional search: name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode.</param>
     /// <param name="categoryId">Optional category ID to filter products by.</param>
+    /// <param name="hasImages">When true, only products with gallery photos; when false, only products without photos.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
     /// <param name="sort">Legacy single sort string (prefer repeated sort query params: sort=col:dir&amp;sort=col:dir)</param>
@@ -73,6 +74,7 @@ public class ProductController : ControllerBase
     public async Task<IActionResult> GetAllProducts(
         string? searchQuery,
         int? categoryId = null,
+        bool? hasImages = null,
         int startIndex = 0,
         int pageSize = 12,
         string? sort = null,
@@ -99,6 +101,11 @@ public class ProductController : ControllerBase
             query = query.Where(p => p.categoryId == null);
         else if (hasCategoryFilter)
             query = query.Where(p => p.categoryId == categoryId!.Value);
+
+        if (hasImages == true)
+            query = query.Where(p => p.images.Any());
+        else if (hasImages == false)
+            query = query.Where(p => !p.images.Any());
 
         query = query.WhereMatchesSearch(searchQuery);
 

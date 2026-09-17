@@ -21,6 +21,7 @@ public sealed class AgentToolHost
     private readonly PythonSandboxClient _python;
     private readonly IPermissionService _permissions;
     private readonly DataContext _db;
+    private readonly CabinetActionCatalog _actions;
     private readonly ILogger<AgentToolHost> _logger;
     private readonly IMcpToolGateway? _mcp;
     private readonly IPublicDocsClient? _publicDocs;
@@ -35,7 +36,8 @@ public sealed class AgentToolHost
         DataContext db,
         ILogger<AgentToolHost> logger,
         IMcpToolGateway? mcp = null,
-        IPublicDocsClient? publicDocs = null)
+        IPublicDocsClient? publicDocs = null,
+        CabinetActionCatalog? actions = null)
     {
         _catalog = catalog;
         _sql = sql;
@@ -47,6 +49,7 @@ public sealed class AgentToolHost
         _logger = logger;
         _mcp = mcp;
         _publicDocs = publicDocs;
+        _actions = actions ?? new CabinetActionCatalog();
     }
 
     public async Task<(object result, string summary)> DispatchAsync(
@@ -77,6 +80,7 @@ public sealed class AgentToolHost
                     "search_knowledge" => await SearchKnowledgeAsync(inputJson, ct),
                     "get_doc" => await GetDocAsync(inputJson, ct),
                     "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
+                    "search_actions" => SearchActions(inputJson),
                     "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
                     "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
                     "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
@@ -111,33 +115,61 @@ public sealed class AgentToolHost
     {
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
         var q = doc.RootElement.TryGetProperty("query", out var qe) ? qe.GetString() ?? "" : "";
-        var take = doc.RootElement.TryGetProperty("limit", out var le) && le.TryGetInt32(out var n) ? n : 8;
+        var take = doc.RootElement.TryGetProperty("limit", out var le) && le.TryGetInt32(out var n) ? n : 12;
         var hits = await _knowledge.SearchAsync(q, take, ct);
-        return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = h.Body.Length > 600 ? h.Body[..600] : h.Body }) },
+        return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = h.Body.Length > 900 ? h.Body[..900] : h.Body }) },
             $"{hits.Count} knowledge hits");
+    }
+
+    private (object, string) SearchActions(string json)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var q = doc.RootElement.TryGetProperty("query", out var qe) ? qe.GetString() ?? "" : "";
+        var take = doc.RootElement.TryGetProperty("limit", out var le) && le.TryGetInt32(out var n) ? n : 8;
+        var hits = _actions.Search(q, take);
+        return (
+            new
+            {
+                hits = hits.Select(h => new { method = h.Method, path = h.Path, write = h.Write, note = h.Note }),
+            },
+            $"{hits.Count} actions");
     }
 
     private async Task<(object, string)> GetDocAsync(string json, CancellationToken ct)
     {
-        if (_publicDocs == null)
-            return (new { error = "docs_not_configured" }, "docs_not_configured");
-
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
         var slug = doc.RootElement.TryGetProperty("slug", out var se) ? se.GetString() ?? "" : "";
         var locale = doc.RootElement.TryGetProperty("locale", out var le) ? le.GetString() ?? "ru" : "ru";
-        try
+        if (string.IsNullOrWhiteSpace(slug))
+            return (new { error = "docs_not_found" }, "docs_not_found");
+
+        if (_publicDocs != null && !KnowledgeIndexService.IsInstanceDocPath(slug))
         {
-            var page = await _publicDocs.GetPageAsync(slug, locale, ct);
-            var body = page.Markdown.Length > PublicDocsClient.MaxBodyChars
-                ? page.Markdown[..PublicDocsClient.MaxBodyChars]
-                : page.Markdown;
-            return (new { slug = page.Slug, locale = page.Locale, title = page.Title, markdown = body },
-                string.IsNullOrEmpty(page.Slug) ? "doc hub" : $"doc {page.Slug}");
+            try
+            {
+                var page = await _publicDocs.GetPageAsync(slug, locale, ct);
+                var body = page.Markdown.Length > PublicDocsClient.MaxBodyChars
+                    ? page.Markdown[..PublicDocsClient.MaxBodyChars]
+                    : page.Markdown;
+                return (new { slug = page.Slug, locale = page.Locale, title = page.Title, markdown = body },
+                    string.IsNullOrEmpty(page.Slug) ? "doc hub" : $"doc {page.Slug}");
+            }
+            catch (DocsClientException)
+            {
+                // Fall through to the indexed instance corpus.
+            }
         }
-        catch (DocsClientException ex)
+
+        var indexed = await _knowledge.ReadSourceAsync(slug, locale, ct);
+        if (indexed != null)
         {
-            return (new { error = ex.Code }, ex.Code);
+            return (new { slug = indexed.SourcePath, locale, title = indexed.Title, markdown = indexed.Body },
+                $"doc {indexed.SourcePath}");
         }
+
+        if (_publicDocs == null)
+            return (new { error = "docs_not_configured" }, "docs_not_configured");
+        return (new { error = "docs_not_found" }, "docs_not_found");
     }
 
     private Task<(object, string)> SearchCatalogAsync(string json, int storeId, CancellationToken ct)

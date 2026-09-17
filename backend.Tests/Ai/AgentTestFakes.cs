@@ -12,7 +12,7 @@ internal sealed class GrantAllPermissions : IPermissionService
     public Task<IReadOnlyList<string>> GetEffectivePermissionsAsync(int userId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<string>>([
             Permissions.AiUse, Permissions.CatalogManage, Permissions.FilesManage,
-            Permissions.MarketplaceManage, Permissions.OrdersManage,
+            Permissions.MarketplaceManage, Permissions.OrdersManage, Permissions.OperationsManage,
         ]);
     public Task<IReadOnlyList<string>> GetRoleNamesAsync(int userId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<string>>([]);
