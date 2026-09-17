@@ -1024,7 +1024,11 @@ public class ProductSyncService
         {
             exportData["group_id"] = group.Id.ToString();
             if (!HasNonEmpty(exportData, "group_name") && !HasNonEmpty(exportData, "groupName"))
-                exportData["group_name"] = group.name;
+            {
+                exportData["group_name"] = !string.IsNullOrWhiteSpace(mappingGroupValue)
+                    ? mappingGroupValue.Trim()
+                    : group.name;
+            }
             return;
         }
 

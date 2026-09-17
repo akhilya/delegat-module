@@ -1309,6 +1309,7 @@
       "currency": "Currency"
     },
     "externalFieldNames": {
+      "__group__": "Merge into card",
       "name": "Product name",
       "sku": "SKU (offer_id)",
       "offerId": "SKU (offerId)",
@@ -1779,6 +1780,10 @@
     },
     "valueMapEditor": {
       "title": "Mappings: variant → valueId",
+      "textTitle": "Mappings: as in cabinet → as in the shop",
+      "textHint": "Type both sides. For Merge into card: group name on the left, collection title on the right. Cabinet group names stay.",
+      "fromPlaceholder": "As it is (group)",
+      "toPlaceholder": "Export as",
       "sourceOptionsHint": "Left - source options (category attribute). Connect a block to an attribute with options.",
       "valueIdHint": "Right - adapter field valueId (entered manually). The label is shown if the valueId matches a known option.",
       "sourceOptionPlaceholder": "Source option",
@@ -1876,7 +1881,7 @@
         "max": "Maximum"
       },
       "valueMap": {
-        "name": "Value mapping (→ valueId)",
+        "name": "Correspondences",
         "mappings": "Mappings",
         "default": "Default"
       },

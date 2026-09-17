@@ -15,12 +15,11 @@ Do **not** call `import-unlinked`, Catalog Connect, `GET /tools`, adapters, or m
 
 ## Medusa collection titles (keep local group names)
 
-Shop collection titles are mapping-canvas `group_name`, not SQL `mappings` rows and not renaming `productgroups`.
+Shop collection titles are the **Merge into card** string field (`__group__`) with a typed from/to `valueMap`, not SQL `mappings` rows, not `valueId`, and not renaming `productgroups`.
 
-1. `GET /marketplace/mapping-graph/blocks` (types, handles, pin types, sizes) then `GET /marketplace/connections/{id}/mappings` then `GET …/mappings/{mappingId}/graph`.
-2. `propose_plan`, then `POST …/mappings/{mappingId}/graph/connect` `{ "adapterFieldKey": "group_name", "sourceType": "groupName" }`.
-3. `POST …/mappings/{mappingId}/graph/modifiers` `{ "adapterFieldKey": "group_name", "modifierType": "valueMap", "params": { "mappings": [{ "from": "cabinet group name", "to": "shop title" }] } }`.
-4. Export with `export-batch` so Medusa collections update. Do not change group names in the cabinet.
+1. `GET /marketplace/mapping-graph/blocks` then `GET /marketplace/connections/{id}/mappings` then `GET …/mappings/{mappingId}/graph`.
+2. `propose_plan`, then `POST …/mappings/{mappingId}/graph/group-titles` `{ "mappings": [{ "from": "cabinet group name", "to": "shop title" }] }`.
+3. Export with `export-batch`. Do not change group names in the cabinet.
 
 ## Import marketplace products
 

@@ -44,4 +44,14 @@ public class CabinetActionCatalogTests
         Assert.Contains(hits, h => h.Path.Contains("mapping-graph/blocks", StringComparison.Ordinal));
         Assert.Contains(hits, h => h.Note.Contains("width/height", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Search_MergeIntoCard_FindsGroupTitles()
+    {
+        var catalog = new CabinetActionCatalog();
+        var hits = catalog.Search("объединить в карточку соответствия групп medusa");
+
+        Assert.Contains(hits, h => h.Path.Contains("group-titles", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Note.Contains("__group__", StringComparison.Ordinal));
+    }
 }

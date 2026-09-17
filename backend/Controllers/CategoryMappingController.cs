@@ -596,6 +596,45 @@ public class CategoryMappingController : ControllerBase
         return Ok(new { success = true });
     }
 
+    /// <summary>
+    /// String switch on Merge into card (<c>__group__</c>): PIM group name → shop collection title.
+    /// Does not rename local groups. Not valueId / category-attribute optionMap.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph/group-titles")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> RemapMappingGroupTitles(
+        int connectionId,
+        int mappingId,
+        [FromBody] GraphGroupTitlesInput input,
+        CancellationToken ct)
+    {
+        await EnsureMappingOnConnectionAsync(connectionId, mappingId);
+        var maps = (input.mappings ?? [])
+            .Where(m => !string.IsNullOrWhiteSpace(m.from) && !string.IsNullOrWhiteSpace(m.to))
+            .Select(m => new GroupTitlePair { From = m.from.Trim(), To = m.to.Trim() })
+            .ToList();
+        if (maps.Count == 0)
+            throw ApiException.BadRequest("mappings must contain from/to pairs");
+
+        try
+        {
+            await _graphMutation.RemapGroupTitlesAsync(mappingId, maps, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            adapterFieldKey = GraphMutationService.GroupTitleFieldKey,
+            sourceType = "groupName",
+            modifierType = "valueMap",
+        });
+    }
+
     private async Task EnsureMappingOnConnectionAsync(int connectionId, int mappingId)
     {
         await GetConnectionAsync(connectionId);
@@ -1536,6 +1575,17 @@ public class CategoryMappingController : ControllerBase
         public string modifierType { get; set; }
         public Dictionary<string, JsonElement>? @params { get; set; }
         public string? sink { get; set; }
+    }
+
+    public struct GraphGroupTitlesInput
+    {
+        public List<GraphGroupTitlePair>? mappings { get; set; }
+    }
+
+    public struct GraphGroupTitlePair
+    {
+        public string from { get; set; }
+        public string to { get; set; }
     }
 
     #endregion

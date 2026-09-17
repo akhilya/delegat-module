@@ -34,6 +34,9 @@ export default {
     };
   },
   computed: {
+    isTextSwitch() {
+      return !this.sourceOptions.length;
+    },
     sourceOptions() {
       return this.sourceFieldOptions.map((o) => ({
         value: String(o.value),
@@ -81,7 +84,7 @@ export default {
       return opt?.label || null;
     },
     isBrokenRow(row) {
-      if (!row.from || !this.sourceOptions.length) return false;
+      if (this.isTextSwitch || !row.from || !this.sourceOptions.length) return false;
       return !this.sourceOptions.some((o) => o.value === String(row.from));
     },
     addRow() {
@@ -113,16 +116,20 @@ export default {
 
 <template>
   <div class="space-y-2">
-    <Label class="text-xs font-medium">{{ $t("marketplace.valueMapEditor.title") }}</Label>
+    <Label class="text-xs font-medium">{{
+      $t(isTextSwitch ? "marketplace.valueMapEditor.textTitle" : "marketplace.valueMapEditor.title")
+    }}</Label>
 
+    <p class="text-[11px] text-muted-foreground">
+      {{
+        $t(isTextSwitch ? "marketplace.valueMapEditor.textHint" : "marketplace.valueMapEditor.valueIdHint")
+      }}
+    </p>
     <p
-      v-if="!sourceOptions.length"
+      v-if="!isTextSwitch && !sourceOptions.length"
       class="text-[11px] text-muted-foreground"
     >
       {{ $t("marketplace.valueMapEditor.sourceOptionsHint") }}
-    </p>
-    <p class="text-[11px] text-muted-foreground">
-      {{ $t("marketplace.valueMapEditor.valueIdHint") }}
     </p>
 
     <div
@@ -130,7 +137,15 @@ export default {
       :key="index"
       class="flex items-center gap-1"
     >
+      <Input
+        v-if="isTextSwitch"
+        class="flex-1 h-7 text-xs"
+        :model-value="row.from"
+        @update:modelValue="(v) => onFromChange(index, v)"
+        :placeholder="$t('marketplace.valueMapEditor.fromPlaceholder')"
+      />
       <SearchableSelect
+        v-else
         class="flex-1 h-7 text-xs"
         :class="{ 'ring-1 ring-warning': isBrokenRow(row) }"
         :options="sourceOptions"
@@ -145,8 +160,8 @@ export default {
         <Input
           :model-value="row.to"
           @update:modelValue="(v) => onToChange(index, v)"
-          placeholder="valueId"
-          class="h-7 text-xs font-mono"
+          :placeholder="isTextSwitch ? $t('marketplace.valueMapEditor.toPlaceholder') : 'valueId'"
+          :class="['h-7 text-xs', isTextSwitch ? '' : 'font-mono']"
         />
         <p
           v-if="valueIdLabel(row.to)"
@@ -187,7 +202,7 @@ export default {
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"
         :placeholder="$t('marketplace.valueMapEditor.defaultValuePlaceholder')"
-        class="h-7 text-xs font-mono"
+        :class="['h-7 text-xs', isTextSwitch ? '' : 'font-mono']"
       />
       <p
         v-if="valueIdLabel(localDefault)"

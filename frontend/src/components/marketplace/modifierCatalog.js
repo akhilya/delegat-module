@@ -202,17 +202,17 @@ export const MODIFIER_CATALOG = {
   valueMap: {
     type: "valueMap",
     get displayName() { return t("marketplace.modifiers.valueMap.name"); },
-    aliases: ["map", "mapping", "lookup", "translate", "dict", "convert"],
-    category: "select",
+    aliases: ["map", "mapping", "lookup", "translate", "dict", "convert", "switch", "string switch"],
+    category: "text",
     reversible: true,
-    applicableTypes: ["select", "multiselect"],
+    applicableTypes: ["string", "text", "select", "multiselect", "any"],
     params: [
       { key: "mappings", get label() { return t("marketplace.modifiers.valueMap.mappings"); }, type: "valueMap", required: true, default: [] },
       { key: "default", get label() { return t("marketplace.modifiers.valueMap.default"); }, type: "text", required: false, default: "" },
     ],
     summary: (p) => {
       const count = Array.isArray(p.mappings) ? p.mappings.length : 0;
-      return count ? `${count} → valueId` : t("marketplace.modifiers.common.empty");
+      return count ? String(count) : t("marketplace.modifiers.common.empty");
     },
   },
   optionMap: {

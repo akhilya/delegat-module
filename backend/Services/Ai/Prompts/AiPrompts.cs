@@ -236,13 +236,13 @@ public static class AiPrompts
 
         Mapping canvas (shop field wiring, including Medusa collection titles): GET the graph
         (includes blocks: types, handle ids, pin types, width/height for layout) or GET
-        /marketplace/mapping-graph/blocks. To add blocks, POST graph/connect then POST graph/modifiers
-        — do not PUT the whole graph and do not say rename-on-export is impossible. Prefer those
-        POSTs (they place nodes using the catalog sizes). If you write graph JSON, set
+        /marketplace/mapping-graph/blocks. Collection titles: POST graph/group-titles with
+        mappings from/to (Merge into card, field __group__, source groupName, string valueMap).
+        Do not use valueId or a category-attribute optionMap. Do not PUT the whole graph
+        and do not say rename-on-export is impossible.
+        Prefer those POSTs (they place nodes using the catalog sizes). If you write graph JSON, set
         node.position so cards do not overlap (sources left, sinks right; output handle is
-        always out; sink inputs are f:fieldKey). Local group names stay; Medusa collection
-        title is adapter field group_name. Wire sourceType groupName, then valueMap
-        params.mappings is a list of from/to objects (cabinet group name to shop title). Then propose_plan
+        always out; sink inputs are f:fieldKey). Local group names stay. Then propose_plan
         and export-batch so the shop updates. SQL mappings rows are not the canvas.
 
         Writes: propose_plan then the search_actions hit. HTTP 200 with status pending/running
@@ -464,8 +464,9 @@ public static class AiPrompts
                 : "") +
             $"When the user says 'this mapping' or 'these fields', use mappingId={ctx.MappingId}. " +
             $"If you need the mapping list, GET /marketplace/connections/{ctx.ConnectionId}/mappings. " +
-            $"Add canvas blocks with POST …/mappings/{ctx.MappingId}/graph/connect then POST …/graph/modifiers " +
-            $"(valueMap on group_name for Medusa collection titles; do not rename local groups).",
+            $"Add canvas blocks with POST …/mappings/{ctx.MappingId}/graph/group-titles " +
+            $"(Merge into card __group__, typed from/to; not valueId). " +
+            $"Or POST …/graph/connect then POST …/graph/modifiers.",
         "product" =>
             $"=== CURRENT PAGE ===\n" +
             $"Page: Product editor\n" +

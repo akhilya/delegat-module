@@ -36,7 +36,8 @@ public static class PlatformRequestPolicy
           GET/PATCH/PUT …/mappings/{mappingId}/graph
           GET /marketplace/mapping-graph/blocks (types, handles, pin types, layout sizes)
           POST …/mappings/{mappingId}/graph/connect  POST …/graph/modifiers
-          (canvas blocks: groupName → group_name, then valueMap; does not rename local groups)
+          POST …/graph/group-titles { mappings: [{from,to}] } — Merge into card (__group__),
+          string valueMap (typed from/to), not valueId / category attributes
           GET …/external-products  GET …/products/import-preview
           POST …/products/import-selected  POST …/products/import-unlinked
           POST …/products/import-all (legacy; prefer import-unlinked or import-selected)

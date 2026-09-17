@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Mapping-canvas «Correspondences» (`valueMap`) can sit on string fields such as Merge into card: you type both sides (group name → collection title). It is no longer limited to select/valueId. Medusa export uses that mapped title while cabinet group names stay.
 - Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.
 - When the calculation sidecar is on, asking the assistant to check it (or run a read-only snippet) uses that helper instead of substituting a catalog COUNT and claiming there is no sandbox.
 - Cabinet assistant export of local products to a shop is `export-batch` (including `{ allMatching, skipWithoutImages }` so a full catalog does not need thousands of ids). Photos for that filter are gallery images, not any file attachment. Read-only SQL now honors `>=` `<=`, `NOT IN`, `SELECT DISTINCT` (including `contentType`), `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` / `SHOW COLUMNS`, `product_images`, and extra store tables (notes, variants, links, operations) instead of ignoring them. Chat tools stay one collapsed line unless you expand them. `get_doc` can open indexed instance docs (including `docs/ai/operator-playbook.md`).
@@ -24,7 +25,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Experimental badge uses the muted fill. Orders sidebar shows it only on the section, aligned right.
 - Dropped the category-attribute «In the shop» switch. Storefront specs follow the mapping graph; unwired fields are not sent.
 - Mapping canvas: add unlimited mapping-local adapter fields (click «Add field» or drop a wire on that row). Custom sinks persist in the graph and go out on export.
-- Cabinet assistant can add mapping-canvas blocks (`POST …/mappings/{id}/graph/connect` and `…/graph/modifiers`). `GET /marketplace/mapping-graph/blocks` (also on GET graph) lists node types, pin ids, pin types, and layout sizes; new blocks are placed with those sizes. Local group names stay; Medusa export keeps a mapped collection title.
+- Cabinet assistant can add mapping-canvas blocks (`POST …/graph/connect`, `…/graph/modifiers`, `…/graph/group-titles`). Merge into card (`__group__`) uses a typed from/to string map (not valueId). `GET /marketplace/mapping-graph/blocks` lists node types, pins, and layout sizes. Local group names stay; Medusa export uses the mapped collection title.
 - Store-engine adapters (Medusa, WooCommerce, OpenCart) create a shop category on a dedicated page: name, parent folder, which local attributes become fields, and whether to auto-map. The mapping dialog opens that page instead of creating immediately.
 - Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
 - Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.

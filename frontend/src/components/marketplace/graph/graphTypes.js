@@ -34,7 +34,7 @@ export const MODIFIER_CATEGORIES = {
   floor: "number",
   ceiling: "number",
   clamp: "number",
-  valueMap: "select",
+  valueMap: "text",
   optionMap: "select",
   llmGenerate: "text",
   randomInt: "number",

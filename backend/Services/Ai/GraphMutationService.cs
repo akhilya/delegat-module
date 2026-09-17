@@ -224,7 +224,87 @@ public class GraphMutationService
         await _context.SaveChangesAsync(ct);
     }
 
-    // Analyze coverage of card fields (legacy - card sink only)
+    public const string GroupTitleFieldKey = "__group__";
+
+    /// <summary>
+    /// Wire PIM group names → shop collection titles on <c>group_name</c>.
+    /// Does not touch category attributes or valueId sinks.
+    /// </summary>
+    public async Task RemapGroupTitlesAsync(
+        int mappingId,
+        IReadOnlyList<GroupTitlePair> maps,
+        CancellationToken ct = default)
+    {
+        var mapping = await LoadMappingAsync(mappingId, ct);
+        var graph = ParseGraph(mapping.graphJson);
+        ApplyGroupTitleMaps(graph, maps);
+        mapping.graphJson = SerializeGraph(graph);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    internal static void ApplyGroupTitleMaps(MappingGraph graph, IReadOnlyList<GroupTitlePair> maps)
+    {
+        if (maps == null || maps.Count == 0)
+            throw new InvalidOperationException("mappings must contain at least one from/to pair");
+
+        var (sinkNode, sinkKind) = GetSink(graph, "card", GroupTitleFieldKey);
+        var fieldDef = new ExternalField(GroupTitleFieldKey, "Merge into card (group)", false, "string");
+        var field = ResolveField(sinkNode, GroupTitleFieldKey, fieldDef, sinkKind);
+        ClearFieldBinding(field, graph, sinkNode);
+
+        var handle = $"f:{GroupTitleFieldKey}";
+        var srcNode = new GraphNode
+        {
+            id = $"ai-src-{GroupTitleFieldKey}-{Guid.NewGuid().ToString("N")[..8]}",
+            type = "groupName",
+            data = new GraphNodeData
+            {
+                label = "Product group name",
+                valueType = "string",
+            },
+        };
+        var pairs = maps
+            .Where(m => !string.IsNullOrWhiteSpace(m.From) && !string.IsNullOrWhiteSpace(m.To))
+            .Select(m => new Dictionary<string, string>
+            {
+                ["from"] = m.From.Trim(),
+                ["to"] = m.To.Trim(),
+            })
+            .ToList();
+        if (pairs.Count == 0)
+            throw new InvalidOperationException("mappings must contain at least one from/to pair");
+
+        var modNode = new GraphNode
+        {
+            id = $"ai-mod-{GroupTitleFieldKey}-{Guid.NewGuid().ToString("N")[..8]}",
+            type = "modifier",
+            data = new GraphNodeData
+            {
+                modifierType = "valueMap",
+                @params = new Dictionary<string, object> { ["mappings"] = pairs },
+            },
+        };
+        graph.nodes.Add(srcNode);
+        graph.nodes.Add(modNode);
+        graph.edges.Add(new GraphEdge
+        {
+            id = $"e-{srcNode.id}-{modNode.id}",
+            source = srcNode.id,
+            target = modNode.id,
+            sourceHandle = "out",
+            targetHandle = "in",
+        });
+        graph.edges.Add(new GraphEdge
+        {
+            id = $"e-{modNode.id}-sink",
+            source = modNode.id,
+            target = sinkNode.id,
+            sourceHandle = "out",
+            targetHandle = handle,
+        });
+        MappingGraphBlockCatalog.PlaceWestOf(graph, [srcNode, modNode], sinkNode, handle);
+    }
+
     public async Task<MappingCoverage> GetCoverageAsync(int mappingId, CancellationToken ct = default)
     {
         var report = await GetCoverageReportAsync(mappingId, ct);
@@ -1248,4 +1328,10 @@ public class EnsureValueMapsResult
     public int Inserted { get; set; }
     public int Updated { get; set; }
     public int AddedMappings { get; set; }
+}
+
+public sealed class GroupTitlePair
+{
+    public string From { get; set; } = "";
+    public string To { get; set; } = "";
 }
