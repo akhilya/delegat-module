@@ -11,6 +11,7 @@ using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
+using Delegat.Services.Ai;
 using Delegat.Services.Plugins;
 using IMarketplaceMetadataCache = Delegat.Marketplace.SDK.IMarketplaceMetadataCache;
 
@@ -31,6 +32,7 @@ public class CategoryMappingController : ControllerBase
     private readonly ILogger<CategoryMappingController> _logger;
 
     private readonly IOperationLogger _operationLogger;
+    private readonly GraphMutationService _graphMutation;
 
     public CategoryMappingController(
         ICurrentUserService currentUserService,
@@ -42,7 +44,8 @@ public class CategoryMappingController : ControllerBase
         PluginVersionSyncService pluginVersionSyncService,
         IMarketplaceMetadataCache metadataCache,
         ILogger<CategoryMappingController> logger,
-        IOperationLogger operationLogger)
+        IOperationLogger operationLogger,
+        GraphMutationService graphMutation)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -54,6 +57,7 @@ public class CategoryMappingController : ControllerBase
         _metadataCache = metadataCache;
         _logger = logger;
         _operationLogger = operationLogger;
+        _graphMutation = graphMutation;
     }
 
     /// <summary>
@@ -474,8 +478,19 @@ public class CategoryMappingController : ControllerBase
             catch (JsonException) { graph = null; }
         }
 
-        return Ok(new { hasGraph = graph != null, graph });
+        return Ok(new
+        {
+            hasGraph = graph != null,
+            graph,
+            blocks = MappingGraphBlockCatalog.Describe(),
+        });
     }
+
+    /// <summary>Node types, pin ids, pin types, and layout sizes for the mapping canvas.</summary>
+    [HttpGet]
+    [Route("/marketplace/mapping-graph/blocks")]
+    public IActionResult GetMappingGraphBlocks()
+        => Ok(MappingGraphBlockCatalog.Describe());
 
     /// <summary>
     /// Save (or clear) the visual node graph for a mapping. A null/empty graph reverts the
@@ -483,6 +498,7 @@ public class CategoryMappingController : ControllerBase
     /// so reverse (import) of unchanged linear fields keeps working.
     /// </summary>
     [HttpPut]
+    [HttpPatch]
     [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph")]
     [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> SaveMappingGraph(
@@ -507,6 +523,102 @@ public class CategoryMappingController : ControllerBase
 
         // The graph is the single source of truth - no per-field projection needed (input.fields ignored).
         return Ok(new { success = true, hasGraph = mapping.graphJson != null });
+    }
+
+    /// <summary>
+    /// Wire one adapter sink (e.g. Medusa collection title) without replacing the whole graph.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph/connect")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ConnectMappingGraphField(
+        int connectionId,
+        int mappingId,
+        [FromBody] GraphConnectInput input,
+        CancellationToken ct)
+    {
+        await EnsureMappingOnConnectionAsync(connectionId, mappingId);
+        if (string.IsNullOrWhiteSpace(input.adapterFieldKey) || string.IsNullOrWhiteSpace(input.sourceType))
+            throw ApiException.BadRequest("adapterFieldKey and sourceType are required");
+
+        try
+        {
+            await _graphMutation.ConnectFieldAsync(
+                mappingId,
+                input.adapterFieldKey.Trim(),
+                input.sourceType.Trim(),
+                input.sourceField,
+                input.sourceAttributeId,
+                input.sink,
+                StubField(input.adapterFieldKey),
+                ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Insert a canvas modifier (valueMap, replace, …) on a sink field.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/mappings/{mappingId}/graph/modifiers")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> AddMappingGraphModifier(
+        int connectionId,
+        int mappingId,
+        [FromBody] GraphModifierInput input,
+        CancellationToken ct)
+    {
+        await EnsureMappingOnConnectionAsync(connectionId, mappingId);
+        if (string.IsNullOrWhiteSpace(input.adapterFieldKey) || string.IsNullOrWhiteSpace(input.modifierType))
+            throw ApiException.BadRequest("adapterFieldKey and modifierType are required");
+
+        try
+        {
+            await _graphMutation.AddModifierAsync(
+                mappingId,
+                input.adapterFieldKey.Trim(),
+                input.modifierType.Trim(),
+                ToModifierParams(input.@params),
+                input.sink,
+                StubField(input.adapterFieldKey),
+                ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw ApiException.BadRequest(ex.Message);
+        }
+
+        return Ok(new { success = true });
+    }
+
+    private async Task EnsureMappingOnConnectionAsync(int connectionId, int mappingId)
+    {
+        await GetConnectionAsync(connectionId);
+        var mapping = await _unitOfWork.Repository<CategoryMapping>()
+            .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
+        if (mapping == null)
+            throw ApiException.NotFound("Mapping not found");
+    }
+
+    private static ExternalField StubField(string key)
+    {
+        var k = key.Trim();
+        return new ExternalField(k, k, false, "string");
+    }
+
+    private static Dictionary<string, object>? ToModifierParams(Dictionary<string, JsonElement>? raw)
+    {
+        if (raw == null || raw.Count == 0)
+            return null;
+        var map = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (var kv in raw)
+            map[kv.Key] = kv.Value.Clone();
+        return map;
     }
 
     /// <summary>
@@ -1407,6 +1519,23 @@ public class CategoryMappingController : ControllerBase
     {
         public int productId { get; set; }
         public JsonElement? graph { get; set; }
+    }
+
+    public struct GraphConnectInput
+    {
+        public string adapterFieldKey { get; set; }
+        public string sourceType { get; set; }
+        public string? sourceField { get; set; }
+        public int? sourceAttributeId { get; set; }
+        public string? sink { get; set; }
+    }
+
+    public struct GraphModifierInput
+    {
+        public string adapterFieldKey { get; set; }
+        public string modifierType { get; set; }
+        public Dictionary<string, JsonElement>? @params { get; set; }
+        public string? sink { get; set; }
     }
 
     #endregion

@@ -83,6 +83,21 @@ public sealed class CabinetActionCatalog
         new("POST", "/products/{id}/files", true,
             "Staged chat files onto a product. Body attachmentIds.",
             "files photos фото вложения attachmentIds"),
+        new("GET", "/marketplace/mapping-graph/blocks", false,
+            "Canvas block catalog: node types, input/output handle ids, pin types, default width/height for layout.",
+            "mapping blocks блоки размеры pins пины handles входы выходы types типы холст graph layout"),
+        new("GET", "/marketplace/connections/{id}/mappings/{mappingId}/graph", false,
+            "Mapping canvas JSON plus the same block catalog (types, handles, sizes). Collection title for Medusa is group_name.",
+            "mapping graph холст соответствие blocks блоки medusa collections группы название выгрузки"),
+        new("PUT", "/marketplace/connections/{id}/mappings/{mappingId}/graph", true,
+            "Replace the whole mapping canvas. Prefer graph/connect and graph/modifiers to add blocks.",
+            "mapping graph save холст"),
+        new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/connect", true,
+            "Add a source block onto a sink. Body: adapterFieldKey, sourceType (groupName|productField|attribute|static), sourceField?, sourceAttributeId?. Medusa collection title: group_name + groupName. Does not rename local groups.",
+            "mapping connect block блок groupName group_name collection название группы medusa выгрузка valueMap"),
+        new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/modifiers", true,
+            "Insert a canvas modifier on that sink. Body: adapterFieldKey, modifierType (valueMap|replace|…), params. valueMap params.mappings is [{from,to},…]. Call after graph/connect. Local group names stay.",
+            "mapping modifier блок valueMap replace group_name medusa collections переименовать выгрузка"),
     ];
 
     private IReadOnlyList<ActionHit> Build()

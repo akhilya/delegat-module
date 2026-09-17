@@ -102,6 +102,8 @@ public class GraphNodeData
     public string? template { get; set; }
     /// <summary>Delimiter for "join" / "splitToArray".</summary>
     public string? delimiter { get; set; }
+    /// <summary>How many left pins on a multi-input op (formatString, join, …).</summary>
+    public int? inputCount { get; set; }
     /// <summary>Element index for "arrayIndex".</summary>
     public int? index { get; set; }
 

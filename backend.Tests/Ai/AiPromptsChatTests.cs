@@ -74,6 +74,23 @@ public class AiPromptsChatTests
         Assert.DoesNotContain("get_mapping", prompt, StringComparison.Ordinal);
         Assert.Contains("GET /marketplace/connections", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("GET /mappings", prompt, StringComparison.Ordinal);
+        Assert.Contains("graph/connect", prompt, StringComparison.Ordinal);
+        Assert.Contains("graph/modifiers", prompt, StringComparison.Ordinal);
+        Assert.Contains("mapping-graph/blocks", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_MappingCanvas_WiresGroupTitlesWithoutRenamingGroups()
+    {
+        var prompt = Prompt();
+        Assert.Contains("POST graph/connect", prompt, StringComparison.Ordinal);
+        Assert.Contains("POST graph/modifiers", prompt, StringComparison.Ordinal);
+        Assert.Contains("valueMap", prompt, StringComparison.Ordinal);
+        Assert.Contains("do not say rename-on-export is impossible", prompt, StringComparison.Ordinal);
+        Assert.Contains("group_name", prompt, StringComparison.Ordinal);
+        Assert.Contains("mapping-graph/blocks", prompt, StringComparison.Ordinal);
+        Assert.Contains("width/height", prompt, StringComparison.Ordinal);
+        Assert.Contains("f:fieldKey", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -198,6 +215,42 @@ public class AiPromptsChatTests
         Assert.Contains("4xx on that step means that write", prompt, StringComparison.Ordinal);
         Assert.Contains("catalog is unchanged", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Every characteristic value is a string", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_WhenSandboxOn_MustCallRunPythonForUserCheck()
+    {
+        var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        Environment.SetEnvironmentVariable("SANDBOX_URL", "http://127.0.0.1:8091");
+        try
+        {
+            var prompt = Prompt();
+            Assert.Contains("MUST call run_python this turn", prompt, StringComparison.Ordinal);
+            Assert.Contains("sql_readonly is not a substitute", prompt, StringComparison.Ordinal);
+            Assert.Contains("Checking the cabinet calculation helper", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("NOT available", prompt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+        }
+    }
+
+    [Fact]
+    public void ChatSystem_WhenSandboxOff_DoesNotPretendACheckRan()
+    {
+        var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+        try
+        {
+            var prompt = Prompt();
+            Assert.Contains("NOT available", prompt, StringComparison.Ordinal);
+            Assert.Contains("Do not pretend a check ran", prompt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+        }
     }
 
     [Fact]

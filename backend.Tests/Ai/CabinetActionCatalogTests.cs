@@ -22,4 +22,26 @@ public class CabinetActionCatalogTests
         Assert.Contains(hits, h => h.Path.Equals("/tools", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(hits, h => h.Note.Contains("Not product export", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Search_MedusaCollectionTitles_FindsGraphBlocks()
+    {
+        var catalog = new CabinetActionCatalog();
+        var hits = catalog.Search("изменить маппинг групп medusa название коллекции valueMap");
+
+        Assert.Contains(hits, h => h.Path.Contains("graph/connect", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Path.Contains("graph/modifiers", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Note.Contains("valueMap", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Note.Contains("groupName", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Search_BlockSizesAndPins_FindsCatalog()
+    {
+        var catalog = new CabinetActionCatalog();
+        var hits = catalog.Search("блоки размеры пины входы выходы типы");
+
+        Assert.Contains(hits, h => h.Path.Contains("mapping-graph/blocks", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Note.Contains("width/height", StringComparison.Ordinal));
+    }
 }

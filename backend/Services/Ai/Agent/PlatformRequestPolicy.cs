@@ -33,7 +33,10 @@ public static class PlatformRequestPolicy
 
         Marketplace (no secrets): GET /marketplace/connections  GET …/connections/{id}
           GET …/capabilities  GET …/limits  GET …/mappings
-          GET/PATCH …/mappings/{mappingId}/graph
+          GET/PATCH/PUT …/mappings/{mappingId}/graph
+          GET /marketplace/mapping-graph/blocks (types, handles, pin types, layout sizes)
+          POST …/mappings/{mappingId}/graph/connect  POST …/graph/modifiers
+          (canvas blocks: groupName → group_name, then valueMap; does not rename local groups)
           GET …/external-products  GET …/products/import-preview
           POST …/products/import-selected  POST …/products/import-unlinked
           POST …/products/import-all (legacy; prefer import-unlinked or import-selected)

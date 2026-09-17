@@ -43,6 +43,18 @@ public class MedusaLocalGroupExportTests
     }
 
     [Fact]
+    public void AttachLocalProductGroup_KeepsMappedCollectionTitle()
+    {
+        var product = ProductWithGroup(8, "Мифология___Славянская");
+        var export = new Dictionary<string, object?> { ["group_name"] = "Славянская мифология" };
+
+        ProductSyncService.AttachLocalProductGroup(export, product, "medusa");
+
+        Assert.Equal("8", export["group_id"]);
+        Assert.Equal("Славянская мифология", export["group_name"]);
+    }
+
+    [Fact]
     public void AttachLocalProductGroup_IgnoresNonMedusaAdapters()
     {
         var product = ProductWithGroup(8, "Warhammer 40K");

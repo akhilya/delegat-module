@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -317,19 +318,47 @@ public class ValueMapModifier : IFieldModifier
             return new List<(string, string)>();
 
         if (mappingsObj is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+            return ParseMapPairsFromJsonArray(jsonElement);
+
+        if (mappingsObj is IEnumerable enumerable)
         {
             var result = new List<(string, string)>();
-            foreach (var item in jsonElement.EnumerateArray())
+            foreach (var item in enumerable)
             {
-                var from = item.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
-                var to = item.TryGetProperty("to", out var toProp) ? toProp.GetString() : null;
-                if (from != null && to != null)
-                    result.Add((from, to));
+                if (item is JsonElement el)
+                {
+                    var from = el.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
+                    var to = el.TryGetProperty("to", out var toProp) ? toProp.GetString() : null;
+                    if (from != null && to != null)
+                        result.Add((from, to));
+                    continue;
+                }
+
+                if (item is IDictionary dict)
+                {
+                    var from = dict.Contains("from") ? dict["from"]?.ToString() : null;
+                    var to = dict.Contains("to") ? dict["to"]?.ToString() : null;
+                    if (from != null && to != null)
+                        result.Add((from, to));
+                }
             }
             return result;
         }
 
         return new List<(string, string)>();
+    }
+
+    private static List<(string from, string to)> ParseMapPairsFromJsonArray(JsonElement jsonElement)
+    {
+        var result = new List<(string, string)>();
+        foreach (var item in jsonElement.EnumerateArray())
+        {
+            var from = item.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
+            var to = item.TryGetProperty("to", out var toProp) ? toProp.GetString() : null;
+            if (from != null && to != null)
+                result.Add((from, to));
+        }
+        return result;
     }
 }
 

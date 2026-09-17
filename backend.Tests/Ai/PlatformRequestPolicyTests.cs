@@ -102,6 +102,15 @@ public class PlatformRequestPolicyTests
         Assert.Contains("match/apply", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("repair-mappings", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("mappings/{mappingId}/graph", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("graph/connect", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("mapping-graph/blocks", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("graph/modifiers", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("valueMap", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/10/mappings/28/graph/connect"));
+        Assert.True(PlatformRequestPolicy.IsAllowed(
+            "POST", "/marketplace/connections/10/mappings/28/graph/modifiers"));
+        Assert.True(PlatformRequestPolicy.IsAllowed("GET", "/marketplace/mapping-graph/blocks"));
         Assert.DoesNotContain("GET …/graph", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("/products/trash/count", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("Do not tell the user to click", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);

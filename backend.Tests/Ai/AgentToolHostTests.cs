@@ -370,6 +370,7 @@ public class AgentToolHostTests
             Assert.Contains(AgentToolCatalog.Build(), t => t.name == "run_python");
             var prompt = AiPrompts.ChatSystem("Store", 1, 0, [], "user", false);
             Assert.Contains("sandbox is on", prompt, StringComparison.Ordinal);
+            Assert.Contains("MUST call run_python this turn", prompt, StringComparison.Ordinal);
         }
         finally
         {

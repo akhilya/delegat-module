@@ -1023,7 +1023,8 @@ public class ProductSyncService
         if (group != null)
         {
             exportData["group_id"] = group.Id.ToString();
-            exportData["group_name"] = group.name;
+            if (!HasNonEmpty(exportData, "group_name") && !HasNonEmpty(exportData, "groupName"))
+                exportData["group_name"] = group.name;
             return;
         }
 

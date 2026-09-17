@@ -43,7 +43,7 @@ public static class AgentToolCatalog
         if (PythonSandboxClient.IsConfigured())
         {
             tools.Add(Prop("run_python",
-                "Run curated Python in the instance sandbox (pandas/pillow/openpyxl). `client` is already imported. Uses Agent HTTP, never the database URL.",
+                "Run curated Python in the instance sandbox (pandas/pillow/openpyxl). `client` is already imported. Uses Agent HTTP, never the database URL. If the user asks to check this helper or run a snippet, call this tool this turn. Read-only print/client.sql does not need propose_plan.",
                 Req(["code"]), ("code", Str("Python source"))));
         }
 

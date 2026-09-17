@@ -124,7 +124,8 @@ public class GraphMutationService
 
         var nodeId = $"ai-static-{adapterFieldKey}-{Guid.NewGuid().ToString("N")[..8]}";
         var data = BuildStaticNodeData(value, fieldDef);
-        graph.nodes.Add(new GraphNode { id = nodeId, type = "static", data = data });
+        var staticNode = new GraphNode { id = nodeId, type = "static", data = data };
+        graph.nodes.Add(staticNode);
 
         graph.edges.Add(new GraphEdge
         {
@@ -134,6 +135,8 @@ public class GraphMutationService
             sourceHandle = "out",
             targetHandle = $"f:{adapterFieldKey}"
         });
+
+        MappingGraphBlockCatalog.PlaceWestOf(graph, [staticNode], sinkNode, $"f:{adapterFieldKey}");
 
         mapping.graphJson = SerializeGraph(graph);
         await _context.SaveChangesAsync(ct);
@@ -158,12 +161,13 @@ public class GraphMutationService
             e.target == sinkNode.id && e.targetHandle == $"f:{adapterFieldKey}");
         var modNodeId = $"ai-mod-{adapterFieldKey}-{Guid.NewGuid().ToString("N")[..8]}";
 
-        graph.nodes.Add(new GraphNode
+        var modNode = new GraphNode
         {
             id = modNodeId,
             type = "modifier",
             data = new GraphNodeData { modifierType = modifierType, @params = @params }
-        });
+        };
+        graph.nodes.Add(modNode);
 
         if (existingEdge != null)
         {
@@ -190,14 +194,14 @@ public class GraphMutationService
             targetHandle = $"f:{adapterFieldKey}"
         });
 
-        // If field had direct source, convert to a source node + wire
+        GraphNode? srcNode = null;
         if (field.source != null)
         {
             var src = field.source;
             field.source = null;
             var srcNodeId = $"ai-src-{adapterFieldKey}-{Guid.NewGuid().ToString("N")[..8]}";
-
-            graph.nodes.Add(await BuildSourceNodeAsync(srcNodeId, src.type ?? "static", src.field, src.attributeId, ct));
+            srcNode = await BuildSourceNodeAsync(srcNodeId, src.type ?? "static", src.field, src.attributeId, ct);
+            graph.nodes.Add(srcNode);
 
             graph.edges.Add(new GraphEdge
             {
@@ -208,6 +212,13 @@ public class GraphMutationService
                 targetHandle = "in"
             });
         }
+
+        var handle = $"f:{adapterFieldKey}";
+        MappingGraphBlockCatalog.PlaceWestOf(
+            graph,
+            srcNode != null ? [srcNode, modNode] : [modNode],
+            sinkNode,
+            handle);
 
         mapping.graphJson = SerializeGraph(graph);
         await _context.SaveChangesAsync(ct);
@@ -899,9 +910,7 @@ public class GraphMutationService
 
         if (string.Equals(sinkHint, "card", StringComparison.OrdinalIgnoreCase))
         {
-            if (card?.data?.fields == null)
-                throw new InvalidOperationException("adapterFields node not found in graph");
-            card.data.fields ??= new List<AdapterField>();
+            card = EnsureCardSink(graph);
             return (card, "card");
         }
 
@@ -916,10 +925,29 @@ public class GraphMutationService
             }
         }
 
-        if (card?.data?.fields == null)
-            throw new InvalidOperationException("adapterFields node not found in graph");
-        card.data.fields ??= new List<AdapterField>();
+        card = EnsureCardSink(graph);
         return (card, "card");
+    }
+
+    private static GraphNode EnsureCardSink(MappingGraph graph)
+    {
+        var node = FindSinkNode(graph, CardSinkType);
+        if (node != null)
+        {
+            node.data ??= new GraphNodeData();
+            node.data.fields ??= new List<AdapterField>();
+            return node;
+        }
+
+        node = new GraphNode
+        {
+            id = "adapter-fields",
+            type = CardSinkType,
+            position = new GraphPosition { x = 400, y = 0 },
+            data = new GraphNodeData { fields = new List<AdapterField>() },
+        };
+        graph.nodes.Add(node);
+        return node;
     }
 
     private static bool IsFieldConnected(AdapterField field, MappingGraph graph, GraphNode sinkNode)
@@ -1117,6 +1145,17 @@ public class GraphMutationService
                     }
                 };
             }
+            case "groupName":
+                return new GraphNode
+                {
+                    id = nodeId,
+                    type = "groupName",
+                    data = new GraphNodeData
+                    {
+                        label = "Product group name",
+                        valueType = "string",
+                    }
+                };
             default:
                 return new GraphNode { id = nodeId, type = "static", data = new GraphNodeData { staticValue = "" } };
         }
