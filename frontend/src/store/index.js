@@ -19,6 +19,7 @@ import errorLogModule from "./modules/errorLogModule";
 import adapterHttpLogModule from "./modules/adapterHttpLogModule";
 import operations from "./modules/operationsModule";
 import docs from "./modules/docsModule";
+import { companionExclusivePlugin } from "../lib/companionExclusive";
 
 /**
  * Creates and configures the Vuex store with all registered modules.
@@ -59,5 +60,6 @@ export function createStore() {
       aiChat: aiChatModule,
       aiModels: aiModelsModule,
     },
+    plugins: [companionExclusivePlugin],
   });
 }

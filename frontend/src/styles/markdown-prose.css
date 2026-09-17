@@ -1,0 +1,260 @@
+/*
+  Shared markdown reading chrome (docs sheet, assistant).
+  Tailwind preflight zeroes list markers — restore them here with class selectors.
+*/
+
+.markdown-prose {
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  letter-spacing: -0.006em;
+  overflow-wrap: anywhere;
+}
+
+.markdown-prose h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.25;
+  margin: 0 0 1.25rem;
+}
+
+.markdown-prose h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 2.25rem 0 0.85rem;
+}
+
+.markdown-prose h3,
+.markdown-prose h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  margin: 1.75rem 0 0.7rem;
+}
+
+.markdown-prose p {
+  margin: 0 0 1.15rem;
+}
+
+.markdown-prose ul,
+.markdown-prose ol {
+  margin: 0 0 1.15rem;
+  padding-inline-start: 1.35rem;
+}
+
+.markdown-prose ul {
+  list-style: disc outside;
+}
+
+.markdown-prose ul ul {
+  list-style-type: circle;
+}
+
+.markdown-prose ul ul ul {
+  list-style-type: square;
+}
+
+.markdown-prose ol {
+  list-style: decimal outside;
+}
+
+.markdown-prose li {
+  margin: 0.4rem 0;
+  padding-inline-start: 0.15rem;
+}
+
+.markdown-prose li::marker {
+  color: var(--muted-foreground);
+}
+
+.markdown-prose li > p {
+  margin-bottom: 0.4rem;
+}
+
+.markdown-prose li > ul,
+.markdown-prose li > ol {
+  margin: 0.35rem 0 0.15rem;
+}
+
+.markdown-prose a {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+.markdown-prose a:hover {
+  color: var(--foreground);
+  text-decoration-color: var(--foreground);
+}
+
+.markdown-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.markdown-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+
+.markdown-prose blockquote {
+  margin: 0 0 1.25rem;
+  padding: 0.15rem 0 0.15rem 1rem;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.markdown-prose strong {
+  font-weight: 600;
+}
+
+.markdown-prose em {
+  font-style: italic;
+}
+
+.markdown-prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.markdown-prose :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 0.3rem;
+  background: var(--muted);
+}
+
+.markdown-prose pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  padding: 1rem 1.15rem;
+  background: var(--muted);
+  margin: 0 0 1.35rem;
+  line-height: 1.6;
+}
+
+.markdown-prose pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.markdown-prose table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0 2rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-prose th,
+.markdown-prose td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-prose th {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+
+.markdown-prose th:first-child,
+.markdown-prose td:first-child {
+  padding-left: 1rem;
+}
+
+.markdown-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-prose thead th:first-child {
+  border-top-left-radius: 0.5rem;
+}
+
+.markdown-prose thead th:last-child {
+  border-top-right-radius: 0.5rem;
+}
+
+/* Assistant: same tokens, tighter rhythm. */
+.markdown-prose--compact {
+  font-size: 0.875rem;
+  line-height: 1.625;
+  letter-spacing: -0.005em;
+}
+
+.markdown-prose--compact h1 {
+  font-size: 1.05em;
+  margin: 0.6em 0 0.25em;
+}
+
+.markdown-prose--compact h2 {
+  font-size: 1em;
+  margin: 0.6em 0 0.25em;
+}
+
+.markdown-prose--compact h3,
+.markdown-prose--compact h4 {
+  font-size: 0.95em;
+  margin: 0.6em 0 0.25em;
+}
+
+.markdown-prose--compact p,
+.markdown-prose--compact ul,
+.markdown-prose--compact ol,
+.markdown-prose--compact blockquote,
+.markdown-prose--compact pre,
+.markdown-prose--compact table,
+.markdown-prose--compact hr {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+
+.markdown-prose--compact p:first-child,
+.markdown-prose--compact ul:first-child,
+.markdown-prose--compact ol:first-child {
+  margin-top: 0;
+}
+
+.markdown-prose--compact p:last-child,
+.markdown-prose--compact ul:last-child,
+.markdown-prose--compact ol:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-prose--compact li {
+  margin: 0.12em 0;
+}
+
+.markdown-prose--compact pre {
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+}
+
+.markdown-prose--compact th,
+.markdown-prose--compact td {
+  padding: 0.35em 0.5em;
+}
+
+.markdown-prose--compact hr {
+  margin: 0.5em 0;
+}
+
+.markdown-prose--muted {
+  color: inherit;
+}

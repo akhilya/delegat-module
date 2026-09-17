@@ -52,6 +52,10 @@ const props = defineProps({
    * work can continue with the assistant open.
    */
   closeOnOutside: { type: Boolean, default: true },
+  /**
+   * Extra pixels from the inset edge. Companion sheets stack without overlap.
+   */
+  edgeOffset: { type: Number, default: 0 },
 });
 const emits = defineEmits([
   "escapeKeyDown",
@@ -83,14 +87,20 @@ const {
 
 const mergedStyle = computed(() => {
   const fromAttrs = attrs.style;
-  if (!props.resizable) return fromAttrs;
-  const resize = {
-    width: `${liveWidth.value}px`,
-    maxWidth: "calc(100vw - 1rem)",
-  };
-  if (!fromAttrs) return resize;
-  if (typeof fromAttrs === "string") return [resize, fromAttrs];
-  return { ...fromAttrs, ...resize };
+  const layout = {};
+  if (props.resizable) {
+    layout.width = `${liveWidth.value}px`;
+    layout.maxWidth = "calc(100vw - 1rem)";
+  }
+  if (isInset.value && props.side === "right") {
+    layout.right = `${8 + (Number(props.edgeOffset) || 0)}px`;
+  } else if (isInset.value && props.side === "left") {
+    layout.left = `${8 + (Number(props.edgeOffset) || 0)}px`;
+  }
+  if (Object.keys(layout).length === 0) return fromAttrs;
+  if (!fromAttrs) return layout;
+  if (typeof fromAttrs === "string") return [layout, fromAttrs];
+  return { ...fromAttrs, ...layout };
 });
 
 const delegatedProps = reactiveOmit(
@@ -108,6 +118,7 @@ const delegatedProps = reactiveOmit(
   "overlay",
   "closeOnOutside",
   "disableOutsidePointerEvents",
+  "edgeOffset",
 );
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
@@ -122,6 +133,8 @@ function isPortaledOverlayTarget(target) {
     target.closest("[data-slot='alert-dialog-content']") ||
     target.closest("[data-slot='alert-dialog-overlay']") ||
     target.closest("[data-slot='dialog-content']") ||
+    target.closest("[data-slot='sheet-content']") ||
+    target.closest("[data-fab-group]") ||
     target.closest("[data-reka-popper-content-wrapper]"),
   );
 }
@@ -193,8 +206,8 @@ function insetSideClass() {
           'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed z-[var(--z-modal)] flex flex-col gap-4 ease-[var(--ease-out-quart)] data-[state=closed]:duration-[var(--duration-drawer-out)] data-[state=open]:duration-[var(--duration-drawer)]',
           resizable &&
             (isResizing
-              ? 'transition-none will-change-[width]'
-              : 'transition-[width] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]'),
+              ? 'transition-none will-change-[width,right,left]'
+              : 'transition-[width,right,left] duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]'),
           isInset ? 'min-h-0 rounded-xl border-0' : 'shadow-none',
           side === 'right' &&
             (isInset
@@ -232,6 +245,7 @@ function insetSideClass() {
       >
         <SheetResizeHandle
           v-if="resizable"
+          class="max-lg:hidden"
           :side="side"
           :resizing="isResizing"
           @pointerdown="startResize"

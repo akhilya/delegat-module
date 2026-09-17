@@ -151,16 +151,26 @@ button {
   --tw-inset-ring-shadow: 0 0 #0000;
 }
 
-/* Control Plane button lift: short white top sheen + hairline drop shadow
+/* Control Plane button lift: short white top sheen + drop shadow
    on default / outline / secondary / destructive. Ghost and link stay flat.
    Grouped segments share one plane. */
 [data-slot="button"]:not([data-variant]),
 [data-slot="button"][data-variant=""],
 [data-slot="button"][data-variant="default"],
-[data-slot="button"][data-variant="outline"],
-[data-slot="button"][data-variant="secondary"],
 [data-slot="button"][data-variant="destructive"] {
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.1);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent),
+    0 1px 2px oklch(0 0 0 / 0.1),
+    0 3px 8px oklch(0 0 0 / 0.1);
+}
+
+[data-slot="button"][data-variant="outline"],
+[data-slot="button"][data-variant="secondary"] {
+  border-color: color-mix(in oklch, var(--foreground) 22%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 16%, transparent),
+    0 1px 2px oklch(0 0 0 / 0.08),
+    0 3px 8px oklch(0 0 0 / 0.1);
 }
 
 [data-slot="button"]:not([data-variant]),
@@ -192,7 +202,13 @@ button {
    clip wrapper does not hide it. The resize handle is the capsule only (no
    full-height wash). The desktop sidebar handle sits on the panel (outside the
    clip) so the capsule can rest on the right hairline. */
-[data-slot="sheet-content"][data-inset],
+[data-slot="sheet-content"][data-inset] {
+  box-shadow:
+    0 0 0 1.5px color-mix(in oklch, var(--foreground) 28%, transparent),
+    0 2px 6px oklch(0 0 0 / 0.06),
+    0 8px 20px oklch(0 0 0 / 0.1);
+}
+
 [data-slot="sidebar-panel"][data-inset] {
   box-shadow:
     0 0 0 1px color-mix(in oklch, var(--foreground) 18%, transparent),
@@ -200,7 +216,13 @@ button {
     0 3px 8px oklch(0 0 0 / 0.06);
 }
 
-.dark [data-slot="sheet-content"][data-inset],
+.dark [data-slot="sheet-content"][data-inset] {
+  box-shadow:
+    0 0 0 1.5px color-mix(in oklch, var(--foreground) 34%, transparent),
+    0 2px 6px oklch(0 0 0 / 0.22),
+    0 8px 20px oklch(0 0 0 / 0.28);
+}
+
 .dark [data-slot="sidebar-panel"][data-inset] {
   box-shadow:
     0 0 0 1px color-mix(in oklch, var(--foreground) 22%, transparent),
@@ -252,7 +274,9 @@ button {
 [data-slot="button"][data-variant="secondary"]:focus-visible,
 [data-slot="button"][data-variant="destructive"]:focus-visible {
   box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent),
     0 1px 2px oklch(0 0 0 / 0.1),
+    0 3px 8px oklch(0 0 0 / 0.1),
     inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 

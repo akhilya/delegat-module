@@ -130,7 +130,8 @@
     },
     "fabGroup": {
       "aiAssistantTitle": "AI Assistant",
-      "backgroundJobsTitle": "Background jobs"
+      "backgroundJobsTitle": "Background jobs",
+      "documentationTitle": "Documentation"
     },
     "formCombobox": {
       "placeholder": "Select...",

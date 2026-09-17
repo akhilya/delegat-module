@@ -130,7 +130,8 @@
     },
     "fabGroup": {
       "aiAssistantTitle": "AI Ассистент",
-      "backgroundJobsTitle": "Фоновые процессы"
+      "backgroundJobsTitle": "Фоновые процессы",
+      "documentationTitle": "Документация"
     },
     "formCombobox": {
       "placeholder": "Выберите...",

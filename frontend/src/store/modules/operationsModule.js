@@ -1,6 +1,11 @@
 import { HubConnectionBuilder, LogLevel, HttpTransportType } from "@microsoft/signalr";
 import { http } from "@/main";
 import { t } from "@/i18n";
+import {
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+  readStoredSheetWidth,
+} from "@/composables/useSheetResize";
 import { parseServerUtc } from "@/utils/dateTime";
 import { randomUuidCompact } from "@/utils/uuid";
 import {
@@ -30,6 +35,10 @@ function readAutoOpenPanelPref() {
 const state = {
   operations: [],
   panelOpen: false,
+  panelWidth: readStoredSheetWidth(
+    SHEET_WIDTH_STORAGE.operations,
+    SHEET_WIDTH_DEFAULTS.operations,
+  ),
   /** When true, starting a background job opens the operations side panel. */
   autoOpenPanel: readAutoOpenPanelPref(),
   historyLoaded: false,
@@ -40,6 +49,10 @@ const state = {
 const mutations = {
   SET_PANEL_OPEN(state, value) {
     state.panelOpen = value;
+  },
+  SET_PANEL_WIDTH(state, width) {
+    const n = Number(width);
+    if (Number.isFinite(n)) state.panelWidth = n;
   },
   SET_AUTO_OPEN_PANEL(state, value) {
     state.autoOpenPanel = !!value;
@@ -505,6 +518,10 @@ const actions = {
 
   closePanel({ commit }) {
     commit("SET_PANEL_OPEN", false);
+  },
+
+  setPanelWidth({ commit }, width) {
+    commit("SET_PANEL_WIDTH", width);
   },
 
   setAutoOpenPanel({ commit }, value) {

@@ -1,9 +1,18 @@
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getLocale } from "@/i18n";
 import { docsSlugForPath } from "@/lib/docsHelp";
+import {
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+  readStoredSheetWidth,
+} from "@/composables/useSheetResize";
 
 const state = {
   panelOpen: false,
+  panelWidth: readStoredSheetWidth(
+    SHEET_WIDTH_STORAGE.docs,
+    SHEET_WIDTH_DEFAULTS.docs,
+  ),
   slug: "",
   catalog: null,
   catalogFailed: false,
@@ -15,6 +24,10 @@ const state = {
 const mutations = {
   SET_PANEL_OPEN(state, value) {
     state.panelOpen = !!value;
+  },
+  SET_PANEL_WIDTH(state, width) {
+    const n = Number(width);
+    if (Number.isFinite(n)) state.panelWidth = n;
   },
   SET_SLUG(state, slug) {
     state.slug = slug == null ? "" : String(slug);
@@ -72,6 +85,14 @@ const actions = {
 
   closePanel({ commit }) {
     commit("SET_PANEL_OPEN", false);
+  },
+
+  togglePanel({ state, dispatch }) {
+    if (state.panelOpen) return dispatch("closePanel");
+    return dispatch("openHub");
+  },
+  setPanelWidth({ commit }, width) {
+    commit("SET_PANEL_WIDTH", width);
   },
 
   openHub({ dispatch }) {

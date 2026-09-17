@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/input-group";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
+import { useCompanionSheets } from "@/composables/useCompanionSheets";
 import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
 import { useI18n } from "vue-i18n";
 import {
@@ -93,10 +94,13 @@ import {
 } from "@/lib/ai/timeline";
 import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
+import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
 const { t } = useI18n();
 const store = useStore();
+const { edgeOffset } = useCompanionSheets();
+const aiEdgeOffset = edgeOffset("ai");
 const {
   timezone: storeTimezone,
   relativeDayLabel,
@@ -571,6 +575,7 @@ function isLatestTurn(msg) {
       :width="panelWidth"
       :default-width="400"
       :storage-key="aiWidthStorageKey"
+      :edge-offset="aiEdgeOffset"
       :aria-label="t('ai.openAssistant')"
       @update:width="onPanelWidth"
       @escape-key-down="onSheetEscape"
@@ -811,11 +816,12 @@ function isLatestTurn(msg) {
                     :enter="isLatestTurn(msg)"
                   />
 
-                  <div
+                  <MarkdownProse
                     v-if="hasPlanExec(msg) && proposalView(msg).reply"
-                    class="ai-message min-w-0 w-full text-sm leading-relaxed wrap-break-word"
+                    density="compact"
+                    :html="renderAiMarkdown(proposalView(msg).reply)"
+                    class="min-w-0 w-full wrap-break-word"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
-                    v-html="renderAiMarkdown(proposalView(msg).reply)"
                   />
 
                   <div
@@ -840,11 +846,12 @@ function isLatestTurn(msg) {
                     :enter="isLatestTurn(msg)"
                   />
 
-                  <div
+                  <MarkdownProse
                     v-if="replyText(msg)"
-                    class="ai-message min-w-0 w-full text-sm leading-relaxed wrap-break-word"
+                    density="compact"
+                    :html="renderAiMarkdown(replyText(msg))"
+                    class="min-w-0 w-full wrap-break-word"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
-                    v-html="renderAiMarkdown(replyText(msg))"
                   />
 
                   <AiChatActions

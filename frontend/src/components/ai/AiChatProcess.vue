@@ -15,6 +15,7 @@ import {
   runningProcessTool,
 } from "@/lib/ai/display";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
+import { MarkdownProse } from "@/components/ui/markdown-prose";
 import { useI18n } from "vue-i18n";
 import "./aiMessage.css";
 
@@ -28,7 +29,7 @@ const { t } = useI18n();
 const groups = computed(() => groupProcessItems(props.process));
 const tools = computed(() => processTools(props.process));
 const runningTool = computed(() => runningProcessTool(props.process));
-const detailsOpen = ref(!props.done);
+const detailsOpen = ref(false);
 
 watch(
   () => props.done,
@@ -72,10 +73,11 @@ function html(text) {
       <CollapsibleContent class="duration-[var(--duration-ui)]">
         <div class="flex min-w-0 flex-col gap-1 pt-1">
           <template v-for="(group, idx) in groups" :key="group.type + idx">
-            <div
+            <MarkdownProse
               v-if="group.type === 'text'"
-              class="ai-message ai-message-think min-w-0 text-xs leading-relaxed text-muted-foreground"
-              v-html="html(group.text)"
+              density="muted"
+              :html="html(group.text)"
+              class="min-w-0 text-xs leading-relaxed text-muted-foreground"
             />
             <AiPythonRunBlock
               v-else-if="group.type === 'python'"
@@ -99,12 +101,13 @@ function html(text) {
     </Collapsible>
 
     <template v-else>
-      <div
+      <MarkdownProse
         v-for="(group, idx) in groups"
         :key="'think-' + idx"
-        class="ai-message ai-message-think min-w-0 text-[13px] leading-relaxed text-muted-foreground"
+        density="muted"
+        :html="html(group.text)"
+        class="min-w-0 text-[13px] leading-relaxed text-muted-foreground"
         :class="props.enter && 'ai-block-in'"
-        v-html="html(group.text)"
       />
     </template>
   </div>

@@ -131,8 +131,10 @@ describe("product motion tokens", () => {
       /relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl/,
     );
     assert.match(sheet, /SheetResizeHandle/);
+    assert.match(sheet, /max-lg:hidden/);
     assert.match(sheet, /data-resizable/);
     assert.match(style, /\[data-slot="sheet-content"\]\[data-inset\]/);
+    assert.match(style, /0 8px 20px oklch\(0 0 0 \/ 0\.1\)/);
     assert.match(style, /0 3px 8px oklch\(0 0 0 \/ 0\.06\)/);
     assert.doesNotMatch(style, /0 10px 36px/);
     assert.doesNotMatch(style, /0 12px 40px/);

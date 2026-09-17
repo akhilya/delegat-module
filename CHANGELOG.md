@@ -20,6 +20,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
 - Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.
 - Navbar page Help is a labeled «Need help?» / «Нужна помощь?» control with a question-mark icon (same expand-from-icon pattern as the account button). It is no longer a book glyph hidden below `md`.
+- Below `lg`, the assistant, documentation, and operations sheets open one at a time (full width). Documentation contents move into a header menu when the sheet is narrower than 720px (resized panel or small viewport) so the article stays readable. The matching corner/navbar button uses an outline (or filled navbar) state while that sheet is open.
+- Inset companion sheets (documentation, assistant, operations, and the other float panels) use a slightly deeper drop shadow than the desktop sidebar.
+- The documentation FAB uses a question-mark icon. Companion FABs (and the compact navbar set) show a tooltip instead of the browser `title` tip. Below `lg`, documentation is only the navbar Help control — not a second question-mark in the compact FAB cluster.
+- Docs sheet and assistant replies share one markdown reading style (disc / nested circle / numbered lists). Tailwind no longer strips those markers.
 - Medusa mapping keeps the linked category’s attributes as adapter sinks. `GET /categories/{id}/fields` no longer drops the bridge list when `success` is omitted, and unmatched local category attributes are merged in (Ozon / Wildberries stay marketplace-only). Reopen the mapping after restarting the API.
 - Cabinet `PATCH /products/{id}/group { groupId }` moves a product into a group (or out, when `groupId` is null). The assistant was told this path existed; only GET was implemented, so plans failed with HTTP 405.
 - API JSON is compressed (Brotli/Gzip at Kestrel; nginx also gzips `application/json`). Vendor JS splits into vue / ui / http / signalr chunks. MySQL pool is capped at 50 connections. Sandbox health checks are not logged.
@@ -29,6 +33,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Corner FABs include Documentation. On desktop (`lg+`), while the assistant (or another companion sheet) is open, the buttons sit beside the stack; opening Operations or Docs places that sheet on the right and shifts the assistant left so the panels do not overlap.
 - Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`
 - Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab
 - Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and external MCP clients: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`

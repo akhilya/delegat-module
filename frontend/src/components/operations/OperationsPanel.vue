@@ -30,9 +30,12 @@ import OperationItem from "./OperationItem.vue";
 import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
 import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
+import { useCompanionSheets } from "@/composables/useCompanionSheets";
 import { OPERATION_TERMINAL_STATUSES } from "@/lib/operationsControl";
 
 const store = useStore();
+const { edgeOffset } = useCompanionSheets();
+const opsEdgeOffset = edgeOffset("operations");
 
 const panelOpen = computed(() => store.state.operations.panelOpen);
 const activeOperations = computed(() => store.getters["operations/activeOperations"]);
@@ -87,16 +90,20 @@ function handleRemove(id) {
 </script>
 
 <template>
-  <Sheet :open="panelOpen" @update:open="onOpenChange">
+  <Sheet :open="panelOpen" :modal="false" @update:open="onOpenChange">
     <SheetContent
       side="right"
       inset
       resizable
+      :overlay="false"
       :show-close="false"
       class="gap-0 p-0"
       :default-width="SHEET_WIDTH_DEFAULTS.operations"
       :storage-key="SHEET_WIDTH_STORAGE.operations"
+      :width="store.state.operations.panelWidth"
+      :edge-offset="opsEdgeOffset"
       :aria-label="t('operations.panelTitle')"
+      @update:width="(w) => store.dispatch('operations/setPanelWidth', w)"
     >
       <SheetHeader variant="bar">
         <div class="flex min-h-8 items-center gap-2">

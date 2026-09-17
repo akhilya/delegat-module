@@ -51,6 +51,13 @@ describe("token radius instead of pills", () => {
     assert.match(aiFab, /size-12 rounded-full/);
     assert.match(opsFab, /size-12 shrink-0 rounded-full/);
     assert.match(fabGroup, /size-12 shrink-0 rounded-full/);
+    assert.match(fabGroup, /data-fab-group/);
+    assert.match(fabGroup, /documentationTitle/);
+    assert.match(fabGroup, /CircleHelp/);
+    assert.doesNotMatch(fabGroup, /BookOpen/);
+    assert.match(fabGroup, /TooltipContent/);
+    assert.match(fabGroup, /data-companion-open/);
+    assert.match(fabGroup, /aria-pressed/);
     assert.match(strip, /size-10 rounded-full/);
   });
 

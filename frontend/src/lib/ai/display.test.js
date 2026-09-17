@@ -101,6 +101,11 @@ describe("AiChatPanel chrome", () => {
     assert.match(panel, /AiChatActions/);
     assert.match(panel, /AiChatForm/);
     assert.match(panel, /AiChatAttachmentList/);
+    assert.match(panel, /<MarkdownProse/);
+    assert.match(panel, /density="compact"/);
+    assert.doesNotMatch(panel, /class="ai-message/);
+    assert.match(process, /density="muted"/);
+    assert.doesNotMatch(process, /ai-message-think/);
     const actions = readFileSync(
       new URL("../../components/ai/AiChatActions.vue", import.meta.url),
       "utf8",
@@ -124,7 +129,7 @@ describe("AiChatPanel chrome", () => {
     assert.match(form, /answersFromFormData/);
     assert.match(panel, /:done="!!msg.done"/);
     assert.match(process, /processUsed/);
-    assert.match(process, /v-model:open="detailsOpen"/);
+    assert.match(process, /const detailsOpen = ref\(false\)/);
     assert.doesNotMatch(process, /InsetGroup/);
     assert.doesNotMatch(panel, /ai-process/);
     assert.doesNotMatch(panel, /border-l/);

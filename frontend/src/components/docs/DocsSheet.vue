@@ -2,8 +2,16 @@
 import { computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
-import { BookOpen, ExternalLink } from "lucide-vue-next";
+import { BookOpen, ExternalLink, List } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -15,12 +23,17 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
+import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE, clampSheetWidth } from "@/composables/useSheetResize";
+import { useCompanionSheets } from "@/composables/useCompanionSheets";
+import { docsSheetUsesRail } from "@/lib/docsSheet";
 import { getDocsPageUrl, getDocsSiteOrigin } from "@/utils/docsUrl";
 import { renderDocsMarkdown } from "@/lib/docsMarkdown";
+import { MarkdownProse } from "@/components/ui/markdown-prose";
 
 const store = useStore();
 const { locale } = useI18n();
+const { edgeOffset } = useCompanionSheets();
+const docsEdgeOffset = edgeOffset("docs");
 
 const panelOpen = computed(() => store.state.docs.panelOpen);
 const slug = computed(() => store.state.docs.slug);
@@ -60,6 +73,16 @@ function selectSlug(next) {
   store.dispatch("docs/openSlug", next ?? "");
 }
 
+function selectTocSlug(next) {
+  selectSlug(next === "_hub" ? "" : next);
+}
+
+const panelWidth = computed(() => store.state.docs.panelWidth);
+const compactChrome = computed(
+  () => !docsSheetUsesRail(clampSheetWidth(panelWidth.value)),
+);
+const tocValue = computed(() => slug.value || "_hub");
+
 function onArticleClick(event) {
   const a = event.target.closest("a[data-docs-slug]");
   if (!a || !event.currentTarget.contains(a)) return;
@@ -69,20 +92,65 @@ function onArticleClick(event) {
 </script>
 
 <template>
-  <Sheet :open="panelOpen" @update:open="onOpenChange">
+  <Sheet :open="panelOpen" :modal="false" @update:open="onOpenChange">
     <SheetContent
       side="right"
       inset
       resizable
+      :overlay="false"
       :show-close="false"
       class="gap-0 p-0"
       :default-width="SHEET_WIDTH_DEFAULTS.docs"
       :storage-key="SHEET_WIDTH_STORAGE.docs"
+      :width="store.state.docs.panelWidth"
+      :edge-offset="docsEdgeOffset"
       :aria-label="t('components.docsSheet.title')"
+      @update:width="(w) => store.dispatch('docs/setPanelWidth', w)"
     >
       <SheetHeader variant="bar">
         <div class="flex min-h-8 items-center gap-2">
-          <BookOpen class="size-4 shrink-0 text-muted-foreground" />
+          <DropdownMenu v-if="compactChrome">
+            <DropdownMenuTrigger as-child>
+              <Button
+                data-slot="docs-toc-trigger"
+                variant="ghost"
+                size="icon"
+                class="size-8 shrink-0"
+                :title="t('components.docsSheet.catalog')"
+                :aria-label="t('components.docsSheet.catalog')"
+              >
+                <List class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              data-slot="docs-toc-menu"
+              align="start"
+              class="w-72"
+            >
+              <DropdownMenuRadioGroup
+                :model-value="tocValue"
+                @update:model-value="selectTocSlug"
+              >
+                <template
+                  v-for="(group, gi) in catalog?.groups || []"
+                  :key="gi"
+                >
+                  <DropdownMenuLabel>{{ group.text }}</DropdownMenuLabel>
+                  <DropdownMenuRadioItem
+                    v-for="(item, ii) in group.items || []"
+                    :key="`${gi}-${ii}-${item.slug}`"
+                    :value="item.slug || '_hub'"
+                  >
+                    {{ item.text }}
+                  </DropdownMenuRadioItem>
+                </template>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <BookOpen
+            v-if="!compactChrome"
+            class="size-4 shrink-0 text-muted-foreground"
+          />
           <SheetTitle class="min-w-0 flex-1 truncate">
             {{ title }}
           </SheetTitle>
@@ -108,6 +176,7 @@ function onArticleClick(event) {
 
       <div class="flex min-h-0 flex-1">
         <nav
+          v-if="!compactChrome"
           data-slot="docs-toc"
           class="w-60 shrink-0 overflow-y-auto border-r border-border px-4 py-5"
           :aria-label="t('components.docsSheet.catalog')"
@@ -142,7 +211,14 @@ function onArticleClick(event) {
           </section>
         </nav>
 
-        <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-8 py-7">
+        <div
+          :class="
+            cn(
+              'min-h-0 min-w-0 flex-1 overflow-y-auto',
+              compactChrome ? 'px-5 py-6' : 'px-8 py-7',
+            )
+          "
+        >
           <EmptyState
             v-if="pageLoading"
             loading
@@ -154,11 +230,10 @@ function onArticleClick(event) {
             :framed="false"
             :title="t('components.docsSheet.loadError')"
           />
-          <div
+          <MarkdownProse
             v-else-if="page"
-            class="docs-article"
+            :html="articleHtml"
             @click="onArticleClick"
-            v-html="articleHtml"
           />
           <EmptyState
             v-else
@@ -170,155 +245,3 @@ function onArticleClick(event) {
     </SheetContent>
   </Sheet>
 </template>
-
-<style scoped>
-.docs-article {
-  color: var(--foreground);
-  font-size: 0.9375rem;
-  line-height: 1.7;
-  letter-spacing: -0.006em;
-}
-
-.docs-article :deep(h1) {
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.024em;
-  line-height: 1.25;
-  margin: 0 0 1.25rem;
-}
-
-.docs-article :deep(h2) {
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-  margin: 2.25rem 0 0.85rem;
-}
-
-.docs-article :deep(h3) {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  margin: 1.75rem 0 0.7rem;
-}
-
-.docs-article :deep(p) {
-  margin: 0 0 1.15rem;
-}
-
-.docs-article :deep(ul),
-.docs-article :deep(ol) {
-  margin: 0 0 1.15rem;
-  padding-left: 1.4rem;
-}
-
-.docs-article :deep(li) {
-  margin: 0.4rem 0;
-}
-
-.docs-article :deep(li) > p {
-  margin-bottom: 0.4rem;
-}
-
-.docs-article :deep(a) {
-  color: var(--muted-foreground);
-  font-weight: 500;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.22em;
-}
-
-.docs-article :deep(a:hover) {
-  color: var(--foreground);
-  text-decoration-color: var(--foreground);
-}
-
-.docs-article :deep(img) {
-  max-width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  margin: 0.75rem 0 1.5rem;
-}
-
-.docs-article :deep(hr) {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 2rem 0;
-}
-
-.docs-article :deep(blockquote) {
-  margin: 0 0 1.25rem;
-  padding: 0.15rem 0 0.15rem 1rem;
-  border-left: 2px solid var(--border);
-  color: var(--muted-foreground);
-}
-
-.docs-article :deep(pre),
-.docs-article :deep(code) {
-  font-size: 0.8125rem;
-}
-
-.docs-article :deep(:not(pre) > code) {
-  padding: 0.15em 0.4em;
-  border-radius: 0.3rem;
-  background: var(--muted);
-}
-
-.docs-article :deep(pre) {
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  padding: 1rem 1.15rem;
-  background: var(--muted);
-  margin: 0 0 1.35rem;
-  line-height: 1.6;
-}
-
-.docs-article :deep(pre code) {
-  padding: 0;
-  background: none;
-}
-
-.docs-article :deep(table) {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 1.5rem 0 2rem;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  font-variant-numeric: tabular-nums;
-}
-
-.docs-article :deep(th),
-.docs-article :deep(td) {
-  padding: 0.75rem 1rem;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
-}
-
-.docs-article :deep(th) {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--muted-foreground);
-  background: var(--muted);
-}
-
-.docs-article :deep(th:first-child),
-.docs-article :deep(td:first-child) {
-  padding-left: 1rem;
-}
-
-.docs-article :deep(tr:last-child td) {
-  border-bottom: 0;
-}
-
-.docs-article :deep(thead th:first-child) {
-  border-top-left-radius: 0.5rem;
-}
-
-.docs-article :deep(thead th:last-child) {
-  border-top-right-radius: 0.5rem;
-}
-</style>

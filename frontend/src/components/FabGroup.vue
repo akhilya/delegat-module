@@ -2,12 +2,16 @@
 import { Spinner } from "@/components/ui/spinner";
 import { computed } from "vue";
 import { useStore } from "vuex";
-import {
-  Sparkles,
-  Activity,
-} from "lucide-vue-next";
+import { Sparkles, Activity, CircleHelp } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { t } from "@/i18n";
+import { useCompanionSheets } from "@/composables/useCompanionSheets";
 
 const props = defineProps({
   aiEnabled: { type: Boolean, default: false },
@@ -20,11 +24,15 @@ const props = defineProps({
 });
 
 const store = useStore();
+const { fabRight } = useCompanionSheets();
 
 const isNavbar = computed(() => props.placement === "navbar");
-const isAiOpen = computed(() => store.state.aiChat?.isOpen);
 const isAiLoading = computed(() => store.state.aiChat?.isLoading);
+const aiOpen = computed(() => !!store.state.aiChat?.isOpen);
+const opsOpen = computed(() => !!store.state.operations?.panelOpen);
+const docsOpen = computed(() => !!store.state.docs?.panelOpen);
 const activeCount = computed(() => store.getters["operations/activeCount"]);
+const tooltipSide = computed(() => (isNavbar.value ? "bottom" : "left"));
 
 function toggleAi() {
   store.commit("aiChat/toggle");
@@ -32,79 +40,144 @@ function toggleAi() {
 function toggleOps() {
   store.dispatch("operations/togglePanel");
 }
+function toggleDocs() {
+  store.dispatch("docs/togglePanel");
+}
+
+function floatVariant(open) {
+  return open ? "outline" : "default";
+}
+function navVariant(open) {
+  return open ? "secondary" : "ghost";
+}
 </script>
 
 <template>
   <Teleport v-if="!isNavbar" to="body">
-    <Transition
-      enter-active-class="transition-[opacity,transform] duration-[var(--duration-overlay)] ease-[var(--ease-out-quart)]"
-      enter-from-class="opacity-0 translate-y-2"
-      enter-to-class="opacity-100 translate-y-0"
-      leave-active-class="transition-[opacity,transform] duration-[var(--duration-overlay-out)] ease-[var(--ease-out-quart)]"
-      leave-from-class="opacity-100 translate-y-0"
-      leave-to-class="opacity-0 translate-y-2"
-    >
+    <TooltipProvider :delay-duration="300">
       <div
-        v-if="!isAiOpen"
-        class="fixed bottom-6 right-4 z-[9996] hidden flex-col-reverse gap-2.5 lg:flex"
+        data-fab-group
+        class="fixed bottom-6 z-[9996] hidden flex-col-reverse gap-2.5 lg:flex"
+        :style="{
+          right: `${fabRight}px`,
+          transition:
+            'right var(--duration-overlay) var(--ease-out-quart)',
+        }"
       >
-        <Button
-          v-if="aiEnabled"
-          size="icon"
-          class="relative size-12 shrink-0 rounded-full shadow-lg"
-          :title="t('components.fabGroup.aiAssistantTitle')"
-          @click="toggleAi"
-        >
-          <Spinner v-if="isAiLoading" size="lg" />
-          <Sparkles v-else class="size-5" />
-          <span
-            v-if="isAiLoading"
-            class="pointer-events-none absolute inset-0 animate-pulse rounded-full bg-white/10"
-          />
-        </Button>
+        <Tooltip v-if="aiEnabled">
+          <TooltipTrigger as-child>
+            <Button
+              size="icon"
+              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :variant="floatVariant(aiOpen)"
+              :data-companion-open="aiOpen ? '' : undefined"
+              :aria-pressed="aiOpen"
+              :aria-label="t('components.fabGroup.aiAssistantTitle')"
+              @click="toggleAi"
+            >
+              <Spinner v-if="isAiLoading" size="lg" />
+              <Sparkles v-else class="size-5" />
+              <span
+                v-if="isAiLoading"
+                class="pointer-events-none absolute inset-0 animate-pulse rounded-full bg-white/10"
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent :side="tooltipSide">
+            {{ t("components.fabGroup.aiAssistantTitle") }}
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          size="icon"
-          class="relative size-12 shrink-0 rounded-full shadow-lg"
-          :title="t('components.fabGroup.backgroundJobsTitle')"
-          @click="toggleOps"
-        >
-          <Activity class="size-5" />
-          <span
-            v-if="activeCount > 0"
-            class="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground"
-          >
-            {{ activeCount > 9 ? "9+" : activeCount }}
-          </span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              size="icon"
+              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :variant="floatVariant(opsOpen)"
+              :data-companion-open="opsOpen ? '' : undefined"
+              :aria-pressed="opsOpen"
+              :aria-label="t('components.fabGroup.backgroundJobsTitle')"
+              @click="toggleOps"
+            >
+              <Activity class="size-5" />
+              <span
+                v-if="activeCount > 0"
+                class="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground"
+              >
+                {{ activeCount > 9 ? "9+" : activeCount }}
+              </span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent :side="tooltipSide">
+            {{ t("components.fabGroup.backgroundJobsTitle") }}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              size="icon"
+              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :variant="floatVariant(docsOpen)"
+              :data-companion-open="docsOpen ? '' : undefined"
+              :aria-pressed="docsOpen"
+              :aria-label="t('components.fabGroup.documentationTitle')"
+              @click="toggleDocs"
+            >
+              <CircleHelp class="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent :side="tooltipSide">
+            {{ t("components.fabGroup.documentationTitle") }}
+          </TooltipContent>
+        </Tooltip>
       </div>
-    </Transition>
+    </TooltipProvider>
   </Teleport>
 
-  <div v-else class="flex items-center gap-0.5 lg:hidden">
-    <Button
-      variant="ghost"
-      size="icon"
-      class="relative size-9 shrink-0"
-      :title="t('components.fabGroup.backgroundJobsTitle')"
-      @click="toggleOps"
-    >
-      <Activity class="size-4" />
-      <span
-        v-if="activeCount > 0"
-        class="absolute top-1 right-1 size-1.5 rounded-full bg-destructive"
-      />
-    </Button>
-    <Button
-      v-if="aiEnabled"
-      variant="ghost"
-      size="icon"
-      class="relative size-9 shrink-0"
-      :title="t('components.fabGroup.aiAssistantTitle')"
-      @click="toggleAi"
-    >
-      <Spinner v-if="isAiLoading" size="sm" />
-      <Sparkles v-else class="size-4" />
-    </Button>
-  </div>
+  <TooltipProvider v-else :delay-duration="300">
+    <div data-fab-group class="flex items-center gap-0.5 lg:hidden">
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            size="icon"
+            class="relative size-9 shrink-0"
+            :variant="navVariant(opsOpen)"
+            :data-companion-open="opsOpen ? '' : undefined"
+            :aria-pressed="opsOpen"
+            :aria-label="t('components.fabGroup.backgroundJobsTitle')"
+            @click="toggleOps"
+          >
+            <Activity class="size-4" />
+            <span
+              v-if="activeCount > 0"
+              class="absolute top-1 right-1 size-1.5 rounded-full bg-destructive"
+            />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent :side="tooltipSide">
+          {{ t("components.fabGroup.backgroundJobsTitle") }}
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip v-if="aiEnabled">
+        <TooltipTrigger as-child>
+          <Button
+            size="icon"
+            class="relative size-9 shrink-0"
+            :variant="navVariant(aiOpen)"
+            :data-companion-open="aiOpen ? '' : undefined"
+            :aria-pressed="aiOpen"
+            :aria-label="t('components.fabGroup.aiAssistantTitle')"
+            @click="toggleAi"
+          >
+            <Spinner v-if="isAiLoading" size="sm" />
+            <Sparkles v-else class="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent :side="tooltipSide">
+          {{ t("components.fabGroup.aiAssistantTitle") }}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  </TooltipProvider>
 </template>

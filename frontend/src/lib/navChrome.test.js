@@ -96,6 +96,10 @@ const languageSwitcher = readFileSync(
   new URL("../components/LanguageSwitcher.vue", import.meta.url),
   "utf8",
 );
+const fabGroup = readFileSync(
+  new URL("../components/FabGroup.vue", import.meta.url),
+  "utf8",
+);
 
 describe("navbar center", () => {
   it("keeps tabs and search on the viewport midline when breadcrumbs sit on the left", () => {
@@ -159,6 +163,13 @@ describe("navbar help", () => {
     assert.doesNotMatch(nav, /hidden sm:inline/);
     assert.doesNotMatch(nav, /BookOpen/);
     assert.doesNotMatch(nav, /hidden size-9 shrink-0 md:inline-flex/);
+  });
+
+  it("does not add a second docs icon in the compact navbar FAB cluster", () => {
+    const compact = fabGroup.slice(fabGroup.indexOf("lg:hidden"));
+    assert.match(compact, /backgroundJobsTitle/);
+    assert.doesNotMatch(compact, /documentationTitle/);
+    assert.match(fabGroup, /documentationTitle/);
   });
 });
 
