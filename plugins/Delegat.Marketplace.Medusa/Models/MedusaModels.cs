@@ -561,6 +561,33 @@ public sealed class MedusaOrderDto
 
     [JsonPropertyName("items")]
     public List<MedusaOrderItemDto>? Items { get; set; }
+
+    [JsonPropertyName("has_label")]
+    public bool HasLabel { get; set; }
+
+    [JsonPropertyName("ozon_posting_number")]
+    public string? OzonPostingNumber { get; set; }
+
+    [JsonPropertyName("ozon_tracking")]
+    public string? OzonTracking { get; set; }
+}
+
+public sealed class MedusaOrderLabelResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("content_type")]
+    public string? ContentType { get; set; }
+
+    [JsonPropertyName("file_name")]
+    public string? FileName { get; set; }
+
+    [JsonPropertyName("file_content")]
+    public string? FileContent { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
 }
 
 public sealed class MedusaOrderListResponse

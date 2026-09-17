@@ -42,6 +42,7 @@ public class MedusaPluginTests
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ImportGroups));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetOrders));
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.UpdateOrderStatus));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetOrderLabels));
     }
 
     [Fact]
@@ -545,6 +546,28 @@ public class MedusaPluginTests
 
         Assert.True(result.Success);
         Assert.Equal("delivering", result.Order?.Status);
+    }
+
+    [Fact]
+    public async Task GetOrderLabel_ReadsBridgePdf()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Contains("/orders/order_1/label", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            return JsonResponse(new
+            {
+                success = true,
+                content_type = "application/pdf",
+                file_name = "ozon-111.pdf",
+                file_content = Convert.ToBase64String(Encoding.ASCII.GetBytes("%PDF-label"))
+            });
+        });
+
+        var result = await new TestPlugin(handler).GetOrderLabelAsync(Context(), "order_1");
+        Assert.True(result.Success);
+        Assert.Equal("ozon-111.pdf", result.Label?.FileName);
+        Assert.Equal("pdf", result.Label?.Format);
+        Assert.False(string.IsNullOrWhiteSpace(result.Label?.ContentBase64));
     }
 
     private static ConnectionContext Context() => new()

@@ -30,6 +30,11 @@
 - `POST /groups/{id}/products`
 - `POST /groups/{id}/products/remove`
 - `POST /groups/{id}/delete`
+- `GET /orders`
+- `GET /orders/{id}`
+- `POST /orders/{id}/status`
+- `POST /orders/{id}/cancel`
+- `GET /orders/{id}/label` — Ozon Delivery packing-label PDF after assemble
 
 Группы товаров Delegat уходят в Medusa как collections. Экспорт группы из dashboard создаёт коллекцию и привязывает уже выгруженные товары.
 

@@ -44,7 +44,7 @@ public class MedusaPlugin : MarketplacePluginBase
 
     public override string Key => "medusa";
     public override string DisplayName => "Medusa";
-    public override string Version => "0.2.2";
+    public override string Version => "0.2.3";
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
@@ -64,7 +64,8 @@ public class MedusaPlugin : MarketplacePluginBase
         MarketplaceCapabilities.ImportGroups |
         MarketplaceCapabilities.DeleteGroups |
         MarketplaceCapabilities.GetOrders |
-        MarketplaceCapabilities.UpdateOrderStatus;
+        MarketplaceCapabilities.UpdateOrderStatus |
+        MarketplaceCapabilities.GetOrderLabels;
 
     public override CredentialsSchema GetCredentialsSchema()
     {
@@ -1149,7 +1150,18 @@ public class MedusaPlugin : MarketplacePluginBase
     }
 
     private static ExternalOrder MapOrder(MedusaOrderDto order)
-        => new()
+    {
+        Dictionary<string, object?>? extra = null;
+        if (order.HasLabel || !string.IsNullOrWhiteSpace(order.OzonPostingNumber) || !string.IsNullOrWhiteSpace(order.OzonTracking))
+        {
+            extra = new Dictionary<string, object?>
+            {
+                ["has_label"] = order.HasLabel,
+                ["ozon_posting_number"] = order.OzonPostingNumber,
+                ["ozon_tracking"] = order.OzonTracking
+            };
+        }
+        return new ExternalOrder
         {
             ExternalId = order.ExternalId ?? "",
             DisplayId = order.DisplayId,
@@ -1173,8 +1185,68 @@ public class MedusaPlugin : MarketplacePluginBase
                 Quantity = i.Quantity,
                 Price = i.Price,
                 ImageUrl = OrderItemImageUrl.NeedsReplacement(i.ImageUrl) ? null : i.ImageUrl
-            }).ToList()
+            }).ToList(),
+            Extra = extra
         };
+    }
+
+    public override async Task<OrderLabelResult> GetOrderLabelAsync(
+        ConnectionContext context,
+        string externalOrderId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(externalOrderId))
+            return new OrderLabelResult { Success = false, ErrorMessage = "Order id is required" };
+
+        using var client = CreateClient(context);
+        try
+        {
+            var response = await client.GetOrderLabelAsync(externalOrderId, ct);
+            if (response.Success != true || string.IsNullOrWhiteSpace(response.FileContent))
+            {
+                return new OrderLabelResult
+                {
+                    Success = false,
+                    ErrorMessage = response.Error ?? "Этикетка появится после сборки заказа"
+                };
+            }
+
+            var bytes = OrderLabelPayload.Decode(response.FileContent);
+            if (bytes.Length == 0)
+                return new OrderLabelResult { Success = false, ErrorMessage = "Пустая этикетка Ozon" };
+
+            var contentType = string.IsNullOrWhiteSpace(response.ContentType)
+                ? "application/pdf"
+                : response.ContentType.Trim();
+            var format = contentType.Contains("png", StringComparison.OrdinalIgnoreCase)
+                ? "png"
+                : contentType.Contains("svg", StringComparison.OrdinalIgnoreCase)
+                    ? "svg"
+                    : "pdf";
+            var fileName = string.IsNullOrWhiteSpace(response.FileName)
+                ? $"ozon-{externalOrderId}.{format}"
+                : response.FileName.Trim();
+            return new OrderLabelResult
+            {
+                Success = true,
+                Label = new OrderLabel
+                {
+                    ContentType = contentType,
+                    FileName = fileName,
+                    ContentBase64 = Convert.ToBase64String(bytes),
+                    Format = format
+                }
+            };
+        }
+        catch (MedusaApiException ex)
+        {
+            return new OrderLabelResult
+            {
+                Success = false,
+                ErrorMessage = MarketplaceApiErrorText.Format("Medusa", ex.StatusCode, ex.Message, ex.ResponseBody)
+            };
+        }
+    }
 
     protected virtual MedusaApiClient CreateClient(ConnectionContext context, HttpClient? httpClient = null)
     {

@@ -40,6 +40,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Medusa 0.2.3 downloads the Ozon Delivery packing-label PDF from the shop after assemble (`GET /orders/{id}/label`).
 - Cabinet assistant `search_actions` looks up allowed cabinet HTTP (MVC routes plus operator aliases) so export/import/match do not need a prompt paragraph each, and Tools is not treated as the write catalog.
 - Corner FABs include Documentation. On desktop (`lg+`), while the assistant (or another companion sheet) is open, the buttons sit beside the stack; opening Operations or Docs places that sheet on the right and shifts the assistant left so the panels do not overlap.
 - Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`

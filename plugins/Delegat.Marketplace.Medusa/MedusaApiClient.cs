@@ -152,6 +152,13 @@ public sealed class MedusaApiClient : IDisposable
             new { action },
             ct);
 
+    public Task<MedusaOrderLabelResponse> GetOrderLabelAsync(
+        string orderId,
+        CancellationToken ct = default)
+        => GetAsync<MedusaOrderLabelResponse>(
+            $"orders/{Uri.EscapeDataString(orderId)}/label",
+            ct);
+
     public async Task<MedusaProductGetResponse?> GetProductAsync(string productId, CancellationToken ct = default)
     {
         try
