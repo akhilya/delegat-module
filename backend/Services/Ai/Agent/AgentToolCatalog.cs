@@ -9,7 +9,7 @@ public static class AgentToolCatalog
         List<AiTool> tools =
         [
         Prop("propose_plan",
-            "ALWAYS call first before any mutating operation (platform_request writes, run_python that changes data). Shows the user a plan and waits for confirmation.",
+            "ALWAYS the first and only tool when the user asked to change catalog or mapping. Do not GET, search_actions, or platform_request first. Shows the user a plan and waits for confirmation. Writes run only after they confirm.",
             Req(["summary", "steps"]),
             ("summary", Str("User-visible summary in store language (UI locale). No tool names, SQL, or HTTP.")),
             ("steps", new AiToolProperty

@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Cabinet assistant shows a confirmable plan before mapping or catalog writes. It no longer runs GET graph / `search_actions` / POST in the same turn as `propose_plan`; writes wait until you confirm.
 - Mapping-canvas «Correspondences» (`valueMap`) can sit on string fields such as Merge into card: you type both sides (group name → collection title). It is no longer limited to select/valueId. Medusa export uses that mapped title while cabinet group names stay.
 - Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.
 - When the calculation sidecar is on, asking the assistant to check it (or run a read-only snippet) uses that helper instead of substituting a catalog COUNT and claiming there is no sandbox.

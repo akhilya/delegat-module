@@ -93,6 +93,9 @@ public class AiPromptsChatTests
         Assert.Contains("width/height", prompt, StringComparison.Ordinal);
         Assert.Contains("f:fieldKey", prompt, StringComparison.Ordinal);
         Assert.Contains("valueId", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not GET the graph", prompt, StringComparison.Ordinal);
+        Assert.Contains("propose_plan first", prompt, StringComparison.Ordinal);
+        Assert.Contains("as the only tool that turn", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

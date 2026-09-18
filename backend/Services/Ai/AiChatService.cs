@@ -235,7 +235,7 @@ public class AiChatService
                         messages.Add(new AiMessage
                         {
                             role = "user",
-                            content = "Continue: do the catalog action you announced, in this same turn. Do not reply with text only."
+                            content = "Continue in this turn. If you announced a catalog or mapping write, call propose_plan only — no GET, search_actions, or other tools until the user confirms. If you announced a live-data question, call that read now. Do not reply with text only."
                         });
                         continue;
                     }
@@ -251,9 +251,10 @@ public class AiChatService
 
                 var toolResults = new List<object>();
                 var shouldBreak = false;
+                var waitForPlan = AgentChatTurnGate.BatchHasProposePlan(toolUses);
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
-                    if (toolName == "propose_plan")
+                    if (AgentChatTurnGate.IsProposePlan(toolName))
                     {
                         var planInput = ParseInput<ProposePlanInput>(toolInputJson);
                         yield return Sse(SseEventType.Plan, new
@@ -270,7 +271,29 @@ public class AiChatService
                             content = "Plan presented to user. Waiting for confirmation. Do not execute any operations until user confirms."
                         });
                         shouldBreak = true;
-                        break;
+                        continue;
+                    }
+
+                    if (waitForPlan)
+                    {
+                        toolResults.Add(new
+                        {
+                            type = "tool_result",
+                            tool_use_id = toolId,
+                            content = AgentChatTurnGate.DeferredForPlan
+                        });
+                        continue;
+                    }
+
+                    if (AgentChatTurnGate.IsMutatingChatTool(toolName, toolInputJson))
+                    {
+                        toolResults.Add(new
+                        {
+                            type = "tool_result",
+                            tool_use_id = toolId,
+                            content = AgentChatTurnGate.WriteNeedsPlan
+                        });
+                        continue;
                     }
 
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });

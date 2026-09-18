@@ -17,8 +17,8 @@ Do **not** call `import-unlinked`, Catalog Connect, `GET /tools`, adapters, or m
 
 Shop collection titles are the **Merge into card** string field (`__group__`) with a typed from/to `valueMap`, not SQL `mappings` rows, not `valueId`, and not renaming `productgroups`.
 
-1. `GET /marketplace/mapping-graph/blocks` then `GET /marketplace/connections/{id}/mappings` then `GET …/mappings/{mappingId}/graph`.
-2. `propose_plan`, then `POST …/mappings/{mappingId}/graph/group-titles` `{ "mappings": [{ "from": "cabinet group name", "to": "shop title" }] }`.
+1. `propose_plan` first (no GET graph / productgroups / search_actions before confirm). Use CURRENT PAGE mapping/connection ids and names the user gave.
+2. After confirm: `POST …/mappings/{mappingId}/graph/group-titles` `{ "mappings": [{ "from": "cabinet group name", "to": "shop title" }] }`.
 3. Export with `export-batch`. Do not change group names in the cabinet.
 
 ## Import marketplace products
