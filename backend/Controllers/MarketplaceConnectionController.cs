@@ -71,7 +71,8 @@ public class MarketplaceConnectionController : ControllerBase
                     version = plugin?.Version,
                     stability = plugin?.Stability.ToString(),
                     capabilities = a.Capabilities.ToString(),
-                    credentialsSchema = a.GetCredentialsSchema()
+                    credentialsSchema = a.GetCredentialsSchema(),
+                    orderActionFields = a.GetOrderActionFields()
                 };
             })
             .ToList();

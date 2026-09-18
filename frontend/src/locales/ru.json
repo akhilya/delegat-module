@@ -3016,6 +3016,7 @@
       "cancelDescription": "На маркетплейсе это нельзя отменить обратно.",
       "cancelReasonLabel": "Причина",
       "cancelReasonPlaceholder": "Необязательно",
+      "cancelFieldsRequired": "Заполните данные для отмены",
       "cancelConfirm": "Отменить заказ",
       "shipTrackingLabel": "Трек-номер",
       "shipServiceLabel": "Служба доставки",

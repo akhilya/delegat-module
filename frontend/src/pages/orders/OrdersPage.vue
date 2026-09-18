@@ -353,7 +353,10 @@ export default {
     },
 
     adapterFor(connection) {
-      const key = adapterKeyOf(connection);
+      return this.adapterByKey(adapterKeyOf(connection));
+    },
+
+    adapterByKey(key) {
       if (!key) return null;
       return (
         (this.adapters || []).find(
@@ -876,7 +879,7 @@ export default {
       this.askLabel([id]);
     },
 
-    async runPendingJob() {
+    async runPendingJob(update = {}) {
       const job = this.pendingJob;
       this.confirmOpen = false;
       this.pendingJob = null;
@@ -888,7 +891,7 @@ export default {
           runOne: (id, current) =>
             current.kind === "label"
               ? this.downloadOrderLabel(id, current.connectionId)
-              : this.postOrderStatus(id, current),
+              : this.postOrderStatus(id, { ...current, statusUpdate: update }),
           onItemError: displaySonnerError,
           onSuccess: displaySonnerSuccess,
           onPartial: displaySonnerError,
@@ -912,6 +915,7 @@ export default {
         action: job.action,
         order: this.orderById(orderId),
         adapterKey: job.adapterKey ?? this.rowAdapterKey,
+        update: job.statusUpdate,
       });
     },
 
@@ -1246,6 +1250,7 @@ export default {
       :can-download-label="canDownloadLabel"
       :can-manage-shipments="canManageShipments"
       :can-get-fulfillment-locations="canGetFulfillmentLocations"
+      :adapter="adapterFor(selectedConnection)"
       @updated="onOrderUpdated"
     />
 
@@ -1253,6 +1258,7 @@ export default {
       v-model:open="confirmOpen"
       :job="pendingJob"
       :adapter-key="pendingJob?.adapterKey || rowAdapterKey"
+      :adapter="adapterByKey(pendingJob?.adapterKey || rowAdapterKey)"
       @confirm="runPendingJob"
     />
   </AppPageChrome>

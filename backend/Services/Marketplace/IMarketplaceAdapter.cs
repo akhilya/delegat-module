@@ -79,6 +79,12 @@ public interface IMarketplaceAdapter
     IReadOnlyList<AdapterToolDescriptor> GetTools() => [];
 
     /// <summary>
+    /// Extra dashboard fields for order status actions. Key is the normalized action.
+    /// </summary>
+    IReadOnlyDictionary<string, IReadOnlyList<Delegat.Marketplace.SDK.OrderActionField>> GetOrderActionFields()
+        => new Dictionary<string, IReadOnlyList<Delegat.Marketplace.SDK.OrderActionField>>();
+
+    /// <summary>
     /// Run a job-mode tool from <see cref="GetTools"/>. Connection is null when the tool does not need one.
     /// </summary>
     Task<AdapterToolRunResult> RunToolAsync(

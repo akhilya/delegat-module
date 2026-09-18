@@ -1,4 +1,6 @@
 /** Normalized marketplace order statuses (SDK MarketplaceOrderStatuses). */
+import { mergeOrderStatusPayload } from "./orderActionFields.js";
+
 export const ORDER_STATUS = {
   New: "new",
   Confirmed: "confirmed",
@@ -1038,10 +1040,14 @@ export async function postMarketplaceOrderStatus({
   action,
   order,
   adapterKey,
+  update,
 }) {
   await http.post(
     marketplaceOrderStatusUrl(connectionId, orderId),
-    orderStatusUpdatePayload(action, order, adapterKey),
+    mergeOrderStatusPayload(
+      orderStatusUpdatePayload(action, order, adapterKey),
+      update || {},
+    ),
   );
 }
 

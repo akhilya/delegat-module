@@ -44,7 +44,7 @@ public class MedusaPlugin : MarketplacePluginBase
 
     public override string Key => "medusa";
     public override string DisplayName => "Medusa";
-    public override string Version => "0.2.3";
+    public override string Version => "0.2.4";
     public override PluginStability Stability => PluginStability.Experimental;
     public override bool IsSystem => true;
     public override string? Description =>
@@ -103,6 +103,50 @@ public class MedusaPlugin : MarketplacePluginBase
             ]
         };
     }
+
+    public override IReadOnlyDictionary<string, IReadOnlyList<OrderActionField>> GetOrderActionFields()
+        => new Dictionary<string, IReadOnlyList<OrderActionField>>
+        {
+            [MarketplaceOrderActions.Cancel] =
+            [
+                new OrderActionField
+                {
+                    Key = "reason",
+                    Name = "Причина отмены",
+                    Type = "select",
+                    Required = true,
+                    Target = OrderActionFieldTargets.Reason,
+                    Options =
+                    [
+                        new SelectOption { Value = "out_of_stock", Label = "Товара нет в наличии" },
+                        new SelectOption { Value = "cannot_deliver", Label = "Не получилось оформить доставку" },
+                        new SelectOption { Value = "order_error", Label = "В заказе ошибка" },
+                        new SelectOption { Value = "customer_request", Label = "Отменили по просьбе покупателя" },
+                        new SelectOption { Value = "other", Label = "Другая причина" }
+                    ]
+                },
+                new OrderActionField
+                {
+                    Key = "note",
+                    Name = "Комментарий",
+                    Type = "textarea",
+                    Target = OrderActionFieldTargets.Extra,
+                    RequiredWhenKey = "reason",
+                    RequiredWhenValue = "other",
+                    VisibleWhenKey = "reason",
+                    VisibleWhenValue = "other",
+                    Placeholder = "Напишите причину отмены"
+                },
+                new OrderActionField
+                {
+                    Key = "refund",
+                    Name = "Вернуть оплату",
+                    Type = "checkbox",
+                    Target = OrderActionFieldTargets.Extra,
+                    DefaultValue = "true"
+                }
+            ]
+        };
 
     public override async Task<ConnectionTestResult> TestConnectionAsync(
         ConnectionContext context,
@@ -1130,7 +1174,12 @@ public class MedusaPlugin : MarketplacePluginBase
         try
         {
             var response = string.Equals(action, MarketplaceOrderActions.Cancel, StringComparison.OrdinalIgnoreCase)
-                ? await client.CancelOrderAsync(externalOrderId, refund: true, ct)
+                ? await client.CancelOrderAsync(
+                    externalOrderId,
+                    refund: OrderStatusExtra.Flag(update.Extra, "refund", defaultValue: true),
+                    reason: FirstNonEmpty(update.Reason, OrderStatusExtra.Get(update.Extra, "reason")),
+                    note: OrderStatusExtra.Get(update.Extra, "note"),
+                    ct)
                 : await client.UpdateOrderStatusAsync(externalOrderId, action, ct);
             return new OrderStatusUpdateResult
             {

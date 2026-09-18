@@ -15,6 +15,12 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import {
+  adapterOrderActionFields,
+  applyOrderActionFieldValues,
+  defaultOrderActionFieldValues,
+  orderActionFieldsValid,
+} from "@/lib/orderActionFields";
+import {
   ORDER_ACTION_CONFIRM,
   ORDER_ACTION_LABEL,
   ORDER_STATUS,
@@ -72,6 +78,7 @@ import {
   InsetGroupLabel,
 } from "@/components/ui/inset-group";
 import ProductImageCell from "@/components/products/ProductImageCell.vue";
+import OrderActionFieldsForm from "@/components/orders/OrderActionFieldsForm.vue";
 import {
   Barcode,
   Check,
@@ -105,6 +112,7 @@ const props = defineProps({
   connectionId: { type: Number, default: null },
   orderId: { type: String, default: "" },
   adapterKey: { type: String, default: "" },
+  adapter: { type: Object, default: null },
   preview: { type: Object, default: null },
   canMutate: { type: Boolean, default: false },
   canDownloadLabel: { type: Boolean, default: false },
@@ -122,7 +130,7 @@ const detail = ref(null);
 const loading = ref(false);
 const acting = ref("");
 const pendingAction = ref("");
-const cancelReason = ref("");
+const actionFieldValues = ref({});
 const trackingNumber = ref("");
 const deliveryService = ref("");
 const packSupplyChoice = ref("new");
@@ -218,6 +226,20 @@ const packOfficeLabel = computed(() => {
 });
 const showShipFields = computed(() =>
   orderActionNeedsShipmentFields(pendingAction.value, props.adapterKey),
+);
+const adapterActionFields = computed(() =>
+  adapterOrderActionFields(props.adapter, pendingAction.value),
+);
+const showAdapterActionFields = computed(
+  () =>
+    adapterActionFields.value.length > 0 &&
+    !showShipFields.value &&
+    !(pendingAction.value === "pack" && props.canManageShipments),
+);
+const confirmActionReady = computed(
+  () =>
+    !showAdapterActionFields.value ||
+    orderActionFieldsValid(adapterActionFields.value, actionFieldValues.value),
 );
 const showMarketplaceDeliveryHint = computed(
   () =>
@@ -416,7 +438,7 @@ watch(
     }
     detail.value = null;
     pendingAction.value = "";
-    cancelReason.value = "";
+    actionFieldValues.value = {};
     trackingNumber.value = "";
     deliveryService.value = "";
     warehouseById.value = {};
@@ -451,8 +473,10 @@ function actionExtra(action) {
     }
   }
   if (action === "cancel") {
-    const reason = cancelReason.value.trim();
-    if (reason) extra.reason = reason;
+    return applyOrderActionFieldValues(
+      adapterOrderActionFields(props.adapter, "cancel"),
+      actionFieldValues.value,
+    );
   }
   return extra;
 }
@@ -463,7 +487,11 @@ function openActionConfirm(action) {
     trackingNumber.value = "";
     deliveryService.value = "";
   }
-  if (action === "cancel") cancelReason.value = "";
+  if (action === "cancel") {
+    actionFieldValues.value = defaultOrderActionFieldValues(
+      adapterOrderActionFields(props.adapter, "cancel"),
+    );
+  }
   if (action === "pack" && props.canManageShipments) {
     resetPackFields();
     loadPackOptions();
@@ -568,7 +596,7 @@ async function onConfirmSubmit() {
   armedAction = "";
   armedExtra = {};
   pendingAction.value = "";
-  cancelReason.value = "";
+  actionFieldValues.value = {};
   trackingNumber.value = "";
   deliveryService.value = "";
   if (!action) return;
@@ -1125,23 +1153,17 @@ async function copyFact(id, value) {
               {{ t("pages.ordersPage.packOptionsLoading") }}
             </p>
           </FieldGroup>
-          <FieldGroup v-else-if="pendingAction === 'cancel'" class="gap-3">
-            <SettingsFormField
-              :label="t('pages.ordersPage.cancelReasonLabel')"
-              label-for="order-cancel-reason"
-            >
-              <Input
-                id="order-cancel-reason"
-                v-model="cancelReason"
-                :placeholder="t('pages.ordersPage.cancelReasonPlaceholder')"
-              />
-            </SettingsFormField>
-          </FieldGroup>
+          <OrderActionFieldsForm
+            v-else-if="showAdapterActionFields"
+            v-model="actionFieldValues"
+            :fields="adapterActionFields"
+            id-prefix="order-sheet-action"
+          />
           <AlertDialogFooter>
             <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
             <AlertDialogAction
               :variant="confirmSpec?.destructive ? 'destructive' : 'default'"
-              :disabled="Boolean(acting)"
+              :disabled="Boolean(acting) || !confirmActionReady"
               @pointerdown="armConfirmSubmit"
               @click="onConfirmSubmit"
             >

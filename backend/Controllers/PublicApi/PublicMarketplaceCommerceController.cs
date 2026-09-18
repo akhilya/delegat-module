@@ -109,7 +109,8 @@ public class PublicMarketplaceCommerceController : ControllerBase
 
     /// <summary>
     /// Changes order status. Body: <c>action</c> (confirm, pack, ship, deliver, complete, cancel)
-    /// plus optional <c>reason</c>, <c>trackingNumber</c>, <c>deliveryService</c>, <c>extra</c>.
+    /// plus optional <c>reason</c>, <c>trackingNumber</c>, <c>deliveryService</c>, <c>extra</c>
+    /// (adapter-specific cancel fields from GET /marketplace/adapters <c>orderActionFields</c>).
     /// </summary>
     [HttpPost("orders/{orderId}/status")]
     [ProducesResponseType(StatusCodes.Status200OK)]

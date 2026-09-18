@@ -43,6 +43,9 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
 
     public virtual IReadOnlyList<Delegat.Marketplace.SDK.AdapterToolDescriptor> GetTools() => [];
 
+    public virtual IReadOnlyDictionary<string, IReadOnlyList<Delegat.Marketplace.SDK.OrderActionField>> GetOrderActionFields()
+        => new Dictionary<string, IReadOnlyList<Delegat.Marketplace.SDK.OrderActionField>>();
+
     public virtual Task<Delegat.Marketplace.SDK.AdapterToolRunResult> RunToolAsync(
         MarketplaceConnection? connection,
         string toolId,

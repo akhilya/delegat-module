@@ -630,6 +630,7 @@ describe("status actions", () => {
     );
     assert.match(sheet, /adapterKey/);
     assert.match(sheet, /orderActionNeedsShipmentFields/);
+    assert.match(sheet, /OrderActionFieldsForm/);
     assert.match(ordersPageSource, /adapter-key/);
   });
 
@@ -820,6 +821,7 @@ describe("order bulk capabilities", () => {
     assert.match(menu, /openOrder/);
     assert.match(menu, /ORDER_ACTION_LABEL/);
     assert.match(ordersPageSource, /OrderJobConfirmDialog/);
+    assert.match(ordersPageSource, /:adapter=/);
     assert.doesNotMatch(ordersPageSource, /const ACTION_CONFIRM/);
     assert.doesNotMatch(ordersPageSource, /const ACTION_LABEL/);
   });

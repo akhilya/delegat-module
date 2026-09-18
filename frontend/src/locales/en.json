@@ -3016,6 +3016,7 @@
       "cancelDescription": "This cannot be undone on the marketplace.",
       "cancelReasonLabel": "Reason",
       "cancelReasonPlaceholder": "Optional",
+      "cancelFieldsRequired": "Fill in the details needed to cancel this order",
       "cancelConfirm": "Cancel order",
       "shipTrackingLabel": "Tracking number",
       "shipServiceLabel": "Delivery service",

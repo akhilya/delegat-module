@@ -549,6 +549,51 @@ public class MedusaPluginTests
     }
 
     [Fact]
+    public async Task UpdateOrderStatus_CancelPostsReasonAndRefund()
+    {
+        string? body = null;
+        var handler = new FakeHandler(req =>
+        {
+            Assert.Contains("/orders/order_1/cancel", req.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+            body = req.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return JsonResponse(new
+            {
+                success = true,
+                order = new { external_id = "order_1", status = "cancelled" }
+            });
+        });
+
+        var result = await new TestPlugin(handler).UpdateOrderStatusAsync(
+            Context(),
+            "order_1",
+            new OrderStatusUpdate
+            {
+                Action = MarketplaceOrderActions.Cancel,
+                Reason = "out_of_stock",
+                Extra = new Dictionary<string, string>
+                {
+                    ["refund"] = "true",
+                    ["note"] = "нет тиража"
+                }
+            });
+
+        Assert.True(result.Success);
+        Assert.Contains("out_of_stock", body, StringComparison.Ordinal);
+        Assert.Contains("\"note\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"refund\":true", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CancelActionFields_RequireReason()
+    {
+        var fields = new MedusaPlugin().GetOrderActionFields();
+        Assert.True(fields.TryGetValue(MarketplaceOrderActions.Cancel, out var cancel));
+        Assert.Contains(cancel, field => field.Key == "reason" && field.Required);
+        Assert.Contains(cancel, field => field.Key == "note");
+        Assert.Contains(cancel, field => field.Key == "refund");
+    }
+
+    [Fact]
     public async Task GetOrderLabel_ReadsBridgePdf()
     {
         var handler = new FakeHandler(req =>

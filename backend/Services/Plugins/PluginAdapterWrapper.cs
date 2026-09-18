@@ -124,6 +124,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
 
     public IReadOnlyList<AdapterToolDescriptor> GetTools() => _plugin.GetTools();
 
+    public IReadOnlyDictionary<string, IReadOnlyList<OrderActionField>> GetOrderActionFields()
+        => _plugin.GetOrderActionFields();
+
     public async Task<AdapterToolRunResult> RunToolAsync(
         MarketplaceConnection? connection,
         string toolId,
