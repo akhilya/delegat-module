@@ -136,22 +136,10 @@ public class AiConversationController : ControllerBase
 
         if (string.IsNullOrEmpty(req.SessionId)) return BadRequest("sessionId required");
 
-        // Upsert conversation row - always scope to current store+user to prevent cross-store bleed
-        var conv = await _context.aiConversations
-            .FirstOrDefaultAsync(c => c.sessionId == req.SessionId
-                && c.storeId == storeId.Value && c.userId == userId.Value, ct);
-        if (conv == null)
-        {
-            conv = new AiConversation
-            {
-                sessionId = req.SessionId,
-                storeId   = storeId.Value,
-                userId    = userId.Value,
-                modelName = req.ModelName,
-            };
-            _context.aiConversations.Add(conv);
-            await _context.SaveChangesAsync(ct);
-        }
+        var conv = await AiConversationTurnStore.EnsureConversationAsync(
+            _context, req.SessionId, storeId.Value, userId.Value, ct);
+        if (conv.modelName == null && req.ModelName != null)
+            conv.modelName = req.ModelName;
 
         var existing = await _context.aiConversationMessages
             .Where(m => m.conversationId == conv.Id)

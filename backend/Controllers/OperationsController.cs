@@ -657,12 +657,7 @@ public class OperationsController : ControllerBase
             throw ApiException.NotFound("Archive artifact not found in storage", code: "artifact_not_found");
 
         var fileName = job.resultFileName ?? "archive.zip";
-        var encoded = Uri.EscapeDataString(fileName);
-        Response.ContentType = "application/zip";
-        if (job.resultBytes is long len)
-            Response.ContentLength = len;
-        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}";
-
+        StorageDownloadHttp.Prepare(Response, "application/zip", fileName, inline: false, job.resultBytes);
         await _storageService.StreamToAsync(job.resultObjectKey, Response.Body, ct);
     }
 

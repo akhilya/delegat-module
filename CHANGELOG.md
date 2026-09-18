@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
+- Cabinet file downloads no longer fail with HTTP 500 `Error while copying content to a stream` when MinIO closes the GET early or response compression wraps the proxy stream.
 - Cabinet assistant shows a confirmable plan before mapping or catalog writes. It no longer runs GET graph / `search_actions` / POST in the same turn as `propose_plan`; writes wait until you confirm.
 - Mapping-canvas «Correspondences» (`valueMap`) can sit on string fields such as Merge into card: you type both sides (group name → collection title). It is no longer limited to select/valueId. Medusa export uses that mapped title while cabinet group names stay.
 - Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.

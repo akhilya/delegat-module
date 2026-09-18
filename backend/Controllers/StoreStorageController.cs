@@ -179,15 +179,9 @@ public class StoreStorageController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var fileName = file.displayName ?? Path.GetFileName(file.filePath);
-        var isImage = file.contentType.StartsWith("image/");
-        var disposition = isImage ? "inline" : "attachment";
-        var encodedFileName = Uri.EscapeDataString(fileName);
-
-        Response.ContentType = file.contentType;
-        Response.ContentLength = file.length;
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-
-        await _storageService.StreamToAsync(file.filePath, Response.Body);
+        StorageDownloadHttp.Prepare(
+            Response, file.contentType, fileName, inline: file.contentType.StartsWith("image/"), file.length);
+        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
     }
 
     [HttpGet]
@@ -873,9 +867,7 @@ public class StoreStorageController : ControllerBase
             return path;
         }
 
-        var encodedName = Uri.EscapeDataString(folderName);
-        Response.ContentType = "application/zip";
-        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{encodedName}.zip\"; filename*=UTF-8''{encodedName}.zip";
+        StorageDownloadHttp.Prepare(Response, "application/zip", $"{folderName}.zip", inline: false);
 
         var bodyStream = Response.BodyWriter.AsStream();
         using var archive = new ZipArchive(bodyStream, ZipArchiveMode.Create, leaveOpen: false);
@@ -962,15 +954,13 @@ public class SharedStoreStorageController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
-        var isImage = shareToken.file.contentType.StartsWith("image/");
-        var disposition = isImage ? "inline" : "attachment";
-        var encodedFileName = Uri.EscapeDataString(fileName);
-
-        Response.ContentType = shareToken.file.contentType;
-        Response.ContentLength = shareToken.file.length;
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-
-        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body);
+        StorageDownloadHttp.Prepare(
+            Response,
+            shareToken.file.contentType,
+            fileName,
+            inline: shareToken.file.contentType.StartsWith("image/"),
+            shareToken.file.length);
+        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body, ct);
     }
 
     [HttpGet]

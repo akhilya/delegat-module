@@ -134,13 +134,7 @@ public class AiController : ControllerBase
         if (!await _storage.ExistsAsync(row.storageKey, ct))
             throw ApiException.NotFound("Attachment expired or not found", code: "attachment_expired");
 
-        var encoded = Uri.EscapeDataString(row.fileName);
-        Response.ContentType = string.IsNullOrWhiteSpace(row.contentType)
-            ? "application/octet-stream"
-            : row.contentType;
-        Response.ContentLength = row.length;
-        Response.Headers["Content-Disposition"] =
-            $"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}";
+        StorageDownloadHttp.Prepare(Response, row.contentType, row.fileName, inline: false, row.length);
         await _storage.StreamToAsync(row.storageKey, Response.Body, ct);
     }
 

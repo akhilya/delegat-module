@@ -422,9 +422,7 @@ public class ProductFolderController : ControllerBase
             return path;
         }
 
-        var encodedName = Uri.EscapeDataString(folderName);
-        Response.ContentType = "application/zip";
-        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{encodedName}.zip\"; filename*=UTF-8''{encodedName}.zip";
+        StorageDownloadHttp.Prepare(Response, "application/zip", $"{folderName}.zip", inline: false);
 
         var bodyStream = Response.BodyWriter.AsStream();
         using (var archive = new ZipArchive(bodyStream, ZipArchiveMode.Create, leaveOpen: false))

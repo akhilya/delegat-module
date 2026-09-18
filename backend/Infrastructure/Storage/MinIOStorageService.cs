@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Minio;
 using Minio.DataModel.Args;
@@ -250,9 +251,7 @@ public class MinIOStorageService : IStorageService
     {
         try
         {
-            var presignedUrl = await GetPresignedUrlAsync(path, 60);
-            var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
-            using var response = await httpClient.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await OpenObjectGetAsync(path, ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -266,7 +265,7 @@ public class MinIOStorageService : IStorageService
             }
 
             var ms = new MemoryStream(contentLength is > 0 and <= int.MaxValue ? (int)contentLength.Value : 0);
-            await response.Content.CopyToAsync(ms, ct);
+            await CopyHttpContentAsync(response, ms, ct);
             if (ms.Length > MaxBufferedDownloadBytes)
             {
                 _logger.LogWarning(
@@ -322,12 +321,48 @@ public class MinIOStorageService : IStorageService
     {
         await EnsureBucketExistsAsync(ct);
 
-        // Bypass SDK GetObjectAsync - use presigned URL + HttpClient to avoid XML parse issues
-        var presignedUrl = await GetPresignedUrlAsync(path, 60);
-        var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
-        using var response = await httpClient.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+        // Presigned GET + HttpClient (SDK GetObjectAsync can XML-parse binary bodies).
+        // Copy until EOF — HttpContent.CopyToAsync uses Content-Length and throws
+        // HttpRequestException ("response ended prematurely") when MinIO closes early
+        // or the advertised length is wrong.
+        using var response = await OpenObjectGetAsync(path, ct);
         response.EnsureSuccessStatusCode();
-        await response.Content.CopyToAsync(outputStream, ct);
+        await CopyHttpContentAsync(response, outputStream, ct);
+    }
+
+    private async Task<HttpResponseMessage> OpenObjectGetAsync(string path, CancellationToken ct)
+    {
+        HttpRequestException? last = null;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                // Match HttpClient timeout so a slow first-byte wait cannot expire the signature.
+                var presignedUrl = await GetPresignedUrlAsync(path, 1800);
+                var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+                using var request = new HttpRequestMessage(HttpMethod.Get, presignedUrl)
+                {
+                    Version = HttpVersion.Version11,
+                    VersionPolicy = HttpVersionPolicy.RequestVersionExact
+                };
+                var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+                return response;
+            }
+            catch (HttpRequestException ex) when (attempt < 3 && !ct.IsCancellationRequested)
+            {
+                last = ex;
+                _logger.LogWarning(ex, "MinIO GET failed for {Path} (attempt {Attempt}/3)", path, attempt);
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), ct);
+            }
+        }
+
+        throw last ?? new HttpRequestException($"Failed to download '{path}' from MinIO");
+    }
+
+    private static async Task CopyHttpContentAsync(HttpResponseMessage response, Stream outputStream, CancellationToken ct)
+    {
+        await using var source = await response.Content.ReadAsStreamAsync(ct);
+        await source.CopyToAsync(outputStream, 81920, ct);
     }
 
     /// <summary>

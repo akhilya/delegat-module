@@ -1,8 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai.Agent;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace Delegat.Services.Ai;
 
@@ -231,14 +233,13 @@ public static class AiConversationTurnStore
         return next;
     }
 
-    private static async Task<AiConversation> EnsureConversationAsync(
+    public static async Task<AiConversation> EnsureConversationAsync(
         DataContext db, string sessionId, int storeId, int userId, CancellationToken ct)
     {
         var conv = await db.aiConversations
-            .FirstOrDefaultAsync(
-                c => c.sessionId == sessionId && c.storeId == storeId && c.userId == userId,
-                ct);
-        if (conv != null) return conv;
+            .FirstOrDefaultAsync(c => c.sessionId == sessionId, ct);
+        if (conv != null)
+            return OwnedConversation(conv, userId);
 
         conv = new AiConversation
         {
@@ -248,8 +249,40 @@ public static class AiConversationTurnStore
             lastMessageAt = DateTime.UtcNow,
         };
         db.aiConversations.Add(conv);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return conv;
+        }
+        catch (DbUpdateException ex) when (IsDuplicateSessionId(ex))
+        {
+            db.Entry(conv).State = EntityState.Detached;
+            var existing = await db.aiConversations
+                .FirstOrDefaultAsync(c => c.sessionId == sessionId, ct)
+                ?? throw new InvalidOperationException(
+                    $"Conversation '{sessionId}' missing after duplicate-key insert.");
+            return OwnedConversation(existing, userId);
+        }
+    }
+
+    private static AiConversation OwnedConversation(AiConversation conv, int userId)
+    {
+        if (conv.userId != userId)
+            throw ApiException.Forbidden("Conversation does not belong to you", code: "access_denied");
         return conv;
+    }
+
+    private static bool IsDuplicateSessionId(DbUpdateException ex)
+    {
+        for (var e = (Exception?)ex; e != null; e = e.InnerException)
+        {
+            if (e is MySqlException mysql && mysql.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
+                return true;
+            if (e.Message.Contains("IX_aiConversations_sessionId", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static Task<AiConversationMessage?> LastMessageAsync(

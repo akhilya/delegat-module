@@ -1,4 +1,6 @@
 using System.Data;
+using System.Net;
+using System.Net.Http;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -207,7 +209,18 @@ builder.Services.AddSingleton<IApiRequestLogQueryService>(sp => sp.GetRequiredSe
 builder.Services.AddHostedService<ApiRequestLogCleanupService>();
 builder.Services.AddHttpClient("MinIOStorage", client =>
 {
-    client.Timeout = TimeSpan.FromMinutes(10);
+    client.Timeout = TimeSpan.FromMinutes(30);
+    client.DefaultRequestVersion = HttpVersion.Version11;
+    client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    AutomaticDecompression = DecompressionMethods.None,
+    AllowAutoRedirect = false,
+    ConnectTimeout = TimeSpan.FromSeconds(30),
+    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+    PooledConnectionIdleTimeout = TimeSpan.FromSeconds(45),
+    MaxConnectionsPerServer = 32
 });
 builder.Services.AddSingleton<IStorageService>(sp =>
 {

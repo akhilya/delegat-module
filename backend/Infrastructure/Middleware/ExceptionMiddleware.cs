@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 using Delegat.Services;
 using Delegat.Services.PlatformLink;
@@ -35,16 +36,26 @@ public class ExceptionMiddleware
             if (ex.StatusCode >= (int)HttpStatusCode.InternalServerError || ex.Data != null)
                 await PersistErrorLogAsync(context, ex, ex.StatusCode);
 
+            if (context.Response.HasStarted)
+                return;
+
             await HandleApiExceptionAsync(context, ex);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
             _logger.LogDebug("Request was canceled by client: {Method} {Path}", context.Request.Method, context.Request.Path);
         }
+        catch (Exception ex) when (IsClientDisconnect(ex, context))
+        {
+            _logger.LogDebug(ex, "Client disconnected: {Method} {Path}", context.Request.Method, context.Request.Path);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception occurred: {Message}", ex.Message);
             await PersistErrorLogAsync(context, ex, (int)HttpStatusCode.InternalServerError);
+            if (context.Response.HasStarted)
+                return;
+
             await HandleExceptionAsync(context, ex);
         }
     }
@@ -154,6 +165,24 @@ public class ExceptionMiddleware
 
     private static bool IsPublicApi(HttpContext context) =>
         context.Request.Path.StartsWithSegments("/api/v1");
+
+    private static bool IsClientDisconnect(Exception ex, HttpContext context)
+    {
+        if (context.RequestAborted.IsCancellationRequested)
+            return true;
+
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            if (e is OperationCanceledException)
+                return true;
+            if (e is IOException && e.Message.Contains("reset", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (e is IOException && e.Message.Contains("broken pipe", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 public class ErrorResponse

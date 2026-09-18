@@ -140,7 +140,7 @@ public class FileController : ControllerBase
     /// </summary>
     [HttpGet]
     [Route("/files/{id}/download")]
-    public async Task DownloadFile(int id)
+    public async Task DownloadFile(int id, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -164,15 +164,9 @@ public class FileController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var fileName = file.displayName ?? Path.GetFileName(file.filePath);
-        var isImage = file.contentType.StartsWith("image/");
-        var disposition = isImage ? "inline" : "attachment";
-        var encodedFileName = Uri.EscapeDataString(fileName);
-
-        Response.ContentType = file.contentType;
-        Response.ContentLength = file.length;
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-
-        await _storageService.StreamToAsync(file.filePath, Response.Body);
+        StorageDownloadHttp.Prepare(
+            Response, file.contentType, fileName, inline: file.contentType.StartsWith("image/"), file.length);
+        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
     }
 
     /// <summary>
@@ -723,7 +717,7 @@ public class SharedFileController : ControllerBase
 
     [HttpGet]
     [Route("/shared/{token}")]
-    public async Task GetSharedFile(string token)
+    public async Task GetSharedFile(string token, CancellationToken ct)
     {
         var shareToken = await _db.fileShareTokens
             .Include(t => t.file)
@@ -737,15 +731,13 @@ public class SharedFileController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
-        var isImage = shareToken.file.contentType.StartsWith("image/");
-        var disposition = isImage ? "inline" : "attachment";
-        var encodedFileName = Uri.EscapeDataString(fileName);
-
-        Response.ContentType = shareToken.file.contentType;
-        Response.ContentLength = shareToken.file.length;
-        Response.Headers["Content-Disposition"] = $"{disposition}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
-
-        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body);
+        StorageDownloadHttp.Prepare(
+            Response,
+            shareToken.file.contentType,
+            fileName,
+            inline: shareToken.file.contentType.StartsWith("image/"),
+            shareToken.file.length);
+        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body, ct);
     }
 }
 
@@ -769,7 +761,7 @@ public class PublicFileController : ControllerBase
 
     [HttpGet]
     [Route("/pub/files/{token}/{filename}")]
-    public async Task GetPublicFile(string token, string filename)
+    public async Task GetPublicFile(string token, string filename, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
             throw ApiException.NotFound("File not found", code: "file_not_found");
@@ -783,20 +775,15 @@ public class PublicFileController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
-        var isImage = file.contentType.StartsWith("image/");
-        var encodedFileName = Uri.EscapeDataString(actualName);
-
-        Response.ContentType = file.contentType;
-        Response.ContentLength = file.length;
-        Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
+        StorageDownloadHttp.Prepare(
+            Response, file.contentType, actualName, inline: file.contentType.StartsWith("image/"), file.length);
         Response.Headers["Cache-Control"] = "private, max-age=3600";
-
-        await _storageService.StreamToAsync(file.filePath, Response.Body);
+        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
     }
 
     [HttpGet]
     [Route("/pub/store-files/{token}/{filename}")]
-    public async Task GetPublicStoreFile(string token, string filename)
+    public async Task GetPublicStoreFile(string token, string filename, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
             throw ApiException.NotFound("File not found", code: "file_not_found");
@@ -810,14 +797,9 @@ public class PublicFileController : ControllerBase
             throw ApiException.NotFound("File not found in storage", code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
-        var isImage = file.contentType.StartsWith("image/");
-        var encodedFileName = Uri.EscapeDataString(actualName);
-
-        Response.ContentType = file.contentType;
-        Response.ContentLength = file.length;
-        Response.Headers["Content-Disposition"] = $"{(isImage ? "inline" : "attachment")}; filename=\"{encodedFileName}\"; filename*=UTF-8''{encodedFileName}";
+        StorageDownloadHttp.Prepare(
+            Response, file.contentType, actualName, inline: file.contentType.StartsWith("image/"), file.length);
         Response.Headers["Cache-Control"] = "private, max-age=3600";
-
-        await _storageService.StreamToAsync(file.filePath, Response.Body);
+        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
     }
 }
