@@ -260,7 +260,7 @@ public class AiPromptsChatTests
             var prompt = Prompt();
             Assert.Contains("NOT available", prompt, StringComparison.Ordinal);
             Assert.Contains("Do not pretend a check ran", prompt, StringComparison.Ordinal);
-            Assert.Contains("Do not resume an earlier catalog write", prompt, StringComparison.Ordinal);
+            Assert.Contains("do not resume an earlier catalog write", prompt, StringComparison.Ordinal);
             Assert.Contains("calculation helper: off", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("then a catalog read", prompt, StringComparison.Ordinal);
         }
