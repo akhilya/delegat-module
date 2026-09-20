@@ -17,7 +17,8 @@ public static class PlatformRequestPolicy
         Lists are paged: startIndex, pageSize (not a fake stats endpoint). Search products with searchQuery.
 
         Catalog: GET/POST /products  GET/PATCH/DELETE /products/{id}  POST /products/{id}/restore
-          GET /products/trash  GET /products/trash/count  POST /products/bulk
+          GET /products/trash  GET /products/trash/count
+          PATCH /products/bulk { allMatching, wait, updates.priceDelta } — add to every catalog price
           PATCH /products/{id}/group { groupId } — move the card (null removes). Also
           POST /productgroups/{id}/products { productIds }  DELETE /productgroups/{id}/products/{productId}
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
@@ -47,7 +48,7 @@ public static class PlatformRequestPolicy
           GET /marketplace/export-batches/{batchId}/status
           POST …/match/preview  POST …/match/apply  POST …/match/repair-mappings
           GET /marketplace/catalog-connect/jobs  GET /marketplace/adapters
-          POST /tools/{id}/run  catalog-scrape search/apply
+          POST /tools/{id}/run  POST /tools/export-all-prices/run { connectionId } — shop prices
         Do not POST/PATCH connection credentials. Do not DELETE a store.
         Do not tell the user to click a cabinet button for a write you can POST.
         Link existing local cards to another marketplace: POST match/preview (optional

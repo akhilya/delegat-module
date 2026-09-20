@@ -346,6 +346,8 @@ public class AgentToolHostTests
     [Fact]
     public void ToolCatalog_OmitsRunPythonWhenSandboxUrlUnset()
     {
+        lock (typeof(PythonSandboxClient))
+        {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
         Environment.SetEnvironmentVariable("SANDBOX_URL", null);
         try
@@ -358,11 +360,14 @@ public class AgentToolHostTests
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
         }
+        }
     }
 
     [Fact]
     public void ToolCatalog_IncludesRunPythonWhenSandboxUrlSet()
     {
+        lock (typeof(PythonSandboxClient))
+        {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
         Environment.SetEnvironmentVariable("SANDBOX_URL", "http://127.0.0.1:8091");
         try
@@ -370,11 +375,12 @@ public class AgentToolHostTests
             Assert.Contains(AgentToolCatalog.Build(), t => t.name == "run_python");
             var prompt = AiPrompts.ChatSystem("Store", 1, 0, [], "user", false);
             Assert.Contains("sandbox is on", prompt, StringComparison.Ordinal);
-            Assert.Contains("MUST call run_python this turn", prompt, StringComparison.Ordinal);
+            Assert.Contains("say yes in store language", prompt, StringComparison.Ordinal);
         }
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+        }
         }
     }
 
@@ -382,7 +388,10 @@ public class AgentToolHostTests
     public async Task RunPython_WithoutSandboxUrl_ReturnsNotConfigured()
     {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
-        Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+        lock (typeof(PythonSandboxClient))
+        {
+            Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+        }
         try
         {
             await using var db = TestDbFactory.CreateDb();

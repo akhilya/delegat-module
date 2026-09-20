@@ -27,6 +27,8 @@ public class ProductBulkUpdateFields
     public List<StoreProductAttributeValue.UserValueForm>? storeAttributeValues { get; set; }
     public string? barcode { get; set; }
     public bool? generateBarcodes { get; set; }
+    /// <summary>Add this amount to each card (and sized variant that has its own price).</summary>
+    public decimal? priceDelta { get; set; }
 }
 
 public sealed class ProductBulkUpdateResult
@@ -94,6 +96,9 @@ public class ProductBulkUpdateService
         if (!HasAnyUpdate(updates))
             throw ApiException.BadRequest("No fields to update", code: "required_fields_missing");
 
+        if (updates.price.HasValue && updates.priceDelta.HasValue)
+            throw ApiException.BadRequest("Use price or priceDelta, not both", code: "price_delta_conflict");
+
         var foundIds = await _db.products.AsNoTracking()
             .Where(p => productIds.Contains(p.Id) && p.storeId == storeId)
             .Select(p => p.Id)
@@ -133,6 +138,7 @@ public class ProductBulkUpdateService
         var products = await _db.products
             .Include(p => p.attributeValues)
             .Include(p => p.storeAttributeValues)
+            .Include(p => p.variants)
             .Where(p => productIds.Contains(p.Id) && p.storeId == storeId)
             .ToListAsync(ct);
 
@@ -328,6 +334,7 @@ public class ProductBulkUpdateService
         if (updates.description != null) parts.Add("description");
         if (updates.storageQuantity.HasValue) parts.Add("storageQuantity");
         if (updates.price.HasValue) parts.Add("price");
+        if (updates.priceDelta.HasValue) parts.Add($"priceDelta {updates.priceDelta.Value}");
         if (updates.oldPrice.HasValue) parts.Add("oldPrice");
         if (updates.minPrice.HasValue) parts.Add("minPrice");
         if (updates.netPrice.HasValue) parts.Add("netPrice");
@@ -350,6 +357,7 @@ public class ProductBulkUpdateService
         || updates.description != null
         || updates.storageQuantity.HasValue
         || updates.price.HasValue
+        || updates.priceDelta.HasValue
         || updates.oldPrice.HasValue
         || updates.minPrice.HasValue
         || updates.netPrice.HasValue
@@ -358,6 +366,18 @@ public class ProductBulkUpdateService
         || updates.generateBarcodes == true
         || (updates.attributeValues != null && updates.attributeValues.Count > 0)
         || (updates.storeAttributeValues != null && updates.storeAttributeValues.Count > 0);
+
+    public async Task<List<int>> ListCatalogProductIdsAsync(int storeId, CancellationToken ct = default) =>
+        await _db.products.AsNoTracking()
+            .Where(p => p.storeId == storeId)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+    private static decimal AddPriceDelta(decimal? current, decimal delta)
+    {
+        var next = (current ?? 0m) + delta;
+        return next < 0m ? 0m : next;
+    }
 
     private static void ApplyProductFields(Product product, ProductBulkUpdateFields updates)
     {
@@ -373,13 +393,23 @@ public class ProductBulkUpdateService
         if (updates.price.HasValue)
             product.price = updates.price.Value;
 
+        if (updates.priceDelta.HasValue)
+        {
+            product.price = AddPriceDelta(product.price, updates.priceDelta.Value);
+            foreach (var variant in product.variants)
+            {
+                if (variant.price.HasValue)
+                    variant.price = AddPriceDelta(variant.price, updates.priceDelta.Value);
+            }
+        }
+
         if (updates.oldPrice.HasValue) product.oldPrice = updates.oldPrice;
         if (updates.minPrice.HasValue) product.minPrice = updates.minPrice;
         if (updates.netPrice.HasValue) product.netPrice = updates.netPrice;
         if (updates.currency != null)
             product.currency = updates.currency == "" ? null : updates.currency;
 
-        if (updates.price.HasValue || updates.oldPrice.HasValue)
+        if (updates.price.HasValue || updates.oldPrice.HasValue || updates.priceDelta.HasValue)
         {
             if (product.price.HasValue)
                 product.discountedPrice = product.price;

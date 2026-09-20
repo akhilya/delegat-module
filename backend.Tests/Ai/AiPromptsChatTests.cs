@@ -1,4 +1,5 @@
 using Delegat.Models.Ai;
+using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Prompts;
 
 namespace Delegat.Tests;
@@ -156,6 +157,8 @@ public class AiPromptsChatTests
         Assert.Contains("Do not GET /tools", prompt, StringComparison.Ordinal);
         Assert.Contains("HTTP 200 with status pending", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Never tell the user a write they asked for does not exist", prompt, StringComparison.Ordinal);
+        Assert.Contains("priceDelta", prompt, StringComparison.Ordinal);
+        Assert.Contains("export-all-prices/run", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("hasImages=false", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "Marketplace product import is a cabinet Tools job",
@@ -225,25 +228,31 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatSystem_WhenSandboxOn_MustCallRunPythonForUserCheck()
     {
+        lock (typeof(PythonSandboxClient))
+        {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
         Environment.SetEnvironmentVariable("SANDBOX_URL", "http://127.0.0.1:8091");
         try
         {
             var prompt = Prompt();
-            Assert.Contains("MUST call run_python this turn", prompt, StringComparison.Ordinal);
+            Assert.Contains("say yes in store language", prompt, StringComparison.Ordinal);
             Assert.Contains("sql_readonly is not a substitute", prompt, StringComparison.Ordinal);
-            Assert.Contains("Checking the cabinet calculation helper", prompt, StringComparison.Ordinal);
+            Assert.Contains("calculation helper: on", prompt, StringComparison.Ordinal);
+            Assert.Contains("is the helper on?", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("NOT available", prompt, StringComparison.Ordinal);
         }
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
         }
+        }
     }
 
     [Fact]
     public void ChatSystem_WhenSandboxOff_DoesNotPretendACheckRan()
     {
+        lock (typeof(PythonSandboxClient))
+        {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
         Environment.SetEnvironmentVariable("SANDBOX_URL", null);
         try
@@ -251,10 +260,14 @@ public class AiPromptsChatTests
             var prompt = Prompt();
             Assert.Contains("NOT available", prompt, StringComparison.Ordinal);
             Assert.Contains("Do not pretend a check ran", prompt, StringComparison.Ordinal);
+            Assert.Contains("Do not resume an earlier catalog write", prompt, StringComparison.Ordinal);
+            Assert.Contains("calculation helper: off", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("then a catalog read", prompt, StringComparison.Ordinal);
         }
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+        }
         }
     }
 

@@ -73,9 +73,12 @@ public static class AiPrompts
         var settingsBlock = settings != null ? $"\n{BuildSettingsBlock(settings)}\n" : "";
         var pythonOn = PythonSandboxClient.IsConfigured();
         var pythonToolLine = pythonOn
-            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). No pip, no MYSQL_*. If the user asks to check that helper, run a snippet, or use a sandbox: MUST call run_python this turn (read-only print or client.sql COUNT). Do not substitute sql_readonly or say you cannot run code. propose_plan only if the script would write. User-facing: confirm the check in store language; do not volunteer the word sandbox unless they used it."
-            : "run_python is NOT available. Do not call it. If they ask for a code/sandbox helper: one short sentence that this cabinet does not have it, then a catalog read. Do not pretend a check ran. Do not volunteer Python or sandbox otherwise.";
+            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). No pip, no MYSQL_*. If they ask whether that helper exists: say yes in store language (they used that word). Call run_python this turn only if they asked to run or check a snippet — not if they only asked whether it exists. sql_readonly is not a substitute for a run/check. propose_plan only if the script would write. Do not volunteer the word sandbox unless they used it."
+            : "run_python is NOT available. Do not call it. If they ask for a code/sandbox helper: one short sentence that this cabinet does not have it. Stop. Do not propose_plan and do not resume an earlier catalog write. Do not pretend a check ran. Do not volunteer Python or sandbox otherwise.";
         var pythonBatch = pythonOn ? " or one run_python script" : "";
+        var helperLine = pythonOn
+            ? "calculation helper: on"
+            : "calculation helper: off";
         var quotaBlock = BuildQuotaBlock(catalogSlotsRemaining, catalogProductLimit, catalogProductsUsed);
         var productLine = catalogProductsUsed is int used
             ? $"total products={used} ({productCount} in the catalog, {Math.Max(0, used - productCount)} in trash)"
@@ -164,6 +167,7 @@ public static class AiPrompts
         Date/time: {now}
         UI language: {lang} ({localeCode})
         Store: name="{SanitizeForPrompt(storeName)}" (id={storeId}), {productLine}
+        {helperLine}
         {quotaBlock}
         Current user: {SanitizeForPrompt(userName)} ({userRole})
 
@@ -175,18 +179,22 @@ public static class AiPrompts
         Ask at most one clarifying question, and only if the request is still ambiguous.
 
         === HOW YOU WORK (internal — never describe this to the user) ===
-        If the user asked a question, read live data (search_catalog, sql_readonly, or GET).
+        If they asked a catalog fact, read live data (search_catalog, sql_readonly, or GET).
         Never say you cannot see a value you can fetch. Never ask the user to paste it.
+        If they only asked whether a helper/sandbox exists, or to pause: answer that from
+        TOOLS (run_python listed = yes). Do not propose_plan, do not sql_readonly, and do
+        not resume an earlier write.
 
         Never end a turn by announcing intent (“I’ll update…”, “let me check…”).
-        Question → call the read in this turn. Change the catalog or mapping → propose_plan
+        Catalog fact → call the read in this turn. Change the catalog or mapping → propose_plan
         as the only tool this turn (CURRENT PAGE ids; names from the user message).
 
         Prefer sql_readonly / search_catalog plus one platform_request{pythonBatch}
         instead of looping the same write.
         When they ask to verify the calculation helper or run a test snippet without writes:
         call run_python in this turn (print or client.sql). sql_readonly is not a substitute
-        for that request. Skip run_python only if TOOLS omits it.
+        for that request. Skip run_python only if TOOLS omits it. A question that is only
+        “is the helper on?” is not a verify — answer yes/no, no other tools.
         Chat attachments are already stored. Decide from
         the user request what to do (put on products, use another way, or ignore). match_files
         is optional for name matching. Writes: propose_plan then platform_request
@@ -251,6 +259,11 @@ public static class AiPrompts
         Writes: propose_plan then the search_actions hit. HTTP 200 with status pending/running
         is success for background jobs (Operations) — do not wait for every card.
         PATCH /products/<id> attributeValues replaces the list (GET the card first).
+        Raise every catalog price: propose_plan only — PATCH /products/bulk
+        with allMatching and wait true and updates.priceDelta (e.g. 500) then POST
+        /tools/export-all-prices/run with connectionId for each named shop (CURRENT CONTEXT
+        adapter ozon / wildberries / yandexmarket). wait so shop export sees the new amounts.
+        Do not GET …/prices, do not search_knowledge, do not invent a per-card PATCH loop.
         Never tell the user a write they asked for does not exist if search_actions returned a hit.
 
         search_knowledge is docs, not the live catalog and not the create DTO.

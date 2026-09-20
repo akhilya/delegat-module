@@ -364,4 +364,58 @@ public class ProductBulkUpdateTests
         Assert.False(string.IsNullOrEmpty(b.barcode));
         Assert.Equal(13, b.barcode!.Length);
     }
+
+    [Fact]
+    public async Task Execute_PriceDelta_AddsToCardAndSizedVariant()
+    {
+        var (db, data, user, _, service) = CreateSut();
+        var (store, _, a, b) = await SeedTwoProductsAsync(data, user);
+        a.price = 100m;
+        b.price = 250m;
+        data.AddVariant(a.Id, size: "M", price: 120m);
+        data.AddVariant(a.Id, size: "L", price: null);
+        await db.SaveChangesAsync();
+
+        var result = await service.ExecuteAsync(store.Id, [a.Id, b.Id], new ProductBulkUpdateFields
+        {
+            priceDelta = 500m
+        });
+
+        Assert.Equal(2, result.updatedCount);
+        await db.Entry(a).ReloadAsync();
+        await db.Entry(b).ReloadAsync();
+        Assert.Equal(600m, a.price);
+        Assert.Equal(750m, b.price);
+        var variants = await db.productVariants.Where(v => v.productId == a.Id).ToListAsync();
+        Assert.Equal(620m, variants.Single(v => v.size == "M").price);
+        Assert.Null(variants.Single(v => v.size == "L").price);
+    }
+
+    [Fact]
+    public async Task BulkUpdate_AllMatchingWait_AppliesDeltaNow()
+    {
+        var (db, data, user, controller, _) = CreateSut();
+        var (_, _, a, b) = await SeedTwoProductsAsync(data, user);
+        a.price = 10m;
+        b.price = 20m;
+        await db.SaveChangesAsync();
+
+        var result = await controller.BulkUpdateProducts(new ProductController.BulkUpdateRequest
+        {
+            allMatching = true,
+            wait = true,
+            updates = new ProductController.BulkUpdateFields { priceDelta = 500m }
+        });
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("queued").GetBoolean());
+        Assert.Equal(2, doc.RootElement.GetProperty("updatedCount").GetInt32());
+        Assert.Equal(0, await db.pendingProductBulkUpdates.CountAsync());
+
+        await db.Entry(a).ReloadAsync();
+        await db.Entry(b).ReloadAsync();
+        Assert.Equal(510m, a.price);
+        Assert.Equal(520m, b.price);
+    }
 }

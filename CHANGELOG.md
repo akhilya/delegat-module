@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If the sidecar is on (`SANDBOX_URL` on the API process), it says yes instead of claiming there is no helper.
+- Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.
 - Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
 - Cabinet file downloads no longer fail with HTTP 500 `Error while copying content to a stream` when MinIO closes the GET early or response compression wraps the proxy stream.
 - Cabinet assistant shows a confirmable plan before mapping or catalog writes. It no longer runs GET graph / `search_actions` / POST in the same turn as `propose_plan`; writes wait until you confirm.

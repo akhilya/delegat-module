@@ -21,6 +21,15 @@ Shop collection titles are the **Merge into card** string field (`__group__`) wi
 2. After confirm: `POST …/mappings/{mappingId}/graph/group-titles` `{ "mappings": [{ "from": "cabinet group name", "to": "shop title" }] }`.
 3. Export with `export-batch`. Do not change group names in the cabinet.
 
+## Raise catalog prices and push them to shops
+
+This is a write. `propose_plan` first (no GET prices, no knowledge search).
+
+1. `PATCH /products/bulk` `{ "allMatching": true, "wait": true, "updates": { "priceDelta": 500 } }` — add that amount to every catalog card (sized variants with their own price too). `wait` so the next step sees new amounts.
+2. For each named marketplace connection (Ozon, Wildberries, Yandex — ids from CURRENT CONTEXT): `POST /tools/export-all-prices/run` `{ "connectionId": <id> }`. HTTP 200 = Operations.
+
+Do **not** `GET …/connections/{id}/prices` (live marketplace list, not a raise). Do not set the same absolute `updates.price` on every card.
+
 ## Import marketplace products
 
 `POST /marketplace/connections/{id}/products/import-unlinked` (or `import-selected` after preview). Same write as Connect catalogs. Pending HTTP 200 is success.

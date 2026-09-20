@@ -659,12 +659,35 @@ public class ProductController : ControllerBase
         if (userId == null)
             throw ApiException.Unauthorized();
 
-        if (request.productIds == null || request.productIds.Count == 0)
+        var updates = ToBulkUpdateFields(request.updates);
+        List<int> productIds;
+        if (request.allMatching == true)
+        {
+            productIds = await _bulkUpdateService.ListCatalogProductIdsAsync(selectedStoreId.Value, ct);
+        }
+        else
+        {
+            productIds = request.productIds ?? [];
+        }
+
+        if (productIds.Count == 0)
             throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
 
-        var updates = ToBulkUpdateFields(request.updates);
         await _bulkUpdateService.ValidateBeforeEnqueueAsync(
-            selectedStoreId.Value, request.productIds, updates, ct);
+            selectedStoreId.Value, productIds, updates, ct);
+
+        if (request.wait == true)
+        {
+            var applied = await _bulkUpdateService.ExecuteAsync(
+                selectedStoreId.Value, productIds, updates, ct);
+            return Ok(new
+            {
+                queued = false,
+                updatedCount = applied.updatedCount,
+                failedCount = applied.failedCount,
+                totalItems = productIds.Count
+            });
+        }
 
         var operationId = Guid.NewGuid().ToString("N");
         var pending = new PendingProductBulkUpdate
@@ -672,7 +695,7 @@ public class ProductController : ControllerBase
             storeId = selectedStoreId.Value,
             authorUserId = userId.Value,
             batchId = operationId,
-            productIdsJson = ProductBulkUpdateService.SerializeProductIds(request.productIds),
+            productIdsJson = ProductBulkUpdateService.SerializeProductIds(productIds),
             updatesJson = ProductBulkUpdateService.SerializeUpdates(updates),
             status = ProductBulkUpdateStatus.Pending,
             createdAt = DateTime.UtcNow
@@ -680,7 +703,7 @@ public class ProductController : ControllerBase
         _context.pendingProductBulkUpdates.Add(pending);
         await _context.SaveChangesAsync(ct);
 
-        var title = $"Bulk edit {request.productIds.Count} product(s)";
+        var title = $"Bulk edit {productIds.Count} product(s)";
         await _operationLogger.StartAsync(
             operationId,
             selectedStoreId.Value,
@@ -689,13 +712,13 @@ public class ProductController : ControllerBase
             title,
             batchId: operationId,
             batchType: "product-bulk-update",
-            totalItems: request.productIds.Count);
+            totalItems: productIds.Count);
 
         return Ok(new
         {
             queued = true,
             operationId,
-            totalItems = request.productIds.Count
+            totalItems = productIds.Count
         });
     }
 
@@ -715,7 +738,8 @@ public class ProductController : ControllerBase
             attributeValues = updates.attributeValues,
             storeAttributeValues = updates.storeAttributeValues,
             barcode = updates.barcode,
-            generateBarcodes = updates.generateBarcodes
+            generateBarcodes = updates.generateBarcodes,
+            priceDelta = updates.priceDelta
         };
 
     /// <summary>
@@ -723,8 +747,12 @@ public class ProductController : ControllerBase
     /// </summary>
     public struct BulkUpdateRequest
     {
-        /// <summary>The list of product IDs to update.</summary>
-        public List<int> productIds { get; set; }
+        /// <summary>The list of product IDs to update. Ignored when <see cref="allMatching"/> is true.</summary>
+        public List<int>? productIds { get; set; }
+        /// <summary>When true, every catalog card in the store (not trash).</summary>
+        public bool? allMatching { get; set; }
+        /// <summary>When true, apply in this request so a following price export sees the new amounts.</summary>
+        public bool? wait { get; set; }
         /// <summary>The field values to apply to every specified product.</summary>
         public BulkUpdateFields updates { get; set; }
     }
@@ -756,6 +784,8 @@ public class ProductController : ControllerBase
         public string? barcode { get; set; }
         /// <summary>When true, generates a unique EAN-13 barcode for each product that doesn't already have one.</summary>
         public bool? generateBarcodes { get; set; }
+        /// <summary>Add this amount to each card price (and sized variants with their own price).</summary>
+        public decimal? priceDelta { get; set; }
     }
 
     /// <summary>

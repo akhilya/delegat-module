@@ -103,6 +103,7 @@ PATCH `/products/{id}` `attributeValues` replaces the list (GET the card first).
 Allowlisted projections (host forces `storeId`): products (incl. `description`), files, `product_images`, categories (`name`, `description`, `hasSizes`), `category_attributes`, `product_attribute_values`, `store_attributes`, `store_product_attribute_values`, groups, connections, mappings, orders, plus notes, variants, group members, product links, store files/folders, operations, pending imports, adapter HTTP logs (no credential or body columns). `WHERE` supports `=`, `!=`, `<` `>` `<=` `>=`, `LIKE` / `NOT LIKE`, `IN` / `NOT IN (...)`, `IS NULL` / `IS NOT NULL`, and `NOT IN (SELECT productId FROM product_images|files)`. Aggregates: `COUNT(*)`, `COUNT(DISTINCT col)`, `MIN(col)`, `MAX(col)` (not mixed with row columns). `SELECT DISTINCT col`. `SHOW TABLES` / `SHOW COLUMNS` / `DESCRIBE`. `LIMIT` / `OFFSET`. No `SELECT *`. Resource `delegat://store/schema`.
 
 Mass catalog export: `POST /marketplace/connections/{id}/products/export-batch` `{ allMatching: true, skipWithoutImages: true }` (gallery photos). Named sets still send `productIds`.
+Raise every catalog price: `PATCH /products/bulk` `{ allMatching: true, wait: true, updates: { priceDelta: 500 } }`, then `POST /tools/export-all-prices/run` `{ connectionId }` per shop.
 
 ## Python SDK (sandbox)
 

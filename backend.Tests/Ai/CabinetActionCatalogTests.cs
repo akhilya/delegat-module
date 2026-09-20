@@ -54,4 +54,15 @@ public class CabinetActionCatalogTests
         Assert.Contains(hits, h => h.Path.Contains("group-titles", StringComparison.Ordinal));
         Assert.Contains(hits, h => h.Note.Contains("__group__", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Search_RaisePrices_FindsBulkDeltaAndShopExport()
+    {
+        var catalog = new CabinetActionCatalog();
+        var hits = catalog.Search("повысь все цены на 500 рублей обновить на яндексе вб и озоне");
+
+        Assert.Contains(hits, h => h.Path.Equals("/products/bulk", StringComparison.OrdinalIgnoreCase)
+            && h.Note.Contains("priceDelta", StringComparison.Ordinal));
+        Assert.Contains(hits, h => h.Path.Contains("export-all-prices/run", StringComparison.Ordinal));
+    }
 }
