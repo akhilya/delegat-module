@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Cabinet assistant treats «finish the mapping» and «link these parameter groups» as wiring marketplace fields to local characteristics. Shop collection titles stay a separate step. It reads the open canvas once before that plan, and a cancelled plan is not described as done.
 - Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
 - Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If the sidecar is on (`SANDBOX_URL` on the API process), it says yes instead of claiming there is no helper.
 - Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.

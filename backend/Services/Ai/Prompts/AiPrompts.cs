@@ -201,9 +201,12 @@ public static class AiPrompts
         POST /products/id/files with attachmentIds. No file bytes in tool JSON.
 
         Reads (list, get, search, preview) run immediately only when the user asked a question.
-        Any write (create, update, delete, export, import, connect, add, set, mapping blocks)
+        Any write (create, update, delete, export, import, connect, add, set)
         → propose_plan first, once per user request, as the only tool that turn.
-        Do not scout with GET / search_actions / sql_readonly / GET graph before that plan.
+        Do not scout with GET / search_actions / sql_readonly before that plan.
+        Finishing a field mapping is the exception in FIELD MAPPING: one graph GET
+        (and one category GET when attribute ids are missing), then propose_plan
+        in that same turn. Still no search_actions before the plan.
         If CURRENT CONTEXT says 0 slots left, do not propose creating a product and do not
         import marketplace products — say the catalog is at cap. Never trash or delete an
         existing product to make room for a new or test card unless the user named that
@@ -244,17 +247,55 @@ public static class AiPrompts
         search_knowledge is product docs, not live routes. A 404 means the path is wrong —
         search_actions again or stop.
 
-        Mapping canvas (shop field wiring, including Medusa collection titles): propose_plan
-        first (only tool). Collection titles: plan step POST graph/group-titles with mappings
-        from/to (Merge into card, field __group__, source groupName, string valueMap).
-        Do not GET the graph, GET mapping-graph/blocks, GET productgroups, or search_actions
-        before the user confirms. Do not use valueId or a category-attribute optionMap.
-        Do not PUT the whole graph and do not say rename-on-export is impossible.
-        Prefer those POSTs (they place nodes using catalog width/height). If you write graph JSON, set
-        node.position so cards do not overlap (sources left, sinks right; output handle is
-        always out; sink inputs are f:fieldKey). Local group names stay. After confirm, the
-        host runs the plan; then export-batch so the shop updates. SQL mappings rows are not
-        the canvas. Do not say the canvas changed until a confirmed step returns 2xx.
+        === FIELD MAPPING ===
+        A mapping binds one local category to one marketplace category on a connection.
+        The canvas graph sends local values into marketplace fields on export and reads
+        them back on import. CURRENT PAGE ids are that mapping. Names like
+        «Основные параметры» and «Вложенные параметры» are groups of local characteristics
+        (attribute.group). They are not shop collection titles. Three requests — do not
+        substitute one for another:
+
+        1) Link categories. The user names a local category and a shop category.
+           If this page is already that pair, say so and finish unwired fields (2).
+           Otherwise propose_plan POST /marketplace/connections/<connectionId>/mappings
+           with localCategoryId, externalCategoryId, externalCategoryName.
+           Missing local id: GET /categories and match the name. Missing shop category
+           id: GET /marketplace/connections/<connectionId>/external-categories.
+           That plan does not call graph/connect or graph/group-titles. Creating the
+           mapping already auto-wires obvious fields.
+
+        2) Finish the mapping («сделай маппинг», «доделай», «свяжи параметры»,
+           «свяжи основные и вложенные»). Wire marketplace fields that still have no
+           source. First GET /marketplace/connections/<connectionId>/mappings/<mappingId>/graph
+           once. A field is unwired when source is empty, omit is false, aliasOf is
+           empty, and no edge targetHandle is f:fieldKey. localCategoryId is on
+           GET /marketplace/connections/<connectionId>/mappings. Characteristics:
+           GET /categories/<localCategoryId> (attributes: id, name, group, key).
+           Match a field label to an attribute in the named group, or to a product
+           field: name, sku, barcode, description, price, storageQuantity, images.
+           Then one propose_plan. Each step is POST …/graph/connect:
+           adapterFieldKey, sourceType "attribute", sourceAttributeId
+           or adapterFieldKey, sourceType "productField", sourceField.
+           Price block: sink "price". Skip a field you cannot match by name.
+           Do not invent ids. Do not PUT the whole graph. Do not call group-titles.
+           graph/connect places nodes (catalog width/height). Output handle is out.
+           Sink inputs are f:fieldKey. Block types ride along on that graph GET —
+           do not GET mapping-graph/blocks separately. A value transform the user
+           asked for is a later POST …/graph/modifiers (valueMap is typed from/to,
+           not valueId).
+
+        3) Shop collection titles only. The user gives from→to titles for export
+           (Medusa collections). propose_plan first with no graph GET.
+           POST …/graph/group-titles with mappings from/to on Merge into
+           card (__group__), source groupName, string valueMap. Local group names
+           stay. do not say rename-on-export is impossible. Not for Wildberries,
+           Ozon, or Yandex characteristics. Not when they named attribute groups
+           to connect.
+
+        If they said not to change the page, describe the wires and do not propose_plan.
+        SQL mappings rows are not the canvas. Do not say the canvas changed until a
+        confirmed step returns 2xx. A cancelled plan changed nothing — say that.
+        After a confirmed wiring plan, export-batch so the shop updates.
 
         Writes: propose_plan then the search_actions hit. HTTP 200 with status pending/running
         is success for background jobs (Operations) — do not wait for every card.
@@ -478,12 +519,13 @@ public static class AiPrompts
             (ctx.PreviewProductId.HasValue
                 ? $"Preview product: id={ctx.PreviewProductId} - optional validation only; optionMap must cover all category options.\n"
                 : "") +
-            $"When the user says 'this mapping' or 'these fields', use mappingId={ctx.MappingId}. " +
-            $"If they asked to change wiring, propose_plan first (no GET graph). " +
-            $"Plan steps: POST …/mappings/{ctx.MappingId}/graph/group-titles " +
-            $"(Merge into card __group__, typed from/to; not valueId). " +
-            $"Or POST …/graph/connect then POST …/graph/modifiers. " +
-            $"Mapping list (questions only): GET /marketplace/connections/{ctx.ConnectionId}/mappings.",
+            $"When the user says 'this mapping', 'these fields', or 'finish the mapping', use mappingId={ctx.MappingId}. " +
+            $"Attribute groups on this page are local characteristics, not shop collection titles. " +
+            $"Finish wiring: GET /marketplace/connections/{ctx.ConnectionId}/mappings/{ctx.MappingId}/graph once, " +
+            $"then propose_plan of POST …/mappings/{ctx.MappingId}/graph/connect per unwired field " +
+            $"(sourceType attribute or productField). " +
+            $"POST …/graph/group-titles is only a shop collection title switch (__group__). " +
+            $"Mapping list: GET /marketplace/connections/{ctx.ConnectionId}/mappings.",
         "product" =>
             $"=== CURRENT PAGE ===\n" +
             $"Page: Product editor\n" +

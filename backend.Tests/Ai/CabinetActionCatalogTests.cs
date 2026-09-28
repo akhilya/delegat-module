@@ -56,6 +56,16 @@ public class CabinetActionCatalogTests
     }
 
     [Fact]
+    public void Search_FinishFieldMapping_FindsConnectNotGroupTitles()
+    {
+        var catalog = new CabinetActionCatalog();
+        var hits = catalog.Search("доделать маппинг связать основные параметры");
+
+        Assert.Contains(hits, h => h.Path.Contains("graph/connect", StringComparison.Ordinal));
+        Assert.DoesNotContain(hits, h => h.Path.Contains("group-titles", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Search_RaisePrices_FindsBulkDeltaAndShopExport()
     {
         var catalog = new CabinetActionCatalog();

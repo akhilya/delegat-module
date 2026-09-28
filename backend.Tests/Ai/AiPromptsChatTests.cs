@@ -79,13 +79,15 @@ public class AiPromptsChatTests
         Assert.Contains("graph/connect", prompt, StringComparison.Ordinal);
         Assert.Contains("graph/modifiers", prompt, StringComparison.Ordinal);
         Assert.Contains("mapping-graph/blocks", prompt, StringComparison.Ordinal);
+        Assert.Contains("Attribute groups on this page are local characteristics", prompt, StringComparison.Ordinal);
+        Assert.Contains("/mappings/9/graph", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ChatSystem_MappingCanvas_WiresGroupTitlesWithoutRenamingGroups()
     {
         var prompt = Prompt();
-        Assert.Contains("POST graph/group-titles", prompt, StringComparison.Ordinal);
+        Assert.Contains("POST …/graph/group-titles", prompt, StringComparison.Ordinal);
         Assert.Contains("__group__", prompt, StringComparison.Ordinal);
         Assert.Contains("valueMap", prompt, StringComparison.Ordinal);
         Assert.Contains("do not say rename-on-export is impossible", prompt, StringComparison.Ordinal);
@@ -94,7 +96,9 @@ public class AiPromptsChatTests
         Assert.Contains("width/height", prompt, StringComparison.Ordinal);
         Assert.Contains("f:fieldKey", prompt, StringComparison.Ordinal);
         Assert.Contains("valueId", prompt, StringComparison.Ordinal);
-        Assert.Contains("Do not GET the graph", prompt, StringComparison.Ordinal);
+        Assert.Contains("GET /marketplace/connections/<connectionId>/mappings/<mappingId>/graph", prompt, StringComparison.Ordinal);
+        Assert.Contains("They are not shop collection titles", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Do not GET the graph", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan first", prompt, StringComparison.Ordinal);
         Assert.Contains("as the only tool that turn", prompt, StringComparison.Ordinal);
     }

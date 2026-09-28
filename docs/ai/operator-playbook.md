@@ -13,6 +13,23 @@ Export is **local catalog → marketplace / storefront** (Medusa «Магази�
 
 Do **not** call `import-unlinked`, Catalog Connect, `GET /tools`, adapters, or mappings for this. Do not tell the operator to start export on the shop page. Import is the opposite direction (shop → this catalog). Linking existing cards to another marketplace is `match/preview` then `match/apply`.
 
+## Finish a field mapping
+
+A mapping binds one local category to one marketplace category. The canvas sends local values into marketplace fields. Attribute groups («Основные параметры», «Вложенные параметры») are groups of local characteristics. They are not shop collection titles.
+
+1. Read `GET /marketplace/connections/{connectionId}/mappings/{mappingId}/graph` once. Use CURRENT PAGE ids.
+2. A field is unwired when `source` is empty, `omit` is false, `aliasOf` is empty, and no edge `targetHandle` is `f:{fieldKey}`.
+3. `localCategoryId` is on `GET …/connections/{connectionId}/mappings`. Characteristics are `GET /categories/{localCategoryId}` (`id`, `name`, `group`, `key`).
+4. `propose_plan` with one `POST …/graph/connect` per field you can match by name:
+   - characteristic: `{ "adapterFieldKey", "sourceType": "attribute", "sourceAttributeId" }`
+   - card field: `{ "adapterFieldKey", "sourceType": "productField", "sourceField" }` (`name`, `sku`, `barcode`, `description`, `price`, `storageQuantity`, `images`)
+   - price block: same body plus `"sink": "price"`
+5. Skip fields you cannot match. Do not `PUT` the whole graph. Do not call `graph/group-titles` for this.
+
+Linking categories (the mapping row itself) is `POST /marketplace/connections/{connectionId}/mappings` `{ localCategoryId, externalCategoryId, externalCategoryName }`. That create already auto-wires obvious fields. If the open page is already that pair, finish unwired fields instead of creating another row.
+
+If the user said not to change the page, describe the wires and do not `propose_plan`.
+
 ## Medusa collection titles (keep local group names)
 
 Shop collection titles are the **Merge into card** string field (`__group__`) with a typed from/to `valueMap`, not SQL `mappings` rows, not `valueId`, and not renaming `productgroups`.

@@ -36,9 +36,13 @@ public static class PlatformRequestPolicy
           GET …/capabilities  GET …/limits  GET …/mappings
           GET/PATCH/PUT …/mappings/{mappingId}/graph
           GET /marketplace/mapping-graph/blocks (types, handles, pin types, layout sizes)
-          POST …/mappings/{mappingId}/graph/connect  POST …/graph/modifiers
-          POST …/graph/group-titles { mappings: [{from,to}] } — Merge into card (__group__),
-          string valueMap (typed from/to), not valueId / category attributes
+          POST /marketplace/connections/{id}/mappings { localCategoryId, externalCategoryId, externalCategoryName }
+          POST …/mappings/{mappingId}/graph/connect — wire one unwired sink
+            { adapterFieldKey, sourceType: attribute|productField, sourceAttributeId|sourceField, sink?: price }
+            Attribute groups (Основные параметры) are local characteristics, not collection titles.
+          POST …/graph/modifiers  POST …/graph/group-titles { mappings: [{from,to}] }
+            group-titles is only Merge into card (__group__) shop collection titles,
+            string valueMap (typed from/to), not valueId / category attributes
           GET …/external-products  GET …/products/import-preview
           POST …/products/import-selected  POST …/products/import-unlinked
           POST …/products/import-all (legacy; prefer import-unlinked or import-selected)
