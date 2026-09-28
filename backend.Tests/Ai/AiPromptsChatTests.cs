@@ -97,6 +97,18 @@ public class AiPromptsChatTests
         Assert.Contains("f:fieldKey", prompt, StringComparison.Ordinal);
         Assert.Contains("valueId", prompt, StringComparison.Ordinal);
         Assert.Contains("GET /marketplace/connections/<connectionId>/mappings/<mappingId>/graph", prompt, StringComparison.Ordinal);
+        Assert.Contains("GET /api/ai/store-settings", prompt, StringComparison.Ordinal);
+        Assert.Contains("divisor 10", prompt, StringComparison.Ordinal);
+        Assert.Contains("TN VED", prompt, StringComparison.Ordinal);
+        Assert.Contains("discountedPrice", prompt, StringComparison.Ordinal);
+        Assert.Contains("Extended price settings: off", prompt, StringComparison.Ordinal);
+        Assert.Contains("paramSources", prompt, StringComparison.Ordinal);
+        Assert.Contains("ask_form", prompt, StringComparison.Ordinal);
+        Assert.Contains("starts collapsed", prompt, StringComparison.Ordinal);
+        Assert.Contains("characteristic name", prompt, StringComparison.Ordinal);
+        Assert.Contains("aliasOf", prompt, StringComparison.Ordinal);
+        Assert.Contains("weightBrutto", prompt, StringComparison.Ordinal);
+        Assert.Contains("Вес товара с упаковкой", prompt, StringComparison.Ordinal);
         Assert.Contains("They are not shop collection titles", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Do not GET the graph", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan first", prompt, StringComparison.Ordinal);

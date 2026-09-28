@@ -166,6 +166,24 @@ public class CategoryImportServiceTests
     }
 
     [Fact]
+    public void PackagingWeightCharacteristic_IsNotAutoMapped()
+    {
+        var map = new Dictionary<string, int> { ["charc:88952"] = 2, ["charc:999"] = 3 };
+        var (sourceType, sourceField, sourceAttributeId) = CategoryImportService.DetermineAutoMapping(
+            new ExternalField("charc:88952", "Вес товара с упаковкой (г)", false, "number"),
+            map);
+        Assert.Equal(FieldMappingSourceType.Static, sourceType);
+        Assert.Null(sourceField);
+        Assert.Null(sourceAttributeId);
+
+        var (netType, _, netAttr) = CategoryImportService.DetermineAutoMapping(
+            new ExternalField("charc:999", "Вес товара без упаковки", false, "number"),
+            map);
+        Assert.Equal(FieldMappingSourceType.CategoryAttribute, netType);
+        Assert.Equal(3, netAttr);
+    }
+
+    [Fact]
     public void ProductNameDuplicates_AreBaseNameFields()
     {
         Assert.True(CategoryImportService.IsNameField("product_name", "Product name"));

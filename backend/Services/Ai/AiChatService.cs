@@ -89,7 +89,7 @@ public class AiChatService
             var model = _modelService.DecryptForUse(modelConfig);
             var storeInfo = await _context.stores.AsNoTracking()
                 .Where(s => s.Id == storeId)
-                .Select(s => new { s.name, s.timezone })
+                .Select(s => new { s.name, s.timezone, s.extendedPriceParameters })
                 .FirstOrDefaultAsync(ct);
             var storeName = storeInfo?.name ?? "Store";
             var productCount = await _context.products.AsNoTracking()
@@ -128,7 +128,8 @@ public class AiChatService
                 catalogSlotsRemaining,
                 AiPrompts.ConnectedMcpFromAiTools(extraMcp),
                 catalogProductLimit,
-                catalogProductsUsed);
+                catalogProductsUsed,
+                storeInfo?.extendedPriceParameters ?? false);
 
             var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))

@@ -115,8 +115,11 @@ public class GraphNodeData
     /// <summary>Field list for the single "adapterFields" sink node (one input pin per field).</summary>
     public List<AdapterField>? fields { get; set; }
 
+    /// <summary>Editor pill. Assistant-created blocks start collapsed so the canvas stays readable.</summary>
+    public bool? collapsed { get; set; }
+
     /// <summary>
-    /// Frontend-only editor fields (e.g. collapsed) that must survive SyncAdapterFields /
+    /// Frontend-only editor fields that must survive SyncAdapterFields /
     /// SyncPriceFields deserialize→serialize round-trips. Evaluator ignores these.
     /// </summary>
     [JsonExtensionData]

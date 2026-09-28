@@ -92,7 +92,7 @@ Pair with a filesystem MCP on the same machine to match a local product-files fo
 
 Same cabinet JSON API as the SPA (`/api` prefix optional). Not Public API v1. Permissions, store membership, and quotas are the signed-in user's. Query strings work (`GET /products?searchQuery=&categoryId=&startIndex=&pageSize=`).
 
-Denied: `/api/v1`, `/api/mcp`, `/api/agent`, `/api/ai`, `/api/auth`, `/api/users`, `/api/plugins`, `/api/api-keys`, connection credential create/update/test, database dump, quota trim, `DELETE /stores/{id}`, permanent product delete.
+Denied: `/api/v1`, `/api/mcp`, `/api/agent`, `/api/ai` except `GET /api/ai/store-settings` (personal settings: store description, communication style, brevity, emoji; `PUT` stays denied), `/api/auth`, `/api/users`, `/api/plugins`, `/api/api-keys`, connection credential create/update/test, database dump, quota trim, `DELETE /stores/{id}`, permanent product delete.
 
 Staged cabinet attachments: `POST /products/{id}/files` `{ attachmentIds }`. Multipart product files stay `PUT …/products/{id}/files` on Agent HTTP.
 

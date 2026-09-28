@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Delegat.Enums;
+using Delegat.Services.Marketplace;
 
 namespace Delegat.Services.Marketplace.Graph;
 
@@ -185,6 +186,7 @@ public static class GraphGenerator
                     data = new GraphNodeData
                     {
                         modifierType = mod.type,
+                        collapsed = true,
                         @params = mod.@params ?? new Dictionary<string, object>(),
                     },
                 };
@@ -350,6 +352,31 @@ public static class GraphGenerator
             have.Add(fm.externalFieldKey);
         }
 
+        var incomingKeys = new HashSet<string>(
+            incoming.Select(f => f.externalFieldKey).Where(k => !string.IsNullOrEmpty(k))!,
+            StringComparer.OrdinalIgnoreCase);
+        var dropped = priceNode.data.fields
+            .Where(f => !string.IsNullOrEmpty(f.fieldKey)
+                && CategoryImportService.IsStoreExtendedPriceKey(f.fieldKey)
+                && !incomingKeys.Contains(f.fieldKey!))
+            .Select(f => f.fieldKey!)
+            .ToList();
+        if (dropped.Count > 0)
+        {
+            priceNode.data.fields.RemoveAll(f =>
+                f.fieldKey != null && dropped.Contains(f.fieldKey, StringComparer.OrdinalIgnoreCase));
+            var priceId = priceNode.id ?? "adapter-price-fields";
+            graph.edges.RemoveAll(e =>
+                string.Equals(e.target, priceId, StringComparison.OrdinalIgnoreCase)
+                && e.targetHandle != null
+                && dropped.Any(k => string.Equals(e.targetHandle, "f:" + k, StringComparison.OrdinalIgnoreCase)));
+            if (adapter?.data?.fields is { Count: > 0 })
+            {
+                adapter.data.fields.RemoveAll(f =>
+                    f.fieldKey != null && dropped.Contains(f.fieldKey, StringComparer.OrdinalIgnoreCase));
+            }
+        }
+
         return JsonSerializer.Serialize(graph, SerializeOpts);
     }
 
@@ -429,25 +456,25 @@ public static class GraphGenerator
             {
                 id = newId("src"),
                 type = "productField",
-                data = new GraphNodeData { field = fm.sourceField, label = label, valueType = valueType },
+                data = new GraphNodeData { field = fm.sourceField, label = label, valueType = valueType, collapsed = true },
             },
             FieldMappingSourceType.CategoryAttribute => new GraphNode
             {
                 id = newId("src"),
                 type = "attribute",
-                data = new GraphNodeData { attributeId = fm.sourceAttributeId, label = label, valueType = valueType },
+                data = new GraphNodeData { attributeId = fm.sourceAttributeId, label = label, valueType = valueType, collapsed = true },
             },
             FieldMappingSourceType.StoreAttribute => new GraphNode
             {
                 id = newId("src"),
                 type = "storeAttribute",
-                data = new GraphNodeData { attributeId = fm.sourceAttributeId, label = label, valueType = valueType },
+                data = new GraphNodeData { attributeId = fm.sourceAttributeId, label = label, valueType = valueType, collapsed = true },
             },
             FieldMappingSourceType.GroupName => new GraphNode
             {
                 id = newId("grp"),
                 type = "groupName",
-                data = new GraphNodeData { label = "Group name", valueType = valueType },
+                data = new GraphNodeData { label = "Group name", valueType = valueType, collapsed = true },
             },
             _ => new GraphNode
             {
@@ -458,6 +485,7 @@ public static class GraphGenerator
                     staticValue = fm.staticValue,
                     label = string.IsNullOrEmpty(fm.staticValue) ? "Static value" : fm.staticValue,
                     valueType = valueType,
+                    collapsed = true,
                 },
             },
         };

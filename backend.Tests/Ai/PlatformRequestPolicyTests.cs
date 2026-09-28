@@ -64,6 +64,10 @@ public class PlatformRequestPolicyTests
         Assert.Equal("route_denied", PlatformRequestPolicy.DenyReason("PATCH", "/marketplace/connections/3"));
         Assert.Equal("route_denied", PlatformRequestPolicy.DenyReason("POST", "/marketplace/connections/3/test"));
         Assert.Equal("route_denied", PlatformRequestPolicy.DenyReason("GET", "/api-keys"));
+        Assert.Null(PlatformRequestPolicy.DenyReason("GET", "/api/ai/store-settings"));
+        Assert.Null(PlatformRequestPolicy.DenyReason("GET", "/ai/store-settings"));
+        Assert.Equal("route_denied", PlatformRequestPolicy.DenyReason("PUT", "/api/ai/store-settings"));
+        Assert.Equal("route_denied", PlatformRequestPolicy.DenyReason("GET", "/api/ai/models"));
     }
 
     [Fact]

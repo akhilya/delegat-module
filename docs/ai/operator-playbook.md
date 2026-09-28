@@ -20,11 +20,19 @@ A mapping binds one local category to one marketplace category. The canvas sends
 1. Read `GET /marketplace/connections/{connectionId}/mappings/{mappingId}/graph` once. Use CURRENT PAGE ids.
 2. A field is unwired when `source` is empty, `omit` is false, `aliasOf` is empty, and no edge `targetHandle` is `f:{fieldKey}`.
 3. `localCategoryId` is on `GET …/connections/{connectionId}/mappings`. Characteristics are `GET /categories/{localCategoryId}` (`id`, `name`, `group`, `key`).
-4. `propose_plan` with one `POST …/graph/connect` per field you can match by name:
+4. Read personal settings before inventing a constant. Cabinet chat already has them. Operator MCP: `GET /api/ai/store-settings` (store description, style, brevity, emoji). `PUT` of that path is denied. Extended price settings are in CURRENT CONTEXT. When they are off, do not wire `discountedPrice` or `sale_price` — that row is not on the price block.
+5. `propose_plan` with one `POST …/graph/connect` per field you can match, plus a modifier step when the units differ:
    - characteristic: `{ "adapterFieldKey", "sourceType": "attribute", "sourceAttributeId" }`
    - card field: `{ "adapterFieldKey", "sourceType": "productField", "sourceField" }` (`name`, `sku`, `barcode`, `description`, `price`, `storageQuantity`, `images`)
+   - constant you can justify from the store description or catalog: `{ "sourceType": "static", "staticValue" }`
    - price block: same body plus `"sink": "price"`
-5. Skip fields you cannot match. Do not `PUT` the whole graph. Do not call `graph/group-titles` for this.
+   - millimeters into centimeters: `POST …/graph/modifiers` `{ "modifierType": "divide", "params": { "divisor": 10 } }`
+   - grams into kilograms: divisor `1000` into the card field `weight`. Do not wire the characteristic «Вес товара с упаковкой» — Wildberries rejects it and reads `dimensions.weightBrutto` in kilograms. Weight without packaging may stay a characteristic.
+   - a per-product divisor (scale from figurine height): `paramSources: [{ "param": "divisor", "sourceType": "attribute", "sourceAttributeId" }]`. Pin is `p:divisor`. Chain static `1700` → divide → round `decimals` 0 → template `1:` plus the value placeholder, and say the assumption.
+   - strikethrough 20–40% above the real price: multiply into `oldPrice` and leave `discount` unwired. Discount `0` charges the higher base.
+6. Brand, material, occasion, country, VAT, and TN VED (Честный знак) — if the field options are a short directory, choose the entry that matches the goods and say which one. Do not invent a code outside that list and do not leave the field blank. If nothing decides it, `ask_form` that turn and do not `propose_plan` until they answer. Two fields for the same fact (Brand and the brand characteristic) are one wire plus `aliasOf`, not two empty rows.
+7. Attribute blocks use the characteristic name as the label. Blocks you add start collapsed. The sink cards stay open.
+8. Do not `PUT` the whole graph. Do not call `graph/group-titles` for this. Skip alias fields.
 
 Linking categories (the mapping row itself) is `POST /marketplace/connections/{connectionId}/mappings` `{ localCategoryId, externalCategoryId, externalCategoryName }`. That create already auto-wires obvious fields. If the open page is already that pair, finish unwired fields instead of creating another row.
 

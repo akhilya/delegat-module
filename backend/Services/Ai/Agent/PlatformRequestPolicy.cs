@@ -38,9 +38,13 @@ public static class PlatformRequestPolicy
           GET /marketplace/mapping-graph/blocks (types, handles, pin types, layout sizes)
           POST /marketplace/connections/{id}/mappings { localCategoryId, externalCategoryId, externalCategoryName }
           POST …/mappings/{mappingId}/graph/connect — wire one unwired sink
-            { adapterFieldKey, sourceType: attribute|productField, sourceAttributeId|sourceField, sink?: price }
+            { adapterFieldKey, sourceType: attribute|productField|static, sourceAttributeId|sourceField|staticValue, sink?: price }
             Attribute groups (Основные параметры) are local characteristics, not collection titles.
-          POST …/graph/modifiers  POST …/graph/group-titles { mappings: [{from,to}] }
+          POST …/graph/modifiers { modifierType, params, paramSources?: [{ param, sourceType, sourceAttributeId|sourceField|staticValue }] }
+            divide divisor 10 converts mm to cm; divisor 1000 converts g to kg.
+            paramSources feeds p:divisor or p:factor (scale = 1700 / height).
+          GET /api/ai/store-settings — personal settings (store description, style, brevity, emoji). PUT stays denied.
+          POST …/graph/group-titles { mappings: [{from,to}] }
             group-titles is only Merge into card (__group__) shop collection titles,
             string valueMap (typed from/to), not valueId / category attributes
           GET …/external-products  GET …/products/import-preview
@@ -133,6 +137,10 @@ public static class PlatformRequestPolicy
     public static string? DenyReason(string method, string path)
     {
         var apiPath = SplitPathAndQuery(path).Path;
+        if (HttpMethods.IsGet(method)
+            && apiPath.Equals("/api/ai/store-settings", StringComparison.OrdinalIgnoreCase))
+            return null;
+
         foreach (var prefix in DeniedPrefixes)
         {
             if (apiPath.Equals(prefix, StringComparison.OrdinalIgnoreCase)
@@ -178,7 +186,7 @@ public static class PlatformRequestPolicy
         description = SurfaceDescription,
         deny = new[]
         {
-            "/api/v1", "/api/mcp", "/mcp", "/api/agent", "/api/ai", "/api/auth",
+            "/api/v1", "/api/mcp", "/mcp", "/api/agent", "/api/ai except GET /api/ai/store-settings", "/api/auth",
             "/api/users", "/api/roles", "/api/plugins", "/api/api-keys",
             "/api/invitation", "/swagger", "/hubs",
             "POST/PATCH marketplace connection credentials and /test",

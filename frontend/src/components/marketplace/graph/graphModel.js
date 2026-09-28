@@ -233,9 +233,11 @@ const MIGRATABLE_PRICE_KEYS = new Set([
   "autoActionEnabled",
   "priceStrategyEnabled",
   "minPriceForAutoActionsEnabled",
-  "discountedPrice",
   "discount",
 ]);
+
+/** Shown on the price sink only when the price-fields API returns them (extended price settings on). */
+const EXTENDED_PRICE_KEYS = new Set(["discountedPrice", "sale_price", "salePrice"]);
 
 /**
  * Build a graph from the page's field mappings. Each enabled field becomes a lane:
@@ -632,13 +634,30 @@ export function ensurePriceNode(nodes, edges, priceFieldMappings) {
   }
 
   syncAdapterPriceFields(list, priceFieldMappings);
-  return { nodes: list, edges: edgeList };
+  const kept = new Set(
+    (priceNode.data?.fields || []).map((f) => f.fieldKey).filter(Boolean),
+  );
+  const prunedEdges = edgeList.filter((e) => {
+    if (e.target !== priceNode.id) return true;
+    const handle = String(e.targetHandle || "");
+    if (!handle.startsWith("f:")) return true;
+    const key = handle.slice(2);
+    if (!EXTENDED_PRICE_KEYS.has(key)) return true;
+    return kept.has(key);
+  });
+  return { nodes: list, edges: prunedEdges };
 }
 
 export function syncAdapterPriceFields(nodes, priceFieldMappings) {
   const priceNode = (nodes || []).find((n) => n.type === "adapterPriceFields");
   if (!priceNode) return nodes;
-  const fields = priceNode.data?.fields || [];
+  const allowed = new Set(
+    (priceFieldMappings || []).map((fm) => fm.externalFieldKey).filter(Boolean),
+  );
+  const fields = (priceNode.data?.fields || []).filter(
+    (f) => !f?.fieldKey || !EXTENDED_PRICE_KEYS.has(f.fieldKey) || allowed.has(f.fieldKey),
+  );
+  priceNode.data = { ...(priceNode.data || {}), fields };
   const have = new Set(fields.map((f) => f.fieldKey));
   for (const fm of priceFieldMappings || []) {
     const key = fm.externalFieldKey;

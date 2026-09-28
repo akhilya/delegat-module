@@ -52,7 +52,8 @@ public static class AiPrompts
         int? catalogSlotsRemaining = null,
         IReadOnlyList<ConnectedMcpTool>? connectedMcpTools = null,
         int? catalogProductLimit = null,
-        int? catalogProductsUsed = null)
+        int? catalogProductsUsed = null,
+        bool extendedPriceParameters = false)
     {
         var tz = storeTimezone ?? StoreTimeHelper.DefaultTimezone;
         var now = StoreTimeHelper.FormatInStoreTimezone(DateTime.UtcNow, tz);
@@ -167,6 +168,7 @@ public static class AiPrompts
         Date/time: {now}
         UI language: {lang} ({localeCode})
         Store: name="{SanitizeForPrompt(storeName)}" (id={storeId}), {productLine}
+        Extended price settings: {(extendedPriceParameters ? "on" : "off")}. When off, the mapping price block has no discounted price (discountedPrice, sale_price). price, oldPrice, and discount remain.
         {helperLine}
         {quotaBlock}
         Current user: {SanitizeForPrompt(userName)} ({userRole})
@@ -273,16 +275,64 @@ public static class AiPrompts
            GET /categories/<localCategoryId> (attributes: id, name, group, key).
            Match a field label to an attribute in the named group, or to a product
            field: name, sku, barcode, description, price, storageQuantity, images.
-           Then one propose_plan. Each step is POST …/graph/connect:
+           Read PERSONAL SETTINGS (store description) before you decide a constant.
+           Operator MCP that has no PERSONAL SETTINGS block: GET /api/ai/store-settings
+           (description, style, brevity, emoji). PUT of that path is denied.
+           Then one propose_plan, unless a required constant is still unknown
+           (see below — ask first). Each wire is POST …/graph/connect:
            adapterFieldKey, sourceType "attribute", sourceAttributeId
-           or adapterFieldKey, sourceType "productField", sourceField.
-           Price block: sink "price". Skip a field you cannot match by name.
+           or adapterFieldKey, sourceType "productField", sourceField
+           or sourceType "static" with staticValue for a constant you can justify.
+           Price block: sink "price".
            Do not invent ids. Do not PUT the whole graph. Do not call group-titles.
            graph/connect places nodes (catalog width/height). Output handle is out.
+           An attribute block label is the characteristic name, never an id
+           such as attr 4. Every block you add starts collapsed (the editor
+           pill). Leave the two sink cards open. When two fields are the same
+           fact (Brand and the brand characteristic), wire one and set the
+           other aliasOf to that field key.
            Sink inputs are f:fieldKey. Block types ride along on that graph GET —
-           do not GET mapping-graph/blocks separately. A value transform the user
-           asked for is a later POST …/graph/modifiers (valueMap is typed from/to,
-           not valueId).
+           do not GET mapping-graph/blocks separately.
+
+           Use blocks in that same plan when a direct copy is wrong.
+           Units: compare the marketplace field unit (mm, cm, g, kg) with the
+           local attribute name. An auto-link of packaging width in millimeters
+           to a centimeter field is wrong. POST …/graph/modifiers divide with
+           params divisor 10 (millimeters to centimeters) or divisor 1000
+           (grams to kilograms). Wildberries packaging weight is only the card
+           field weight, in kilograms. Do not wire the characteristic named
+           weight with packaging (Вес товара с упаковкой). The API rejects
+           that characteristic and requires dimensions.weightBrutto in
+           kilograms. Weight without packaging may stay a characteristic.
+           A divisor that changes per product (scale from
+           figurine height) goes in paramSources: param "divisor", sourceType
+           "attribute", sourceAttributeId. That pin is p:divisor. Multiply uses
+           factor. If oldPrice should show 20 to 40 percent above the real price,
+           multiply the price by 1.2 to 1.4 into oldPrice and leave discount
+           unwired. An explicit discount of 0 charges the higher base.
+           template uses the incoming-value placeholder the block catalog
+           documents (the word value inside double curly braces).
+           valueMap is typed from/to, not valueId.
+
+           Derived values: if the store description or catalog names say what
+           you sell, fill fields from that. Figurines or miniatures with a
+           height in millimeters: scale is 1:round(1700 divided by that height).
+           Chain: static 1700 into divide, height attribute into p:divisor,
+           round with decimals 0, then template. Say that assumption.
+           Skip alias fields (same value as name, sku, or description).
+           When extended price settings are off, do not wire discountedPrice
+           or sale_price. That row is not on the canvas.
+
+           Brand, material, occasion, country, VAT rate, and TN VED (Honest Sign /
+           Честный знак) are required on marked categories. If the field has a
+           short option list, pick the entry that matches the goods and say
+           which one (for example the toys code already in that list, or the
+           standard VAT rate the list contains). Do not invent a code that is
+           not in the list. Reuse a value already stored on these products.
+           If the store description, the catalog, and the option list still
+           do not decide it, ask_form that turn and do not propose_plan until
+           they answer. Do not leave those fields blank without asking or
+           without naming the directory entry you chose.
 
         3) Shop collection titles only. The user gives from→to titles for export
            (Medusa collections). propose_plan first with no graph GET.
@@ -505,8 +555,8 @@ public static class AiPrompts
         };
         var desc = !string.IsNullOrWhiteSpace(s.StoreDescription)
             ? $"\nStore description: {SanitizeForPrompt(s.StoreDescription)}"
-            : "";
-        return $"=== PERSONAL SETTINGS ==={desc}\nCommunication style: {style}\nResponse brevity: {brevity}\nEmoji usage: {emoji}";
+            : "\nStore description: (empty — ask before inventing what the store sells)";
+        return $"=== PERSONAL SETTINGS ==={desc}\nCommunication style: {style}\nResponse brevity: {brevity}\nEmoji usage: {emoji}\nUse the store description when filling a mapping (material, scale, audience). Do not invent a TN VED code.";
     }
 
     private static string BuildPageBlock(AiPageContext ctx) => ctx.Page switch
@@ -523,7 +573,9 @@ public static class AiPrompts
             $"Attribute groups on this page are local characteristics, not shop collection titles. " +
             $"Finish wiring: GET /marketplace/connections/{ctx.ConnectionId}/mappings/{ctx.MappingId}/graph once, " +
             $"then propose_plan of POST …/mappings/{ctx.MappingId}/graph/connect per unwired field " +
-            $"(sourceType attribute or productField). " +
+            $"(sourceType attribute, productField, or static with staticValue). " +
+            $"Convert units with graph/modifiers (divide). " +
+            $"Read the store description before inferring scale, material, or brand. " +
             $"POST …/graph/group-titles is only a shop collection title switch (__group__). " +
             $"Mapping list: GET /marketplace/connections/{ctx.ConnectionId}/mappings.",
         "product" =>

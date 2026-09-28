@@ -101,12 +101,15 @@ public sealed class CabinetActionCatalog
         new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/group-titles", true,
             "Shop collection titles only. String switch on Merge into card (__group__). Body: mappings [{from, to}]. PIM group names stay. Not local attribute groups. Not valueId.",
             "group-titles merge into card объединить карточку __group__ коллекции medusa славянская мифология star wars valueMap switch"),
+        new("GET", "/ai/store-settings", false,
+            "Personal settings for this store: store description, communication style, brevity, emoji. Read before inferring mapping constants.",
+            "персональные настройки описание магазина store description стиль краткость emoji"),
         new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/connect", true,
-            "Wire one marketplace field. Body: adapterFieldKey, sourceType attribute|productField|groupName|static, sourceAttributeId or sourceField, sink price for the price block. Use this to finish a mapping. Not group-titles.",
-            "mapping connect доделать маппинг связать поля характеристики основные параметры вложенные параметры attribute productField sourceAttributeId"),
+            "Wire one marketplace field. Body: adapterFieldKey, sourceType attribute|productField|groupName|static, sourceAttributeId or sourceField or staticValue, sink price for the price block. Use this to finish a mapping. Not group-titles. staticValue sets a constant.",
+            "mapping connect доделать маппинг связать поля характеристики основные параметры вложенные параметры attribute productField sourceAttributeId staticValue бренд материал"),
         new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/modifiers", true,
-            "Insert a canvas modifier on that sink. Body: adapterFieldKey, modifierType (valueMap|replace|…), params. valueMap params.mappings is [{from,to},…]. Call after graph/connect. Local group names stay.",
-            "mapping modifier блок valueMap replace group_name medusa collections переименовать выгрузка"),
+            "Insert a canvas modifier on that sink. Body: adapterFieldKey, modifierType (divide|multiply|round|template|valueMap|replace|…), params, optional paramSources. divide params.divisor 10 is mm to cm, 1000 is g to kg. paramSources item: param divisor or factor, sourceType attribute|productField|static. valueMap params.mappings is [{from,to},…]. Call after graph/connect.",
+            "mapping modifier блок divide multiply единицы измерения мм см масштаб valueMap replace"),
     ];
 
     private IReadOnlyList<ActionHit> Build()

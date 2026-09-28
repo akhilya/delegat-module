@@ -134,6 +134,12 @@ public class FieldMappingController : ControllerBase
         try
         {
             var fields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+            var extendedPrice = await _unitOfWork.Repository<Store>().Query()
+                .Where(s => s.Id == connection.storeId)
+                .Select(s => s.extendedPriceParameters)
+                .FirstOrDefaultAsync(ct);
+            if (!extendedPrice)
+                fields = fields.Where(f => !CategoryImportService.IsStoreExtendedPriceKey(f.Key)).ToList();
             return Ok(fields.Select(f => new
             {
                 key = f.Key,

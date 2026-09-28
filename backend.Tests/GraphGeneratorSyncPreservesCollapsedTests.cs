@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Delegat.Enums;
+using Delegat.Models.Marketplace.DTOs;
+using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
 
 namespace Delegat.Tests;
@@ -219,5 +221,100 @@ public class GraphGeneratorSyncPreservesCollapsedTests
 
         var brand = fields["brand"];
         Assert.Equal("attribute", brand.GetProperty("source").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void BuildPriceFieldSpecs_OmitsDiscountedPriceWhenExtendedOff()
+    {
+        var fields = new List<ExternalField>
+        {
+            new("price", "Price", true, "number"),
+            new("discountedPrice", "Discounted price", false, "number"),
+            new("sale_price", "Sale price", false, "number"),
+            new("oldPrice", "Old price", false, "number"),
+        };
+
+        var off = CategoryImportService.BuildPriceFieldSpecs(fields, new Dictionary<string, int>());
+        Assert.DoesNotContain(off, s => s.externalFieldKey is "discountedPrice" or "sale_price");
+        Assert.Contains(off, s => s.externalFieldKey == "oldPrice");
+        Assert.Contains(off, s => s.externalFieldKey == "price" && s.sourceField == "price");
+
+        var on = CategoryImportService.BuildPriceFieldSpecs(
+            fields, new Dictionary<string, int>(), extendedPriceParameters: true);
+        var discounted = Assert.Single(on, s => s.externalFieldKey == "discountedPrice");
+        Assert.Equal("discountedPrice", discounted.sourceField);
+        var sale = Assert.Single(on, s => s.externalFieldKey == "sale_price");
+        Assert.Equal("discountedPrice", sale.sourceField);
+    }
+
+    [Fact]
+    public void SyncPriceFields_DropsDiscountedPriceWhenSpecsOmitIt()
+    {
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "adapter-price-fields",
+                  "type": "adapterPriceFields",
+                  "data": {
+                    "fields": [
+                      { "fieldKey": "price", "label": "Price", "outputType": "number", "isRequired": true },
+                      {
+                        "fieldKey": "discountedPrice",
+                        "label": "Discounted price",
+                        "outputType": "number",
+                        "source": { "type": "productField", "field": "discountedPrice" }
+                      },
+                      { "fieldKey": "oldPrice", "label": "Old price", "outputType": "number" }
+                    ]
+                  }
+                }
+              ],
+              "edges": [
+                {
+                  "id": "e-sale",
+                  "source": "src-sale",
+                  "target": "adapter-price-fields",
+                  "targetHandle": "f:discountedPrice"
+                }
+              ]
+            }
+            """;
+
+        var result = GraphGenerator.SyncPriceFields(graph, [
+            new FieldSpec
+            {
+                externalFieldKey = "price",
+                externalFieldName = "Price",
+                externalFieldType = "number",
+                isRequired = true,
+                isEnabled = true,
+                sortOrder = 0,
+                sourceType = FieldMappingSourceType.ProductField,
+                sourceField = "price",
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "oldPrice",
+                externalFieldName = "Old price",
+                externalFieldType = "number",
+                isRequired = false,
+                isEnabled = true,
+                sortOrder = 1,
+                sourceType = FieldMappingSourceType.Static,
+            },
+        ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var priceFields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterPriceFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .Select(f => f.GetProperty("fieldKey").GetString())
+            .ToList();
+        Assert.Contains("price", priceFields);
+        Assert.Contains("oldPrice", priceFields);
+        Assert.DoesNotContain("discountedPrice", priceFields);
+        var edges = doc.RootElement.GetProperty("edges").EnumerateArray().ToList();
+        Assert.DoesNotContain(edges, e => e.GetProperty("targetHandle").GetString() == "f:discountedPrice");
     }
 }

@@ -53,4 +53,66 @@ public class WildberriesMapCardToProductTests
         Assert.Null(product.CategoryId);
         Assert.Null(product.CategoryName);
     }
+
+    [Fact]
+    public void PackagingWeightCharacteristic_IsNotSent_AndCardWeightStaysKilograms()
+    {
+        Assert.True(WildberriesPlugin.IsPackagingWeightCharacteristic("charc:88952", null));
+        Assert.True(WildberriesPlugin.IsPackagingWeightCharacteristic("charc:1", "Вес товара с упаковкой (г)"));
+        Assert.False(WildberriesPlugin.IsPackagingWeightCharacteristic("charc:2", "Вес товара без упаковки"));
+
+        var data = new Dictionary<string, object>
+        {
+            ["weight"] = 0.06,
+            ["charc:88952"] = 60,
+            ["charc:17596"] = "пластик",
+            ["_fieldLabels"] = new Dictionary<string, string>
+            {
+                ["charc:88952"] = "Вес товара с упаковкой (г)",
+                ["charc:17596"] = "Материал изделия",
+            },
+        };
+
+        Assert.Equal(0.06, WildberriesPlugin.ResolveWeightBruttoKilograms(data));
+        var ids = WildberriesPlugin.BuildCharacteristics(data)!.Select(c => c.Id).ToList();
+        Assert.DoesNotContain(88952, ids);
+        Assert.Contains(17596, ids);
+    }
+
+    [Fact]
+    public void PackagingWeightCharacteristic_FillsWeightBruttoWhenCardWeightIsMissing()
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["charc:88952"] = 60,
+        };
+        Assert.Equal(0.06, WildberriesPlugin.ResolveWeightBruttoKilograms(data));
+    }
+
+    [Fact]
+    public void SelectCharacteristics_StayStringLists_NotNumbers()
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["charc:15000001"] = "9503003500",
+            ["charc:15001405"] = "22",
+            ["charc:90745"] = 12,
+            ["_fieldTypes"] = new Dictionary<string, string>
+            {
+                ["charc:15000001"] = "select",
+                ["charc:15001405"] = "select",
+                ["charc:90745"] = "number",
+            },
+        };
+
+        var chars = WildberriesPlugin.BuildCharacteristics(data)!;
+        Assert.Equal(new[] { "9503003500" }, Assert.IsAssignableFrom<IEnumerable<string>>(chars.Single(c => c.Id == 15000001).Value));
+        Assert.Equal(new[] { "22" }, Assert.IsAssignableFrom<IEnumerable<string>>(chars.Single(c => c.Id == 15001405).Value));
+        Assert.Equal(12, chars.Single(c => c.Id == 90745).Value);
+
+        var requests = WildberriesPlugin.CardErrorListRequests(new DateTime(2026, 9, 28, 20, 0, 0, DateTimeKind.Utc));
+        Assert.False(requests[0].Order!.Ascending);
+        Assert.Equal("2026-09-28T20:00:00Z", requests[0].Cursor!.UpdatedAt);
+        Assert.True(requests[1].Order!.Ascending);
+    }
 }

@@ -11,6 +11,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Wildberries export sends directory values such as TN VED and VAT as text. A numeric code sent as a number was accepted by the upload call and the card never appeared. Draft errors are read from the current error list instead of an empty page.
+- Wildberries export sends packaging weight only as kilograms in the card dimensions. The characteristic «Вес товара с упаковкой» is no longer sent: the marketplace rejects it.
+- Mapping blocks the assistant adds use the characteristic name and start collapsed. Two fields for the same fact, such as Brand and the brand characteristic, share one value. TN VED and VAT are chosen from that field’s directory when the goods match an entry.
+- Mapping price block hides discounted price (`discountedPrice`, `sale_price`) while the store’s extended price settings are off. Opening the canvas no longer puts that row back. The cabinet assistant reads personal settings (`GET /api/ai/store-settings`: store description, style, brevity, emoji), converts units when a local characteristic is millimeters or grams and the shop field is centimeters or kilograms, and asks for brand, material, occasion, and TN VED instead of leaving them empty or inventing a code.
 - Cabinet assistant treats «finish the mapping» and «link these parameter groups» as wiring marketplace fields to local characteristics. Shop collection titles stay a separate step. It reads the open canvas once before that plan, and a cancelled plan is not described as done.
 - Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
 - Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If the sidecar is on (`SANDBOX_URL` on the API process), it says yes instead of claiming there is no helper.

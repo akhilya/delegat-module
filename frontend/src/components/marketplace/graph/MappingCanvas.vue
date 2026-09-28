@@ -1165,6 +1165,15 @@ watch(
     const next = copy.find((n) => n.id === ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
     const nextKeys = next.map((f) => f.fieldKey).join("\0");
     if (nextKeys !== curKeys) {
+      const kept = new Set(next.map((f) => f.fieldKey));
+      setEdges(edges.value.filter((e) => {
+        if (e.target !== ADAPTER_PRICE_NODE_ID) return true;
+        const handle = String(e.targetHandle || "");
+        if (!handle.startsWith("f:")) return true;
+        const key = handle.slice(2);
+        if (key !== "discountedPrice" && key !== "sale_price" && key !== "salePrice") return true;
+        return kept.has(key);
+      }));
       updateNodeData(ADAPTER_PRICE_NODE_ID, {
         fields: enrichFieldsWithDefs(next, props.priceFieldDefs),
       });

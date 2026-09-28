@@ -395,6 +395,11 @@ public class CategoryImportService
         if (IsImageField(field.Key, field.Name))
             return (FieldMappingSourceType.ProductField, "images", null);
 
+        // WB rejects this characteristic (HTTP 400) and reads packaging weight only
+        // from dimensions.weightBrutto, in kilograms. Leave the row unwired.
+        if (IsWbPackagingWeightCharacteristic(field.Key, field.Name))
+            return (FieldMappingSourceType.Static, null, null);
+
         // By default, map to the created category attribute
         if (attributeMap.TryGetValue(field.Key, out var attributeId))
             return (FieldMappingSourceType.CategoryAttribute, null, attributeId);
@@ -419,6 +424,30 @@ public class CategoryImportService
                IsStockField(keyLower, nameLower) ||
                IsGroupingField(field.Key, field.Name) ||
                IsImageField(field.Key, field.Name);
+    }
+
+    /// <summary>
+    /// Wildberries characteristic «Вес товара с упаковкой». Since 2025-03-31 the
+    /// cards API returns HTTP 400 if this object is in <c>characteristics</c>.
+    /// The value belongs on the card <c>weight</c> field (kilograms).
+    /// Weight without packaging is a different characteristic and stays mapped.
+    /// </summary>
+    internal static bool IsWbPackagingWeightCharacteristic(string key, string? name)
+    {
+        if (key.Equals("charc:88952", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.IsNullOrWhiteSpace(name) || !key.StartsWith("charc:", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return PackagingWeightName(name);
+    }
+
+    internal static bool PackagingWeightName(string name)
+    {
+        var n = name.ToLowerInvariant();
+        if (n.Contains("без упаков") || n.Contains("without packaging"))
+            return false;
+        return (n.Contains("вес") && n.Contains("упаков"))
+            || (n.Contains("weight") && n.Contains("packag"));
     }
 
     /// <summary>
@@ -495,7 +524,11 @@ public class CategoryImportService
         bool skipAutoMapping = false,
         bool extendedPriceParameters = false)
     {
-        return priceFields
+        var visible = extendedPriceParameters
+            ? priceFields
+            : priceFields.Where(f => !IsStoreExtendedPriceKey(f.Key));
+
+        return visible
             .OrderBy(f => f.SortOrder)
             .Select((field, index) =>
             {
@@ -521,6 +554,18 @@ public class CategoryImportService
             .ToList();
     }
 
+    /// <summary>
+    /// Price-API keys that exist only when the store has extended price settings
+    /// (the product form's discounted price). Marketplace base, old price, and discount stay.
+    /// </summary>
+    internal static bool IsStoreExtendedPriceKey(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return false;
+        return key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("sale_price", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("salePrice", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Price-API keys with a fixed semantic target - AI must not guess substitutes.</summary>
     internal static bool IsStrictPriceSemanticKey(string key)
     {
@@ -542,9 +587,6 @@ public class CategoryImportService
         if (keyLower == "price")
             return (FieldMappingSourceType.ProductField, "price", null);
 
-        if (keyLower is "sale_price" or "saleprice" or "discountedprice")
-            return (FieldMappingSourceType.ProductField, "discountedPrice", null);
-
         if (extendedPriceParameters)
         {
             return keyLower switch
@@ -552,7 +594,7 @@ public class CategoryImportService
                 "oldprice" => (FieldMappingSourceType.ProductField, "oldPrice", null),
                 "minprice" => (FieldMappingSourceType.ProductField, "minPrice", null),
                 "netprice" => (FieldMappingSourceType.ProductField, "netPrice", null),
-                "discountedprice" => (FieldMappingSourceType.ProductField, "discountedPrice", null),
+                "discountedprice" or "sale_price" or "saleprice" => (FieldMappingSourceType.ProductField, "discountedPrice", null),
                 "discount" => (FieldMappingSourceType.ProductField, "discount", null),
                 "currency" or "currencyid" => (FieldMappingSourceType.ProductField, "currency", null),
                 _ => (FieldMappingSourceType.Static, null, null)
@@ -586,8 +628,11 @@ public class CategoryImportService
     {
         if (sourceType == null) return true;
 
-        if (fieldDef.Key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (IsStoreExtendedPriceKey(fieldDef.Key))
+        {
+            return sourceType == "productField"
+                && string.Equals(sourceField, "discountedPrice", StringComparison.OrdinalIgnoreCase);
+        }
 
         if (!IsStrictPriceSemanticKey(fieldDef.Key))
             return true;

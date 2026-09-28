@@ -461,10 +461,15 @@ public class CategoryMappingController : ControllerBase
                     if (adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
                     {
                         var priceFields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+                        var extendedPrice = await _unitOfWork.Repository<Store>().Query()
+                            .Where(s => s.Id == connection.storeId)
+                            .Select(s => s.extendedPriceParameters)
+                            .FirstOrDefaultAsync(ct);
                         var priceSpecs = CategoryImportService.BuildPriceFieldSpecs(
                             priceFields,
                             new Dictionary<string, int>(),
-                            skipAutoMapping: false);
+                            skipAutoMapping: false,
+                            extendedPriceParameters: extendedPrice);
                         graphJson = GraphGenerator.SyncPriceFields(graphJson, priceSpecs);
                     }
                 }
@@ -543,15 +548,29 @@ public class CategoryMappingController : ControllerBase
 
         try
         {
-            await _graphMutation.ConnectFieldAsync(
-                mappingId,
-                input.adapterFieldKey.Trim(),
-                input.sourceType.Trim(),
-                input.sourceField,
-                input.sourceAttributeId,
-                input.sink,
-                StubField(input.adapterFieldKey),
-                ct);
+            if (string.Equals(input.sourceType, "static", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(input.staticValue))
+            {
+                await _graphMutation.SetStaticValueAsync(
+                    mappingId,
+                    input.adapterFieldKey.Trim(),
+                    input.staticValue.Trim(),
+                    input.sink,
+                    StubField(input.adapterFieldKey),
+                    ct);
+            }
+            else
+            {
+                await _graphMutation.ConnectFieldAsync(
+                    mappingId,
+                    input.adapterFieldKey.Trim(),
+                    input.sourceType.Trim(),
+                    input.sourceField,
+                    input.sourceAttributeId,
+                    input.sink,
+                    StubField(input.adapterFieldKey),
+                    ct);
+            }
         }
         catch (InvalidOperationException ex)
         {
@@ -586,6 +605,15 @@ public class CategoryMappingController : ControllerBase
                 ToModifierParams(input.@params),
                 input.sink,
                 StubField(input.adapterFieldKey),
+                input.paramSources?
+                    .Where(s => !string.IsNullOrWhiteSpace(s.param) && !string.IsNullOrWhiteSpace(s.sourceType))
+                    .Select(s => new GraphMutationService.ModifierParamSource(
+                        s.param.Trim(),
+                        s.sourceType.Trim(),
+                        s.sourceField,
+                        s.sourceAttributeId,
+                        s.staticValue))
+                    .ToList(),
                 ct);
         }
         catch (InvalidOperationException ex)
@@ -1566,7 +1594,17 @@ public class CategoryMappingController : ControllerBase
         public string sourceType { get; set; }
         public string? sourceField { get; set; }
         public int? sourceAttributeId { get; set; }
+        public string? staticValue { get; set; }
         public string? sink { get; set; }
+    }
+
+    public struct GraphModifierParamSource
+    {
+        public string param { get; set; }
+        public string sourceType { get; set; }
+        public string? sourceField { get; set; }
+        public int? sourceAttributeId { get; set; }
+        public string? staticValue { get; set; }
     }
 
     public struct GraphModifierInput
@@ -1575,6 +1613,7 @@ public class CategoryMappingController : ControllerBase
         public string modifierType { get; set; }
         public Dictionary<string, JsonElement>? @params { get; set; }
         public string? sink { get; set; }
+        public List<GraphModifierParamSource>? paramSources { get; set; }
     }
 
     public struct GraphGroupTitlesInput

@@ -124,6 +124,7 @@ public class GraphMutationService
 
         var nodeId = $"ai-static-{adapterFieldKey}-{Guid.NewGuid().ToString("N")[..8]}";
         var data = BuildStaticNodeData(value, fieldDef);
+        data.collapsed = true;
         var staticNode = new GraphNode { id = nodeId, type = "static", data = data };
         graph.nodes.Add(staticNode);
 
@@ -145,7 +146,8 @@ public class GraphMutationService
     // Add a modifier to a field chain
     public async Task AddModifierAsync(int mappingId, string adapterFieldKey,
         string modifierType, Dictionary<string, object>? @params,
-        string? sink = null, ExternalField? fieldDef = null, CancellationToken ct = default)
+        string? sink = null, ExternalField? fieldDef = null,
+        IReadOnlyList<ModifierParamSource>? paramSources = null, CancellationToken ct = default)
     {
         if (!ModifierPipeline.IsKnownModifier(modifierType))
             throw new InvalidOperationException(
@@ -165,7 +167,7 @@ public class GraphMutationService
         {
             id = modNodeId,
             type = "modifier",
-            data = new GraphNodeData { modifierType = modifierType, @params = @params }
+            data = new GraphNodeData { modifierType = modifierType, @params = @params, collapsed = true }
         };
         graph.nodes.Add(modNode);
 
@@ -219,6 +221,7 @@ public class GraphMutationService
             srcNode != null ? [srcNode, modNode] : [modNode],
             sinkNode,
             handle);
+        await AttachParamSourcesAsync(graph, modNode, paramSources, ct);
 
         mapping.graphJson = SerializeGraph(graph);
         await _context.SaveChangesAsync(ct);
@@ -261,6 +264,7 @@ public class GraphMutationService
             {
                 label = "Product group name",
                 valueType = "string",
+                collapsed = true,
             },
         };
         var pairs = maps
@@ -282,6 +286,7 @@ public class GraphMutationService
             {
                 modifierType = "valueMap",
                 @params = new Dictionary<string, object> { ["mappings"] = pairs },
+                collapsed = true,
             },
         };
         graph.nodes.Add(srcNode);
@@ -651,7 +656,7 @@ public class GraphMutationService
 
         foreach (var def in priceFieldDefs.OrderBy(f => f.SortOrder))
         {
-            if (def.Key.Equals("discountedPrice", StringComparison.OrdinalIgnoreCase))
+            if (!extendedPrice && CategoryImportService.IsStoreExtendedPriceKey(def.Key))
                 continue;
 
             var field = sinkNode.data.fields.FirstOrDefault(f => f.fieldKey == def.Key);
@@ -682,7 +687,7 @@ public class GraphMutationService
                     graph.nodes.Add(new GraphNode
                     {
                         id = nodeId, type = "static",
-                        data = new GraphNodeData { staticValue = "0", label = "0", valueType = "number" },
+                        data = new GraphNodeData { staticValue = "0", label = "0", valueType = "number", collapsed = true },
                     });
                     graph.edges.Add(new GraphEdge
                     {
@@ -1132,6 +1137,61 @@ public class GraphMutationService
         return true;
     }
 
+    /// <summary>Extra number wired into a modifier param pin (p:divisor, p:factor).</summary>
+    public sealed record ModifierParamSource(
+        string Param,
+        string SourceType,
+        string? SourceField = null,
+        int? SourceAttributeId = null,
+        string? StaticValue = null);
+
+    private async Task AttachParamSourcesAsync(
+        MappingGraph graph,
+        GraphNode modifier,
+        IReadOnlyList<ModifierParamSource>? sources,
+        CancellationToken ct)
+    {
+        if (sources == null || sources.Count == 0 || string.IsNullOrEmpty(modifier.id))
+            return;
+
+        foreach (var src in sources)
+        {
+            if (string.IsNullOrWhiteSpace(src.Param))
+                continue;
+            var id = $"ai-param-{src.Param.Trim()}-{Guid.NewGuid().ToString("N")[..8]}";
+            GraphNode node = (src.SourceType ?? "").Trim().ToLowerInvariant() switch
+            {
+                "attribute" => await BuildSourceNodeAsync(id, "attribute", null, src.SourceAttributeId, ct),
+                "productfield" => await BuildSourceNodeAsync(id, "productField", src.SourceField, null, ct),
+                "static" => new GraphNode
+                {
+                    id = id,
+                    type = "static",
+                    data = new GraphNodeData
+                    {
+                        staticValue = src.StaticValue ?? "",
+                        label = string.IsNullOrEmpty(src.StaticValue) ? "Static value" : src.StaticValue,
+                        valueType = "number",
+                        collapsed = true,
+                    },
+                },
+                _ => throw new InvalidOperationException(
+                    $"paramSources sourceType '{src.SourceType}' is not attribute, productField, or static"),
+            };
+            graph.nodes.Add(node);
+            var pin = "p:" + src.Param.Trim();
+            graph.edges.Add(new GraphEdge
+            {
+                id = $"e-{id}-{modifier.id}:{pin}",
+                source = id,
+                target = modifier.id,
+                sourceHandle = "out",
+                targetHandle = pin,
+            });
+            MappingGraphBlockCatalog.PlaceWestOf(graph, [node], modifier, pin);
+        }
+    }
+
     private static void AddModifierChain(MappingGraph graph, string sourceId, string sinkId,
         string fieldKey, List<AiModifierSpec>? modifiers)
     {
@@ -1145,7 +1205,7 @@ public class GraphMutationService
                 graph.nodes.Add(new GraphNode
                 {
                     id = modId, type = "modifier",
-                    data = new GraphNodeData { modifierType = mod.Type, @params = mod.Params }
+                    data = new GraphNodeData { modifierType = mod.Type, @params = mod.Params, collapsed = true }
                 });
                 graph.edges.Add(new GraphEdge
                 {
@@ -1184,6 +1244,7 @@ public class GraphMutationService
                         field = sourceField,
                         label = info?.DisplayName ?? sourceField,
                         valueType = info?.Type ?? "string",
+                        collapsed = true,
                     }
                 };
             }
@@ -1203,6 +1264,7 @@ public class GraphMutationService
                         attributeId = attributeId,
                         label = attr?.name ?? $"Attribute #{attributeId}",
                         valueType = AttrValueType(attr?.type),
+                        collapsed = true,
                     }
                 };
             }
@@ -1222,6 +1284,7 @@ public class GraphMutationService
                         attributeId = attributeId,
                         label = attr?.name ?? $"Attribute #{attributeId}",
                         valueType = AttrValueType(attr?.type),
+                        collapsed = true,
                     }
                 };
             }
@@ -1234,10 +1297,11 @@ public class GraphMutationService
                     {
                         label = "Product group name",
                         valueType = "string",
+                        collapsed = true,
                     }
                 };
             default:
-                return new GraphNode { id = nodeId, type = "static", data = new GraphNodeData { staticValue = "" } };
+                return new GraphNode { id = nodeId, type = "static", data = new GraphNodeData { staticValue = "", collapsed = true } };
         }
     }
 
