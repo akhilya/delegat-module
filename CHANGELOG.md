@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
 - Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If the sidecar is on (`SANDBOX_URL` on the API process), it says yes instead of claiming there is no helper.
 - Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.
 - Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
