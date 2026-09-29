@@ -340,6 +340,13 @@ public class ProductSyncService
             var pinnedExternalId = realExternalId;
             var previousLinkExternalId = existingLink?.externalProductId;
 
+            if (realExternalId == null
+                && string.Equals(adapter.Key, "wildberries", StringComparison.OrdinalIgnoreCase))
+            {
+                await Log("info",
+                    "Wildberries confirms a new card asynchronously. This export stays running until the article is in the catalog or the draft error list names it (up to 30 minutes).");
+            }
+
             var result = await adapter.ExportProductAsync(
                 connection,
                 exportDataNonNull,

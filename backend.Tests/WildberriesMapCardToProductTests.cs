@@ -115,4 +115,33 @@ public class WildberriesMapCardToProductTests
         Assert.Equal("2026-09-28T20:00:00Z", requests[0].Cursor!.UpdatedAt);
         Assert.True(requests[1].Order!.Ascending);
     }
+
+    [Fact]
+    public void CardCreateWait_KeepsGoingUntilCatalogOrDraftError()
+    {
+        var max = WildberriesPlugin.CardCreateMaxWait;
+        Assert.Equal(TimeSpan.FromMinutes(30), max);
+        Assert.Equal(
+            WildberriesPlugin.CardCreateConfirmation.Created,
+            WildberriesPlugin.ClassifyCardCreateWait(true, true, TimeSpan.FromSeconds(20), max));
+        Assert.Equal(
+            WildberriesPlugin.CardCreateConfirmation.DraftError,
+            WildberriesPlugin.ClassifyCardCreateWait(false, true, TimeSpan.FromMinutes(5), max));
+        Assert.Equal(
+            WildberriesPlugin.CardCreateConfirmation.KeepWaiting,
+            WildberriesPlugin.ClassifyCardCreateWait(false, false, TimeSpan.FromMinutes(29), max));
+        Assert.Equal(
+            WildberriesPlugin.CardCreateConfirmation.TimedOut,
+            WildberriesPlugin.ClassifyCardCreateWait(false, false, max, max));
+
+        var unresolved = WildberriesPlugin.CardCreateUnresolvedMessage(max);
+        Assert.Contains("did not return a reason", unresolved, StringComparison.Ordinal);
+        Assert.DoesNotContain("may still be processing", unresolved, StringComparison.OrdinalIgnoreCase);
+
+        var errors = new Dictionary<string, List<string>>
+        {
+            ["_FI43"] = ["Недопустимое значение ТНВЭД"],
+        };
+        Assert.Equal("Недопустимое значение ТНВЭД", WildberriesPlugin.VendorErrorText(errors, "_fi43"));
+    }
 }
