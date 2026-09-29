@@ -11,13 +11,16 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Wildberries export of a new card stays running until the article appears in the catalog or the draft error list names it (up to 30 minutes). It no longer fails after half a minute with “created but not found” while the marketplace has not yet said why.
 - Wildberries export sends directory values such as TN VED and VAT as text. A numeric code sent as a number was accepted by the upload call and the card never appeared. Draft errors are read from the current error list instead of an empty page.
 - Wildberries export sends packaging weight only as kilograms in the card dimensions. The characteristic «Вес товара с упаковкой» is no longer sent: the marketplace rejects it.
 - Mapping blocks the assistant adds use the characteristic name and start collapsed. Two fields for the same fact, such as Brand and the brand characteristic, share one value. TN VED and VAT are chosen from that field’s directory when the goods match an entry.
 - Mapping price block hides discounted price (`discountedPrice`, `sale_price`) while the store’s extended price settings are off. Opening the canvas no longer puts that row back. The cabinet assistant reads personal settings (`GET /api/ai/store-settings`: store description, style, brevity, emoji), converts units when a local characteristic is millimeters or grams and the shop field is centimeters or kilograms, and asks for brand, material, occasion, and TN VED instead of leaving them empty or inventing a code.
 - Cabinet assistant treats «finish the mapping» and «link these parameter groups» as wiring marketplace fields to local characteristics. Shop collection titles stay a separate step. It reads the open canvas once before that plan, and a cancelled plan is not described as done.
 - Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
-- Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If the sidecar is on (`SANDBOX_URL` on the API process), it says yes instead of claiming there is no helper.
+- Cabinet assistant uses the calculation helper for catalog logic: comparisons, grouping, finding products by a rule, and working out a bulk change. A single count or one named card stays a normal catalog read. A change the person already spelled out still asks for confirmation first; a change that must be calculated may run a read-only check and then ask. Applying the change still waits for confirmation.
+- Cabinet calculation sidecar runs only while AI is enabled. Turning `AI_ENABLED` off and redeploying stops the process; turning it on starts it. The API does not need a sandbox URL or a DNS alias: while AI is on it uses the container name `d-{stack}-sandbox` from `STACK_ID`, `inst_{stack}`, or `mysql-{stack}` / `minio-{stack}`. With AI off, the helper is omitted even if a URL is still set. A failed run is “temporarily unreachable”, not “this cabinet has no helper”.
+- Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If AI is on, it says yes instead of claiming there is no helper.
 - Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.
 - Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
 - Cabinet file downloads no longer fail with HTTP 500 `Error while copying content to a stream` when MinIO closes the GET early or response compression wraps the proxy stream.
@@ -29,6 +32,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Cabinet assistant keeps a short system prompt on ordinary turns. Mapping rules, a catalog-wide price change, and the page-address list are added only when that page is open or the message is about them.
+- Products page search is wider, so a product name or SKU fits in the field. Other pages keep the shorter nav search.
 - `/api/ai`, `/api/agent`, and `/api/mcp` are exempt from the SPA rate-limit bucket. Authenticated catalog traffic allows 2400 requests per minute per user (was 1200).
 - Docker Compose pulls MinIO from `quay.io/minio` (`minio` and `mc`). Docker Hub no longer serves those images (`pull access denied`).
 - Sidebar Orders and Integrations list connections by connection name, not adapter display name.

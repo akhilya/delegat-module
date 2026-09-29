@@ -29,7 +29,7 @@ Permission `ai.use` is required (or `workspace.view` for read-only). Resource gr
 | `search_catalog` | Live products (name / SKU / barcode) and file display names in **this** store |
 | `search_actions` | Lexical search over cabinet HTTP the assistant may call (MVC routes + body notes). Use instead of memorizing paths or `GET /tools` |
 | `sql_readonly` | `SELECT` on allowlisted projections; host forces `storeId`. Comparisons, `NOT IN`, subquery against `product_images` or `files`, `DISTINCT`, `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` |
-| `run_python` | Sandbox job (`SANDBOX_URL`); pandas / pillow / openpyxl |
+| `run_python` | Sandbox job while AI is on; pandas / pillow / openpyxl |
 | `platform_request` | `method + path + json` against the same cabinet controllers as the SPA (denylist for secrets and irreversible actions) |
 | `match_files` | Optional: map filenames to products (SKU / barcode / name stem) |
 | `propose_plan` | UI confirmation before writes |
@@ -49,7 +49,7 @@ Host parser (`AgentSqlGuard`): `SELECT` / `WITH` only, no `SELECT *`, allowliste
 
 ## Python sandbox
 
-Sidecar `sandbox/python`. Isolated process, non-root. Compose cgroup: **0.50 CPU**, **512 MiB RAM**, no extra swap (`SANDBOX_CPUS` / `SANDBOX_MEM_LIMIT`). One job at a time (`sandbox_busy` if busy). Jobs are single-threaded for BLAS (`SANDBOX_CPU_THREADS=1`), 384 MiB address-space cap, 30s wall timeout, `/tmp` workspace. Network intended for Agent HTTP only. If `SANDBOX_URL` is unset, `run_python` is omitted from the tool catalog (a direct call still returns `sandbox_not_configured`). Audit table `aiSandboxRuns`. The Compose service is profile **`ai`**: it starts only when AI is on (`pnpm dev` reads `AI_ENABLED`; self-host `docker compose --profile ai`). Local host port `8091`, `SANDBOX_AGENT_BASE_URL=http://host.docker.internal:5000`. The API posts buffered JSON with `Content-Length`; the sidecar also accepts chunked bodies.
+Sidecar `sandbox/python`. Isolated process, non-root. Compose cgroup: **0.50 CPU**, **512 MiB RAM**, no extra swap (`SANDBOX_CPUS` / `SANDBOX_MEM_LIMIT`). One job at a time (`sandbox_busy` if busy). Jobs are single-threaded for BLAS (`SANDBOX_CPU_THREADS=1`), 384 MiB address-space cap, 30s wall timeout, `/tmp` workspace. Network intended for Agent HTTP only. `run_python` is listed only while AI is on, and only when `SANDBOX_URL` is set (local) or `STACK_ID` / `INSTANCE_ID` / `mysql-{stack}` can form the container name `http://d-{stack}-sandbox:8080`. Alias DNS is not used. AI off omits the tool even if a URL is set. A direct call with no candidates returns `sandbox_not_configured`. Audit table `aiSandboxRuns`. On a Control Plane instance the sidecar process starts only while `AI_ENABLED` is true (container command; a redeploy applies an env edit). Local compose uses profile **`ai`** (`pnpm dev` reads `AI_ENABLED`; self-host `docker compose --profile ai`). Local host port `8091`, `SANDBOX_AGENT_BASE_URL=http://host.docker.internal:5000`. The API posts buffered JSON with `Content-Length`; the sidecar also accepts chunked bodies.
 
 ## Auth (MCP / Agent HTTP)
 

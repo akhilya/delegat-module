@@ -15,8 +15,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
 
+[Collection("sandbox-env")]
 public class AgentToolHostTests
 {
+    static readonly SemaphoreSlim SandboxEnv = new(1, 1);
+
     [Fact]
     public async Task DispatchAsync_McpPrefixedTool_UsesGateway()
     {
@@ -349,7 +352,13 @@ public class AgentToolHostTests
         lock (typeof(PythonSandboxClient))
         {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevStack = Environment.GetEnvironmentVariable("STACK_ID");
+        var prevInstance = Environment.GetEnvironmentVariable("INSTANCE_ID");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+        Environment.SetEnvironmentVariable("STACK_ID", null);
+        Environment.SetEnvironmentVariable("INSTANCE_ID", null);
+        Environment.SetEnvironmentVariable("AI_ENABLED", "false");
         try
         {
             Assert.DoesNotContain(AgentToolCatalog.Build(), t => t.name == "run_python");
@@ -359,6 +368,9 @@ public class AgentToolHostTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("STACK_ID", prevStack);
+            Environment.SetEnvironmentVariable("INSTANCE_ID", prevInstance);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
         }
     }
@@ -369,7 +381,9 @@ public class AgentToolHostTests
         lock (typeof(PythonSandboxClient))
         {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         Environment.SetEnvironmentVariable("SANDBOX_URL", "http://127.0.0.1:8091");
+        Environment.SetEnvironmentVariable("AI_ENABLED", "true");
         try
         {
             Assert.Contains(AgentToolCatalog.Build(), t => t.name == "run_python");
@@ -380,6 +394,7 @@ public class AgentToolHostTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
         }
     }
@@ -388,9 +403,15 @@ public class AgentToolHostTests
     public async Task RunPython_WithoutSandboxUrl_ReturnsNotConfigured()
     {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevStack = Environment.GetEnvironmentVariable("STACK_ID");
+        var prevInstance = Environment.GetEnvironmentVariable("INSTANCE_ID");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         lock (typeof(PythonSandboxClient))
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+            Environment.SetEnvironmentVariable("STACK_ID", null);
+            Environment.SetEnvironmentVariable("INSTANCE_ID", null);
+            Environment.SetEnvironmentVariable("AI_ENABLED", "false");
         }
         try
         {
@@ -403,6 +424,9 @@ public class AgentToolHostTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("STACK_ID", prevStack);
+            Environment.SetEnvironmentVariable("INSTANCE_ID", prevInstance);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
     }
 
@@ -417,8 +441,11 @@ public class AgentToolHostTests
     [Fact]
     public async Task RunPython_PostsJsonWithContentLength()
     {
+        await SandboxEnv.WaitAsync();
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         Environment.SetEnvironmentVariable("SANDBOX_URL", "http://sandbox.test");
+        Environment.SetEnvironmentVariable("AI_ENABLED", "true");
         var handler = new CaptureHandler();
         try
         {
@@ -436,6 +463,8 @@ public class AgentToolHostTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
+            SandboxEnv.Release();
         }
     }
 

@@ -129,7 +129,8 @@ public class AiChatService
                 AiPrompts.ConnectedMcpFromAiTools(extraMcp),
                 catalogProductLimit,
                 catalogProductsUsed,
-                storeInfo?.extendedPriceParameters ?? false);
+                storeInfo?.extendedPriceParameters ?? false,
+                turnText: TurnText(userMessages));
 
             var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))
@@ -322,6 +323,35 @@ public class AiChatService
 
             yield return Sse(SseEventType.Done, new { modelName = model.modelId });
         }
+    }
+
+    private static string? TurnText(List<ChatMessage> messages)
+    {
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            if (!string.Equals(messages[i].role, "user", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var content = messages[i].content;
+            if (content.ValueKind == JsonValueKind.String)
+                return content.GetString();
+            if (content.ValueKind == JsonValueKind.Array)
+            {
+                var text = new StringBuilder();
+                foreach (var block in content.EnumerateArray())
+                {
+                    if (block.ValueKind == JsonValueKind.Object
+                        && block.TryGetProperty("text", out var part)
+                        && part.ValueKind == JsonValueKind.String)
+                        text.Append(part.GetString());
+                }
+                if (text.Length > 0)
+                    return text.ToString();
+            }
+            if (content.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+                continue;
+            return content.ToString();
+        }
+        return null;
     }
 
     public async Task<string> ExplainErrorAsync(string errorMessage, string context,

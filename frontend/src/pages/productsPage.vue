@@ -991,6 +991,7 @@ export default {
           <TooltipTrigger as-child>
             <NavSearchField
               v-model="searchQuery"
+              class="lg:!w-[min(32rem,42vw)]"
               :placeholder="$t('common.search')"
               @submit="fetchProducts"
             >

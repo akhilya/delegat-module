@@ -4,6 +4,7 @@ using Delegat.Services.Ai.Prompts;
 
 namespace Delegat.Tests;
 
+[Collection("sandbox-env")]
 public class AiPromptsChatTests
 {
     private static string Prompt(
@@ -13,10 +14,12 @@ public class AiPromptsChatTests
         int? catalogSlotsRemaining = null,
         int? catalogProductLimit = null,
         int? catalogProductsUsed = null,
-        IReadOnlyList<AiPrompts.ConnectedMcpTool>? connectedMcpTools = null) =>
+        IReadOnlyList<AiPrompts.ConnectedMcpTool>? connectedMcpTools = null,
+        string? turnText = null) =>
         AiPrompts.ChatSystem("Store", 1, 0, [], "user", false, page, settings, locale: locale,
             catalogSlotsRemaining: catalogSlotsRemaining, connectedMcpTools: connectedMcpTools,
-            catalogProductLimit: catalogProductLimit, catalogProductsUsed: catalogProductsUsed);
+            catalogProductLimit: catalogProductLimit, catalogProductsUsed: catalogProductsUsed,
+            turnText: turnText);
 
     [Fact]
     public void ChatSystem_IsStoreAssistantNotApiClient()
@@ -86,7 +89,7 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatSystem_MappingCanvas_WiresGroupTitlesWithoutRenamingGroups()
     {
-        var prompt = Prompt();
+        var prompt = Prompt(page: new AiPageContext { Page = "fieldMapping", MappingId = 9, ConnectionId = 3 });
         Assert.Contains("POST …/graph/group-titles", prompt, StringComparison.Ordinal);
         Assert.Contains("__group__", prompt, StringComparison.Ordinal);
         Assert.Contains("valueMap", prompt, StringComparison.Ordinal);
@@ -113,6 +116,25 @@ public class AiPromptsChatTests
         Assert.DoesNotContain("Do not GET the graph", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan first", prompt, StringComparison.Ordinal);
         Assert.Contains("as the only tool that turn", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_DefaultTurn_OmitsPlaybooks()
+    {
+        var prompt = Prompt(turnText: "what is the price of SKU-1");
+        Assert.DoesNotContain("weightBrutto", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("priceDelta", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("/tools/catalog-connect", prompt, StringComparison.Ordinal);
+        Assert.Contains("as the only tool that turn", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_TurnText_IncludesTheMatchingPlaybook()
+    {
+        var mapping = Prompt(turnText: "свяжи параметры на холсте");
+        Assert.Contains("weightBrutto", mapping, StringComparison.Ordinal);
+        var routes = Prompt(turnText: "открой страницу карточки");
+        Assert.Contains("/tools/catalog-connect", routes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,7 +190,7 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatSystem_MarketplaceProductImport_IsAWriteTheAssistantRuns()
     {
-        var prompt = Prompt();
+        var prompt = Prompt(turnText: "raise every catalog price by 500");
         Assert.Contains("search_actions", prompt, StringComparison.Ordinal);
         Assert.Contains("Do not GET /tools", prompt, StringComparison.Ordinal);
         Assert.Contains("HTTP 200 with status pending", prompt, StringComparison.OrdinalIgnoreCase);
@@ -247,12 +269,17 @@ public class AiPromptsChatTests
         lock (typeof(PythonSandboxClient))
         {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         Environment.SetEnvironmentVariable("SANDBOX_URL", "http://127.0.0.1:8091");
+        Environment.SetEnvironmentVariable("AI_ENABLED", "true");
         try
         {
             var prompt = Prompt();
             Assert.Contains("say yes in store language", prompt, StringComparison.Ordinal);
+            Assert.Contains("finding products by a rule", prompt, StringComparison.Ordinal);
+            Assert.Contains("one read-only run_python", prompt, StringComparison.Ordinal);
             Assert.Contains("sql_readonly is not a substitute", prompt, StringComparison.Ordinal);
+            Assert.Contains("temporarily unreachable", prompt, StringComparison.Ordinal);
             Assert.Contains("calculation helper: on", prompt, StringComparison.Ordinal);
             Assert.Contains("is the helper on?", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("NOT available", prompt, StringComparison.Ordinal);
@@ -260,6 +287,7 @@ public class AiPromptsChatTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
         }
     }
@@ -270,7 +298,13 @@ public class AiPromptsChatTests
         lock (typeof(PythonSandboxClient))
         {
         var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevStack = Environment.GetEnvironmentVariable("STACK_ID");
+        var prevInstance = Environment.GetEnvironmentVariable("INSTANCE_ID");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
         Environment.SetEnvironmentVariable("SANDBOX_URL", null);
+        Environment.SetEnvironmentVariable("STACK_ID", null);
+        Environment.SetEnvironmentVariable("INSTANCE_ID", null);
+        Environment.SetEnvironmentVariable("AI_ENABLED", "false");
         try
         {
             var prompt = Prompt();
@@ -283,6 +317,9 @@ public class AiPromptsChatTests
         finally
         {
             Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("STACK_ID", prevStack);
+            Environment.SetEnvironmentVariable("INSTANCE_ID", prevInstance);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
         }
     }

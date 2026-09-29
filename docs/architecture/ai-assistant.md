@@ -36,9 +36,9 @@ User MCP (cabinet as client): Settings → AI lists HTTP MCP servers (`aiMcpServ
 
 ## Tools (closed set)
 
-`propose_plan`, `search_knowledge`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (when `SANDBOX_URL` is set), `platform_request`, `match_files`, `navigate_to`, `ask_form`, plus tools from Settings → AI MCP servers (`mcp{id}_{name}`).
+`propose_plan`, `search_knowledge`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only while AI is on, via `SANDBOX_URL` or container name `d-{stack}-sandbox`), `platform_request`, `match_files`, `navigate_to`, `ask_form`, plus tools from Settings → AI MCP servers (`mcp{id}_{name}`).
 
-Do not generate one MCP tool per OpenAPI path, and do not grow `ChatSystem` with a paragraph per cabinet write. `search_actions` indexes allowed MVC routes (plus a small alias list for operator language and request bodies). `platform_request` invokes those controllers; deny secrets in `PlatformRequestPolicy`.
+Do not generate one MCP tool per OpenAPI path, and do not grow `ChatSystem` with a paragraph per cabinet write. Mapping instructions, a catalog-wide price change, and the page-address list are appended only when the open page or the latest user message is about that topic. `search_actions` indexes allowed MVC routes (plus a small alias list for operator language and request bodies). `platform_request` invokes those controllers; deny secrets in `PlatformRequestPolicy`.
 
 Cabinet execution UI (`AiChatPanel`) is Apple inset chrome: thinking and tools stay a **one-line disclosure** (current step while running; “N steps” when done). Expand it for thoughts, compact tool rows, and Python. SQL rows show the query (truncated on the line, full text when the step is open) plus the result table. `navigate_to` results are **buttons on the reply** (open a cabinet path **or** send a follow-up, not both). `ask_form` is a form on the reply (connection keys never enter the thread; clarifying questions are a short Questionnaire). History rows match Mail (title, count, trailing date). Replies strip emoji so Settings → Emoji: Don't use is visible. The companion sheet fades as it slides; the latest turn and chat/history switch ease in at `--duration-ui` (no message stagger). Do not stack every tool above a concatenated blob of thoughts.
 

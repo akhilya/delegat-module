@@ -141,12 +141,12 @@ describe("toolbar search", () => {
     );
   });
 
-  it("keeps catalog search at 16rem on lg so breadcrumbs keep room", () => {
+  it("keeps the shared nav search at 16rem and widens only the products field", () => {
     assert.match(search, /w-full min-w-0/);
     assert.match(nav, /nav-search\]\]:w-64/);
     assert.doesNotMatch(search, /lg:w-64/);
     assert.doesNotMatch(products, /sm:w-72/);
-    assert.doesNotMatch(products, /lg:w-\[min\(32rem/);
+    assert.match(products, /lg:!w-\[min\(32rem,42vw\)\]/);
   });
 
   it("does not paint a 3px ring on the field", () => {

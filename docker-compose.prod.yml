@@ -38,7 +38,8 @@ services:
       - PLATFORM_HEARTBEAT_MINUTES=${PLATFORM_HEARTBEAT_MINUTES:-5}
       - AI_ENABLED=${AI_ENABLED:-}
       - API_USAGE_ENABLED=${API_USAGE_ENABLED:-}
-      - SANDBOX_URL=${SANDBOX_URL:-http://sandbox:8080}
+      # Hardcoded service DNS — empty SANDBOX_URL= in .env must not wipe this.
+      - SANDBOX_URL=http://sandbox:8080
       - SANDBOX_SECRET=${SANDBOX_SECRET:-}
       - SANDBOX_AGENT_BASE_URL=${SANDBOX_AGENT_BASE_URL:-http://delegat-api:5000}
       - BRAND_NAME=${BRAND_NAME:-}
