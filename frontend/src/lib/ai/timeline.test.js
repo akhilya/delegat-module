@@ -22,13 +22,13 @@ describe("ai timeline", () => {
     assert.equal(timeline[2].text, "Category id=5 is a match.");
   });
 
-  it("treats streaming text before any tool as process, then as the reply when done", () => {
+  it("shows the answer while it is still streaming", () => {
     const streaming = executionView(
       [{ type: "text", text: "Checking the catalog." }],
       { done: false },
     );
-    assert.equal(streaming.process.length, 1);
-    assert.equal(streaming.reply, "");
+    assert.equal(streaming.process.length, 0);
+    assert.equal(streaming.reply, "Checking the catalog.");
     assert.deepEqual(streaming.actions, []);
 
     const finished = executionView(

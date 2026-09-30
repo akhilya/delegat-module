@@ -83,7 +83,7 @@ export function collectChatForms(timeline) {
  */
 export function executionView(timeline, opts = {}) {
   const items = Array.isArray(timeline) ? timeline : [];
-  const done = opts.done === true;
+  void opts;
   const actions = collectChatActions(items);
   const forms = collectChatForms(items);
   if (!items.length) return { process: [], reply: "", actions, forms };
@@ -97,7 +97,6 @@ export function executionView(timeline, opts = {}) {
   }
 
   if (lastToolIdx < 0) {
-    if (!done) return { process: items, reply: "", actions, forms };
     return { process: [], reply: joinText(items), actions, forms };
   }
 

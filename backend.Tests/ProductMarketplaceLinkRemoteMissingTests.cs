@@ -216,6 +216,76 @@ public class ProductMarketplaceLinkRemoteMissingTests
     }
 
     [Fact]
+    public async Task VerifyLinks_CatalogPageFault_LooksUpLinksTheListMissed()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var alive = data.AddProduct(store.Id, "Alive");
+        var later = data.AddProduct(store.Id, "Later");
+        var dead = data.AddProduct(store.Id, "Dead");
+        data.AddProductLink(connection.Id, alive.Id, "alive-1", ProductMarketplaceStatus.Synced);
+        data.AddProductLink(connection.Id, later.Id, "later-1", ProductMarketplaceStatus.Synced);
+        data.AddProductLink(connection.Id, dead.Id, "dead-1", ProductMarketplaceStatus.Synced);
+        await data.SaveAsync();
+
+        var adapter = new FakeImportAdapter(
+            foundIds: ["later-1"],
+            catalogPages: [["alive-1"], ["later-1"]],
+            failListCall: 2,
+            failListMessage: "Yandex Market API error: InternalServerError: {\"errors\":[{\"code\":\"INTERNAL_ERROR\"}]}");
+        var service = new ProductSyncService(
+            db,
+            new FakeAdapterRegistry(adapter),
+            null!,
+            null!,
+            NullLogger<ProductSyncService>.Instance,
+            null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
+
+        var result = await service.VerifyLinksAsync(connection.Id);
+
+        Assert.Equal(2, adapter.ListCalls);
+        Assert.Equal(1, adapter.BatchCalls);
+        Assert.Equal(3, result.Checked);
+        Assert.Equal(2, result.Confirmed);
+        Assert.Equal(1, result.Broken);
+
+        var links = await db.productMarketplaceLinks.ToDictionaryAsync(l => l.externalProductId);
+        Assert.Equal(ProductMarketplaceStatus.Synced, links["alive-1"].status);
+        Assert.Equal(ProductMarketplaceStatus.Synced, links["later-1"].status);
+        Assert.Equal(ProductMarketplaceStatus.RemoteMissing, links["dead-1"].status);
+    }
+
+    [Fact]
+    public async Task VerifyLinks_CatalogBadRequest_DoesNotGuessFromAPartialList()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var alive = data.AddProduct(store.Id, "Alive");
+        data.AddProductLink(connection.Id, alive.Id, "alive-1", ProductMarketplaceStatus.Synced);
+        await data.SaveAsync();
+
+        var adapter = new FakeImportAdapter(
+            foundIds: ["alive-1"],
+            catalogPages: [["alive-1"]],
+            failListCall: 1,
+            failListMessage: "Yandex Market API error: BadRequest: {\"status\":\"ERROR\"}");
+        var service = new ProductSyncService(
+            db,
+            new FakeAdapterRegistry(adapter),
+            null!,
+            null!,
+            NullLogger<ProductSyncService>.Instance,
+            null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.VerifyLinksAsync(connection.Id));
+        Assert.Equal(0, adapter.BatchCalls);
+    }
+
+    [Fact]
     public async Task VerifyLinks_SingleLink_DoesNotListTheCatalog()
     {
         var (db, data) = Create();
@@ -258,14 +328,20 @@ public class ProductMarketplaceLinkRemoteMissingTests
 
         public FakeImportAdapter(
             IReadOnlyCollection<string> foundIds,
-            IReadOnlyList<string[]>? catalogPages = null)
+            IReadOnlyList<string[]>? catalogPages = null,
+            int failListCall = 0,
+            string? failListMessage = null)
         {
             _found = new HashSet<string>(foundIds, StringComparer.OrdinalIgnoreCase);
             _pages = catalogPages;
+            FailListCall = failListCall;
+            FailListMessage = failListMessage;
         }
 
         public int BatchCalls { get; private set; }
         public int ListCalls { get; private set; }
+        public int FailListCall { get; }
+        public string? FailListMessage { get; }
 
         public string Key => "fake";
         public string DisplayName => "Fake";
@@ -317,6 +393,8 @@ public class ProductMarketplaceLinkRemoteMissingTests
         public Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(MarketplaceConnection connection, int pageSize = 100, string? cursor = null, string? offerIdFilter = null, CancellationToken ct = default)
         {
             ListCalls++;
+            if (FailListCall > 0 && ListCalls == FailListCall)
+                throw new InvalidOperationException(FailListMessage ?? "InternalServerError");
             if (_pages == null)
                 throw new NotImplementedException();
 

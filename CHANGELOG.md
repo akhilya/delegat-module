@@ -11,8 +11,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
-- Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation.
-- Wildberries price export leaves a card alone when that price and discount are already set. A card priced per size is updated on those sizes instead of failing the whole export.
+- Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation. A Yandex Market page that returns an internal error no longer fails the whole check: that page is retried in smaller pieces, and any saved links still missing are looked up directly.
+- The navbar Help button stays beside product search instead of covering it. The search narrows when the bar is tight.
+- Cabinet assistant answers stay in the message. Tool steps stay on their own collapsed line, and the reply is not folded into that line.
+- Markdown tables in docs and the assistant use the same flush rows, caption header, and row hover as cabinet tables.
+- Wildberries price export reads the current card with a single-article lookup and treats a matching buyer price as already exported.
 - Cabinet assistant runs a DeepSeek tool call instead of printing its markup in the reply.
 - Wildberries card description is sent as plain text. Line breaks, quotes, and emoji no longer appear as `<br>` and `&#…;` on the marketplace.
 - Wildberries export no longer fails while confirming a new card when the size id (`chrtID`) is larger than a 32-bit integer. Stock updates use the same wider id.

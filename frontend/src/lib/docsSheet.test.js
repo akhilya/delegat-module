@@ -50,10 +50,14 @@ describe("shared markdown prose", () => {
     assert.match(prose, /text-decoration: underline/);
   });
 
-  it("gives tables and body copy room to breathe", () => {
+  it("draws markdown tables like the cabinet data table", () => {
     assert.match(prose, /line-height: 1\.7/);
-    assert.match(prose, /padding: 0\.75rem 1rem/);
-    assert.match(prose, /border-collapse: separate/);
+    assert.match(prose, /border-collapse: collapse/);
+    assert.match(prose, /height: 2\.5rem/);
+    assert.match(prose, /padding: 0\.5rem/);
+    assert.match(prose, /font-size: 0\.75rem/);
+    assert.doesNotMatch(prose, /border-top-left-radius/);
+    assert.doesNotMatch(prose, /border-collapse: separate/);
   });
 
   it("restores list markers against Tailwind preflight", () => {

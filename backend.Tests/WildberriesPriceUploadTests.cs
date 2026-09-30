@@ -17,6 +17,22 @@ public class WildberriesPriceUploadTests
     }
 
     [Fact]
+    public void DiscountedBuyerPrice_WithSameDiscount_IsUnchanged()
+    {
+        var goods = new WbGoodsItem
+        {
+            NmId = 42,
+            Discount = 0,
+            Sizes = [new WbGoodsSize { SizeId = 1, Price = 0, DiscountedPrice = 1000 }],
+        };
+        var desired = new WbPriceItem { NmId = 42, Price = 1000, Discount = 0 };
+
+        var action = Assert.Single(WbPriceUploadPlanner.Plan([desired], new Dictionary<long, WbGoodsItem> { [42] = goods }));
+
+        Assert.Equal(WbPriceActionKind.Unchanged, action.Kind);
+    }
+
+    [Fact]
     public void DifferentPrice_UploadsNm()
     {
         var goods = Goods(price: 1500, discount: 0);

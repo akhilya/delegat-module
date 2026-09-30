@@ -2226,10 +2226,28 @@ public class ProductSyncService
 
         // A whole connection is one catalog list compared with the saved external ids.
         // A single link stays a direct lookup so one row does not download the shop.
-        var foundIds = !linkId.HasValue &&
-                       adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts)
-            ? await ListRemoteExternalIdsAsync(adapter, connection, ct)
-            : await LookupExternalIdsAsync(adapter, connection, checkable, ct);
+        HashSet<string> foundIds;
+        if (!linkId.HasValue &&
+            adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts))
+        {
+            var listed = await ListRemoteExternalIdsAsync(adapter, connection, ct);
+            foundIds = listed.Ids;
+            if (!listed.Complete)
+            {
+                var remaining = checkable
+                    .Where(l => !foundIds.Contains(l.externalProductId))
+                    .ToList();
+                if (remaining.Count > 0)
+                {
+                    foreach (var id in await LookupExternalIdsAsync(adapter, connection, remaining, ct))
+                        foundIds.Add(id);
+                }
+            }
+        }
+        else
+        {
+            foundIds = await LookupExternalIdsAsync(adapter, connection, checkable, ct);
+        }
 
         var confirmed = 0;
         var broken = 0;
@@ -2289,7 +2307,7 @@ public class ProductSyncService
     /// One pass over the remote catalog. An incomplete list must fail the check:
     /// a missing page would mark live links as gone.
     /// </summary>
-    private async Task<HashSet<string>> ListRemoteExternalIdsAsync(
+    private async Task<(HashSet<string> Ids, bool Complete)> ListRemoteExternalIdsAsync(
         IMarketplaceAdapter adapter,
         MarketplaceConnection connection,
         CancellationToken ct)
@@ -2302,7 +2320,22 @@ public class ProductSyncService
         while (true)
         {
             ct.ThrowIfCancellationRequested();
-            var page = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, null, ct);
+            PagedResult<ExternalProduct> page;
+            try
+            {
+                page = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, null, ct);
+            }
+            catch (Exception ex) when (IsCatalogListingFault(ex))
+            {
+                // A later page can 500 (Yandex Market does this on one page token)
+                // after earlier pages succeeded. Keep those ids and check the
+                // saved links that were not in them with a direct lookup.
+                _logger.LogWarning(
+                    ex,
+                    "Connection {ConnectionId} catalog listing stopped early after {RemoteCount} ids",
+                    connection.Id, foundIds.Count);
+                return (foundIds, false);
+            }
             foreach (var product in page.Items)
             {
                 if (!string.IsNullOrWhiteSpace(product.ExternalId))
@@ -2330,7 +2363,23 @@ public class ProductSyncService
             "Connection {ConnectionId} link check compared {RemoteCount} remote product ids",
             connection.Id, foundIds.Count);
 
-        return foundIds;
+        return (foundIds, true);
+    }
+
+    private static bool IsCatalogListingFault(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            var message = current.Message ?? "";
+            if (message.Contains("InternalServerError", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("INTERNAL_ERROR", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("BadGateway", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("ServiceUnavailable", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("GatewayTimeout", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private async Task MarkLinksRemoteMissingByExternalIdAsync(

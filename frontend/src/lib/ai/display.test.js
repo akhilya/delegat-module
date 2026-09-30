@@ -131,7 +131,11 @@ describe("AiChatPanel chrome", () => {
     assert.match(panel, /<MarkdownProse/);
     assert.match(panel, /density="compact"/);
     assert.doesNotMatch(panel, /class="ai-message/);
-    assert.match(process, /density="muted"/);
+    const template = process.slice(process.indexOf("<template>"));
+    assert.match(template, /density="compact"/);
+    assert.doesNotMatch(template, /density="muted"/);
+    assert.doesNotMatch(template, /CollapsibleContent[\s\S]*MarkdownProse/);
+    assert.match(template, /MarkdownProse[\s\S]*<Collapsible/);
     assert.doesNotMatch(process, /ai-message-think/);
     const actions = readFileSync(
       new URL("../../components/ai/AiChatActions.vue", import.meta.url),

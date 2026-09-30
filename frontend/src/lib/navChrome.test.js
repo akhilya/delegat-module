@@ -105,9 +105,9 @@ describe("navbar center", () => {
   it("keeps tabs and search on the viewport midline when breadcrumbs sit on the left", () => {
     assert.match(
       nav,
-      /lg:grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/,
+      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,min\(32rem,42vw\)\)_max-content\]/,
     );
-    assert.match(nav, /justify-self-center|justify-center/);
+    assert.match(nav, /justify-self-end|justify-center/);
   });
 
   it("stacks search and tabs under the title row below lg", () => {
@@ -143,10 +143,12 @@ describe("toolbar search", () => {
 
   it("keeps the shared nav search at 16rem and widens only the products field", () => {
     assert.match(search, /w-full min-w-0/);
-    assert.match(nav, /nav-search\]\]:w-64/);
+    assert.match(nav, /nav-search\]\]:max-w-64/);
+    assert.match(nav, /nav-search\]\]:min-w-0/);
     assert.doesNotMatch(search, /lg:w-64/);
     assert.doesNotMatch(products, /sm:w-72/);
-    assert.match(products, /lg:!w-\[min\(32rem,42vw\)\]/);
+    assert.match(products, /lg:!max-w-none/);
+    assert.doesNotMatch(products, /lg:!w-\[min\(32rem,42vw\)\]/);
   });
 
   it("does not paint a 3px ring on the field", () => {

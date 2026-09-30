@@ -88,7 +88,7 @@ export default {
         <div
           :class="
             hasCenter
-              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
+              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(0,min(32rem,42vw))_max-content] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
               : 'flex h-[var(--app-navbar-row)] items-center gap-2'
           "
         >
@@ -109,10 +109,10 @@ export default {
 
           <div
             v-if="hasCenter"
-            class="col-span-2 row-start-2 flex min-w-0 w-full items-center pb-2.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:w-auto lg:max-w-full lg:justify-self-center lg:pb-0"
+            class="col-span-2 row-start-2 flex min-w-0 w-full items-center pb-2.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:w-full lg:min-w-0 lg:max-w-full lg:justify-self-stretch lg:pb-0"
           >
             <div
-              class="flex min-w-0 w-full items-center justify-start overflow-x-auto lg:w-auto lg:justify-center lg:[&_[data-slot=nav-search]]:w-64"
+              class="flex min-w-0 w-full items-center justify-start lg:justify-center lg:[&_[data-slot=nav-search]]:w-full lg:[&_[data-slot=nav-search]]:min-w-0 lg:[&_[data-slot=nav-search]]:max-w-64"
             >
               <slot name="center" />
             </div>
@@ -121,7 +121,7 @@ export default {
           <div
             :class="
               hasCenter
-                ? 'col-start-2 row-start-1 flex h-[var(--app-navbar-row)] shrink-0 items-center justify-end gap-0.5 lg:col-start-3'
+                ? 'col-start-2 row-start-1 flex h-[var(--app-navbar-row)] shrink-0 items-center justify-end gap-0.5 lg:col-start-3 lg:justify-self-end'
                 : 'ml-auto flex shrink-0 items-center gap-0.5'
             "
           >

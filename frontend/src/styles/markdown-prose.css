@@ -150,45 +150,49 @@
 
 .markdown-prose table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 1.5rem 0 2rem;
+  border-collapse: collapse;
+  margin: 1rem 0;
   font-size: 0.875rem;
-  line-height: 1.55;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
-}
-
-.markdown-prose th,
-.markdown-prose td {
-  padding: 0.75rem 1rem;
+  caption-side: bottom;
   text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
 }
 
-.markdown-prose th {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--muted-foreground);
-  background: var(--muted);
+.markdown-prose thead tr {
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
 }
 
-.markdown-prose th:first-child,
-.markdown-prose td:first-child {
-  padding-left: 1rem;
+.markdown-prose tbody tr {
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  transition: background-color var(--duration-ui) var(--ease-out-quart);
 }
 
-.markdown-prose tr:last-child td {
+.markdown-prose tbody tr:last-child {
   border-bottom: 0;
 }
 
-.markdown-prose thead th:first-child {
-  border-top-left-radius: 0.5rem;
+.markdown-prose tbody tr:hover {
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
 }
 
-.markdown-prose thead th:last-child {
-  border-top-right-radius: 0.5rem;
+.markdown-prose th {
+  height: 2.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--muted-foreground);
+  background: transparent;
+  white-space: nowrap;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.markdown-prose td {
+  padding: 0.5rem;
+  vertical-align: middle;
+  text-align: left;
 }
 
 /* Assistant: same tokens, tighter rhythm. */
@@ -244,11 +248,6 @@
 .markdown-prose--compact pre {
   padding: 0.75rem 1rem;
   border-radius: 0.75rem;
-}
-
-.markdown-prose--compact th,
-.markdown-prose--compact td {
-  padding: 0.35em 0.5em;
 }
 
 .markdown-prose--compact hr {
