@@ -193,6 +193,8 @@ public class GraphEvaluatorModifierTests
         new("truncate", "abcdef", null, "string", "abc", P(("maxLength", 3))),
         new("split", "a-b-c", null, "string", "b", P(("delimiter", "-"), ("index", 1))),
         new("replace", "hello", null, "string", "hallo", P(("search", "e"), ("replacement", "a"))),
+        new("regexReplace", "aa-11", null, "string", "aa-xx", P(("pattern", @"\d+"), ("replacement", "xx"))),
+        new("regexExtract", "aa-11", null, "string", "11", P(("pattern", @"(\d+)"), ("group", 1))),
         new("append", "ab", null, "string", "ab!", P(("suffix", "!"))),
         new("prepend", "ab", null, "string", "!ab", P(("prefix", "!"))),
         new("uppercase", "Ab", null, "string", "AB", P()),

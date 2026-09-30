@@ -1679,6 +1679,15 @@
         "productFilesByExtensionHint": "Подаёт массив ссылок на все файлы товара с этим расширением.",
         "sourceLabel": "Источник",
         "sourceChangeHint": "Чтобы изменить источник, добавьте другой узел из меню (ПКМ/Tab) и переподключите.",
+        "dictionaryKey": "Ключ",
+        "dictionaryValue": "Значение",
+        "dictionarySideHint": "Ключ — код словаря. Значение — название из этого словаря.",
+        "dictionarySourceLabel": "Источник",
+        "chooseDictionarySource": "Поле магазина",
+        "dictionarySourceHint": "Сначала выберите поле. Источник потом не меняется — для другого поля создайте новый блок.",
+        "dictionarySourceLocked": "Источник выбран",
+        "dictionarySourceLockedHint": "Источник зафиксирован. Другое поле — новый блок «Стандартное значение».",
+        "noDictionary": "У этого поля нет словаря.",
         "importableLabel": "Импортируемый",
         "importableHint": "Снятие флажка - только экспорт: при импорте с маркетплейса значение не записывается в этот источник.",
         "valueLabel": "Значение",
@@ -1830,6 +1839,18 @@
         "name": "Заменить",
         "search": "Искать",
         "replacement": "Заменить на"
+      },
+      "regexReplace": {
+        "name": "Regex: заменить",
+        "pattern": "Шаблон",
+        "replacement": "Замена",
+        "ignoreCase": "Без учёта регистра"
+      },
+      "regexExtract": {
+        "name": "Regex: найти",
+        "pattern": "Шаблон",
+        "group": "Группа",
+        "ignoreCase": "Без учёта регистра"
       },
       "append": {
         "name": "Добавить в конец",

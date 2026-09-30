@@ -1679,6 +1679,15 @@
         "productFilesByExtensionHint": "Outputs an array of links to all product files with this extension.",
         "sourceLabel": "Source",
         "sourceChangeHint": "To change the source, add another node from the menu (right-click/Tab) and reconnect it.",
+        "dictionaryKey": "Key",
+        "dictionaryValue": "Value",
+        "dictionarySideHint": "Key is the dictionary code. Value is the name from that dictionary.",
+        "dictionarySourceLabel": "Source",
+        "chooseDictionarySource": "Shop field",
+        "dictionarySourceHint": "Choose the field first. The source cannot be changed afterwards — create a new block for another field.",
+        "dictionarySourceLocked": "Source chosen",
+        "dictionarySourceLockedHint": "The source is fixed. Another field needs a new standard-value block.",
+        "noDictionary": "This field has no dictionary.",
         "importableLabel": "Importable",
         "importableHint": "Unchecking this makes it export-only: importing from the marketplace won't write the value back to this source.",
         "valueLabel": "Value",
@@ -1830,6 +1839,18 @@
         "name": "Replace",
         "search": "Search",
         "replacement": "Replace with"
+      },
+      "regexReplace": {
+        "name": "Regex: replace",
+        "pattern": "Pattern",
+        "replacement": "Replacement",
+        "ignoreCase": "Ignore case"
+      },
+      "regexExtract": {
+        "name": "Regex: find",
+        "pattern": "Pattern",
+        "group": "Group",
+        "ignoreCase": "Ignore case"
       },
       "append": {
         "name": "Append",

@@ -247,7 +247,12 @@ public class FieldMappingController : ControllerBase
                 key = sa.key,
                 name = sa.name,
                 type = sa.type.ToString(),
-                isRequired = sa.isRequired
+                isRequired = sa.isRequired,
+                options = sa.type is AttributeType.Select or AttributeType.MultiSelect
+                    ? Delegat.Services.Marketplace.Mapping.OptionAlignmentHelper.ParseAttributeOptions(sa.options)
+                        .Select(o => new { value = o.Value, label = o.Label })
+                        .ToList()
+                    : null
             })
         });
     }

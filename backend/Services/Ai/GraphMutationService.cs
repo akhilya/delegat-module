@@ -940,6 +940,8 @@ public class GraphMutationService
             label = string.Join(", ", labels),
             isAdapterValue = true,
             valueType = isMulti ? "array" : "string",
+            optionSourceKey = fieldDef.Key,
+            optionSourceLabel = fieldDef.Name,
             options = fieldDef.Options.Select(o => new GraphNodeOption { value = o.Value, label = o.Label }).ToList(),
         };
     }

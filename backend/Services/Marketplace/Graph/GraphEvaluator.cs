@@ -75,15 +75,21 @@ public static class GraphEvaluator
                     case "attribute":
                     {
                         var id = data.attributeId ?? 0;
+                        var options = ctx.ResolveCategoryAttributeOptions(id);
                         var val = ApplySourceType(ctx.ResolveCategoryAttribute(id), data.valueType);
-                        pins[nodeId] = new PinValue(val, ctx.ResolveCategoryAttributeOptions(id));
+                        if (data.emitLabel == true)
+                            val = EmitDictionaryLabel(val, options);
+                        pins[nodeId] = new PinValue(val, options);
                         break;
                     }
                     case "storeAttribute":
                     {
                         var id = data.attributeId ?? 0;
+                        var options = ctx.ResolveStoreAttributeOptions(id);
                         var val = ApplySourceType(ctx.ResolveStoreAttribute(id), data.valueType);
-                        pins[nodeId] = new PinValue(val, ctx.ResolveStoreAttributeOptions(id));
+                        if (data.emitLabel == true)
+                            val = EmitDictionaryLabel(val, options);
+                        pins[nodeId] = new PinValue(val, options);
                         break;
                     }
                     case "productField":
@@ -600,6 +606,39 @@ public static class GraphEvaluator
         }
         // Nodes left in a cycle are intentionally dropped (their outputs evaluate to null).
         return order;
+    }
+
+    /// <summary>
+    /// Maps a stored dictionary key (or a list of keys) to the option label.
+    /// A key with no label, or a value that is already unmatched, is left as stored.
+    /// </summary>
+    public static object? EmitDictionaryLabel(object? value, IReadOnlyList<SourceOption>? options)
+    {
+        if (value == null || options == null || options.Count == 0)
+            return value;
+
+        string Label(string stored)
+        {
+            foreach (var option in options)
+            {
+                if (string.Equals(option.value, stored, StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrEmpty(option.label))
+                    return option.label;
+            }
+            return stored;
+        }
+
+        if (value is string text && !text.TrimStart().StartsWith('['))
+            return Label(text);
+
+        var list = ModifierHelpers.TryParseList(value);
+        if (list != null)
+            return list.Select(Label).ToList();
+
+        if (value is string plain)
+            return Label(plain);
+
+        return value;
     }
 
     private static object? ApplySourceType(object? value, string? valueType)

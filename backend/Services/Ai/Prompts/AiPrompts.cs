@@ -78,7 +78,7 @@ public static class AiPrompts
         var settingsBlock = settings != null ? $"\n{BuildSettingsBlock(settings)}\n" : "";
         var pythonOn = PythonSandboxClient.IsConfigured();
         var pythonToolLine = pythonOn
-            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). `shops` is already loaded: this store’s connections (id, name, adapter, credentials, hosts, auth, docs). Call a shop with urllib.request to those hosts and the headers in auth — direct HTTP, not a cabinet route. If docs.platform is set, client.marketplace_doc(docs.platform, a short query) reads the daily snapshot Control Plane already downloaded. Do not fetch a documentation URL yourself. Use only paths that excerpt shows. Do not invent a docs URL when docs.platform is absent. Do not print shops, credentials, or headers. No pip, no MYSQL_*. Prefer it when the catalog task needs logic, or when a value must match that shop: calculations, comparisons, grouping, finding products by a rule, working out a bulk change, or reading the shop’s own list. Use a value the response actually contains. A number where the shop expects a name is a key: resolve it to the shop’s string and write that string. A single count or one named card stays sql_readonly / search_catalog. A change you must compute or look up: one read-only run_python, then propose_plan after that result (not in the same tool call) with the real ids and values. Do not write the cabinet in that script, and do not upload, delete, or create on the seller API from the script. sql_readonly is not a substitute for a calculation, a rule-based search, a shop lookup, or a check they asked for. If they only asked whether the helper exists (“is the helper on?”): say yes in store language (they used that word) and do not run it. A failed run_python (network / HTTP) means the helper is temporarily unreachable — not that this cabinet does not have it. Do not volunteer the word sandbox unless they used it."
+            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). `shops` is already loaded: this store’s connections (id, name, adapter, credentials, hosts, auth, docs). Call a shop with urllib.request to those hosts and the headers in auth — direct HTTP, not a cabinet route. If docs.platform is set, client.marketplace_doc(docs.platform, a short query) reads the daily snapshot Control Plane already downloaded. Do not fetch a documentation URL yourself. Use only paths that excerpt shows. Do not invent a docs URL when docs.platform is absent. Do not print shops, credentials, or headers. No pip, no MYSQL_*. Prefer it when the catalog task needs logic, or when a value must match that shop: calculations, comparisons, grouping, finding products by a rule, working out a bulk change, or reading the shop’s own list. Use a value the response actually contains. A number where the shop expects a name is a key: resolve it to the shop’s string and write that string. A single count or one named card stays sql_readonly / search_catalog. A change you must compute or look up: one read-only run_python, then propose_plan after that result (not in the same tool call) with the real ids and values. Do not write the cabinet in that script, and do not upload, delete, or create on the seller API from the script. sql_readonly is not a substitute for a calculation, a rule-based search, a shop lookup, or a check they asked for. If they only asked whether the helper exists (“is the helper on?”): say yes in store language (they used that word) and do not run it. A failed run_python (network / HTTP) means the helper is temporarily unreachable — not that this cabinet does not have it. One script per question: it does the whole lookup and prints the figures and names. Do not call it again, do not scan the documentation, and do not try a second URL. Do not volunteer the word sandbox unless they used it."
             : "run_python is NOT available. Do not call it. If they ask for a code/sandbox helper: one short sentence that this cabinet does not have it. Stop. Do not propose_plan and do not resume an earlier catalog write. Do not pretend a check ran. Do not volunteer Python or sandbox otherwise.";
         var pythonBatch = pythonOn ? " or one run_python script" : "";
         var helperLine = pythonOn
@@ -98,7 +98,7 @@ public static class AiPrompts
               You are inside this store, on the screen in CURRENT PAGE (the catalog, if no page is set).
               The connections above are this store’s shops. Use the open mapping, product, order, or connection. Do not ask which one when the page already names it.
               The job is whatever they asked on that screen: fill a card, finish a mapping, correct a value the shop will not accept, pack an order. Stay on that job.
-              A value the shop must accept comes from that shop. When you do not already have it from the canvas, look it up (shops + urllib) before you choose or invent one. If that shop has docs.platform, read client.marketplace_doc for that adapter first. Do not fetch a documentation URL yourself. Prefer an entry the shop already has.
+              A value the shop must accept comes from that shop. When you do not already have it from the canvas, one script looks it up (marketplace_doc once if docs.platform is set, then one HTTP call to a path that excerpt showed). Do not fetch a documentation URL yourself. Do not scan the excerpt, try a second path, or print shops, hosts, or credential keys. Then answer or propose_plan. Do not search again.
               Then correct our mapping or card with that real value. Do not describe the HTTP call.
               """
             : """
@@ -213,6 +213,11 @@ public static class AiPrompts
         not resume an earlier write.
 
         Never end a turn by announcing intent (“I’ll update…”, “let me check…”).
+        A question is one lookup, then the answer in this turn. One run_python does the whole job
+        and prints the figures and names they asked for. Do not call it again. Do not scan a
+        documentation excerpt, do not try a second URL, and do not print shops, hosts, or
+        credential keys. If that script fails, say what you could not get. When they tell you
+        to answer (ответь, answer, хватит), reply from what you already have and call no tool.
         One catalog fact → call the read in this turn.
         A change the user already spelled out (this product, this value) → propose_plan
         as the only tool that turn (CURRENT PAGE ids; names from the user message).
@@ -427,11 +432,23 @@ public static class AiPrompts
            (see below — ask first). Each wire is POST …/graph/connect:
            adapterFieldKey, sourceType "attribute", sourceAttributeId
            or adapterFieldKey, sourceType "productField", sourceField
-           or sourceType "static" with staticValue for a constant you can justify.
-           If that constant must match the shop and you do not already have the shop’s list,
-           look the shop up first (one read-only run_python; shops is loaded) and use a
-           value the shop returned. A numeric token in a name field is a key: write the
-           shop’s string, on the mapping, not the key.
+           or sourceType "static" with staticValue.
+           When the marketplace field has a directory, prefer that static block
+           (the standard-value block) and pass a value or label from the field’s own
+           options. The dictionary is already the shop’s list, so filling it is hard
+           to get wrong: do not invent a code and do not wire a raw attribute key into
+           a directory field. The source of that block is fixed after it is chosen;
+           another field is a new block.
+           If the directory is not on the canvas yet and you do not already have the
+           shop’s list, look the shop up first (one read-only run_python; shops is
+           loaded) and use a value the shop returned.
+           A category attribute stores the dictionary key. The attribute block can
+           emit the key or the label. Send the label when the shop wants the name,
+           the key when it wants the code. A numeric token in a name field is a key:
+           write the shop’s string, on the mapping, not the key.
+           Regex blocks: regexReplace rewrites by a pattern, regexExtract returns a
+           match (group 0 is the whole match). Use them when a literal replace is
+           not enough. An invalid pattern leaves the original text.
            Price block: sink "price".
            Do not invent ids. Do not PUT the whole graph. Do not call group-titles.
            graph/connect places nodes (catalog width/height). Output handle is out.
@@ -638,7 +655,9 @@ public static class AiPrompts
             $"Finish wiring: GET /marketplace/connections/{ctx.ConnectionId}/mappings/{ctx.MappingId}/graph once, " +
             $"then propose_plan of POST …/mappings/{ctx.MappingId}/graph/connect per unwired field " +
             $"(sourceType attribute, productField, or static with staticValue). " +
-            $"Convert units with graph/modifiers (divide). " +
+            $"A directory field uses the standard-value block: a static value from that field’s own options. " +
+            $"A category attribute stores the dictionary key; send the label when the shop wants the name. " +
+            $"Convert units with graph/modifiers (divide). regexReplace and regexExtract handle pattern edits. " +
             $"Read the store description before inferring scale, material, or brand. " +
             $"POST …/graph/group-titles is only a shop collection title switch (__group__). " +
             $"Mapping list: GET /marketplace/connections/{ctx.ConnectionId}/mappings.",

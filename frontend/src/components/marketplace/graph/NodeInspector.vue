@@ -182,6 +182,33 @@ function adapterFieldTooltip(f) {
 // Adapter sink: per-field source binding lives here (in settings), not as dropdowns inside the block.
 const adapterFields = computed(() => data.value.fields || []);
 const adapterAvail = computed(() => data.value.availableSources || {});
+
+const dictionaryAttribute = computed(() => {
+  const sources = props.availableSources || {};
+  const sameId = (a, b) => a != null && b != null && String(a) === String(b);
+  if (type.value === "attribute")
+    return sources.categoryAttributes?.find((x) => sameId(x.id, data.value.attributeId));
+  if (type.value === "storeAttribute")
+    return sources.storeAttributes?.find((x) => sameId(x.id, data.value.attributeId));
+  return null;
+});
+
+const hasDictionaryKey = computed(() =>
+  (dictionaryAttribute.value?.options || []).some(
+    (o) => o?.value != null && o?.label && String(o.value) !== String(o.label),
+  ),
+);
+
+const adapterValueLocked = computed(() => {
+  if (data.value.optionSourceKey) return true;
+  return Array.isArray(data.value.options) && data.value.options.length > 0;
+});
+
+const adapterValueSourceName = computed(() => {
+  if (data.value.optionSourceLabel) return data.value.optionSourceLabel;
+  const hit = props.adapterFieldsWithOptions.find((f) => f.fieldKey === data.value.optionSourceKey);
+  return hit?.label || "";
+});
 const adapterPreview = computed(() => data.value.preview || {});
 const adapterFieldFilter = ref("");
 const bindingDialogOpen = ref(false);
@@ -347,6 +374,7 @@ function onAdapterValuePick(val) {
 }
 
 function onAdapterFieldPick(fieldKey) {
+  if (adapterValueLocked.value) return;
   const f = props.adapterFieldsWithOptions.find((f) => f.fieldKey === fieldKey);
   if (f)
     emit("update", {
@@ -354,6 +382,8 @@ function onAdapterFieldPick(fieldKey) {
       valueType: f.valueType,
       staticValue: "",
       label: "",
+      optionSourceKey: f.fieldKey,
+      optionSourceLabel: f.label,
     });
 }
 
@@ -538,6 +568,23 @@ function resolvePreview(fieldKey, raw) {
             {{ t("marketplace.graph.inspector.sourceChangeHint") }}
           </p>
         </div>
+        <div v-if="hasDictionaryKey" class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs" :class="data.emitLabel === true ? 'text-muted-foreground' : 'font-medium'">
+              {{ t("marketplace.graph.inspector.dictionaryKey") }}
+            </span>
+            <Switch
+              :model-value="data.emitLabel === true"
+              @update:model-value="setData({ emitLabel: $event })"
+            />
+            <span class="text-xs" :class="data.emitLabel === true ? 'font-medium' : 'text-muted-foreground'">
+              {{ t("marketplace.graph.inspector.dictionaryValue") }}
+            </span>
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            {{ t("marketplace.graph.inspector.dictionarySideHint") }}
+          </p>
+        </div>
         <div v-if="hasImportableToggle" class="space-y-1.5">
           <div class="flex items-center gap-2">
             <Switch
@@ -559,10 +606,35 @@ function resolvePreview(fieldKey, raw) {
 
       <!-- "standard value" - static node with predefined options from adapter field -->
       <template v-else-if="type === 'static' && data.isAdapterValue">
-        <div class="space-y-1.5">
+        <div v-if="!adapterValueLocked" class="space-y-1.5">
+          <Label>{{ t("marketplace.graph.inspector.dictionarySourceLabel") }}</Label>
+          <Select @update:model-value="onAdapterFieldPick($event)">
+            <SelectTrigger class="h-9 text-xs">
+              <SelectValue :placeholder="t('marketplace.graph.inspector.chooseDictionarySource')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="f in adapterFieldsWithOptions"
+                :key="f.fieldKey"
+                :value="f.fieldKey"
+              >{{ f.label }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-[11px] text-muted-foreground">
+            {{ t("marketplace.graph.inspector.dictionarySourceHint") }}
+          </p>
+        </div>
+        <div v-else class="space-y-1.5">
+          <Label>{{ t("marketplace.graph.inspector.dictionarySourceLabel") }}</Label>
+          <div class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
+            {{ adapterValueSourceName || t("marketplace.graph.inspector.dictionarySourceLocked") }}
+          </div>
+          <p class="text-[11px] text-muted-foreground">
+            {{ t("marketplace.graph.inspector.dictionarySourceLockedHint") }}
+          </p>
+
           <Label>{{ t("marketplace.graph.inspector.valueLabel") }}</Label>
 
-          <!-- Options available: single select -->
           <template v-if="data.options?.length && data.valueType !== 'array'">
             <SearchableSelect
               :options="data.options"
@@ -572,7 +644,6 @@ function resolvePreview(fieldKey, raw) {
             />
           </template>
 
-          <!-- Options available: multi-select (array type) - checkbox list -->
           <template v-else-if="data.options?.length && data.valueType === 'array'">
             <div class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5">
               <label
@@ -589,33 +660,9 @@ function resolvePreview(fieldKey, raw) {
             </div>
           </template>
 
-          <!-- No options from adapter: free-text fallback (user types the ID manually) -->
-          <template v-else>
-            <Input
-              :model-value="data.staticValue"
-              :placeholder="t('marketplace.graph.inspector.enterValuePlaceholder')"
-              @update:model-value="setData({ staticValue: $event, label: $event })"
-            />
-            <p class="text-[11px] text-muted-foreground">
-              {{ t("marketplace.graph.inspector.adapterValueAutoloadHint") }}
-            </p>
-          </template>
-
-          <!-- Manual field picker: load options from a known field -->
-          <template v-if="adapterFieldsWithOptions.length">
-            <Select :model-value="NONE" @update:model-value="onAdapterFieldPick($event)">
-              <SelectTrigger class="h-7 text-xs">
-                <SelectValue :placeholder="t('marketplace.graph.inspector.loadOptionsFromFieldPlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="f in adapterFieldsWithOptions"
-                  :key="f.fieldKey"
-                  :value="f.fieldKey"
-                >{{ f.label }}</SelectItem>
-              </SelectContent>
-            </Select>
-          </template>
+          <p v-else class="text-[11px] text-muted-foreground">
+            {{ t("marketplace.graph.inspector.noDictionary") }}
+          </p>
         </div>
       </template>
 

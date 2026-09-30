@@ -106,6 +106,69 @@ public class TrimModifier : IFieldModifier
     }
 }
 
+/// <summary>
+/// Rewrites text with a regular expression. An empty or invalid pattern, or a match that
+/// runs too long, leaves the original string so a half-typed pattern does not wipe an export.
+/// </summary>
+public class RegexReplaceModifier : IFieldModifier
+{
+    public string Type => "regexReplace";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var pattern = GetString(parameters, "pattern", "");
+        if (string.IsNullOrEmpty(pattern)) return str;
+        var replacement = GetString(parameters, "replacement", "") ?? "";
+        return ApplyRegex(str, pattern, GetBool(parameters, "ignoreCase", false), regex => regex.Replace(str, replacement));
+    }
+
+    internal static string ApplyRegex(string str, string pattern, bool ignoreCase, Func<Regex, string> apply)
+    {
+        try
+        {
+            var options = ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None;
+            var regex = new Regex(pattern, options, TimeSpan.FromMilliseconds(200));
+            return apply(regex);
+        }
+        catch (ArgumentException)
+        {
+            return str;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return str;
+        }
+    }
+}
+
+/// <summary>
+/// Returns one match. Group 0 is the whole match; a higher group returns that capture.
+/// No match, an empty pattern, or an invalid pattern yields an empty string (no match)
+/// or the original string (bad pattern), so the export keeps going.
+/// </summary>
+public class RegexExtractModifier : IFieldModifier
+{
+    public string Type => "regexExtract";
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+    {
+        var str = value?.ToString();
+        if (str == null) return null;
+        var pattern = GetString(parameters, "pattern", "");
+        if (string.IsNullOrEmpty(pattern)) return str;
+        var group = GetInt(parameters, "group", 0);
+        return RegexReplaceModifier.ApplyRegex(str, pattern, GetBool(parameters, "ignoreCase", false), regex =>
+        {
+            var match = regex.Match(str);
+            if (!match.Success) return "";
+            if (group < 0 || group >= match.Groups.Count) return "";
+            return match.Groups[group].Value;
+        });
+    }
+}
+
 // ===== Number Modifiers =====
 
 public class MultiplyModifier : IFieldModifier
@@ -753,6 +816,22 @@ internal static class ModifierHelpers
                 return je.ValueKind == JsonValueKind.String ? je.GetString() : je.ToString();
             return val?.ToString();
         }
+        return defaultValue;
+    }
+
+    public static bool GetBool(Dictionary<string, object> parameters, string key, bool defaultValue)
+    {
+        if (!parameters.TryGetValue(key, out var val) || val == null)
+            return defaultValue;
+        if (val is bool b) return b;
+        if (val is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.True) return true;
+            if (je.ValueKind == JsonValueKind.False) return false;
+            if (je.ValueKind == JsonValueKind.String && bool.TryParse(je.GetString(), out var parsed))
+                return parsed;
+        }
+        if (bool.TryParse(val.ToString(), out var p)) return p;
         return defaultValue;
     }
 

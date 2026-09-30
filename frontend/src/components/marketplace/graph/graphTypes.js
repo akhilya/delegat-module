@@ -21,6 +21,8 @@ export const MODIFIER_CATEGORIES = {
   truncate: "text",
   split: "text",
   replace: "text",
+  regexReplace: "text",
+  regexExtract: "text",
   append: "text",
   prepend: "text",
   uppercase: "text",

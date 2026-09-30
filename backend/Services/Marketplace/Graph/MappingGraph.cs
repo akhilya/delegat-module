@@ -65,6 +65,10 @@ public class GraphNodeData
     public bool? isAdapterValue { get; set; }
     /// <summary>Predefined options for "isAdapterValue" static nodes (copied from the adapter field).</summary>
     public List<GraphNodeOption>? options { get; set; }
+    /// <summary>Shop field that supplied <see cref="options"/>. Fixed after the block is created.</summary>
+    public string? optionSourceKey { get; set; }
+    /// <summary>Display name of <see cref="optionSourceKey"/>.</summary>
+    public string? optionSourceLabel { get; set; }
     /// <summary>Store shared-storage file id for "storeFileUrl" / "storeFileContent" sources.</summary>
     public int? storeFileId { get; set; }
     /// <summary>Product file name for "productFileByName" / "productFileContentByName" sources.</summary>
@@ -82,6 +86,11 @@ public class GraphNodeData
     /// (import from marketplace skips this source). Null or true = importable when the chain allows.
     /// </summary>
     public bool? importable { get; set; }
+    /// <summary>
+    /// Attribute / store-attribute sources that store a dictionary key. True emits the option
+    /// label (the name). Null or false keeps the stored key.
+    /// </summary>
+    public bool? emitLabel { get; set; }
 
     // Modifier node
     /// <summary>Modifier type id (e.g. "multiply", "toText", "forceType").</summary>

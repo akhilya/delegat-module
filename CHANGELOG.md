@@ -33,6 +33,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- A cabinet question runs one calculation script, then the assistant answers. It does not keep searching the shop or the documentation. A message that only says to answer (“ответь”) replies from what is already known.
+- Mapping canvas adds Regex replace and Regex find. A standard-value block asks for the shop field first, then a dictionary entry, and that source stays fixed. A category or store attribute that stores a dictionary key can send the key or the name. On a directory field the assistant prefers that standard-value block.
 - On a field mapping, the cabinet assistant sees how many exports of that category succeeded or failed since the canvas was last saved, and the text the adapter returned on the failures. Results from before that save are not treated as open problems.
 - Cabinet assistant can call a connected shop’s own API from the calculation helper, using that connection’s key, and correct a filled value from what the shop returns. It stays on the open screen (mapping, product, order) and does not invent a directory entry. Seller documentation is downloaded once a day by Control Plane (Wildberries items and FBS orders, Ozon Seller, Yandex Market). The assistant reads that copy through the platform link and does not fetch the seller’s documentation URL itself.
 - Cabinet assistant keeps a short system prompt on ordinary turns. Mapping rules, a catalog-wide price change, and the page-address list are added only when that page is open or the message is about them.

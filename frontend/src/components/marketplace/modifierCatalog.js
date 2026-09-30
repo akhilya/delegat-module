@@ -38,7 +38,7 @@ export const MODIFIER_CATALOG = {
   replace: {
     type: "replace",
     get displayName() { return t("marketplace.modifiers.replace.name"); },
-    aliases: ["replace", "substitute", "regex", "regexp", "swap"],
+    aliases: ["replace", "substitute", "swap"],
     category: "text",
     reversible: false,
     applicableTypes: ["string", "text"],
@@ -47,6 +47,34 @@ export const MODIFIER_CATALOG = {
       { key: "replacement", get label() { return t("marketplace.modifiers.replace.replacement"); }, type: "text", required: false, default: "" },
     ],
     summary: (p) => `"${p.search || ""}" → "${p.replacement || ""}"`,
+  },
+  regexReplace: {
+    type: "regexReplace",
+    get displayName() { return t("marketplace.modifiers.regexReplace.name"); },
+    aliases: ["regex", "regexp", "regular expression", "pattern replace"],
+    category: "text",
+    reversible: false,
+    applicableTypes: ["string", "text"],
+    params: [
+      { key: "pattern", get label() { return t("marketplace.modifiers.regexReplace.pattern"); }, type: "text", required: true, default: "" },
+      { key: "replacement", get label() { return t("marketplace.modifiers.regexReplace.replacement"); }, type: "text", required: false, default: "" },
+      { key: "ignoreCase", get label() { return t("marketplace.modifiers.regexReplace.ignoreCase"); }, type: "checkbox", required: false, default: false },
+    ],
+    summary: (p) => `/${p.pattern || ""}/ → "${p.replacement || ""}"`,
+  },
+  regexExtract: {
+    type: "regexExtract",
+    get displayName() { return t("marketplace.modifiers.regexExtract.name"); },
+    aliases: ["regex find", "regex search", "extract", "match", "capture"],
+    category: "text",
+    reversible: false,
+    applicableTypes: ["string", "text"],
+    params: [
+      { key: "pattern", get label() { return t("marketplace.modifiers.regexExtract.pattern"); }, type: "text", required: true, default: "" },
+      { key: "group", get label() { return t("marketplace.modifiers.regexExtract.group"); }, type: "number", required: false, default: 0 },
+      { key: "ignoreCase", get label() { return t("marketplace.modifiers.regexExtract.ignoreCase"); }, type: "checkbox", required: false, default: false },
+    ],
+    summary: (p) => `/${p.pattern || ""}/ [${p.group ?? 0}]`,
   },
   append: {
     type: "append",

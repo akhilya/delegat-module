@@ -278,6 +278,8 @@ public class AiPromptsChatTests
             Assert.Contains("say yes in store language", prompt, StringComparison.Ordinal);
             Assert.Contains("finding products by a rule", prompt, StringComparison.Ordinal);
             Assert.Contains("one read-only run_python", prompt, StringComparison.Ordinal);
+            Assert.Contains("A question is one lookup", prompt, StringComparison.Ordinal);
+            Assert.Contains("call no tool", prompt, StringComparison.Ordinal);
             Assert.Contains("WHERE YOU ARE", prompt, StringComparison.Ordinal);
             Assert.Contains("`shops` is already loaded", prompt, StringComparison.Ordinal);
             Assert.Contains("docs.platform", prompt, StringComparison.Ordinal);

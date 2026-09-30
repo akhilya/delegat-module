@@ -158,16 +158,30 @@ public class AiChatService
             var tools = AgentToolCatalog.Build();
             tools.AddRange(extraMcp);
             var autoContinued = false;
+            var answerNow = AgentChatTurnGate.AsksToAnswerNow(TurnText(userMessages));
+            var toolRounds = 0;
+            var pythonRuns = 0;
 
-            for (var iteration = 0; iteration < 10; iteration++)
+            // One extra pass with tools removed so a question always ends in an answer,
+            // even when the earlier passes were spent on tools.
+            for (var iteration = 0; iteration < AgentChatTurnGate.MaxToolRounds + 1; iteration++)
             {
+                var pass = AgentChatTurnGate.NextPass(answerNow, toolRounds, pythonRuns);
+                List<AiTool>? passTools = tools;
+                if (pass.SpeakOnly)
+                    passTools = null;
+                else if (pass.ProposePlanOnly)
+                    passTools = tools.Where(t => AgentChatTurnGate.IsProposePlan(t.name)).ToList();
+                if (passTools is { Count: 0 })
+                    passTools = null;
+
                 var request = new AiRequest
                 {
                     model = model.modelId,
                     max_tokens = model.maxTokens,
                     system = systemPrompt,
                     messages = messages,
-                    tools = tools,
+                    tools = passTools,
                     stream = true,
                     user = sessionId,
                 };
@@ -238,7 +252,7 @@ public class AiChatService
                 if (toolUses.Count == 0)
                 {
                     var finalText = textBuffer.ToString();
-                    if (!autoContinued && EndsWithUnfulfilledIntent(finalText))
+                    if (passTools != null && !autoContinued && EndsWithUnfulfilledIntent(finalText))
                     {
                         autoContinued = true;
                         messages.Add(new AiMessage { role = "assistant", content = finalText });
@@ -259,8 +273,12 @@ public class AiChatService
                     assistantContent.Add(new { type = "tool_use", id = tid, name = tname, input = ParseJsonOrEmpty(tinput) });
                 messages.Add(new AiMessage { role = "assistant", content = assistantContent });
 
+                if (passTools == null)
+                    break;
+
                 var toolResults = new List<object>();
                 var shouldBreak = false;
+                var blockedPython = false;
                 var waitForPlan = AgentChatTurnGate.BatchHasProposePlan(toolUses);
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
@@ -306,6 +324,22 @@ public class AiChatService
                         continue;
                     }
 
+                    if (AgentChatTurnGate.IsRunPython(toolName)
+                        && pythonRuns >= AgentChatTurnGate.MaxRunPythonPerTurn)
+                    {
+                        blockedPython = true;
+                        toolResults.Add(new
+                        {
+                            type = "tool_result",
+                            tool_use_id = toolId,
+                            content = AgentChatTurnGate.PythonBudgetSpent
+                        });
+                        continue;
+                    }
+
+                    if (AgentChatTurnGate.IsRunPython(toolName))
+                        pythonRuns++;
+
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
                     object result;
                     string summary;
@@ -327,6 +361,10 @@ public class AiChatService
 
                 messages.Add(new AiMessage { role = "user", content = toolResults });
                 if (shouldBreak) break;
+                if (blockedPython)
+                    toolRounds = AgentChatTurnGate.MaxToolRounds;
+                else
+                    toolRounds++;
             }
 
             yield return Sse(SseEventType.Done, new { modelName = model.modelId });

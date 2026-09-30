@@ -18,6 +18,8 @@ public static class ModifierPipeline
             new TruncateModifier(),
             new SplitModifier(),
             new ReplaceModifier(),
+            new RegexReplaceModifier(),
+            new RegexExtractModifier(),
             new AppendModifier(),
             new PrependModifier(),
             new UppercaseModifier(),
