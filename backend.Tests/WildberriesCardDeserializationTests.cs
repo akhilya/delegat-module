@@ -61,4 +61,29 @@ public class WildberriesCardDeserializationTests
         Assert.Equal(12L, response.Cards[2].NmId);
         Assert.Equal(3147483647L, response.Cursor!.NmId);
     }
+
+    [Fact]
+    public void CardsList_DeserializesChrtIdOutsideInt32()
+    {
+        const string json = """
+            {
+              "cards": [
+                {
+                  "nmID": 1,
+                  "vendorCode": "a",
+                  "sizes": [
+                    { "chrtID": 3147483647, "techSize": "0" },
+                    { "chrtID": "4200000000", "techSize": "1" }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var response = JsonSerializer.Deserialize<WbCardsListResponse>(json, Options);
+        var sizes = response!.Cards![0].Sizes!;
+
+        Assert.Equal(3147483647L, sizes[0].ChrtId);
+        Assert.Equal(4200000000L, sizes[1].ChrtId);
+    }
 }
