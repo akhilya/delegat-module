@@ -6,9 +6,24 @@
 const EMOJI_SEQUENCE =
   /\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu;
 
+const DSML_CALLS =
+  /<\s*[|｜]+\s*DSML\s*[|｜]+\s*(?:tool_|function_)?calls\b[^>]*>[\s\S]*?(?:<\/\s*[|｜]+\s*DSML\s*[|｜]+\s*(?:tool_|function_)?calls\s*>|$)/gi;
+
+const DSML_INVOKE =
+  /<\s*[|｜]+\s*DSML\s*[|｜]+\s*invoke\b[^>]*>[\s\S]*?(?:<\/\s*[|｜]+\s*DSML\s*[|｜]+\s*invoke\s*>|$)/gi;
+
+/** DeepSeek tool-call markup is a tool, not a reply. Hide it if a saved turn still contains it. */
+export function stripDsmlMarkup(text) {
+  const raw = text == null ? "" : String(text);
+  if (!raw.includes("DSML")) return raw;
+  const stripped = raw.replace(DSML_CALLS, "").replace(DSML_INVOKE, "");
+  if (stripped === raw) return raw;
+  return stripped.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function stripDisplayEmoji(text) {
   if (!text) return "";
-  return String(text)
+  return stripDsmlMarkup(text)
     .replace(EMOJI_SEQUENCE, "")
     .replace(/[\uFE0F\u200D]/g, "")
     .replace(/[ \t]{2,}/g, " ")

@@ -31,6 +31,7 @@ public class ProductSyncController : ControllerBase
     private readonly CategoryImportQueueService _categoryImportQueue;
     private readonly QuotaService _quotaService;
     private readonly EncryptionService? _encryptionService;
+    private readonly LinkVerifyQueue _linkVerifyQueue;
 
     public ProductSyncController(
         ICurrentUserService currentUserService,
@@ -44,6 +45,7 @@ public class ProductSyncController : ControllerBase
         IOperationLogger operationLogger,
         CategoryImportQueueService categoryImportQueue,
         QuotaService quotaService,
+        LinkVerifyQueue linkVerifyQueue,
         EncryptionService? encryptionService = null)
     {
         _currentUserService = currentUserService;
@@ -57,6 +59,7 @@ public class ProductSyncController : ControllerBase
         _operationLogger = operationLogger;
         _categoryImportQueue = categoryImportQueue;
         _quotaService = quotaService;
+        _linkVerifyQueue = linkVerifyQueue;
         _encryptionService = encryptionService;
     }
 
@@ -375,8 +378,7 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
-    /// Verify that marketplace links still point at existing remote products.
-    /// Missing remotes are marked as RemoteMissing.
+    /// Queue a background check that every link on the connection still points at a remote product.
     /// </summary>
     [HttpPost]
     [Route("/marketplace/connections/{connectionId}/links/verify")]
@@ -384,22 +386,49 @@ public class ProductSyncController : ControllerBase
     public async Task<IActionResult> VerifyConnectionLinks(int connectionId, CancellationToken ct)
     {
         var connection = await GetConnectionAsync(connectionId);
-        try
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        if (adapter == null || !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportProduct))
+            throw ApiException.BadRequest(
+                "Adapter does not support product import — cannot verify remote product existence");
+
+        var existing = _linkVerifyQueue.ActiveOperationId(connection.Id);
+        if (existing != null)
         {
-            var result = await _productSyncService.VerifyLinksAsync(connection.Id, linkId: null, ct);
+            return Ok(new { success = true, operationId = existing, alreadyRunning = true });
+        }
+
+        var operationId = Guid.NewGuid().ToString("N");
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var work = new LinkVerifyWork
+        {
+            OperationId = operationId,
+            ConnectionId = connection.Id,
+            StoreId = connection.storeId,
+            UserId = userId,
+            ConnectionName = connection.name,
+        };
+        await _operationLogger.StartAsync(
+            operationId,
+            connection.storeId,
+            userId,
+            LinkVerifyQueue.OperationType,
+            "Verify links",
+            connectionId: connection.Id,
+            connectionName: connection.name);
+
+        if (!_linkVerifyQueue.TryEnqueue(work))
+        {
+            await _operationLogger.FinishAsync(
+                operationId, connection.storeId, OperationLifecycle.Cancelled, "Already running");
             return Ok(new
             {
                 success = true,
-                checkedCount = result.Checked,
-                confirmed = result.Confirmed,
-                broken = result.Broken,
-                recovered = result.Recovered
+                operationId = _linkVerifyQueue.ActiveOperationId(connection.Id) ?? operationId,
+                alreadyRunning = true,
             });
         }
-        catch (InvalidOperationException ex)
-        {
-            throw ApiException.BadRequest(ex.Message);
-        }
+
+        return Ok(new { success = true, operationId, alreadyRunning = false });
     }
 
     /// <summary>

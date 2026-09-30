@@ -481,6 +481,15 @@ export default {
     connectionId() {
       return parseInt(this.$route.params.connId);
     },
+    linkCheckRunning() {
+      const id = this.connectionId;
+      return (this.$store.state.operations.operations || []).some(
+        (op) =>
+          op.type === "link-verify" &&
+          Number(op.connectionId) === id &&
+          (op.status === "running" || op.status === "paused"),
+      );
+    },
     canManageAdapters() {
       return canAct(getCachedMe(), PERMS.MarketplaceManage);
     },
@@ -1227,21 +1236,14 @@ export default {
     },
 
     async handleVerifyLinks() {
-      if (this.isVerifyingLinks || !this.connectionId) return;
+      if (this.isVerifyingLinks || this.linkCheckRunning || !this.connectionId) return;
       this.isVerifyingLinks = true;
       await this.verifyConnectionLinks({
         connectionId: this.connectionId,
-        onSuccess: (response) => {
-          const result = extractResponseData(response, {});
+        onSuccess: () => {
           displaySonnerSuccess(
-            this.$t("marketplace.connectionPage.notifications.linksVerified", {
-              total: result.checkedCount ?? 0,
-              ok: result.confirmed ?? 0,
-              broken: result.broken ?? 0,
-            }),
+            this.$t("marketplace.connectionPage.notifications.linksVerifyStarted"),
           );
-          this.fetchProducts(true);
-          this.fetchLocalProducts();
         },
         onError: (error) => {
           displaySonnerError(
@@ -3325,10 +3327,10 @@ export default {
                         {{ $t("marketplace.connectionPage.header.test") }}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        :disabled="isVerifyingLinks"
+                        :disabled="isVerifyingLinks || linkCheckRunning"
                         @click="handleVerifyLinks"
                       >
-                        <Spinner v-if="isVerifyingLinks" class="mr-2" />
+                        <Spinner v-if="isVerifyingLinks || linkCheckRunning" class="mr-2" />
                         <SearchCheck v-else class="size-4 mr-2" />
                         {{
                           $t("marketplace.connectionPage.header.verifyLinks")

@@ -962,7 +962,7 @@ export default {
     async verifyConnectionLinks(ctx, { connectionId, onSuccess, onError }) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/links/verify`,
-        { method: "POST", cache: false, timeout: 5 * 60 * 1000 },
+        { method: "POST", cache: false },
         http,
         { immediate: true, abortPrevious: true },
       )

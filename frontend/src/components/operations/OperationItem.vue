@@ -143,6 +143,8 @@ const typeIcon = computed(() => {
       return Cable;
     case "catalog-scrape":
       return Search;
+    case "link-verify":
+      return Search;
     case "category-import":
       return FolderTree;
     case "tool":

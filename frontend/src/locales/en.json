@@ -856,6 +856,7 @@
         "selectProductsToExport": "Select products to export",
         "selectMappingForAll": "Select a mapping for all products (remaining: {count})",
         "saveMappingSelectionsError": "Error saving mapping selections",
+        "linksVerifyStarted": "Link check started. Progress is in Operations.",
         "linksVerified": "Checked {total} links: {ok} ok, {broken} broken",
         "linksVerifyError": "Failed to verify links"
       },

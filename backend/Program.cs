@@ -338,6 +338,8 @@ builder.Services.AddScoped<IStoreDeletionService, StoreDeletionService>();
 builder.Services.AddScoped<PluginVersionSyncService>();
 
 // Background services
+builder.Services.AddSingleton<LinkVerifyQueue>();
+builder.Services.AddHostedService<LinkVerifyBackgroundService>();
 builder.Services.AddHostedService<ImageDownloadBackgroundService>();
 builder.Services.AddHostedService<ProductImportBackgroundService>();
 builder.Services.AddHostedService<CategoryImportBackgroundService>();
@@ -706,6 +708,18 @@ using (var scope = app.Services.CreateScope())
     var stuckCategoryImports = await db.pendingCategoryImports
         .Where(p => p.status == CategoryImportStatus.InProgress)
         .ExecuteUpdateAsync(s => s.SetProperty(p => p.status, CategoryImportStatus.Pending));
+
+    var interruptedLinkChecks = await db.operations
+        .Where(o => o.type == LinkVerifyQueue.OperationType && o.status == OperationLifecycle.Running)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(o => o.status, OperationLifecycle.Failed)
+            .SetProperty(o => o.summary, "Interrupted by restart")
+            .SetProperty(o => o.finishedAt, DateTime.UtcNow));
+
+    if (interruptedLinkChecks > 0)
+        resetLogger.LogWarning(
+            "Startup recovery: marked {Count} link checks interrupted by restart",
+            interruptedLinkChecks);
 
     if (stuckImports + stuckExports + stuckImages + stuckTransfers + stuckBulkUpdates + stuckFolderJobs + stuckCatalogConnect + stuckCategoryImports > 0)
         resetLogger.LogWarning(

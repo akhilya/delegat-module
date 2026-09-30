@@ -18,7 +18,7 @@ public static class AgentChatTurnGate
         "Not run. Cabinet writes only run after the user confirms propose_plan. Call propose_plan as the only tool this turn; use CURRENT PAGE ids.";
 
     /// <summary>Tool-using model passes before the turn must answer in text.</summary>
-    public const int MaxToolRounds = 2;
+    public const int MaxToolRounds = 3;
 
     /// <summary>One script per user message. A second script is fishing.</summary>
     public const int MaxRunPythonPerTurn = 1;

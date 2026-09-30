@@ -9,6 +9,7 @@ import {
   runningProcessTool,
   sqlResultParts,
   stripDisplayEmoji,
+  stripDsmlMarkup,
 } from "./display.js";
 
 describe("stripDisplayEmoji", () => {
@@ -16,6 +17,21 @@ describe("stripDisplayEmoji", () => {
     assert.equal(stripDisplayEmoji("Ready ✅ 3 products"), "Ready 3 products");
     assert.equal(stripDisplayEmoji("Warhammer 🎉"), "Warhammer");
     assert.equal(stripDisplayEmoji("plain SQL"), "plain SQL");
+  });
+});
+
+describe("stripDsmlMarkup", () => {
+  it("hides a DeepSeek tool-call transcript", () => {
+    const bar = "\uFF5C";
+    const markup = [
+      `<${bar}${bar}DSML${bar}${bar} calls>`,
+      `<${bar}${bar}DSML${bar}${bar} invoke name="platform_request">`,
+      `<${bar}${bar}DSML${bar}${bar} parameter name="method" string="true">GET</${bar}${bar}DSML${bar}${bar} parameter>`,
+      `</${bar}${bar}DSML${bar}${bar} invoke>`,
+      `</${bar}${bar}DSML${bar}${bar} calls>`,
+    ].join("\n");
+    assert.equal(stripDsmlMarkup(`смотри\n${markup}`), "смотри");
+    assert.equal(stripDisplayEmoji(markup), "");
   });
 });
 

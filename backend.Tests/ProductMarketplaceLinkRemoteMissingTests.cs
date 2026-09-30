@@ -174,6 +174,74 @@ public class ProductMarketplaceLinkRemoteMissingTests
         Assert.Equal(ProductMarketplaceStatus.Synced, links["b-1"].status);
     }
 
+    [Fact]
+    public async Task VerifyLinks_WholeConnection_ComparesOneCatalogList()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var alive = data.AddProduct(store.Id, "Alive");
+        var dead = data.AddProduct(store.Id, "Dead");
+        var recovered = data.AddProduct(store.Id, "Recovered");
+        data.AddProductLink(connection.Id, alive.Id, "alive-1", ProductMarketplaceStatus.Synced);
+        data.AddProductLink(connection.Id, dead.Id, "dead-1", ProductMarketplaceStatus.Synced);
+        data.AddProductLink(connection.Id, recovered.Id, "back-1", ProductMarketplaceStatus.RemoteMissing);
+        await data.SaveAsync();
+
+        var adapter = new FakeImportAdapter(
+            foundIds: [],
+            catalogPages: [["alive-1"], ["back-1", "extra"]]);
+        var service = new ProductSyncService(
+            db,
+            new FakeAdapterRegistry(adapter),
+            null!,
+            null!,
+            NullLogger<ProductSyncService>.Instance,
+            null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
+
+        var result = await service.VerifyLinksAsync(connection.Id);
+
+        Assert.Equal(0, adapter.BatchCalls);
+        Assert.Equal(2, adapter.ListCalls);
+        Assert.Equal(3, result.Checked);
+        Assert.Equal(2, result.Confirmed);
+        Assert.Equal(1, result.Broken);
+        Assert.Equal(1, result.Recovered);
+
+        var links = await db.productMarketplaceLinks.ToDictionaryAsync(l => l.externalProductId);
+        Assert.Equal(ProductMarketplaceStatus.Synced, links["alive-1"].status);
+        Assert.Equal(ProductMarketplaceStatus.RemoteMissing, links["dead-1"].status);
+        Assert.Equal(ProductMarketplaceStatus.Synced, links["back-1"].status);
+    }
+
+    [Fact]
+    public async Task VerifyLinks_SingleLink_DoesNotListTheCatalog()
+    {
+        var (db, data) = Create();
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var a = data.AddProduct(store.Id, "A");
+        var linkA = data.AddProductLink(connection.Id, a.Id, "a-1", ProductMarketplaceStatus.Synced);
+        await data.SaveAsync();
+
+        var adapter = new FakeImportAdapter(foundIds: ["a-1"], catalogPages: [["a-1", "other"]]);
+        var service = new ProductSyncService(
+            db,
+            new FakeAdapterRegistry(adapter),
+            null!,
+            null!,
+            NullLogger<ProductSyncService>.Instance,
+            null!,
+            new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
+
+        var result = await service.VerifyLinksAsync(connection.Id, linkA.Id);
+
+        Assert.Equal(1, result.Confirmed);
+        Assert.Equal(0, adapter.ListCalls);
+        Assert.Equal(1, adapter.BatchCalls);
+    }
+
     private sealed class FakeAdapterRegistry(IMarketplaceAdapter adapter) : IMarketplaceAdapterRegistry
     {
         public IReadOnlyList<IMarketplaceAdapter> GetAll() => [adapter];
@@ -183,15 +251,30 @@ public class ProductMarketplaceLinkRemoteMissingTests
         public IReadOnlyList<MarketplaceInfo> GetAvailableMarketplaces() => [];
     }
 
-    private sealed class FakeImportAdapter(IReadOnlyCollection<string> foundIds) : IMarketplaceAdapter
+    private sealed class FakeImportAdapter : IMarketplaceAdapter
     {
-        private readonly HashSet<string> _found = new(foundIds, StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _found;
+        private readonly IReadOnlyList<string[]>? _pages;
+
+        public FakeImportAdapter(
+            IReadOnlyCollection<string> foundIds,
+            IReadOnlyList<string[]>? catalogPages = null)
+        {
+            _found = new HashSet<string>(foundIds, StringComparer.OrdinalIgnoreCase);
+            _pages = catalogPages;
+        }
+
+        public int BatchCalls { get; private set; }
+        public int ListCalls { get; private set; }
 
         public string Key => "fake";
         public string DisplayName => "Fake";
         public string? Description => null;
         public string? LogoUrl => null;
-        public MarketplaceCapabilities Capabilities => MarketplaceCapabilities.ImportProduct;
+        public MarketplaceCapabilities Capabilities =>
+            _pages == null
+                ? MarketplaceCapabilities.ImportProduct
+                : MarketplaceCapabilities.ImportProduct | MarketplaceCapabilities.ImportAllProducts;
         public string? ProductEditUrlTemplate => null;
 
         public CredentialsSchema GetCredentialsSchema() => new();
@@ -223,13 +306,30 @@ public class ProductMarketplaceLinkRemoteMissingTests
             MarketplaceConnection connection,
             List<string> externalProductIds,
             CancellationToken ct = default)
-            => Task.FromResult(externalProductIds
+        {
+            BatchCalls++;
+            return Task.FromResult(externalProductIds
                 .Where(_found.Contains)
                 .Select(id => new ExternalProduct(id, null, id))
                 .ToList());
+        }
 
         public Task<PagedResult<ExternalProduct>> ImportAllProductsAsync(MarketplaceConnection connection, int pageSize = 100, string? cursor = null, string? offerIdFilter = null, CancellationToken ct = default)
-            => throw new NotImplementedException();
+        {
+            ListCalls++;
+            if (_pages == null)
+                throw new NotImplementedException();
+
+            var index = 0;
+            if (!string.IsNullOrEmpty(cursor))
+                index = int.Parse(cursor);
+            var ids = index < _pages.Count ? _pages[index] : [];
+            var hasMore = index + 1 < _pages.Count;
+            return Task.FromResult(new PagedResult<ExternalProduct>(
+                ids.Select(id => new ExternalProduct(id, null, id)).ToList(),
+                hasMore,
+                hasMore ? (index + 1).ToString() : null));
+        }
         public Task<ExportResult> ExportProductAsync(MarketplaceConnection connection, Dictionary<string, object> productData, string? existingExternalId = null, CancellationToken ct = default)
             => throw new NotImplementedException();
         public Task<BulkExportResult> ExportProductsBulkAsync(MarketplaceConnection connection, List<BulkExportItem> items, CancellationToken ct = default)

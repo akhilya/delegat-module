@@ -62,7 +62,8 @@ public class AgentChatTurnGateTests
     {
         Assert.Equal((false, false), AgentChatTurnGate.NextPass(false, 0, 0));
         Assert.Equal((false, true), AgentChatTurnGate.NextPass(false, 1, 1));
-        Assert.Equal((true, false), AgentChatTurnGate.NextPass(false, 2, 0));
+        Assert.Equal((false, false), AgentChatTurnGate.NextPass(false, 2, 0));
+        Assert.Equal((true, false), AgentChatTurnGate.NextPass(false, 3, 0));
         Assert.Equal((true, false), AgentChatTurnGate.NextPass(true, 0, 0));
     }
 }

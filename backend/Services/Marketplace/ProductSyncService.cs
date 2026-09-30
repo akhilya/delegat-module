@@ -2224,18 +2224,12 @@ public class ProductSyncService
             return new LinkVerifyResult(0, 0, 0, 0);
         }
 
-        var foundIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        const int batchSize = 50;
-        for (var i = 0; i < checkable.Count; i += batchSize)
-        {
-            var chunk = checkable.Skip(i).Take(batchSize).Select(l => l.externalProductId).Distinct().ToList();
-            var found = await adapter.ImportProductsBatchAsync(connection, chunk, ct);
-            foreach (var product in found)
-            {
-                if (!string.IsNullOrWhiteSpace(product.ExternalId))
-                    foundIds.Add(product.ExternalId);
-            }
-        }
+        // A whole connection is one catalog list compared with the saved external ids.
+        // A single link stays a direct lookup so one row does not download the shop.
+        var foundIds = !linkId.HasValue &&
+                       adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts)
+            ? await ListRemoteExternalIdsAsync(adapter, connection, ct)
+            : await LookupExternalIdsAsync(adapter, connection, checkable, ct);
 
         var confirmed = 0;
         var broken = 0;
@@ -2267,6 +2261,76 @@ public class ProductSyncService
         await _context.SaveChangesAsync(ct);
 
         return new LinkVerifyResult(checkable.Count, confirmed, broken, recovered);
+    }
+
+    private static async Task<HashSet<string>> LookupExternalIdsAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        List<ProductMarketplaceLink> links,
+        CancellationToken ct)
+    {
+        var foundIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        const int batchSize = 50;
+        for (var i = 0; i < links.Count; i += batchSize)
+        {
+            var chunk = links.Skip(i).Take(batchSize).Select(l => l.externalProductId).Distinct().ToList();
+            var found = await adapter.ImportProductsBatchAsync(connection, chunk, ct);
+            foreach (var product in found)
+            {
+                if (!string.IsNullOrWhiteSpace(product.ExternalId))
+                    foundIds.Add(product.ExternalId);
+            }
+        }
+
+        return foundIds;
+    }
+
+    /// <summary>
+    /// One pass over the remote catalog. An incomplete list must fail the check:
+    /// a missing page would mark live links as gone.
+    /// </summary>
+    private async Task<HashSet<string>> ListRemoteExternalIdsAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        CancellationToken ct)
+    {
+        var foundIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenCursors = new HashSet<string>(StringComparer.Ordinal);
+        string? cursor = null;
+        const int pageSize = 1000;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await adapter.ImportAllProductsAsync(connection, pageSize, cursor, null, ct);
+            foreach (var product in page.Items)
+            {
+                if (!string.IsNullOrWhiteSpace(product.ExternalId))
+                    foundIds.Add(product.ExternalId);
+            }
+
+            if (page.Items.Count == 0)
+            {
+                if (page.HasMore)
+                    throw new InvalidOperationException(
+                        "Marketplace catalog listing returned an empty page with more results");
+                break;
+            }
+
+            if (!page.HasMore || string.IsNullOrEmpty(page.NextCursor))
+                break;
+
+            if (!seenCursors.Add(page.NextCursor))
+                throw new InvalidOperationException("Marketplace catalog listing repeated a page cursor");
+
+            cursor = page.NextCursor;
+        }
+
+        _logger.LogInformation(
+            "Connection {ConnectionId} link check compared {RemoteCount} remote product ids",
+            connection.Id, foundIds.Count);
+
+        return foundIds;
     }
 
     private async Task MarkLinksRemoteMissingByExternalIdAsync(

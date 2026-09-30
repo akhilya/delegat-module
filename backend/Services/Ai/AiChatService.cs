@@ -191,6 +191,8 @@ public class AiChatService
 
                 var textBuffer = new StringBuilder();
                 var toolUses = new List<(string id, string name, string inputJson)>();
+                var dsml = new DeepSeekDsmlGate();
+                var dsmlSeq = 0;
                 var currentToolId = "";
                 var currentToolName = "";
                 var currentToolInput = new StringBuilder();
@@ -213,8 +215,14 @@ public class AiChatService
                         case "content_block_delta":
                             if (ev.delta?.type == "text_delta" && ev.delta.text != null)
                             {
-                                textBuffer.Append(ev.delta.text);
-                                yield return Sse(SseEventType.Text, new { delta = ev.delta.text });
+                                var drain = dsml.Push(ev.delta.text);
+                                if (drain.Visible.Length > 0)
+                                {
+                                    textBuffer.Append(drain.Visible);
+                                    yield return Sse(SseEventType.Text, new { delta = drain.Visible });
+                                }
+                                foreach (var invoke in drain.Invokes)
+                                    toolUses.Add(($"dsml-{iteration}-{dsmlSeq++}", invoke.Name, invoke.ArgumentsJson));
                             }
                             else if (ev.delta?.type == "input_json_delta" && isCollectingTool)
                             {
@@ -248,6 +256,15 @@ public class AiChatService
 
                 if (isCollectingTool && currentToolName.Length > 0)
                     toolUses.Add((currentToolId, currentToolName, currentToolInput.ToString()));
+
+                var dsmlTail = dsml.Flush();
+                if (dsmlTail.Visible.Length > 0)
+                {
+                    textBuffer.Append(dsmlTail.Visible);
+                    yield return Sse(SseEventType.Text, new { delta = dsmlTail.Visible });
+                }
+                foreach (var invoke in dsmlTail.Invokes)
+                    toolUses.Add(($"dsml-{iteration}-{dsmlSeq++}", invoke.Name, invoke.ArgumentsJson));
 
                 if (toolUses.Count == 0)
                 {

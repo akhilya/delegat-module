@@ -11,6 +11,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation.
+- Wildberries price export leaves a card alone when that price and discount are already set. A card priced per size is updated on those sizes instead of failing the whole export.
+- Cabinet assistant runs a DeepSeek tool call instead of printing its markup in the reply.
 - Wildberries card description is sent as plain text. Line breaks, quotes, and emoji no longer appear as `<br>` and `&#…;` on the marketplace.
 - Wildberries export no longer fails while confirming a new card when the size id (`chrtID`) is larger than a 32-bit integer. Stock updates use the same wider id.
 - Deleting a folder in store storage or on a product with the Delete key or the toolbar button uses the same confirmation as the folder menu, and the folder is removed. An empty folder no longer says that 0 files will be deleted.

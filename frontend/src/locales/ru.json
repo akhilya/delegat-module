@@ -856,6 +856,7 @@
         "selectProductsToExport": "Выберите товары для экспорта",
         "selectMappingForAll": "Выберите маппинг для всех товаров (осталось: {count})",
         "saveMappingSelectionsError": "Ошибка сохранения выбора маппингов",
+        "linksVerifyStarted": "Проверка связей запущена. Ход — в операциях.",
         "linksVerified": "Проверено связей: {total}, в порядке: {ok}, разорвано: {broken}",
         "linksVerifyError": "Не удалось проверить связи"
       },
