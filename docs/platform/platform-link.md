@@ -26,6 +26,7 @@ If URL or secret is empty, Platform Link is **disabled**.
 3. First-run wizard (`/setup`) uses `/reference/status` for currency/timezone; if catalogs are not ready, can create a store with server defaults (`RUB` / `Europe/Moscow`).
 4. Auth JWT must have non-empty `iss`/`aud`. CP provision sets `JWT_ISSUER` / `JWT_AUDIENCE` (default `delegat`); API falls back to `delegat` if env is missing. Cookies use HTTPS/`COOKIE_SECURE`, not `ASPNETCORE_ENVIRONMENT=Production`.
 5. **Usage / entitlements:** heartbeat may include a usage snapshot; instance polls `GET /platform/v1/entitlements` for plan name and `overagePurgeAt` (cached in `instancePlatformEntitlements`). Admin UI: Settings → Admin → Usage. Auto-trim runs on the instance when the purge deadline is due and usage is still over caps.
+6. **Seller docs:** Control Plane downloads Wildberries (items and FBS orders), Ozon Seller, and Yandex Market documentation once a day. The cabinet assistant reads the current excerpt with `GET /api/agent/stores/{storeId}/marketplace-docs/{adapter}?q=` (Platform Link `GET /platform/v1/marketplace-docs/{adapter}`) and does not fetch those portals itself.
 
 ## Related
 

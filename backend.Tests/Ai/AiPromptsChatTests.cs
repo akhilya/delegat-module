@@ -278,6 +278,11 @@ public class AiPromptsChatTests
             Assert.Contains("say yes in store language", prompt, StringComparison.Ordinal);
             Assert.Contains("finding products by a rule", prompt, StringComparison.Ordinal);
             Assert.Contains("one read-only run_python", prompt, StringComparison.Ordinal);
+            Assert.Contains("WHERE YOU ARE", prompt, StringComparison.Ordinal);
+            Assert.Contains("`shops` is already loaded", prompt, StringComparison.Ordinal);
+            Assert.Contains("docs.platform", prompt, StringComparison.Ordinal);
+            Assert.Contains("client.marketplace_doc", prompt, StringComparison.Ordinal);
+            Assert.Contains("Do not fetch a documentation URL yourself", prompt, StringComparison.Ordinal);
             Assert.Contains("sql_readonly is not a substitute", prompt, StringComparison.Ordinal);
             Assert.Contains("temporarily unreachable", prompt, StringComparison.Ordinal);
             Assert.Contains("calculation helper: on", prompt, StringComparison.Ordinal);
@@ -322,6 +327,16 @@ public class AiPromptsChatTests
             Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
         }
         }
+    }
+
+    [Fact]
+    public void ChatSystem_OnAMapping_IncludesCurrentExportExperience()
+    {
+        var prompt = Prompt(
+            page: new AiPageContext { Page = "fieldMapping", MappingId = 4, ConnectionId = 2 },
+            turnText: "finish this mapping");
+        Assert.Contains("MAPPING EXPERIENCE", prompt, StringComparison.Ordinal);
+        Assert.Contains("already behind", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

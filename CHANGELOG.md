@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Deleting a folder in store storage or on a product with the Delete key or the toolbar button uses the same confirmation as the folder menu, and the folder is removed. An empty folder no longer says that 0 files will be deleted.
 - Wildberries export of a new card stays running until the article appears in the catalog or the draft error list names it (up to 30 minutes). It no longer fails after half a minute with “created but not found” while the marketplace has not yet said why.
 - Wildberries export sends directory values such as TN VED and VAT as text. A numeric code sent as a number was accepted by the upload call and the card never appeared. Draft errors are read from the current error list instead of an empty page.
 - Wildberries export sends packaging weight only as kilograms in the card dimensions. The characteristic «Вес товара с упаковкой» is no longer sent: the marketplace rejects it.
@@ -32,6 +33,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- On a field mapping, the cabinet assistant sees how many exports of that category succeeded or failed since the canvas was last saved, and the text the adapter returned on the failures. Results from before that save are not treated as open problems.
+- Cabinet assistant can call a connected shop’s own API from the calculation helper, using that connection’s key, and correct a filled value from what the shop returns. It stays on the open screen (mapping, product, order) and does not invent a directory entry. Seller documentation is downloaded once a day by Control Plane (Wildberries items and FBS orders, Ozon Seller, Yandex Market). The assistant reads that copy through the platform link and does not fetch the seller’s documentation URL itself.
 - Cabinet assistant keeps a short system prompt on ordinary turns. Mapping rules, a catalog-wide price change, and the page-address list are added only when that page is open or the message is about them.
 - Products page search is wider, so a product name or SKU fits in the field. Other pages keep the shorter nav search.
 - `/api/ai`, `/api/agent`, and `/api/mcp` are exempt from the SPA rate-limit bucket. Authenticated catalog traffic allows 2400 requests per minute per user (was 1200).

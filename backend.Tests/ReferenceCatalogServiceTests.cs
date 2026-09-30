@@ -135,5 +135,9 @@ public class ReferenceCatalogServiceTests
         public Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default) => Task.CompletedTask;
         public Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default) =>
             Task.FromResult<PlatformEntitlementsDto?>(null);
+
+        public Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(
+            string adapter, string? query, CancellationToken ct = default) =>
+            Task.FromResult<PlatformMarketplaceDocDto?>(null);
     }
 }

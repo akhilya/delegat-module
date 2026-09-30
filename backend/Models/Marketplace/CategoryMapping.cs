@@ -63,6 +63,12 @@ public class CategoryMapping : IEntity, IMapToDTO<CategoryMapping.MappingDTO>,
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When the canvas graph was last saved. Export results older than this
+    /// belong to the previous wiring.
+    /// </summary>
+    public DateTime? graphUpdatedAt { get; set; }
+
+    /// <summary>
     /// JSON-serialized node graph (nodes + edges) for the whole-category visual mapping editor.
     /// The single source of truth for the mapping - schema, per-field config, and export/import.
     /// Stored as LONGTEXT.

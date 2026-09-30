@@ -43,7 +43,7 @@ public static class AgentToolCatalog
         if (PythonSandboxClient.IsConfigured())
         {
             tools.Add(Prop("run_python",
-                "Run curated Python in the instance sandbox (pandas/pillow/openpyxl). `client` is already imported. Uses Agent HTTP, never the database URL. If the user asks to check this helper or run a snippet, call this tool this turn. Read-only print/client.sql does not need propose_plan.",
+                "Run curated Python in the instance sandbox (pandas/pillow/openpyxl). `client` and `shops` are already loaded. `shops` holds this store’s connection keys, seller hosts, and `docs.platform` when Control Plane keeps that seller’s daily snapshot — call those hosts with urllib (direct HTTP). Read `client.marketplace_doc(docs.platform, query)` before inventing a seller path. Do not fetch a documentation URL yourself. Do not print credentials. Uses Agent HTTP for the cabinet, never the database URL. If the user asks to check this helper or run a snippet, call this tool this turn. A shop lookup or other read-only script does not need propose_plan; do not change the seller account from the script.",
                 Req(["code"]), ("code", Str("Python source"))));
         }
 

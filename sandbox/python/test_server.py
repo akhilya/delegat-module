@@ -33,6 +33,19 @@ class SandboxLimitTests(unittest.TestCase):
         self.assertEqual(env["OPENBLAS_NUM_THREADS"], "1")
         os.environ.pop("SANDBOX_CPU_THREADS", None)
 
+    def test_shops_are_loaded_for_the_script(self):
+        result = server._run_job({
+            "code": "print(shops[0]['hosts']['content'])",
+            "shops": [{
+                "id": 1,
+                "adapter": "wildberries",
+                "hosts": {"content": "https://content-api.wildberries.ru"},
+                "credentials": {"apiKey": "do-not-print"},
+            }],
+        })
+        self.assertEqual(result["exitCode"], 0, result.get("stderr"))
+        self.assertIn("content-api.wildberries.ru", result["stdout"])
+
     def test_health_log_is_quiet(self):
         class Fake(server.Handler):
             def __init__(self):

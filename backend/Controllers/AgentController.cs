@@ -3,6 +3,7 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Services.Ai.Agent;
+using Delegat.Services.PlatformLink;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Delegat.Controllers;
@@ -16,18 +17,21 @@ public class AgentController : ControllerBase
     private readonly AgentToolHost _tools;
     private readonly AgentFileUploadService _uploads;
     private readonly KnowledgeIndexService _knowledge;
+    private readonly IPlatformLinkClient _platform;
     private static readonly JsonSerializerOptions Camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public AgentController(
         AgentSessionResolver session,
         AgentToolHost tools,
         AgentFileUploadService uploads,
-        KnowledgeIndexService knowledge)
+        KnowledgeIndexService knowledge,
+        IPlatformLinkClient platform)
     {
         _session = session;
         _tools = tools;
         _uploads = uploads;
         _knowledge = knowledge;
+        _platform = platform;
     }
 
     [HttpPut("stores/{storeId:int}/products/{productId:int}/files")]
@@ -110,6 +114,22 @@ public class AgentController : ControllerBase
         if (err != null) return err;
         var hits = await _knowledge.SearchAsync(q ?? "", limit, ct);
         return Ok(new { items = hits });
+    }
+
+    [HttpGet("stores/{storeId:int}/marketplace-docs/{adapter}")]
+    public async Task<IActionResult> MarketplaceDoc(
+        int storeId, string adapter, [FromQuery] string? q, CancellationToken ct)
+    {
+        EnsureAi();
+        var (_, err) = await TryResolve(storeId, ct);
+        if (err != null) return err;
+        if (!_platform.IsEnabled)
+            return Ok(new { error = "platform_link_off" });
+
+        var doc = await _platform.GetMarketplaceDocAsync(adapter, q, ct);
+        if (doc is null)
+            return Ok(new { error = "not_ready", adapter });
+        return Ok(doc);
     }
 
     [HttpGet("stores/{storeId:int}/openapi")]

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
+using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,19 +19,22 @@ public sealed class PythonSandboxClient
     private readonly IHttpContextAccessor _httpContext;
     private readonly IJwtService _jwt;
     private readonly ILogger<PythonSandboxClient> _logger;
+    private readonly EncryptionService? _encryption;
 
     public PythonSandboxClient(
         DataContext db,
         IHttpClientFactory http,
         ILogger<PythonSandboxClient> logger,
         IHttpContextAccessor httpContext,
-        IJwtService jwt)
+        IJwtService jwt,
+        EncryptionService? encryption = null)
     {
         _db = db;
         _http = http;
         _logger = logger;
         _httpContext = httpContext;
         _jwt = jwt;
+        _encryption = encryption;
     }
 
     /// <summary>
@@ -142,6 +146,8 @@ public sealed class PythonSandboxClient
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script))).ToLowerInvariant();
         var started = DateTime.UtcNow;
         var token = await ResolveSandboxTokenAsync(userId, ct);
+        var shopsJson = await SandboxShops.ForStoreAsync(_db, _encryption, storeId, ct);
+        var shopSecrets = SandboxShops.SecretValues(shopsJson);
 
         Exception? lastConnect = null;
         for (var i = 0; i < urls.Count; i++)
@@ -153,11 +159,14 @@ public sealed class PythonSandboxClient
                 using var req = new HttpRequestMessage(HttpMethod.Post, url.TrimEnd('/') + "/run");
                 if (secret.Length > 0)
                     req.Headers.TryAddWithoutValidation("X-Sandbox-Secret", secret);
-                req.Content = CreateRunBody(script, storeId, baseUrl, token);
+                req.Content = CreateRunBody(script, storeId, baseUrl, token, shopsJson);
                 using var resp = await client.SendAsync(req, ct);
                 var payload = await resp.Content.ReadFromJsonAsync<SandboxRunResponse>(
                                  new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }, ct)
                               ?? new SandboxRunResponse();
+                payload.Stdout = SandboxShops.Redact(payload.Stdout, shopSecrets);
+                payload.Stderr = SandboxShops.Redact(payload.Stderr, shopSecrets);
+                payload.Error = SandboxShops.Redact(payload.Error, shopSecrets);
                 var duration = (int)(DateTime.UtcNow - started).TotalMilliseconds;
                 _db.aiSandboxRuns.Add(new AiSandboxRun
                 {
@@ -194,9 +203,11 @@ public sealed class PythonSandboxClient
         return (new { error = lastConnect?.Message ?? "sandbox unreachable" }, "sandbox error");
     }
 
-    internal static ByteArrayContent CreateRunBody(string script, int storeId, string baseUrl, string token)
+    internal static ByteArrayContent CreateRunBody(
+        string script, int storeId, string baseUrl, string token, string shopsJson = "[]")
     {
-        var json = JsonSerializer.Serialize(new { code = script, storeId, baseUrl, token });
+        var shops = ParseShops(shopsJson);
+        var json = JsonSerializer.Serialize(new { code = script, storeId, baseUrl, token, shops });
         var content = new ByteArrayContent(Encoding.UTF8.GetBytes(json));
         content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
         return content;
@@ -223,6 +234,20 @@ public sealed class PythonSandboxClient
         if (list.Exists(u => string.Equals(u, url, StringComparison.OrdinalIgnoreCase)))
             return;
         list.Add(url);
+    }
+
+    private static JsonElement ParseShops(string shopsJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(shopsJson) ? "[]" : shopsJson);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            using var doc = JsonDocument.Parse("[]");
+            return doc.RootElement.Clone();
+        }
     }
 
     private static string? Trim(string? text)

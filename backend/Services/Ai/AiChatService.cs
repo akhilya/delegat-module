@@ -119,6 +119,13 @@ public class AiChatService
                 _logger.LogWarning(ex, "Listing connected MCP tools failed");
             }
 
+            string? mappingExperience = null;
+            if (pageContext is { Page: "fieldMapping", MappingId: int mappingId })
+            {
+                mappingExperience = await MappingExportExperience.ForMappingAsync(
+                    _context, storeId, mappingId, storeInfo?.timezone, ct);
+            }
+
             var systemPrompt = AiPrompts.ChatSystem(
                 storeName, storeId, productCount, connections
                     .Select(c => new AiPrompts.ConnectionInfo(c.Id, c.name, c.adapterKey, c.isActive, c.lastSyncAt))
@@ -130,7 +137,8 @@ public class AiChatService
                 catalogProductLimit,
                 catalogProductsUsed,
                 storeInfo?.extendedPriceParameters ?? false,
-                turnText: TurnText(userMessages));
+                turnText: TurnText(userMessages),
+                mappingExperience: mappingExperience);
 
             var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))

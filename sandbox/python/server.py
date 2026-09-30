@@ -111,11 +111,19 @@ def _run_job(body: dict) -> dict:
     store_id = str(body.get("storeId") or body.get("store_id") or "")
     base_url = str(body.get("baseUrl") or body.get("base_url") or "")
     token = str(body.get("token") or "")
+    shops = body.get("shops")
+    if isinstance(shops, str):
+        shops_json = shops or "[]"
+    elif shops is None:
+        shops_json = "[]"
+    else:
+        shops_json = json.dumps(shops)
 
     env = _scrub_env(dict(os.environ))
     env["DELEGAT_BASE_URL"] = base_url
     env["DELEGAT_TOKEN"] = token
     env["DELEGAT_STORE_ID"] = store_id
+    env["DELEGAT_SHOPS"] = shops_json
     env["PYTHONPATH"] = APP_DIR + os.pathsep + env.get("PYTHONPATH", "")
     env.pop("SANDBOX_SECRET", None)
     env["SANDBOX_TIMEOUT_SEC"] = str(TIMEOUT_SEC)
@@ -128,6 +136,8 @@ def _run_job(body: dict) -> dict:
         with open(script_path, "w", encoding="utf-8") as fh:
             fh.write("import sandbox_limits\n")
             fh.write("sandbox_limits.apply()\n")
+            fh.write("import json as _delegat_json, os as _delegat_os\n")
+            fh.write("shops = _delegat_json.loads(_delegat_os.environ.get('DELEGAT_SHOPS') or '[]')\n")
             fh.write("from delegat_sdk import client\n")
             fh.write(code)
             if not code.endswith("\n"):

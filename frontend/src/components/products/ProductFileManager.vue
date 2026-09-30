@@ -1259,6 +1259,7 @@ async function deleteFolder() {
       collectDescendantIds(deleteFolderTarget.value.id, removeIds);
     }
     folders.value = folders.value.filter((f) => !removeIds.includes(f.id));
+    clearSelection();
     if (data?.queued) {
       displaySonnerSuccess(t("products.productFileManager.folderDeleteQueued"));
     } else {
@@ -1475,6 +1476,13 @@ const pendingDeleteFileId = ref(null);
 async function deleteSelected() {
   const items = selectedItems.value;
   if (items.length === 0) return;
+  const folders = items.filter((i) => i.type === "folder");
+  const files = items.filter((i) => i.type === "file");
+  if (files.length === 0 && folders.length === 1) {
+    openDeleteFolderDialog(folders[0].item);
+    return;
+  }
+  if (files.length === 0) return;
   showDeleteConfirm.value = true;
 }
 
@@ -1721,7 +1729,7 @@ const selectedFileCount = computed(
             <template v-if="pendingDeleteFileId">
               {{ t("products.productFileManager.deleteFileIrreversible") }}
             </template>
-            <template v-else>
+            <template v-else-if="selectedItems.filter(i => i.type === 'file').length > 0">
               {{ t("products.productFileManager.deleteFilesCountIrreversible", { count: selectedItems.filter(i => i.type === 'file').length }) }}
             </template>
           </AlertDialogDescription>

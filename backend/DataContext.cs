@@ -619,4 +619,35 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        TouchMappingGraphs();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        TouchMappingGraphs();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// A graph write is a new wiring. Later export results are the only ones
+    /// that still describe this mapping.
+    /// </summary>
+    private void TouchMappingGraphs()
+    {
+        foreach (var entry in ChangeTracker.Entries<CategoryMapping>())
+        {
+            var graph = entry.Property(m => m.graphJson);
+            var changed = entry.State == EntityState.Added
+                ? entry.Entity.graphJson != null
+                : entry.State == EntityState.Modified && graph.IsModified;
+            if (changed)
+                entry.Entity.graphUpdatedAt = DateTime.UtcNow;
+        }
+    }
 }

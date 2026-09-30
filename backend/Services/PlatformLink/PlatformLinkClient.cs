@@ -13,6 +13,7 @@ public interface IPlatformLinkClient
     Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default);
     Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default);
     Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default);
+    Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(string adapter, string? query, CancellationToken ct = default);
 }
 
 public sealed class PlatformLinkClient : IPlatformLinkClient
@@ -72,6 +73,31 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         return await JsonSerializer.DeserializeAsync<PlatformEntitlementsDto>(stream, JsonOptions, ct);
+    }
+
+    public async Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(
+        string adapter, string? query, CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+
+        var key = Uri.EscapeDataString((adapter ?? "").Trim().ToLowerInvariant());
+        var path = $"/platform/v1/marketplace-docs/{key}";
+        if (!string.IsNullOrWhiteSpace(query))
+            path += "?q=" + Uri.EscapeDataString(query.Trim());
+
+        using var response = await SendRawAsync(HttpMethod.Get, path, body: null, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Platform Link GET {Path} returned {StatusCode}",
+                path, (int)response.StatusCode);
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        return await JsonSerializer.DeserializeAsync<PlatformMarketplaceDocDto>(stream, JsonOptions, ct);
     }
 
     private async Task<IReadOnlyList<T>> GetCatalogAsync<T>(string path, CancellationToken ct)

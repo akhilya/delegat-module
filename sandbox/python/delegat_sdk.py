@@ -46,6 +46,26 @@ class DelegatClient:
     def match_files(self, files: list):
         return self._req("POST", "/files/match", {"files": files})
 
+    def marketplace_doc(self, adapter: str, query: str = ""):
+        from urllib.parse import quote
+
+        url = (
+            f"{self.base}/api/agent/stores/{self.store_id}/marketplace-docs/"
+            f"{quote(adapter or '')}"
+        )
+        q = quote(query or "")
+        if q:
+            url += f"?q={q}"
+        req = urllib.request.Request(url, method="GET")
+        if self.token:
+            req.add_header("Authorization", self.token)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Agent HTTP {exc.code}: {detail}") from exc
+
     def search_knowledge(self, query: str, limit: int = 8):
         from urllib.parse import quote
 

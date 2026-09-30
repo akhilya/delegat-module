@@ -1080,6 +1080,9 @@ namespace Delegat.Migrations
                     b.Property<string>("graphJson")
                         .HasColumnType("longtext");
 
+                    b.Property<DateTime?>("graphUpdatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("localCategoryId")
                         .HasColumnType("int");
 

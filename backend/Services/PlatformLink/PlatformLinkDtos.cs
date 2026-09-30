@@ -14,6 +14,21 @@ public sealed class PlatformCurrencyDto
     public string? Symbol { get; set; }
 }
 
+public sealed class PlatformMarketplaceDocDto
+{
+    [JsonPropertyName("adapter")]
+    public string Adapter { get; set; } = "";
+
+    [JsonPropertyName("sourceUrl")]
+    public string SourceUrl { get; set; } = "";
+
+    [JsonPropertyName("fetchedAt")]
+    public DateTimeOffset FetchedAt { get; set; }
+
+    [JsonPropertyName("excerpt")]
+    public string Excerpt { get; set; } = "";
+}
+
 public sealed class PlatformTimezoneDto
 {
     [JsonPropertyName("id")]

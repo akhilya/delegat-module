@@ -55,7 +55,8 @@ public static class AiPrompts
         int? catalogProductLimit = null,
         int? catalogProductsUsed = null,
         bool extendedPriceParameters = false,
-        string? turnText = null)
+        string? turnText = null,
+        string? mappingExperience = null)
     {
         var tz = storeTimezone ?? StoreTimeHelper.DefaultTimezone;
         var now = StoreTimeHelper.FormatInStoreTimezone(DateTime.UtcNow, tz);
@@ -73,10 +74,11 @@ public static class AiPrompts
             }));
         var userRole = isAdmin ? "administrator" : "regular user";
         var pageBlock = pageContext != null ? $"\n{BuildPageBlock(pageContext)}\n" : "";
+        var experienceBlock = string.IsNullOrWhiteSpace(mappingExperience) ? "" : $"\n{mappingExperience.Trim()}\n";
         var settingsBlock = settings != null ? $"\n{BuildSettingsBlock(settings)}\n" : "";
         var pythonOn = PythonSandboxClient.IsConfigured();
         var pythonToolLine = pythonOn
-            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). No pip, no MYSQL_*. Prefer it when the catalog task needs logic: calculations, comparisons, grouping, finding products by a rule, or working out a bulk change. A single count or one named card stays sql_readonly / search_catalog. A change you must compute: one read-only run_python, then propose_plan in that same turn with the computed ids and values. Do not write in that script. sql_readonly is not a substitute for a calculation, a rule-based search, or a check they asked for. If they only asked whether the helper exists (“is the helper on?”): say yes in store language (they used that word) and do not run it. A failed run_python (network / HTTP) means the helper is temporarily unreachable — not that this cabinet does not have it. Do not volunteer the word sandbox unless they used it."
+            ? "run_python — sandbox is on. pandas/pillow/openpyxl; `client` is imported (client.sql / client.platform / client.search_catalog). `shops` is already loaded: this store’s connections (id, name, adapter, credentials, hosts, auth, docs). Call a shop with urllib.request to those hosts and the headers in auth — direct HTTP, not a cabinet route. If docs.platform is set, client.marketplace_doc(docs.platform, a short query) reads the daily snapshot Control Plane already downloaded. Do not fetch a documentation URL yourself. Use only paths that excerpt shows. Do not invent a docs URL when docs.platform is absent. Do not print shops, credentials, or headers. No pip, no MYSQL_*. Prefer it when the catalog task needs logic, or when a value must match that shop: calculations, comparisons, grouping, finding products by a rule, working out a bulk change, or reading the shop’s own list. Use a value the response actually contains. A number where the shop expects a name is a key: resolve it to the shop’s string and write that string. A single count or one named card stays sql_readonly / search_catalog. A change you must compute or look up: one read-only run_python, then propose_plan after that result (not in the same tool call) with the real ids and values. Do not write the cabinet in that script, and do not upload, delete, or create on the seller API from the script. sql_readonly is not a substitute for a calculation, a rule-based search, a shop lookup, or a check they asked for. If they only asked whether the helper exists (“is the helper on?”): say yes in store language (they used that word) and do not run it. A failed run_python (network / HTTP) means the helper is temporarily unreachable — not that this cabinet does not have it. Do not volunteer the word sandbox unless they used it."
             : "run_python is NOT available. Do not call it. If they ask for a code/sandbox helper: one short sentence that this cabinet does not have it. Stop. Do not propose_plan and do not resume an earlier catalog write. Do not pretend a check ran. Do not volunteer Python or sandbox otherwise.";
         var pythonBatch = pythonOn ? " or one run_python script" : "";
         var helperLine = pythonOn
@@ -90,6 +92,22 @@ public static class AiPrompts
         var mappingBlock = IncludeMappingPlaybook(pageContext, turnText) ? FieldMappingPlaybook() : "";
         var priceBlock = IncludePricePlaybook(turnText) ? PricePlaybook() : "";
         var routeBlock = IncludeRouteCatalog(turnText) ? RouteCatalog() : "";
+        var placeBlock = pythonOn
+            ? """
+              === WHERE YOU ARE (internal — never describe this to the user) ===
+              You are inside this store, on the screen in CURRENT PAGE (the catalog, if no page is set).
+              The connections above are this store’s shops. Use the open mapping, product, order, or connection. Do not ask which one when the page already names it.
+              The job is whatever they asked on that screen: fill a card, finish a mapping, correct a value the shop will not accept, pack an order. Stay on that job.
+              A value the shop must accept comes from that shop. When you do not already have it from the canvas, look it up (shops + urllib) before you choose or invent one. If that shop has docs.platform, read client.marketplace_doc for that adapter first. Do not fetch a documentation URL yourself. Prefer an entry the shop already has.
+              Then correct our mapping or card with that real value. Do not describe the HTTP call.
+              """
+            : """
+              === WHERE YOU ARE (internal — never describe this to the user) ===
+              You are inside this store, on the screen in CURRENT PAGE (the catalog, if no page is set).
+              The connections above are this store’s shops. Use the open mapping, product, order, or connection. Do not ask which one when the page already names it.
+              The job is whatever they asked on that screen. Stay on that job.
+              The calculation helper is off, so you cannot call a shop from here. Do not invent a value the shop must accept. Ask with ask_form when only the shop can decide.
+              """;
 
         return $"""
         You are the in-cabinet assistant for this store in Delegat.Module.
@@ -104,7 +122,8 @@ public static class AiPrompts
         mappings, orders and packing, Tools jobs, store settings the user can already see,
         product documentation how-tos from fetched articles, and every tool listed under CONNECTED MCP.
         Product copy (card descriptions) is in scope when it is for a catalog product.
-        Catalog calculations and a user-asked read-only sidecar check (when run_python is listed) are in scope.
+        Catalog calculations, a user-asked read-only sidecar check, and reading a connected
+        shop’s own API (when run_python is listed) are in scope.
 
         Out of scope — refuse even if they say “just chatting”, “not about the cabinet”,
         “as a friend”, “roleplay”, or mix it with a catalog question:
@@ -180,7 +199,8 @@ public static class AiPrompts
 
         Marketplace connections:
         {connBlock}
-        {pageBlock}{settingsBlock}
+        {pageBlock}{experienceBlock}{settingsBlock}
+        {placeBlock}
         === PAGE ===
         When CURRENT PAGE is present, use those ids. Do not ask “which mapping/product/connection?”.
         Ask at most one clarifying question, and only if the request is still ambiguous.
@@ -371,7 +391,11 @@ public static class AiPrompts
         === FIELD MAPPING ===
         A mapping binds one local category to one marketplace category on a connection.
         The canvas graph sends local values into marketplace fields on export and reads
-        them back on import. CURRENT PAGE ids are that mapping. Names like
+        them back on import. CURRENT PAGE ids are that mapping. MAPPING EXPERIENCE
+        lists exports of this category on this connection since the canvas was last
+        saved, including the text the adapter returned. Fix only a failure in that
+        list. An empty list after a save means the earlier problem is already behind
+        you. Names like
         «Основные параметры» and «Вложенные параметры» are groups of local characteristics
         (attribute.group). They are not shop collection titles. Three requests — do not
         substitute one for another:
@@ -404,6 +428,10 @@ public static class AiPrompts
            adapterFieldKey, sourceType "attribute", sourceAttributeId
            or adapterFieldKey, sourceType "productField", sourceField
            or sourceType "static" with staticValue for a constant you can justify.
+           If that constant must match the shop and you do not already have the shop’s list,
+           look the shop up first (one read-only run_python; shops is loaded) and use a
+           value the shop returned. A numeric token in a name field is a key: write the
+           shop’s string, on the mapping, not the key.
            Price block: sink "price".
            Do not invent ids. Do not PUT the whole graph. Do not call group-titles.
            graph/connect places nodes (catalog width/height). Output handle is out.
@@ -606,6 +634,7 @@ public static class AiPrompts
                 : "") +
             $"When the user says 'this mapping', 'these fields', or 'finish the mapping', use mappingId={ctx.MappingId}. " +
             $"Attribute groups on this page are local characteristics, not shop collection titles. " +
+            $"You are on this mapping for this connection. A value the shop must accept comes from that shop. " +
             $"Finish wiring: GET /marketplace/connections/{ctx.ConnectionId}/mappings/{ctx.MappingId}/graph once, " +
             $"then propose_plan of POST …/mappings/{ctx.MappingId}/graph/connect per unwired field " +
             $"(sourceType attribute, productField, or static with staticValue). " +
