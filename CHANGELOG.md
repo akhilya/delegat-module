@@ -32,6 +32,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - When the calculation sidecar is on, asking the assistant to check it (or run a read-only snippet) uses that helper instead of substituting a catalog COUNT and claiming there is no sandbox.
 - Cabinet assistant export of local products to a shop is `export-batch` (including `{ allMatching, skipWithoutImages }` so a full catalog does not need thousands of ids). Photos for that filter are gallery images, not any file attachment. Read-only SQL now honors `>=` `<=`, `NOT IN`, `SELECT DISTINCT` (including `contentType`), `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` / `SHOW COLUMNS`, `product_images`, and extra store tables (notes, variants, links, operations) instead of ignoring them. Chat tools stay one collapsed line unless you expand them. `get_doc` can open indexed instance docs (including `docs/ai/operator-playbook.md`).
 
+### Security
+
+- Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
+
 ### Changed
 
 - A cabinet question runs one calculation script, then the assistant answers. It does not keep searching the shop or the documentation. A message that only says to answer (“ответь”) replies from what is already known.
