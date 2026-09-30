@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Wildberries card description is sent as plain text. Line breaks, quotes, and emoji no longer appear as `<br>` and `&#…;` on the marketplace.
 - Wildberries export no longer fails while confirming a new card when the size id (`chrtID`) is larger than a 32-bit integer. Stock updates use the same wider id.
 - Deleting a folder in store storage or on a product with the Delete key or the toolbar button uses the same confirmation as the folder menu, and the folder is removed. An empty folder no longer says that 0 files will be deleted.
 - Wildberries export of a new card stays running until the article appears in the catalog or the draft error list names it (up to 30 minutes). It no longer fails after half a minute with “created but not found” while the marketplace has not yet said why.
