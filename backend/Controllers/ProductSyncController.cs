@@ -11,6 +11,7 @@ using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
 using Delegat.Services;
+using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
 
 namespace Delegat.Controllers;
@@ -32,6 +33,7 @@ public class ProductSyncController : ControllerBase
     private readonly QuotaService _quotaService;
     private readonly EncryptionService? _encryptionService;
     private readonly LinkVerifyQueue _linkVerifyQueue;
+    private readonly SqlReadonlyService? _catalogFilter;
 
     public ProductSyncController(
         ICurrentUserService currentUserService,
@@ -46,7 +48,8 @@ public class ProductSyncController : ControllerBase
         CategoryImportQueueService categoryImportQueue,
         QuotaService quotaService,
         LinkVerifyQueue linkVerifyQueue,
-        EncryptionService? encryptionService = null)
+        EncryptionService? encryptionService = null,
+        SqlReadonlyService? catalogFilter = null)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -61,6 +64,7 @@ public class ProductSyncController : ControllerBase
         _quotaService = quotaService;
         _linkVerifyQueue = linkVerifyQueue;
         _encryptionService = encryptionService;
+        _catalogFilter = catalogFilter;
     }
 
     #region Product Links
@@ -619,17 +623,29 @@ public class ProductSyncController : ControllerBase
         [FromBody] ExportBulkInput input,
         CancellationToken ct)
     {
-        if ((input.productIds == null || input.productIds.Count == 0) && !input.allMatching)
+        var hasIds = input.productIds is { Count: > 0 };
+        var hasWhere = !string.IsNullOrWhiteSpace(input.where);
+        if (!hasIds && !input.allMatching && !hasWhere && !input.skipWithoutImages)
             throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
 
         var connection = await GetConnectionAsync(connectionId);
-        var productIds = await ExportBatchSelection.ResolveProductIdsAsync(
-            _context,
-            connection.storeId,
-            input.productIds,
-            input.allMatching,
-            input.skipWithoutImages,
-            ct);
+        List<int> productIds;
+        try
+        {
+            productIds = await ExportBatchSelection.ResolveProductIdsAsync(
+                _context,
+                connection.storeId,
+                input.productIds,
+                input.allMatching || hasWhere,
+                input.skipWithoutImages && !hasWhere,
+                ct,
+                input.where,
+                _catalogFilter);
+        }
+        catch (AgentSqlFilterException ex)
+        {
+            throw ApiException.BadRequest(ex.Message, code: "invalid_filter");
+        }
         if (productIds.Count == 0)
             throw ApiException.BadRequest("No products selected for export", code: "required_fields_missing");
 
@@ -3411,7 +3427,13 @@ public class ProductSyncController : ControllerBase
         public List<int>? productIds { get; set; }
         /// <summary>When true and productIds is empty, queue every live catalog card.</summary>
         public bool allMatching { get; set; }
-        /// <summary>Drop cards that have no gallery photos (product_images).</summary>
+        /// <summary>
+        /// sql_readonly WHERE on products. Examples: <c>price &gt;= 1000</c>,
+        /// <c>id IN (SELECT productId FROM product_images)</c>.
+        /// Selects the matching live catalog when productIds is empty.
+        /// </summary>
+        public string? where { get; set; }
+        /// <summary>Kept for older clients. Prefer <see cref="where"/>.</summary>
         public bool skipWithoutImages { get; set; }
     }
 

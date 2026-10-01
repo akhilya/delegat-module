@@ -604,6 +604,8 @@
     "planCancelled": "Cancelled",
     "planAffected": "Affected:",
     "planTitle": "Plan",
+    "planShowMore": "Show {n} more",
+    "planShowLess": "Show less",
     "pythonRun": "Python",
     "pythonRunning": "Running",
     "pythonDone": "Done",

@@ -8,7 +8,7 @@ Export is **local catalog → marketplace / storefront** (Medusa «Магази�
 
 1. Resolve the connection from CURRENT CONTEXT by the name the user sees (one GET is enough).
 2. Optional: count cards without gallery photos (`product_images`, not `files`).
-3. Whole catalog except those without photos: `propose_plan`, then `POST /marketplace/connections/{id}/products/export-batch` with `{ "allMatching": true, "skipWithoutImages": true }`. HTTP 200 pending is success; cards export in Operations.
+3. Any catalog slice: `propose_plan`, then `POST /marketplace/connections/{id}/products/export-batch` with `{ "where": "…" }`. Prefer a template: `@withGallery`, `@withoutGallery`, `@withFiles`, `@withoutFiles`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`. Combine with `AND` (`@withGallery AND price >= 1000 AND categoryId = 3`). A characteristic is `id IN (SELECT productId FROM store_product_attribute_values WHERE storeAttributeId = N AND value = 'text')`. The same `where` filters `GET /products` and `PATCH /products/bulk`. HTTP 200 pending is success; cards export in Operations.
 4. Named subsets: collect `productIds`, then the same POST with `{ productIds }`. Tiny sets may use `POST …/products/export-bulk`.
 
 Do **not** call `import-unlinked`, Catalog Connect, `GET /tools`, adapters, or mappings for this. Do not tell the operator to start export on the shop page. Import is the opposite direction (shop → this catalog). Linking existing cards to another marketplace is `match/preview` then `match/apply`.

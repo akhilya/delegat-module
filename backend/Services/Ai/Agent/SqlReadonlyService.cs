@@ -468,6 +468,18 @@ public sealed class SqlReadonlyService
         return q.IsDistinct ? DistinctRows(rows, q) : rows;
     }
 
+    /// <summary>
+    /// Applies a sql_readonly WHERE clause to a product query. Store scope stays on <paramref name="src"/>.
+    /// </summary>
+    public IQueryable<Product> ApplyProductWhereClause(IQueryable<Product> src, int storeId, string where)
+    {
+        var expanded = CatalogWhereTemplates.Expand(where);
+        var parsed = AgentSqlGuard.TryParseWhere("products", expanded);
+        if (parsed.Error != null)
+            throw new AgentSqlFilterException(parsed.Error);
+        return ApplyProductWhere(src, new AgentSqlQuery { Table = "products", Where = parsed.Predicates }, storeId);
+    }
+
     private IQueryable<Product> ApplyProductWhere(IQueryable<Product> src, AgentSqlQuery q, int storeId)
     {
         if (q.Where == null) return src;
@@ -495,6 +507,7 @@ public sealed class SqlReadonlyService
                 ("id", AgentSqlOp.Gte) when TryInt(val, out var idGte) => src.Where(p => p.Id >= idGte),
                 ("id", AgentSqlOp.In) when ids.Count > 0 => src.Where(p => ids.Contains(p.Id)),
                 ("id", AgentSqlOp.NotIn) when ids.Count > 0 => src.Where(p => !ids.Contains(p.Id)),
+                ("id", AgentSqlOp.InSelect) => src.Where(p => SubqueryProductIds(storeId, pred).Contains(p.Id)),
                 ("id", AgentSqlOp.NotInSelect) => src.Where(p => !SubqueryProductIds(storeId, pred).Contains(p.Id)),
                 ("barcode", AgentSqlOp.IsNull) => src.Where(p => p.barcode == null),
                 ("barcode", AgentSqlOp.IsNotNull) => src.Where(p => p.barcode != null),
@@ -508,6 +521,8 @@ public sealed class SqlReadonlyService
                 ("price", AgentSqlOp.Lt) when decimal.TryParse(val, out var priceLt) => src.Where(p => p.price < priceLt),
                 ("price", AgentSqlOp.Gte) when decimal.TryParse(val, out var priceGte) => src.Where(p => p.price >= priceGte),
                 ("price", AgentSqlOp.Lte) when decimal.TryParse(val, out var priceLte) => src.Where(p => p.price <= priceLte),
+                ("price", AgentSqlOp.IsNull) => src.Where(p => p.price == null),
+                ("price", AgentSqlOp.IsNotNull) => src.Where(p => p.price != null),
                 ("storagequantity", AgentSqlOp.Eq) when TryInt(val, out var qty) => src.Where(p => p.storageQuantity == qty),
                 ("storagequantity", AgentSqlOp.Gt) when TryInt(val, out var qtyGt) => src.Where(p => p.storageQuantity > qtyGt),
                 ("storagequantity", AgentSqlOp.Lt) when TryInt(val, out var qtyLt) => src.Where(p => p.storageQuantity < qtyLt),
@@ -530,6 +545,8 @@ public sealed class SqlReadonlyService
         {
             "product_images" => ImageSource(storeId, sub).Select(i => i.productId),
             "files" => FileSource(storeId, sub).Select(f => f.productId),
+            "product_attribute_values" => ProductAttributeValueSource(storeId, sub).Select(v => v.productId),
+            "store_product_attribute_values" => StoreProductAttributeValueSource(storeId, sub).Select(v => v.productId),
             _ => _db.products.Where(_ => false).Select(p => p.Id),
         };
     }
@@ -771,7 +788,9 @@ public sealed class SqlReadonlyService
                 ("productid", AgentSqlOp.In) when ids.Count > 0 => src.Where(v => ids.Contains(v.productId)),
                 ("attributeid", AgentSqlOp.Eq) when TryInt(val, out var aid) => src.Where(v => v.attributeId == aid),
                 ("id", AgentSqlOp.Eq) when TryInt(val, out var id) => src.Where(v => v.Id == id),
-                _ => src,
+                ("value", AgentSqlOp.Eq) => src.Where(v => v.value == val),
+                ("value", AgentSqlOp.Like) => src.Where(v => v.value != null && v.value.Contains(val.Trim('%'))),
+                _ => throw new AgentSqlFilterException($"WHERE {pred.Column} is not supported on product_attribute_values"),
             };
         }
 
@@ -827,7 +846,7 @@ public sealed class SqlReadonlyService
                 ("storeattributeid", AgentSqlOp.Eq) when TryInt(val, out var aid) => src.Where(v => v.storeAttributeId == aid),
                 ("value", AgentSqlOp.Eq) => src.Where(v => v.value == val),
                 ("value", AgentSqlOp.Like) => src.Where(v => v.value != null && v.value.Contains(val.Trim('%'))),
-                _ => src,
+                _ => throw new AgentSqlFilterException($"WHERE {pred.Column} is not supported on store_product_attribute_values"),
             };
         }
 

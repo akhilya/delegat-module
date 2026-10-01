@@ -141,6 +141,17 @@ public class AgentSqlGuardTests
         Assert.Equal(AgentSqlOp.NotInSelect, notIn.Where?[0].Op);
         Assert.Equal("product_images", notIn.Where?[0].SubTable);
 
+        var inPhotos = AgentSqlGuard.Parse(
+            "SELECT id FROM products WHERE id IN (SELECT productId FROM product_images)");
+        Assert.Null(inPhotos.Error);
+        Assert.Equal(AgentSqlOp.InSelect, inPhotos.Where?[0].Op);
+
+        var byValue = AgentSqlGuard.Parse(
+            "SELECT id FROM products WHERE id IN (SELECT productId FROM store_product_attribute_values WHERE value = 'Cotton')");
+        Assert.Null(byValue.Error);
+        Assert.Equal(AgentSqlOp.InSelect, byValue.Where?[0].Op);
+        Assert.Equal("Cotton", byValue.Where?[0].SubWhere?[0].Value);
+
         var min = AgentSqlGuard.Parse("SELECT MIN(productId) AS n FROM files");
         Assert.Null(min.Error);
         Assert.Equal(AgentSqlSelectKind.Min, min.Select[0].Kind);
@@ -188,6 +199,60 @@ public class AgentSqlGuardTests
         Assert.Null(fromSchema.Error);
         Assert.Equal("category_attributes", fromSchema.SchemaFilterTable);
         Assert.Equal(new[] { "table_name", "column_name" }, fromSchema.Columns);
+    }
+
+    [Fact]
+    public void WhereTemplates_ExpandToFixedSql_AndAttacksNeverParse()
+    {
+        var combined = CatalogWhereTemplates.Expand("@withGallery AND price >= 1000 AND @noCategory");
+        var parsed = AgentSqlGuard.TryParseWhere("products", combined);
+        Assert.Null(parsed.Error);
+        Assert.Equal(AgentSqlOp.InSelect, parsed.Predicates![0].Op);
+        Assert.Equal("product_images", parsed.Predicates[0].SubTable);
+        Assert.Equal(AgentSqlOp.Gte, parsed.Predicates[1].Op);
+        Assert.Equal(AgentSqlOp.IsNull, parsed.Predicates[2].Op);
+
+        var quoted = CatalogWhereTemplates.Expand("name = '@withGallery'");
+        Assert.Contains("'@withGallery'", quoted, StringComparison.Ordinal);
+        Assert.Null(AgentSqlGuard.TryParseWhere("products", quoted).Error);
+
+        foreach (var name in CatalogWhereTemplates.All)
+        {
+            var one = AgentSqlGuard.TryParseWhere("products", CatalogWhereTemplates.Expand("@" + name.Name));
+            Assert.Null(one.Error);
+        }
+
+        string[] attacks =
+        [
+            "id = 1; DROP TABLE products",
+            "@withGallery; DELETE FROM products",
+            "id = 1 OR 1=1",
+            "name = 'x' OR '1'='1'",
+            "@withGallery OR @inStock",
+            "id = 1 -- comment",
+            "id = 1 /* comment */",
+            "id IN (SELECT password FROM users)",
+            "id IN (SELECT productId FROM product_images) UNION SELECT id FROM products",
+            "id IN (SELECT productId FROM information_schema.tables)",
+            "id IN (SELECT productId FROM products)",
+            "name = 'a\\' OR id IS NOT NULL",
+            "@nope",
+            "price >= 1; SELECT SLEEP(5)",
+        ];
+        foreach (var attack in attacks)
+        {
+            string? expanded = null;
+            try
+            {
+                expanded = CatalogWhereTemplates.Expand(attack);
+            }
+            catch (AgentSqlFilterException)
+            {
+                continue;
+            }
+
+            Assert.NotNull(AgentSqlGuard.TryParseWhere("products", expanded!).Error);
+        }
     }
 
     [Fact]

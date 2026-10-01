@@ -37,7 +37,7 @@ public static class AgentToolCatalog
             Req([]), ("query", Str()), ("limit", Int())),
         Prop("search_actions", "Find cabinet HTTP the assistant can run (same JSON API as the SPA). Use before inventing a path or GET /tools. Query in store language (export, выгрузка, import, match). Hits include method, path, and body notes.",
             Req(["query"]), ("query", Str("e.g. export products to Medusa without photos")), ("limit", Int("Max hits, default 8"))),
-        Prop("sql_readonly", "Read-only SELECT against allowlisted store tables. storeId is forced. No SELECT *. SHOW TABLES / SHOW COLUMNS FROM table / DESCRIBE table list the allowlist (or SELECT table_name, column_name FROM schema). WHERE supports = != <> < > <= >= LIKE NOT LIKE IN NOT IN IS NULL IS NOT NULL and NOT IN (SELECT productId FROM files|product_images). SELECT DISTINCT col (one column).",
+        Prop("sql_readonly", "Read-only SELECT against allowlisted store tables. storeId is forced. No SELECT *. SHOW TABLES / SHOW COLUMNS FROM table / DESCRIBE table list the allowlist (or SELECT table_name, column_name FROM schema). WHERE supports = != <> < > <= >= LIKE NOT LIKE IN NOT IN IS NULL IS NOT NULL and IN or NOT IN (SELECT productId FROM files|product_images|product_attribute_values|store_product_attribute_values). SELECT DISTINCT col (one column). The same WHERE is the catalog filter on GET /products, PATCH /products/bulk, and export-batch (field where). There is no has-photos flag.",
             Req(["sql"]), ("sql", Str("SELECT id, name, sku FROM products LIMIT 50"))),
         ];
         if (PythonSandboxClient.IsConfigured())

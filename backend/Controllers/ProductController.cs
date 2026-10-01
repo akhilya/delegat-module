@@ -8,6 +8,7 @@ using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
 using Delegat.Services;
+using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
 
 namespace Delegat.Controllers;
@@ -29,6 +30,7 @@ public class ProductController : ControllerBase
     private readonly IOperationLogger _operationLogger;
     private readonly AttributeUniquenessService _attributeUniqueness;
     private readonly ProductBulkUpdateService _bulkUpdateService;
+    private readonly SqlReadonlyService? _catalogFilter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductController"/> class.
@@ -43,7 +45,8 @@ public class ProductController : ControllerBase
         QuotaService quotaService,
         IOperationLogger operationLogger,
         AttributeUniquenessService attributeUniqueness,
-        ProductBulkUpdateService bulkUpdateService)
+        ProductBulkUpdateService bulkUpdateService,
+        SqlReadonlyService? catalogFilter = null)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -55,6 +58,7 @@ public class ProductController : ControllerBase
         _operationLogger = operationLogger;
         _attributeUniqueness = attributeUniqueness;
         _bulkUpdateService = bulkUpdateService;
+        _catalogFilter = catalogFilter;
     }
 
     /// <summary>
@@ -62,7 +66,7 @@ public class ProductController : ControllerBase
     /// </summary>
     /// <param name="searchQuery">Optional search: name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode.</param>
     /// <param name="categoryId">Optional category ID to filter products by.</param>
-    /// <param name="hasImages">When true, only products with gallery photos; when false, only products without photos.</param>
+    /// <param name="where">sql_readonly WHERE on products, for example <c>price &gt;= 1000</c> or <c>id IN (SELECT productId FROM product_images)</c>.</param>
     /// <param name="startIndex">Zero-based index of the first item to return.</param>
     /// <param name="pageSize">Number of items per page.</param>
     /// <param name="sort">Legacy single sort string (prefer repeated sort query params: sort=col:dir&amp;sort=col:dir)</param>
@@ -74,7 +78,7 @@ public class ProductController : ControllerBase
     public async Task<IActionResult> GetAllProducts(
         string? searchQuery,
         int? categoryId = null,
-        bool? hasImages = null,
+        string? where = null,
         int startIndex = 0,
         int pageSize = 12,
         string? sort = null,
@@ -102,10 +106,19 @@ public class ProductController : ControllerBase
         else if (hasCategoryFilter)
             query = query.Where(p => p.categoryId == categoryId!.Value);
 
-        if (hasImages == true)
-            query = query.Where(p => p.images.Any());
-        else if (hasImages == false)
-            query = query.Where(p => !p.images.Any());
+        if (!string.IsNullOrWhiteSpace(where))
+        {
+            if (_catalogFilter == null)
+                throw ApiException.BadRequest("Catalog filter is not available", code: "invalid_filter");
+            try
+            {
+                query = _catalogFilter.ApplyProductWhereClause(query, selectedStoreId.Value, where);
+            }
+            catch (AgentSqlFilterException ex)
+            {
+                throw ApiException.BadRequest(ex.Message, code: "invalid_filter");
+            }
+        }
 
         query = query.WhereMatchesSearch(searchQuery);
 
@@ -661,7 +674,27 @@ public class ProductController : ControllerBase
 
         var updates = ToBulkUpdateFields(request.updates);
         List<int> productIds;
-        if (request.allMatching == true)
+        if (!string.IsNullOrWhiteSpace(request.where))
+        {
+            if (_catalogFilter == null)
+                throw ApiException.BadRequest("Catalog filter is not available", code: "invalid_filter");
+            var src = _context.products.AsNoTracking()
+                .Where(p => p.storeId == selectedStoreId.Value && p.deletedAt == null);
+            if (request.allMatching != true && request.productIds is { Count: > 0 })
+                src = src.Where(p => request.productIds.Contains(p.Id));
+            try
+            {
+                productIds = await _catalogFilter
+                    .ApplyProductWhereClause(src, selectedStoreId.Value, request.where)
+                    .Select(p => p.Id)
+                    .ToListAsync(ct);
+            }
+            catch (AgentSqlFilterException ex)
+            {
+                throw ApiException.BadRequest(ex.Message, code: "invalid_filter");
+            }
+        }
+        else if (request.allMatching == true)
         {
             productIds = await _bulkUpdateService.ListCatalogProductIdsAsync(selectedStoreId.Value, ct);
         }
@@ -751,6 +784,8 @@ public class ProductController : ControllerBase
         public List<int>? productIds { get; set; }
         /// <summary>When true, every catalog card in the store (not trash).</summary>
         public bool? allMatching { get; set; }
+        /// <summary>sql_readonly WHERE on products. Selects the matching live catalog when productIds is empty.</summary>
+        public string? where { get; set; }
         /// <summary>When true, apply in this request so a following price export sees the new amounts.</summary>
         public bool? wait { get; set; }
         /// <summary>The field values to apply to every specified product.</summary>

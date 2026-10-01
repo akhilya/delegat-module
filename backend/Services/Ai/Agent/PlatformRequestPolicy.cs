@@ -51,7 +51,9 @@ public static class PlatformRequestPolicy
           POST …/products/import-selected  POST …/products/import-unlinked
           POST …/products/import-all (legacy; prefer import-unlinked or import-selected)
           POST …/products/export-batch { productIds } — local catalog → this shop (Operations)
-          POST …/products/export-batch { allMatching: true, skipWithoutImages?: true } — whole catalog (skip cards with no gallery photos)
+          POST …/products/export-batch { where } — CATALOG WHERE templates (@withGallery, @withoutGallery, @inStock, @outOfStock, @noPrice, @noBarcode, @noCategory, @withFiles, @withoutFiles) or the same SQL WHERE as sql_readonly. Combine with AND. No per-criterion flags.
+          GET /products?where=…  PATCH /products/bulk { where, updates } — same WHERE
+          POST …/products/export-batch { allMatching: true } — every live catalog card
           POST …/products/export-bulk { productIds } — same write, waits in-request (small sets only)
           GET /marketplace/export-batches/{batchId}/status
           POST …/match/preview  POST …/match/apply  POST …/match/repair-mappings

@@ -25,6 +25,8 @@ public class AiPromptsChatTests
     public void ChatSystem_IsStoreAssistantNotApiClient()
     {
         var prompt = Prompt();
+        Assert.Contains("@withGallery", prompt, StringComparison.Ordinal);
+        Assert.Contains("@noPrice", prompt, StringComparison.Ordinal);
         Assert.Contains("store assistant", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Never mention: tool names", prompt, StringComparison.Ordinal);
         Assert.Contains("Respond in English", prompt, StringComparison.Ordinal);
@@ -202,6 +204,18 @@ public class AiPromptsChatTests
             "Marketplace product import is a cabinet Tools job",
             prompt,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_ExportWithPhotos_NamesTheBatchBody()
+    {
+        var prompt = Prompt(turnText: "экспортируй все товары с фотографиями на вб");
+        Assert.Contains("export-batch", prompt, StringComparison.Ordinal);
+        Assert.Contains("@withGallery", prompt, StringComparison.Ordinal);
+        Assert.Contains("id IN (SELECT productId FROM product_images)", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("skipWithoutImages", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("includePhotos", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("priceDelta", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

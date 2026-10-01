@@ -604,6 +604,8 @@
     "planCancelled": "Отменено",
     "planAffected": "Затронуто:",
     "planTitle": "План",
+    "planShowMore": "Ещё {n}",
+    "planShowLess": "Свернуть",
     "pythonRun": "Python",
     "pythonRunning": "Выполняется",
     "pythonDone": "Готово",

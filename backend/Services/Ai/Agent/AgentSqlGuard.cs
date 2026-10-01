@@ -15,6 +15,7 @@ public enum AgentSqlOp
     Gte,
     In,
     NotIn,
+    InSelect,
     NotInSelect,
     IsNull,
     IsNotNull,
@@ -71,6 +72,14 @@ public sealed class AgentSqlQuery
 public static class AgentSqlGuard
 {
     public const int MaxLimit = 200;
+
+    private static readonly HashSet<string> ProductIdSubqueryTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "files",
+        "product_images",
+        "product_attribute_values",
+        "store_product_attribute_values",
+    };
     public const int MaxInValues = 200;
 
     public const string SchemaDescription = """
@@ -81,7 +90,7 @@ public static class AgentSqlGuard
         pending_imports, adapter_http_logs.
         Never: credentials, tokens, payloadJson, graphJson, HTTP bodies/headers, users, API keys.
         WHERE: = != <> < > <= >= LIKE NOT LIKE IN NOT IN IS NULL IS NOT NULL. AND only. No OR. No JOIN.
-        NOT IN (SELECT productId FROM product_images|files). SELECT DISTINCT col. LIMIT/OFFSET.
+        IN or NOT IN (SELECT productId FROM product_images|files|product_attribute_values|store_product_attribute_values). SELECT DISTINCT col. LIMIT/OFFSET.
         Aggregates: COUNT(*), COUNT(DISTINCT col), MIN(col), MAX(col) — not mixed with row columns.
         SHOW TABLES / SHOW COLUMNS FROM t / SELECT table_name, column_name FROM schema.
         Not information_schema. Not SELECT *.
@@ -476,31 +485,30 @@ public static class AgentSqlGuard
                 continue;
             }
 
-            var notInSelect = Regex.Match(trimmedPart,
-                @"^([a-zA-Z_][\w]*)\s+NOT\s+IN\s*\(\s*SELECT\s+([a-zA-Z_][\w]*)\s+FROM\s+([a-zA-Z_][\w]*)(?:\s+WHERE\s+(.+?))?\s*\)$",
+            var inSelect = Regex.Match(trimmedPart,
+                @"^([a-zA-Z_][\w]*)\s+(NOT\s+)?IN\s*\(\s*SELECT\s+([a-zA-Z_][\w]*)\s+FROM\s+([a-zA-Z_][\w]*)(?:\s+WHERE\s+(.+?))?\s*\)$",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (notInSelect.Success)
+            if (inSelect.Success)
             {
-                var col = notInSelect.Groups[1].Value;
+                var col = inSelect.Groups[1].Value;
                 if (!allowedCols.Contains(col.ToLowerInvariant()))
                     return (ColumnError(table, col), null);
-                var subCol = notInSelect.Groups[2].Value;
-                var subTableRaw = notInSelect.Groups[3].Value;
+                var subCol = inSelect.Groups[3].Value;
+                var subTableRaw = inSelect.Groups[4].Value;
                 var subTable = CanonicalTable(subTableRaw);
                 if (!Tables.TryGetValue(subTable, out var subColNames))
                     return ($"Table '{subTableRaw}' is not allowlisted", null);
                 var subCols = AllowedColumnSet(subColNames);
                 if (!subCols.Contains(subCol.ToLowerInvariant()))
                     return (ColumnError(subTable, subCol), null);
-                if (!subTable.Equals("files", StringComparison.OrdinalIgnoreCase)
-                    && !subTable.Equals("product_images", StringComparison.OrdinalIgnoreCase))
-                    return ("NOT IN subquery is only allowed against files or product_images", null);
+                if (!ProductIdSubqueryTables.Contains(subTable))
+                    return ("IN subquery is only allowed against files, product_images, or attribute values", null);
                 if (!subCol.Equals("productId", StringComparison.OrdinalIgnoreCase))
-                    return ("NOT IN subquery must select productId", null);
+                    return ("IN subquery must select productId", null);
                 IReadOnlyList<AgentSqlPredicate>? subWhere = null;
-                if (notInSelect.Groups[4].Success && notInSelect.Groups[4].Value.Trim().Length > 0)
+                if (inSelect.Groups[5].Success && inSelect.Groups[5].Value.Trim().Length > 0)
                 {
-                    var nested = ParseWhere(notInSelect.Groups[4].Value.Trim(), subCols, subTable);
+                    var nested = ParseWhere(inSelect.Groups[5].Value.Trim(), subCols, subTable);
                     if (nested.Error != null)
                         return (nested.Error, null);
                     subWhere = nested.Predicates;
@@ -509,7 +517,7 @@ public static class AgentSqlGuard
                 list.Add(new AgentSqlPredicate
                 {
                     Column = col,
-                    Op = AgentSqlOp.NotInSelect,
+                    Op = inSelect.Groups[2].Success ? AgentSqlOp.NotInSelect : AgentSqlOp.InSelect,
                     SubTable = subTable,
                     SubColumn = subCol,
                     SubWhere = subWhere,
@@ -559,6 +567,19 @@ public static class AgentSqlGuard
         }
 
         return (null, list);
+    }
+
+    /// <summary>
+    /// Parses a products WHERE clause in the sql_readonly dialect (AND only, allowlisted columns).
+    /// </summary>
+    public static (string? Error, IReadOnlyList<AgentSqlPredicate>? Predicates) TryParseWhere(
+        string table, string whereSql)
+    {
+        var canonical = CanonicalTable(table);
+        if (!Tables.TryGetValue(canonical, out var cols))
+            return ($"Table '{table}' is not allowlisted", null);
+        var parsed = ParseWhere(whereSql, AllowedColumnSet(cols), canonical);
+        return (parsed.Error, parsed.Predicates);
     }
 
     private static List<string> ParseInValues(string inner)

@@ -2,6 +2,7 @@ using Delegat.Enums;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Products;
+using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -433,5 +434,64 @@ public class ProductSyncPendingDomainTests
             db, store.Id, productIds: null, allMatching: true, skipWithoutImages: true, default);
 
         Assert.Equal(new[] { withPhoto.Id }, ids);
+    }
+
+    [Fact]
+    public async Task ExportBatchSelection_WhereGalleryPhotos_UsesSqlNotAPhotoFlag()
+    {
+        var (db, data, _) = Create();
+        var store = data.AddStore();
+        var user = data.AddUser();
+        var withPhoto = data.AddProduct(store.Id, "Has photo", sku: "P1");
+        var pricey = data.AddProduct(store.Id, "Pricey", sku: "P2");
+        pricey.price = 1500m;
+        db.files.Add(new Delegat.Models.File
+        {
+            productId = withPhoto.Id,
+            authorUserId = user.Id,
+            filePath = "a.jpg",
+            contentType = "image/jpeg",
+            length = 10,
+        });
+        db.images.Add(new ImageReference { fileId = 1, productId = withPhoto.Id, index = 0 });
+        await db.SaveChangesAsync();
+        var fileId = await db.files.Select(f => f.Id).SingleAsync();
+        var image = await db.images.SingleAsync();
+        image.fileId = fileId;
+        await db.SaveChangesAsync();
+
+        var sql = new SqlReadonlyService(db);
+        var photos = await ExportBatchSelection.ResolveProductIdsAsync(
+            db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+            where: "id IN (SELECT productId FROM product_images)",
+            catalogFilter: sql);
+        var byPrice = await ExportBatchSelection.ResolveProductIdsAsync(
+            db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+            where: "price >= 1000",
+            catalogFilter: sql);
+        var byTemplate = await ExportBatchSelection.ResolveProductIdsAsync(
+            db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+            where: "@withGallery",
+            catalogFilter: sql);
+        var combined = await ExportBatchSelection.ResolveProductIdsAsync(
+            db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+            where: "@withGallery AND price >= 1000",
+            catalogFilter: sql);
+
+        Assert.Equal(new[] { withPhoto.Id }, photos);
+        Assert.Equal(photos, byTemplate);
+        Assert.Equal(new[] { pricey.Id }, byPrice);
+        Assert.Empty(combined);
+
+        await Assert.ThrowsAsync<AgentSqlFilterException>(() =>
+            ExportBatchSelection.ResolveProductIdsAsync(
+                db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+                where: "id = 1; DROP TABLE products",
+                catalogFilter: sql));
+        await Assert.ThrowsAsync<AgentSqlFilterException>(() =>
+            ExportBatchSelection.ResolveProductIdsAsync(
+                db, store.Id, productIds: null, allMatching: false, skipWithoutImages: false, default,
+                where: "id = 1 OR 1=1",
+                catalogFilter: sql));
     }
 }

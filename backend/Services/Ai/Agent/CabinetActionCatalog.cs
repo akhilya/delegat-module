@@ -51,8 +51,8 @@ public sealed class CabinetActionCatalog
     internal static readonly ActionHit[] Extras =
     [
         new("POST", "/marketplace/connections/{id}/products/export-batch", true,
-            "Local catalog → this shop (Medusa/Woo/OpenCart/Ozon/…). Body: productIds, or allMatching+skipWithoutImages (gallery photos). HTTP 200 pending = Operations. Not GET /tools, not import.",
-            "export выгрузка выгрузить shop магазин medusa catalog products photos фото без фото allMatching skipWithoutImages export-batch export-bulk"),
+            "Local catalog → this shop (Medusa/Woo/OpenCart/Ozon/…). Body: productIds, allMatching, or where (@withGallery and the other CATALOG WHERE templates, or a sql_readonly WHERE). HTTP 200 pending = Operations. Not GET /tools, not import.",
+            "export выгрузка выгрузить shop магазин medusa catalog products photos фото без фото where allMatching export-batch export-bulk"),
         new("POST", "/marketplace/connections/{id}/products/export-bulk", true,
             "Same as export-batch but waits in-request. Small named sets only.",
             "export-bulk выгрузка"),

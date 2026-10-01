@@ -91,6 +91,8 @@ public static class AiPrompts
         var connectedMcpBlock = BuildConnectedMcpBlock(connectedMcpTools);
         var mappingBlock = IncludeMappingPlaybook(pageContext, turnText) ? FieldMappingPlaybook() : "";
         var priceBlock = IncludePricePlaybook(turnText) ? PricePlaybook() : "";
+        var exportBlock = IncludeExportPlaybook(turnText) ? ExportPlaybook() : "";
+        var whereBlock = CatalogWhereTemplates.PromptBlock();
         var routeBlock = IncludeRouteCatalog(turnText) ? RouteCatalog() : "";
         var placeBlock = pythonOn
             ? """
@@ -282,6 +284,8 @@ public static class AiPrompts
         is success for background jobs (Operations) — do not wait for every card.
         PATCH /products/<id> attributeValues replaces the list (GET the card first).
         {priceBlock}
+        {whereBlock}
+        {exportBlock}
         Never tell the user a write they asked for does not exist if search_actions returned a hit.
 
         search_knowledge is docs, not the live catalog and not the create DTO.
@@ -388,6 +392,22 @@ public static class AiPrompts
 
     private static bool IncludePricePlaybook(string? turnText) =>
         !string.IsNullOrWhiteSpace(turnText) && PriceTurnRx.IsMatch(turnText);
+
+    private static readonly Regex ExportTurnRx = new(
+        @"export-batch|выгруз|экспорт|export\s+all|все\s+товар",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static bool IncludeExportPlaybook(string? turnText) =>
+        !string.IsNullOrWhiteSpace(turnText) && ExportTurnRx.IsMatch(turnText);
+
+    private static string ExportPlaybook() => """
+        Export local products to a shop: propose_plan, then POST
+        /marketplace/connections/{id}/products/export-batch. Connection id is CURRENT CONTEXT
+        (wildberries / ozon / yandexmarket).         Filter with where from CATALOG WHERE. Photos are @withGallery or @withoutGallery.
+        A slice is those names plus AND (price >= 1000 AND categoryId = 3).
+        GET /products?where=… and PATCH /products/bulk { where, updates } use that clause too.
+        Named cards: productIds. Do not send an empty body. HTTP 200 pending is Operations.
+        """;
 
     private static bool IncludeRouteCatalog(string? turnText) =>
         !string.IsNullOrWhiteSpace(turnText) && RouteTurnRx.IsMatch(turnText);
@@ -518,7 +538,9 @@ public static class AiPrompts
         Raise every catalog price: propose_plan only — PATCH /products/bulk
         with allMatching and wait true and updates.priceDelta (e.g. 500) then POST
         /tools/export-all-prices/run with connectionId for each named shop (CURRENT CONTEXT
-        adapter ozon / wildberries / yandexmarket). wait so shop export sees the new amounts.
+        adapter ozon / wildberries / yandexmarket). A slice uses where from CATALOG WHERE
+        instead of allMatching — gallery photos are @withGallery.
+        wait so shop export sees the new amounts.
         Do not GET …/prices, do not search_knowledge, do not invent a per-card PATCH loop.
         """;
 
