@@ -61,12 +61,12 @@ public class AgentChatTurnGateTests
     }
 
     [Fact]
-    public void NextPass_OneScriptThenPlanOrAnswer()
+    public void SpeakOnly_WhenTheyAskToAnswer_NotAfterAFewTools()
     {
-        Assert.Equal((false, false), AgentChatTurnGate.NextPass(false, 0, 0));
-        Assert.Equal((false, true), AgentChatTurnGate.NextPass(false, 1, 1));
-        Assert.Equal((false, false), AgentChatTurnGate.NextPass(false, 2, 0));
-        Assert.Equal((true, false), AgentChatTurnGate.NextPass(false, 3, 0));
-        Assert.Equal((true, false), AgentChatTurnGate.NextPass(true, 0, 0));
+        Assert.False(AgentChatTurnGate.SpeakOnly(false, 0));
+        Assert.False(AgentChatTurnGate.SpeakOnly(false, 3));
+        Assert.False(AgentChatTurnGate.SpeakOnly(false, 12));
+        Assert.True(AgentChatTurnGate.SpeakOnly(true, 0));
+        Assert.True(AgentChatTurnGate.SpeakOnly(false, AgentChatTurnGate.RunawayToolRounds));
     }
 }

@@ -160,23 +160,15 @@ public class AiChatService
             var autoContinued = false;
             var answerNow = AgentChatTurnGate.AsksToAnswerNow(TurnText(userMessages));
             var toolRounds = 0;
-            var pythonRuns = 0;
             var spoke = false;
             var sawPlan = false;
             var nudgedSilence = false;
 
-            // One extra pass with tools removed so a question always ends in an answer,
-            // even when the earlier passes were spent on tools.
-            for (var iteration = 0; iteration < AgentChatTurnGate.MaxToolRounds + 1; iteration++)
+            // Keep calling tools until the task is closed. A stuck loop still has to end in a sentence.
+            for (var iteration = 0; iteration < AgentChatTurnGate.RunawayToolRounds + 2; iteration++)
             {
-                var pass = AgentChatTurnGate.NextPass(answerNow, toolRounds, pythonRuns);
-                List<AiTool>? passTools = tools;
-                if (pass.SpeakOnly)
-                    passTools = null;
-                else if (pass.ProposePlanOnly)
-                    passTools = tools.Where(t => AgentChatTurnGate.IsProposePlan(t.name)).ToList();
-                if (passTools is { Count: 0 })
-                    passTools = null;
+                var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds);
+                List<AiTool>? passTools = speakOnly ? null : tools;
 
                 var request = new AiRequest
                 {
@@ -290,13 +282,12 @@ public class AiChatService
                     if (!spoke && !sawPlan && !nudgedSilence)
                     {
                         nudgedSilence = true;
-                        toolRounds = AgentChatTurnGate.MaxToolRounds;
                         if (finalText.Length > 0)
                             messages.Add(new AiMessage { role = "assistant", content = finalText });
                         messages.Add(new AiMessage
                         {
                             role = "user",
-                            content = "You have not replied. Answer now in the user's language with what you found or that you could not. Do not call tools."
+                            content = "You stopped with no reply. The task is not finished. If a fact is still missing, call the next tool. If you already have it, answer or propose_plan now. Do not end the turn on tools alone."
                         });
                         continue;
                     }
@@ -315,7 +306,6 @@ public class AiChatService
 
                 var toolResults = new List<object>();
                 var shouldBreak = false;
-                var blockedPython = false;
                 var waitForPlan = AgentChatTurnGate.BatchHasProposePlan(toolUses);
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
@@ -362,22 +352,6 @@ public class AiChatService
                         continue;
                     }
 
-                    if (AgentChatTurnGate.IsRunPython(toolName)
-                        && pythonRuns >= AgentChatTurnGate.MaxRunPythonPerTurn)
-                    {
-                        blockedPython = true;
-                        toolResults.Add(new
-                        {
-                            type = "tool_result",
-                            tool_use_id = toolId,
-                            content = AgentChatTurnGate.PythonBudgetSpent
-                        });
-                        continue;
-                    }
-
-                    if (AgentChatTurnGate.IsRunPython(toolName))
-                        pythonRuns++;
-
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
                     object result;
                     string summary;
@@ -399,10 +373,15 @@ public class AiChatService
 
                 messages.Add(new AiMessage { role = "user", content = toolResults });
                 if (shouldBreak) break;
-                if (blockedPython)
-                    toolRounds = AgentChatTurnGate.MaxToolRounds;
-                else
-                    toolRounds++;
+                toolRounds++;
+                if (toolRounds == AgentChatTurnGate.RunawayToolRounds)
+                {
+                    messages.Add(new AiMessage
+                    {
+                        role = "user",
+                        content = "Close the task now from what you already have: a sentence or propose_plan. Do not call another tool."
+                    });
+                }
             }
 
             if (!spoke && !sawPlan)

@@ -11,7 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
-- A cabinet assistant turn that only runs tools still ends with a sentence. A nudge such as «и?» asks for that reply instead of another search. A regex block on a mapping names the field it edits.
+- A cabinet assistant turn is not cut off after a few tool calls. A complex task keeps going until it ends in a sentence or a plan. A nudge such as «и?» still asks for that reply instead of another search. A regex block on a mapping names the field it edits.
 - Catalog list, bulk edit, and shop export take one SQL `where`. Frequent slices are named templates (`@withGallery`, `@withoutGallery`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`, and the file pair). The assistant copies those names. There is no separate “has photos” switch.
 - Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation. A Yandex Market page that returns an internal error no longer fails the whole check: that page is retried in smaller pieces, and any saved links still missing are looked up directly.
 - The navbar Help button stays beside product search instead of covering it. The search narrows when the bar is tight.

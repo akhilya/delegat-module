@@ -17,14 +17,11 @@ public static class AgentChatTurnGate
     public const string WriteNeedsPlan =
         "Not run. Cabinet writes only run after the user confirms propose_plan. Call propose_plan as the only tool this turn; use CURRENT PAGE ids.";
 
-    /// <summary>Tool-using model passes before the turn must answer in text.</summary>
-    public const int MaxToolRounds = 3;
-
-    /// <summary>One script per user message. A second script is fishing.</summary>
-    public const int MaxRunPythonPerTurn = 1;
-
-    public const string PythonBudgetSpent =
-        "Not run. One script already ran for this question. Answer the user now from that result. Do not call another tool.";
+    /// <summary>
+    /// Stuck-loop fuse. A normal task is not cut here. Past this, the turn must close
+    /// with a sentence or a plan instead of calling tools forever.
+    /// </summary>
+    public const int RunawayToolRounds = 40;
 
     /// <summary>Shown when a turn used tools and still produced no sentence and no plan.</summary>
     public static string SilentTurnFallback(string? locale) =>
@@ -51,21 +48,8 @@ public static class AgentChatTurnGate
             or "and" or "so" or "well";
     }
 
-    public static bool IsRunPython(string? toolName) =>
-        string.Equals(toolName, "run_python", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// SpeakOnly: no tools, the model must reply.
-    /// ProposePlanOnly: a script already ran; the only remaining tool is the plan.
-    /// </summary>
-    public static (bool SpeakOnly, bool ProposePlanOnly) NextPass(bool answerNow, int toolRounds, int pythonRuns)
-    {
-        if (answerNow || toolRounds >= MaxToolRounds)
-            return (true, false);
-        if (pythonRuns >= MaxRunPythonPerTurn)
-            return (false, true);
-        return (false, false);
-    }
+    public static bool SpeakOnly(bool answerNow, int toolRounds) =>
+        answerNow || toolRounds >= RunawayToolRounds;
 
     private static string CollapseSpaces(string s)
     {
