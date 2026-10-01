@@ -96,7 +96,13 @@ public class AiPromptsChatTests
         var prompt = Prompt(turnText: "Измени мапинг, чтобы в описании все эмодзи заменялись регулярным выражением");
         Assert.Contains("regexReplace", prompt, StringComparison.Ordinal);
         Assert.Contains("adapterFieldKey", prompt, StringComparison.Ordinal);
+        Assert.Contains("removeModifierTypes", prompt, StringComparison.Ordinal);
+        Assert.Contains(@"[\uD83C-\uD83E][\uDC00-\uDFFF]", prompt, StringComparison.Ordinal);
+        Assert.Contains(@"\u{…} is invalid", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan in that same turn", prompt, StringComparison.Ordinal);
+        Assert.Contains("save-mapping-selections", prompt, StringComparison.Ordinal);
+        Assert.Contains("resolve-mappings", prompt, StringComparison.Ordinal);
+        Assert.Contains("does not edit the canvas", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

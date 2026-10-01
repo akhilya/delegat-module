@@ -37,6 +37,8 @@ In the app: **Settings → API** → "Open Swagger", or **Tools → Try Public A
 2. Paste only `dk_…` (do **not** type `Bearer`)
 3. Try it out - request must include `Authorization: Bearer dk_…`
 
+Sections start collapsed, in this order: account, catalog, connections, mappings, sync, then live commerce (Prices, Orders, Fulfillment, Shipments, Promotions). Each row is one line; the contract, query, and error codes are inside the operation. Every non-2xx body is `{ "error": { "code", "message", "details" } }`. The key stays in the browser after refresh.
+
 On production only **Public API v1** is listed (SPA/internal API docs are hidden).
 
 ## Base URL
@@ -90,7 +92,9 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 401 | `unauthorized` | Missing/invalid/revoked key, inactive user |
 | 403 | `forbidden` / `access_denied_store` | User is not a member of `storeId` |
 | 404 | `not_found` | Resource missing in that store (prefer the semantic codes below when present) |
-| 404 | `product_not_found` / `category_not_found` / `group_not_found` / `variant_not_found` / `store_attribute_not_found` / `connection_not_found` / `operation_not_found` / `group_member_not_found` | Named resource missing |
+| 404 | `product_not_found` / `category_not_found` / `group_not_found` / `variant_not_found` / `store_attribute_not_found` / `connection_not_found` / `operation_not_found` / `group_member_not_found` / `mapping_not_found` | Named resource missing |
+| 400 | `mapping_category_mismatch` | Product was assigned a mapping whose local category is not the product’s category |
+| 400 | `product_has_no_category` | Product has no local category, so no marketplace mapping can be chosen |
 | 400 | `connection_inactive` | Sync starter or live commerce used a paused marketplace connection |
 | 400 | `adapter_capability_missing` | Connection adapter does not support the requested commerce action |
 | 400 | `order_status_failed` / `order_label_failed` / `promotion_update_failed` | Marketplace rejected the order status, label download, or promotion product update |
@@ -185,7 +189,19 @@ Respects product quotas (`409 product_limit_reached` when exceeded). Duplicate S
 |--------|------|-------------|
 | GET | `/connections` | Marketplace connections (**no credentials**) |
 | GET | `/connections/{connectionId}` | Connection meta |
-| GET | `/product-links` | Links. Query: `connectionId?`, `page`, `pageSize` |
+| GET | `/product-links` | Links. Query: `connectionId?`, `page`, `pageSize`. Each item includes `categoryMappingId`, `categoryMappingName`, and `externalCategoryName` when a mapping is chosen |
+
+### Mappings
+
+Base: `/stores/{storeId}/connections/{connectionId}/…`
+
+One local category may have several mappings when it exports to different marketplace categories. Assigning a product picks one of those rows. It does not edit the field canvas.
+
+| Method | Path | Body | Notes |
+|--------|------|------|--------|
+| GET | `/mappings` | | `id`, `name`, `localCategoryId`, `localCategoryName`, `externalCategoryId`, `externalCategoryName` |
+| POST | `/product-mappings/resolve` | `{ productIds }` | `selectedMappingId`, `needsSelection`, `availableMappings` for each product |
+| POST | `/product-mappings` | `{ selections: [{ productId, categoryMappingId }] }` | `categoryMappingId` must belong to this connection and to the product’s local category. Unknown mapping → `404 mapping_not_found`. Other local category → `400 mapping_category_mismatch`. No local category → `400 product_has_no_category`. A product with no link yet gets a pending link |
 
 ### Operations
 
@@ -207,20 +223,39 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 | POST | `/export-stocks` | `{ linkIds?: number[] }` | |
 | POST | `/import-stocks` | _(empty)_ | Adapter must support import stocks |
 
-### Marketplace commerce (orders stored; prices/promotions/shipments live)
+### Marketplace commerce
+
+Paths are unchanged. Swagger lists them as separate sections: Prices, Orders, Fulfillment, Shipments, Promotions.
 
 Base: `/stores/{storeId}/connections/{connectionId}/…`
 
 Order **lists and gets** read Delegat’s snapshot (eventually consistent; additive `syncedAt`). They do **not** call the marketplace. A background worker plus cabinet page-load (5-minute cooldown) pull new rows. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`. Seller status POST still goes to the marketplace, then upserts. Labels, shipments, prices, and promotions stay live pass-through.
 
+#### Prices
+
 | Method | Path | Capability | Notes |
 |--------|------|------------|--------|
 | GET | `/prices` | ImportPrices | Query `ids` = comma-separated marketplace product ids (omit = page what the adapter can list). Includes discounts / sale / marketing price when the marketplace sends them. |
+
+#### Orders
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|--------|
 | GET | `/orders` | GetOrders | Snapshot. Query: `page`, `pageSize`, `cursor` (numeric cursor is the next page number; `nextCursor` is `page+1` when `hasMore`), `status`, `from`, `to`, `channel` (`fbs` / `fbo` / `shop`), `search`. Same item fields as before plus `syncedAt`. Never synced → empty page, not a live cabinet dump. Normalized `status`: `new`, `confirmed`, `awaiting_pack`, `awaiting_deliver`, `delivering`, `delivered`, `cancelled`, `returned`, `unpaid`, `unknown`. Yandex Market maps those to Partner API `UNPAID` / `PROCESSING` / `PICKUP` / `DELIVERY` / `DELIVERED` / `CANCELLED` / `RETURNED` (`new` is `UNPAID`, packing is `PROCESSING` — Yandex has no `NEW` / `AWAITING_PACK`). Cabinet New (`new` / `unpaid`) is the accept queue (Ozon `awaiting_approve`). Wildberries FBS has no accept step: new assembly tasks (`supplierStatus=new`, `GET /api/v3/orders/new`) are `awaiting_pack`; in a supply (`confirm`) is `awaiting_deliver`; handed to WB (`complete`) is `delivering` until `wbStatus=sold`. Each item may include `imageUrl`, `name`, `barcode`, and `localProductId` as before. Wildberries `displayId` is the numeric order id (not `rid`). Search matches stored posting / display ids. |
 | GET | `/orders/{orderId}` | GetOrders | Snapshot. Missing → `404 order_not_found` (never synced). Ozon: posting number or the cabinet order number. Same item fields as the list plus `syncedAt`. |
 | GET | `/orders/{orderId}/label` | GetOrderLabels | Packing label / barcode sticker. Body: `{ contentType, fileName, contentBase64, format, barcode?, extra? }`. `format` is `pdf`, `png`, or `svg`. **Only in statuses where the marketplace can print:** Ozon FBS PDF (`/v2/posting/fbs/package-label`) after assemble (`awaiting_deliver`); FBO has none. Wildberries PNG sticker (`/api/v3/orders/stickers`) for `confirm` (in a supply) and `complete` (in delivery), not new assembly. Yandex Market PDF (`/v2/campaigns/…/orders/…/delivery/labels`) while `PROCESSING` (FBS/DBS); FBY has none. WooCommerce and OpenCart → `400 adapter_capability_missing`. Wrong status or marketplace error → `400 order_label_failed`. |
 | POST | `/orders/{orderId}/status` | UpdateOrderStatus | Body `{ action, reason?, trackingNumber?, deliveryService?, extra? }`. `action`: `confirm`, `pack`, `ship`, `deliver`, `complete`, `cancel`. **Not every marketplace accepts every action.** Ozon FBS: `pack`/`confirm` assemble (`/v4/posting/fbs/ship`), `ship` hands over (`/v2/posting/fbs/awaiting-delivery`), `cancel` before handover. Ozon does **not** let the seller mark delivered (`deliver`/`complete` → `400 order_status_failed`). Wildberries FBS: `pack`/`confirm` add to a supply (`extra.supplyId` uses that supply; omit it and the adapter creates one), optional `extra.boxId` / `extra.createBox` for a TRBX; `ship` delivers **the whole supply** (`extra.supplyId`); `cancel` on new assembly tasks; sold is WB logistics. Yandex: `deliver`/`complete` are for DBS (shop delivery), not FBS/FBY. Woo/OpenCart: shop-owned statuses. Failure → `400 order_status_failed`. |
+
+#### Fulfillment
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|--------|
 | GET | `/fulfillment/locations` | GetFulfillmentLocations | Query `kind`: `seller_warehouse` or `marketplace_office` (omit = both). Wildberries: seller warehouses (`GET /api/v3/warehouses`) and drop-off offices (`GET /api/v3/offices`). Ozon: seller warehouses only (`/v2/warehouse/list`). Yandex/Woo/OpenCart → `400 adapter_capability_missing`. Marketplace error → `400 fulfillment_location_failed`. Not stored. |
+
+#### Shipments
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|--------|
 | GET | `/shipments` | ManageShipments | Query: `limit`, `cursor`, `openOnly`. Live supplies (Wildberries `GET /api/v3/supplies`). Response is a page plus `nextCursor` / `hasMore`. Yandex/Ozon/Woo/OpenCart → `400 adapter_capability_missing`. Marketplace error → `400 shipment_failed`. Not stored. |
 | POST | `/shipments` | ManageShipments | Body `{ name?, destinationLocationId? }`. Creates an open Wildberries supply. `destinationLocationId` is display-only when the marketplace has no write. Failure → `400 shipment_failed`. |
 | GET | `/shipments/{shipmentId}` | ManageShipments | Missing → `404 shipment_not_found`. Includes order ids and boxes when the API has them. |
@@ -230,6 +265,11 @@ Order **lists and gets** read Delegat’s snapshot (eventually consistent; addit
 | POST | `/shipments/{shipmentId}/boxes/{boxId}/orders` | ManageShipments | Body `{ orderIds }`. Puts orders into a TRBX. Failure → `400 shipment_failed`. |
 | GET | `/shipments/{shipmentId}/boxes/{boxId}/label` | ManageShipments | Box QR sticker (same body as order labels). Empty box or marketplace error → `400 shipment_failed`. |
 | GET | `/shipments/{shipmentId}/label` | ManageShipments | Supply QR. Wildberries: only after `ship` / deliver. Failure → `400 shipment_failed`. |
+
+#### Promotions
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|--------|
 | GET | `/promotions` | GetPromotions | Query: `page`, `pageSize`, `cursor`, `status`, `type`. Marketplace actions, calendar campaigns, or shop coupons. |
 | GET | `/promotions/{promotionId}` | GetPromotions | Missing → `404 promotion_not_found` |
 | POST | `/promotions/{promotionId}/products` | UpdatePromotions | Body `{ add: [{ externalProductId, actionPrice? }], removeExternalProductIds: [] }`. Failure → `400 promotion_update_failed`. |

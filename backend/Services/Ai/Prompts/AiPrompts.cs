@@ -378,7 +378,7 @@ public static class AiPrompts
     }
 
     private static readonly Regex MappingTurnRx = new(
-        @"mapping|маппинг|мапинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи",
+        @"mapping|маппинг|мапинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи|эмодзи|emoji|переназнач|save-mapping|resolve-mappings",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex PriceTurnRx = new(
@@ -470,13 +470,18 @@ public static class AiPrompts
            the key when it wants the code. A numeric token in a name field is a key:
            write the shop’s string, on the mapping, not the key.
            Regex blocks: regexReplace rewrites by a pattern, regexExtract returns a
-           match (group 0 is the whole match). Use them when a literal replace is
-           not enough. An invalid pattern leaves the original text.
-           POST …/graph/modifiers always includes adapterFieldKey — the sink field
-           key from that graph (description for the description). modifierType
-           regexReplace, params pattern and replacement. Several literal replace
-           blocks on one field become one regexReplace on that same key, not
-           several posts. One graph GET, then propose_plan in that same turn.
+           match (group 0 is the whole match). The engine is .NET. \u{…} is invalid
+           and the preview keeps the original text. Use \u and exactly four hex
+           digits. An emoji above U+FFFF is a surrogate pair, not one class of
+           code points.
+           To strip every emoji, one POST …/graph/modifiers on that field:
+           adapterFieldKey (description for the description), modifierType
+           regexReplace, replacement "", removeModifierTypes ["replace"],
+           pattern exactly
+           [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
+           removeModifierTypes drops those literal replace blocks on that same
+           field in this call. Do not leave them. Do not post one block per emoji.
+           One graph GET, then propose_plan in that same turn.
            Do not search_knowledge, get_doc, or run_python to reread a graph
            you already have. The step args are what runs after confirm.
            Price block: sink "price".
@@ -542,6 +547,16 @@ public static class AiPrompts
         SQL mappings rows are not the canvas. Do not say the canvas changed until a
         confirmed step returns 2xx. A cancelled plan changed nothing — say that.
         After a confirmed wiring plan, export-batch so the shop updates.
+
+        Assign a product to one marketplace category when its local category has several
+        mappings (two Wildberries categories for the same local category, such as Фигурки).
+        This does not edit the canvas and does not create another mapping row.
+        POST /marketplace/connections/<connectionId>/resolve-mappings { productIds }
+        returns selectedMappingId and availableMappings (id, name, externalCategoryName).
+        Then one propose_plan: POST …/save-mapping-selections
+        { selections: [{ productId, categoryMappingId }] }.
+        categoryMappingId must be one of that product’s availableMappings.
+        Do not PUT the graph for this.
         """;
 
     private static string PricePlaybook() => """

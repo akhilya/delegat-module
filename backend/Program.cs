@@ -330,6 +330,7 @@ builder.Services.AddScoped<PlatformToolJobService>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
 builder.Services.AddScoped<MarketplaceCommerceService>();
+builder.Services.AddScoped<ProductMappingSelectionService>();
 builder.Services.AddScoped<MarketplaceOrderSnapshotService>();
 builder.Services.AddScoped<MarketplaceOrderSyncService>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -373,11 +374,17 @@ builder.Services.AddSwaggerGen(options =>
         Title = "Delegat Public API",
         Version = "v1",
         Description =
-            "Partner API for ERP/1C/n8n (API key auth).\n\n" +
-            "**Auth:** Authorize with key `dk_…` only (Swagger adds Bearer).\n\n" +
-            "**Docs:** see repository `docs/api/public-v1.md`.\n\n" +
-            "**Async sync:** POST export/import endpoints return **202** + `operationId`; " +
-            "poll `GET /api/v1/stores/{storeId}/operations/{operationId}`."
+            """
+            Partner API for ERP, 1C, and n8n.
+
+            **Authorize** with the key only (`dk_…`). Swagger adds `Bearer`.
+
+            Sections follow the work: account, catalog, connections, mappings, sync jobs, then live commerce (prices, orders, fulfillment, shipments, promotions). Open a section to see one-line operations; the contract is inside each operation.
+
+            Sync jobs return **202** and an `operationId`. Poll `GET /api/v1/stores/{storeId}/operations/{operationId}`.
+
+            Every error is `{ "error": { "code", "message", "details" } }`. Branch on `code`.
+            """
     });
     options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
@@ -401,6 +408,19 @@ builder.Services.AddSwaggerGen(options =>
         BearerFormat = "API Key"
     });
     options.OperationFilter<Delegat.Infrastructure.PublicApiSwaggerSecurityFilter>();
+    options.OperationFilter<Delegat.Infrastructure.PublicApiErrorResponsesFilter>();
+    options.DocumentFilter<Delegat.Infrastructure.PublicApiTagOrderFilter>();
+    options.CustomOperationIds(desc =>
+    {
+        if (desc.ActionDescriptor is not Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor action)
+            return desc.RelativePath;
+        var name = action.ControllerName;
+        if (name.StartsWith("Public", StringComparison.Ordinal))
+            name = name["Public".Length..];
+        if (name.StartsWith("Marketplace", StringComparison.Ordinal))
+            name = name["Marketplace".Length..];
+        return name + "_" + action.ActionName;
+    });
 
     var xmlPath = Path.Combine(AppContext.BaseDirectory, "Delegat.xml");
     if (System.IO.File.Exists(xmlPath))
@@ -755,6 +775,12 @@ app.UseSwaggerUI(c =>
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SPA API");
     c.DocumentTitle = "Delegat API";
     c.RoutePrefix = "swagger";
+    c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
+    c.DefaultModelsExpandDepth(1);
+    c.EnableDeepLinking();
+    c.EnableFilter();
+    c.EnablePersistAuthorization();
+    c.DisplayRequestDuration();
 });
 
 app.UseCors();

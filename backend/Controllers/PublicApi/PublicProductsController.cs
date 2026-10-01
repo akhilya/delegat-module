@@ -183,7 +183,8 @@ public class PublicProductsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, new { id = product.Id });
     }
 
-    /// <summary>Partially updates a product. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced.</summary>
+    /// <summary>Updates a product.</summary>
+    /// <remarks>Partial update. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced.</remarks>
     [HttpPatch("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

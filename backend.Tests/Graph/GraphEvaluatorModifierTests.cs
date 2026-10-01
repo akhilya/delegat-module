@@ -171,6 +171,21 @@ public class GraphEvaluatorModifierTests
     }
 
     [Fact]
+    public void RegexReplace_StripsEmoji_AndIgnoresJsCodePointEscapes()
+    {
+        const string pattern = @"[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3";
+        var input = "Привет 😀 мир ⭐ ✅ ☀️!";
+        var stripped = ModifierPipeline.ApplySingle("regexReplace", input, P(("pattern", pattern), ("replacement", "")));
+        Assert.Equal("Привет  мир   !", stripped);
+
+        var js = ModifierPipeline.ApplySingle(
+            "regexReplace",
+            input,
+            P(("pattern", @"[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]"), ("replacement", "")));
+        Assert.Equal(input, js);
+    }
+
+    [Fact]
     public void ApplySingle_TruncateAndUppercase_MatchGraphSamples()
     {
         Assert.Equal("abc", ModifierPipeline.ApplySingle("truncate", "abcdef", P(("maxLength", 3))));

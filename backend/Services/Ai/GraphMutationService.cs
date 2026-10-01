@@ -147,6 +147,7 @@ public class GraphMutationService
     public async Task AddModifierAsync(int mappingId, string adapterFieldKey,
         string modifierType, Dictionary<string, object>? @params,
         string? sink = null, ExternalField? fieldDef = null,
+        IReadOnlyList<string>? removeModifierTypes = null,
         IReadOnlyList<ModifierParamSource>? paramSources = null, CancellationToken ct = default)
     {
         if (!ModifierPipeline.IsKnownModifier(modifierType))
@@ -155,6 +156,7 @@ public class GraphMutationService
 
         var mapping = await LoadMappingAsync(mappingId, ct);
         var graph = ParseGraph(mapping.graphJson);
+        RemoveModifiersOnField(graph, adapterFieldKey, removeModifierTypes, sink);
 
         var (sinkNode, sinkKind) = GetSink(graph, sink, adapterFieldKey);
         var field = ResolveField(sinkNode, adapterFieldKey, fieldDef, sinkKind);
@@ -979,6 +981,111 @@ public class GraphMutationService
         };
         graph.nodes.Add(node);
         return node;
+    }
+
+    /// <summary>
+    /// Splices modifier nodes of the given types off the value chain into this sink field
+    /// and reconnects what remains. Param pins on a removed block go with it.
+    /// </summary>
+    internal static int RemoveModifiersOnField(
+        MappingGraph graph,
+        string adapterFieldKey,
+        IReadOnlyCollection<string>? modifierTypes,
+        string? sink = null)
+    {
+        if (modifierTypes == null || modifierTypes.Count == 0 || string.IsNullOrWhiteSpace(adapterFieldKey))
+            return 0;
+
+        var types = new HashSet<string>(
+            modifierTypes.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        if (types.Count == 0)
+            return 0;
+
+        var (sinkNode, _) = GetSink(graph, sink, adapterFieldKey);
+        var removed = 0;
+        for (var guard = 0; guard < 64; guard++)
+        {
+            var victim = FindModifierOnFieldChain(graph, sinkNode, adapterFieldKey, types);
+            if (victim == null)
+                break;
+            SpliceModifierOut(graph, victim);
+            removed++;
+        }
+
+        return removed;
+    }
+
+    private static GraphNode? FindModifierOnFieldChain(
+        MappingGraph graph, GraphNode sink, string fieldKey, HashSet<string> types)
+    {
+        var byId = graph.nodes.ToDictionary(n => n.id);
+        var handle = $"f:{fieldKey}";
+        var edge = graph.edges.FirstOrDefault(e => e.target == sink.id && e.targetHandle == handle);
+        var seen = new HashSet<string>();
+        while (edge != null && seen.Add(edge.source) && byId.TryGetValue(edge.source, out var node))
+        {
+            if (node.type == "modifier"
+                && node.data?.modifierType != null
+                && types.Contains(node.data.modifierType))
+                return node;
+
+            if (node.type != "modifier")
+                return null;
+
+            edge = graph.edges.FirstOrDefault(e => e.target == node.id && e.targetHandle == "in");
+        }
+
+        return null;
+    }
+
+    private static void SpliceModifierOut(MappingGraph graph, GraphNode mod)
+    {
+        var inEdge = graph.edges.FirstOrDefault(e => e.target == mod.id && e.targetHandle == "in");
+        var outEdge = graph.edges.FirstOrDefault(e =>
+            e.source == mod.id && (e.sourceHandle == "out" || string.IsNullOrEmpty(e.sourceHandle)));
+        var paramEdges = graph.edges
+            .Where(e => e.target == mod.id && e.targetHandle != "in")
+            .ToList();
+
+        foreach (var pe in paramEdges)
+        {
+            graph.edges.Remove(pe);
+            DropOrphanNode(graph, pe.source);
+        }
+
+        if (inEdge != null && outEdge != null)
+        {
+            graph.edges.Add(new GraphEdge
+            {
+                id = $"e-{inEdge.source}-{outEdge.target}-{mod.id}",
+                source = inEdge.source,
+                sourceHandle = string.IsNullOrEmpty(inEdge.sourceHandle) ? "out" : inEdge.sourceHandle,
+                target = outEdge.target,
+                targetHandle = outEdge.targetHandle,
+            });
+        }
+
+        if (inEdge != null)
+            graph.edges.Remove(inEdge);
+        if (outEdge != null)
+            graph.edges.Remove(outEdge);
+        graph.edges.RemoveAll(e => e.source == mod.id || e.target == mod.id);
+        graph.nodes.Remove(mod);
+
+        if (inEdge != null && outEdge == null)
+            DropOrphanNode(graph, inEdge.source);
+    }
+
+    private static void DropOrphanNode(MappingGraph graph, string nodeId)
+    {
+        if (string.IsNullOrEmpty(nodeId))
+            return;
+        if (graph.edges.Any(e => e.source == nodeId || e.target == nodeId))
+            return;
+        var node = graph.nodes.FirstOrDefault(n => n.id == nodeId);
+        if (node != null && node.type is not ("adapterFields" or "adapterPriceFields"))
+            graph.nodes.Remove(node);
     }
 
     private static (GraphNode sink, string sinkKind) GetSink(

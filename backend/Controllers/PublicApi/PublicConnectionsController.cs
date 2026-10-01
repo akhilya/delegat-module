@@ -128,7 +128,10 @@ public class PublicConnectionsController : ControllerBase
                 lastSyncAt = l.lastSyncAt,
                 lastError = l.lastErrorMessage,
                 externalPrice = l.externalPrice,
-                externalStock = l.externalStock
+                externalStock = l.externalStock,
+                categoryMappingId = l.categoryMappingId,
+                categoryMappingName = l.categoryMapping != null ? l.categoryMapping.name : null,
+                externalCategoryName = l.categoryMapping != null ? l.categoryMapping.externalCategoryName : null,
             })
             .ToListAsync(ct);
 

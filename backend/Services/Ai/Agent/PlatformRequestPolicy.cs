@@ -34,15 +34,23 @@ public static class PlatformRequestPolicy
 
         Marketplace (no secrets): GET /marketplace/connections  GET …/connections/{id}
           GET …/capabilities  GET …/limits  GET …/mappings
+          POST …/resolve-mappings { productIds } — which mapping each product uses, and the other mappings of that local category
+          POST …/save-mapping-selections { selections: [{ productId, categoryMappingId }] }
+            Assign a product to one marketplace category when the local category has several.
+            Does not edit the canvas. categoryMappingId must be one of that product’s availableMappings.
           GET/PATCH/PUT …/mappings/{mappingId}/graph
           GET /marketplace/mapping-graph/blocks (types, handles, pin types, layout sizes)
           POST /marketplace/connections/{id}/mappings { localCategoryId, externalCategoryId, externalCategoryName }
           POST …/mappings/{mappingId}/graph/connect — wire one unwired sink
             { adapterFieldKey, sourceType: attribute|productField|static, sourceAttributeId|sourceField|staticValue, sink?: price }
             Attribute groups (Основные параметры) are local characteristics, not collection titles.
-          POST …/graph/modifiers { adapterFieldKey, modifierType, params, paramSources?: [{ param, sourceType, sourceAttributeId|sourceField|staticValue }] }
+          POST …/graph/modifiers { adapterFieldKey, modifierType, params, removeModifierTypes?: ["replace"], paramSources?: [{ param, sourceType, sourceAttributeId|sourceField|staticValue }] }
             divide divisor 10 converts mm to cm; divisor 1000 converts g to kg.
             paramSources feeds p:divisor or p:factor (scale = 1700 / height).
+            regexReplace is .NET. \u{…} is invalid and the preview keeps the text.
+            Strip every emoji with replacement "" , removeModifierTypes ["replace"],
+            pattern [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
+            (surrogate pairs; copy it). That same call removes literal replace blocks on the field.
           GET /api/ai/store-settings — personal settings (store description, style, brevity, emoji). PUT stays denied.
           POST …/graph/group-titles { mappings: [{from,to}] }
             group-titles is only Merge into card (__group__) shop collection titles,

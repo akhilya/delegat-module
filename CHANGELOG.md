@@ -9,8 +9,14 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+### Added
+
+- Partners can list a connection’s category mappings and assign a product to one of them when a local category exports to several marketplace categories (`GET …/mappings`, `POST …/product-mappings/resolve`, `POST …/product-mappings`). The cabinet assistant uses the same choice (`resolve-mappings`, then `save-mapping-selections`) and does not edit the field canvas for it.
+- Public API Swagger splits marketplace commerce into Prices, Orders, Fulfillment, Shipments, and Promotions. Paths are unchanged. Sections start collapsed, each operation is one line, and the longer contract sits inside it. Errors share one `{ error: { code, message, details } }` schema.
+
 ### Fixed
 
+- Cabinet assistant strips emoji on a mapped field with one .NET regular expression and removes the old literal replacements on that field in the same step. A pattern written as `\u{…}` does not match, so the preview used to keep the original text.
 - A cabinet assistant turn is not cut off after a few tool calls. A complex task keeps going until it ends in a sentence or a plan. A nudge such as «и?» still asks for that reply instead of another search. A regex block on a mapping names the field it edits.
 - Catalog list, bulk edit, and shop export take one SQL `where`. Frequent slices are named templates (`@withGallery`, `@withoutGallery`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`, and the file pair). The assistant copies those names. There is no separate “has photos” switch.
 - Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation. A Yandex Market page that returns an internal error no longer fails the whole check: that page is retried in smaller pieces, and any saved links still missing are looked up directly.

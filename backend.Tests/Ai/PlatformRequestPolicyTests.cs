@@ -117,6 +117,10 @@ public class PlatformRequestPolicyTests
         Assert.Contains("mapping-graph/blocks", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("graph/modifiers", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("POST …/graph/modifiers { adapterFieldKey", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("removeModifierTypes", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains(@"[\uD83C-\uD83E][\uDC00-\uDFFF]", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("save-mapping-selections", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("resolve-mappings", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("valueMap", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.True(PlatformRequestPolicy.IsAllowed(
             "POST", "/marketplace/connections/10/mappings/28/graph/connect"));

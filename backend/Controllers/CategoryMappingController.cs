@@ -33,6 +33,7 @@ public class CategoryMappingController : ControllerBase
 
     private readonly IOperationLogger _operationLogger;
     private readonly GraphMutationService _graphMutation;
+    private readonly ProductMappingSelectionService _mappingSelection;
 
     public CategoryMappingController(
         ICurrentUserService currentUserService,
@@ -45,7 +46,8 @@ public class CategoryMappingController : ControllerBase
         IMarketplaceMetadataCache metadataCache,
         ILogger<CategoryMappingController> logger,
         IOperationLogger operationLogger,
-        GraphMutationService graphMutation)
+        GraphMutationService graphMutation,
+        ProductMappingSelectionService mappingSelection)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -58,6 +60,7 @@ public class CategoryMappingController : ControllerBase
         _logger = logger;
         _operationLogger = operationLogger;
         _graphMutation = graphMutation;
+        _mappingSelection = mappingSelection;
     }
 
     /// <summary>
@@ -605,6 +608,7 @@ public class CategoryMappingController : ControllerBase
                 ToModifierParams(input.@params),
                 input.sink,
                 StubField(input.adapterFieldKey),
+                input.removeModifierTypes,
                 input.paramSources?
                     .Where(s => !string.IsNullOrWhiteSpace(s.param) && !string.IsNullOrWhiteSpace(s.sourceType))
                     .Select(s => new GraphMutationService.ModifierParamSource(
@@ -1064,71 +1068,28 @@ public class CategoryMappingController : ControllerBase
         CancellationToken ct = default)
     {
         var connection = await GetConnectionAsync(connectionId);
-        var productIds = input?.productIds;
-
-        if (productIds == null || productIds.Count == 0)
-            return Ok(new { products = Array.Empty<object>() });
-
-        // Load products with category info
-        var products = await _context.products
-            .Include(p => p.category)
-            .Where(p => productIds.Contains(p.Id))
-            .ToListAsync(ct);
-
-        // Load existing links for these products
-        var existingLinks = await _context.productMarketplaceLinks
-            .Where(l => productIds.Contains(l.productId) && l.connectionId == connectionId)
-            .ToListAsync(ct);
-        var linkByProductId = existingLinks.ToDictionary(l => l.productId, l => l);
-
-        // Load all category mappings for relevant categories
-        var categoryIds = products
-            .Where(p => p.categoryId.HasValue)
-            .Select(p => p.categoryId!.Value)
-            .Distinct()
-            .ToList();
-
-        var mappings = await _context.categoryMappings
-            .Where(cm => cm.connectionId == connectionId && categoryIds.Contains(cm.localCategoryId))
-            .ToListAsync(ct);
-
-        var mappingsByCategoryId = mappings
-            .GroupBy(cm => cm.localCategoryId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var result = products.Select(product =>
+        var productIds = input?.productIds ?? [];
+        var products = await _mappingSelection.ResolveAsync(connection.storeId, connectionId, productIds, ct);
+        return Ok(new
         {
-            var categoryId = product.categoryId;
-            var availableMappings = categoryId.HasValue && mappingsByCategoryId.TryGetValue(categoryId.Value, out var catMappings)
-                ? catMappings
-                : new List<CategoryMapping>();
-
-            linkByProductId.TryGetValue(product.Id, out var existingLink);
-            var selectedMappingId = existingLink?.categoryMappingId;
-
-            // needsSelection: multiple mappings exist AND no selection has been made yet
-            var needsSelection = availableMappings.Count > 1 && selectedMappingId == null;
-
-            return new
+            products = products.Select(product => new
             {
-                productId = product.Id,
-                productName = product.name,
-                categoryId = categoryId,
-                categoryName = product.category?.name,
-                selectedMappingId = selectedMappingId,
-                availableMappings = availableMappings.Select(m => new
+                productId = product.ProductId,
+                productName = product.ProductName,
+                categoryId = product.CategoryId,
+                categoryName = product.CategoryName,
+                selectedMappingId = product.SelectedMappingId,
+                availableMappings = product.AvailableMappings.Select(m => new
                 {
                     id = m.Id,
-                    name = m.name,
-                    externalCategoryId = m.externalCategoryId,
-                    externalCategoryName = m.externalCategoryName,
-                    localCategoryName = product.category?.name
+                    name = m.Name,
+                    externalCategoryId = m.ExternalCategoryId,
+                    externalCategoryName = m.ExternalCategoryName,
+                    localCategoryName = m.LocalCategoryName,
                 }),
-                needsSelection = needsSelection
-            };
-        }).ToList();
-
-        return Ok(new { products = result });
+                needsSelection = product.NeedsSelection,
+            }),
+        });
     }
 
     /// <summary>
@@ -1143,48 +1104,10 @@ public class CategoryMappingController : ControllerBase
         CancellationToken ct = default)
     {
         var connection = await GetConnectionAsync(connectionId);
-
-        if (input.selections == null || input.selections.Count == 0)
-            return Ok(new { updated = 0 });
-
-        var productIds = input.selections.Select(s => s.productId).ToList();
-        await ProductNotTrashed.EnsureNoneAsync(_context, productIds, ct);
-
-        // Load existing links
-        var existingLinks = await _context.productMarketplaceLinks
-            .Where(l => productIds.Contains(l.productId) && l.connectionId == connectionId)
-            .ToListAsync(ct);
-        var linkByProductId = existingLinks.ToDictionary(l => l.productId, l => l);
-
-        var updated = 0;
-        foreach (var selection in input.selections)
-        {
-            if (linkByProductId.TryGetValue(selection.productId, out var link))
-            {
-                link.categoryMappingId = selection.categoryMappingId;
-            }
-            else
-            {
-                // Create a new link with NotSynced status.
-                // Use a unique placeholder for externalProductId to satisfy the
-                // (externalProductId, connectionId) unique index - will be replaced
-                // with the real marketplace ID on first sync/export.
-                var newLink = new ProductMarketplaceLink();
-                newLink.AddFill(new ProductMarketplaceLink.AddForm
-                {
-                    productId = selection.productId,
-                    connectionId = connectionId,
-                    externalProductId = $"pending:{selection.productId}",
-                    status = ProductMarketplaceStatus.NotSynced,
-                    categoryMappingId = selection.categoryMappingId
-                });
-                _context.productMarketplaceLinks.Add(newLink);
-            }
-            updated++;
-        }
-
-        await _context.SaveChangesAsync(ct);
-
+        var selections = (input.selections ?? [])
+            .Select(s => new MappingSelection(s.productId, s.categoryMappingId))
+            .ToList();
+        var updated = await _mappingSelection.SaveAsync(connection.storeId, connectionId, selections, ct);
         return Ok(new { updated });
     }
 
@@ -1613,6 +1536,11 @@ public class CategoryMappingController : ControllerBase
         public string modifierType { get; set; }
         public Dictionary<string, JsonElement>? @params { get; set; }
         public string? sink { get; set; }
+        /// <summary>
+        /// Modifier types to splice off this field before the new block is inserted
+        /// (literal <c>replace</c> blocks when switching that field to <c>regexReplace</c>).
+        /// </summary>
+        public List<string>? removeModifierTypes { get; set; }
         public List<GraphModifierParamSource>? paramSources { get; set; }
     }
 
