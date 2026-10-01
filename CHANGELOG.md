@@ -16,6 +16,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Changing a product’s category no longer keeps a connection looking synced when that category has several mappings and none is chosen. The connection status says the mapping is not selected.
+- A background job started with an API key is attributed to that key, not to the person who created it. Operation logs show JSON on its own lines, and a product named in a log opens that product.
 - Cabinet assistant strips emoji on a mapped field with one .NET regular expression and removes the old literal replacements on that field in the same step. A pattern written as `\u{…}` does not match, so the preview used to keep the original text.
 - A cabinet assistant turn is not cut off after a few tool calls. A complex task keeps going until it ends in a sentence or a plan. A nudge such as «и?» still asks for that reply instead of another search. A regex block on a mapping names the field it edits.
 - Catalog list, bulk edit, and shop export take one SQL `where`. Frequent slices are named templates (`@withGallery`, `@withoutGallery`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`, and the file pair). The assistant copies those names. There is no separate “has photos” switch.

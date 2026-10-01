@@ -23,7 +23,8 @@ public class OperationLogger : IOperationLogger
 
     public async Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
                                   int? connectionId = null, string? connectionName = null,
-                                  string? batchId = null, string? batchType = null, int? totalItems = null)
+                                  string? batchId = null, string? batchType = null, int? totalItems = null,
+                                  int? authorApiKeyId = null)
     {
         string? authorUserName = null;
         try
@@ -35,6 +36,7 @@ public class OperationLogger : IOperationLogger
                 operationId = operationId,
                 storeId = storeId,
                 authorUserId = authorUserId,
+                authorApiKeyId = authorApiKeyId,
                 type = type,
                 title = title,
                 status = "running",
@@ -47,11 +49,7 @@ public class OperationLogger : IOperationLogger
             });
             await db.SaveChangesAsync();
 
-            // Resolve author name for the SignalR event so the panel can show who started this
-            authorUserName = await db.Users
-                .Where(u => u.Id == authorUserId)
-                .Select(u => u.UserName)
-                .FirstOrDefaultAsync();
+            authorUserName = await ResolveAuthorNameAsync(db, authorUserId, authorApiKeyId);
         }
         catch (Exception ex)
         {
@@ -177,6 +175,27 @@ public class OperationLogger : IOperationLogger
                 summary,
                 timestamp
             });
+    }
+
+    private static async Task<string?> ResolveAuthorNameAsync(
+        DataContext db, int authorUserId, int? authorApiKeyId)
+    {
+        if (authorApiKeyId is int keyId)
+        {
+            var key = await db.userApiKeys
+                .AsNoTracking()
+                .Where(k => k.Id == keyId)
+                .Select(k => new { k.name, k.keyPrefix, k.last4 })
+                .FirstOrDefaultAsync();
+            return key == null
+                ? "API"
+                : OperationAuthor.ApiKey(key.name, key.keyPrefix, key.last4);
+        }
+
+        return await db.Users
+            .Where(u => u.Id == authorUserId)
+            .Select(u => u.UserName)
+            .FirstOrDefaultAsync();
     }
 
     public async Task UpdateStatusAsync(string operationId, int storeId, string status)

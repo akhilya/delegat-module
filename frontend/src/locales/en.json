@@ -878,6 +878,7 @@
       "status": {
         "unlinked": "Unlinked",
         "noMapping": "No mapping",
+        "mappingNotSelected": "Mapping not selected",
         "synced": "Synced",
         "notSynced": "Not synced",
         "syncError": "Error",
@@ -2160,6 +2161,7 @@
     "unlinkConfirmLabel": "Unlink",
     "productUnlinked": "Product unlinked from {adapter}",
     "noMapping": "No mapping",
+    "mappingNotSelected": "Mapping not selected",
     "statusSynced": "Synced",
     "statusNotSynced": "Not synced",
     "statusError": "Error",

@@ -315,7 +315,7 @@ public class FolderJobServiceTests
 
         public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
             int? connectionId = null, string? connectionName = null,
-            string? batchId = null, string? batchType = null, int? totalItems = null)
+            string? batchId = null, string? batchType = null, int? totalItems = null, int? authorApiKeyId = null)
         {
             LastStartType = type;
             LastStartTitle = title;

@@ -105,7 +105,7 @@ describe("navbar center", () => {
   it("keeps tabs and search on the viewport midline when breadcrumbs sit on the left", () => {
     assert.match(
       nav,
-      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,min\(32rem,42vw\)\)_max-content\]/,
+      /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,min\(32rem,42vw\)\)_minmax\(0,1fr\)\]/,
     );
     assert.match(nav, /justify-self-end|justify-center/);
   });

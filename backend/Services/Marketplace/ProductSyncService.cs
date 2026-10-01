@@ -9,6 +9,7 @@ using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
 using Delegat.Services.Marketplace.Modifiers;
+using Delegat.Services;
 using System.Text.Json;
 
 namespace Delegat.Services.Marketplace;
@@ -67,7 +68,7 @@ public class ProductSyncService
         if (await ProductNotTrashed.IsTrashedAsync(_context, productId, ct))
             return ProductExportResult.Failure(ProductNotTrashed.Message);
 
-        await Log("info", $"Loading product #{productId}");
+        await Log("info", $"Loading {OperationProductRef.Format(productId, null)}");
 
         // Split query: a category with 100+ attributes cartesian-explodes
         // files/images/memberships into one JOIN (minutes, empty groups).
@@ -89,7 +90,7 @@ public class ProductSyncService
         if (product == null)
             return ProductExportResult.Failure($"Product with ID {productId} not found");
 
-        await Log("info", $"Exporting product: {product.name} ({product.sku})");
+        await Log("info", $"Exporting {OperationProductRef.Format(product.Id, product.name)} ({product.sku})");
 
         // Load the connection
         var connection = await _context.marketplaceConnections
@@ -136,19 +137,31 @@ public class ProductSyncService
                 l.productId == productId &&
                 l.connectionId == connectionId, ct);
 
-        // If the product has a selected mapping - use it, otherwise fall back to the first one for the category
-        CategoryMapping? categoryMapping;
+        // A saved mapping counts only when it still belongs to the product's category.
+        // Several mappings and no choice is an error — do not pick the first one.
+        CategoryMapping? categoryMapping = null;
         if (existingLink?.categoryMappingId != null)
         {
-            categoryMapping = await _context.categoryMappings
+            var saved = await _context.categoryMappings
                 .FirstOrDefaultAsync(cm => cm.Id == existingLink.categoryMappingId.Value, ct);
+            if (saved != null && saved.localCategoryId == product.categoryId.Value)
+                categoryMapping = saved;
         }
-        else
+
+        if (categoryMapping == null)
         {
-            categoryMapping = await _context.categoryMappings
-                .FirstOrDefaultAsync(cm =>
+            var matches = await _context.categoryMappings
+                .Where(cm =>
                     cm.connectionId == connectionId &&
-                    cm.localCategoryId == product.categoryId.Value, ct);
+                    cm.localCategoryId == product.categoryId.Value)
+                .ToListAsync(ct);
+            if (matches.Count == 1)
+                categoryMapping = matches[0];
+            else if (matches.Count > 1)
+            {
+                await Log("error", "Mapping is not selected");
+                return ProductExportResult.Failure("Mapping is not selected");
+            }
         }
 
         if (categoryMapping == null)
@@ -692,18 +705,28 @@ public class ProductSyncService
                 continue;
             }
 
-            // Resolve category mapping: prefer product's selected mapping, fallback to first for category
+            // Resolve category mapping: a saved choice only if it still matches this category.
+            // Several mappings and no choice is an error — do not pick the first one.
             CategoryMapping? categoryMapping = null;
 
             if (linkByProductId.TryGetValue(productId, out var existingLink)
                 && existingLink.categoryMappingId != null
-                && mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out var overrideMapping))
+                && mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out var overrideMapping)
+                && overrideMapping.localCategoryId == product.categoryId.Value)
             {
                 categoryMapping = overrideMapping;
             }
             else if (mappingsByCategoryId.TryGetValue(product.categoryId.Value, out var catMappings))
             {
-                categoryMapping = catMappings.First();
+                if (catMappings.Count == 1)
+                    categoryMapping = catMappings[0];
+                else if (catMappings.Count > 1)
+                {
+                    itemResults.Add(new BulkProductExportItemResult(productId, false,
+                        ErrorMessage: "Mapping is not selected"));
+                    failedProductIds.Add(productId);
+                    continue;
+                }
             }
 
             if (categoryMapping == null)
@@ -1660,18 +1683,24 @@ public class ProductSyncService
         var existingLink = await _context.productMarketplaceLinks
             .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
 
-        CategoryMapping? categoryMapping;
+        CategoryMapping? categoryMapping = null;
         if (existingLink?.categoryMappingId != null)
         {
-            categoryMapping = await _context.categoryMappings
+            var saved = await _context.categoryMappings
                 .FirstOrDefaultAsync(cm => cm.Id == existingLink.categoryMappingId.Value, ct);
+            if (saved != null && saved.localCategoryId == categoryId)
+                categoryMapping = saved;
         }
-        else
+
+        if (categoryMapping == null)
         {
-            categoryMapping = await _context.categoryMappings
-                .FirstOrDefaultAsync(cm =>
+            var matches = await _context.categoryMappings
+                .Where(cm =>
                     cm.connectionId == connectionId &&
-                    cm.localCategoryId == categoryId, ct);
+                    cm.localCategoryId == categoryId)
+                .ToListAsync(ct);
+            if (matches.Count == 1)
+                categoryMapping = matches[0];
         }
 
         if (categoryMapping == null)

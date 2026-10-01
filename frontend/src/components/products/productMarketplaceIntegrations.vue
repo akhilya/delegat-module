@@ -1385,6 +1385,12 @@ export default {
       return canAct(getCachedMe(), PERMS.MarketplaceManage);
     },
     headerStatus(conn) {
+      if (conn.mappingUnselected) {
+        return {
+          label: t("productMarketplaceIntegrations.mappingNotSelected"),
+          color: "text-destructive",
+        };
+      }
       if (conn.isLinked) return this.getConnectionStatusInfo(conn);
       if (conn.hasMapping && !conn.mappingMissing) {
         return {

@@ -314,7 +314,7 @@ public class ProductSyncImportAttributesTests
     {
         public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
             int? connectionId = null, string? connectionName = null,
-            string? batchId = null, string? batchType = null, int? totalItems = null)
+            string? batchId = null, string? batchType = null, int? totalItems = null, int? authorApiKeyId = null)
             => Task.CompletedTask;
         public Task LogAsync(string operationId, int storeId, string level, string message) => Task.CompletedTask;
         public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed) => Task.CompletedTask;

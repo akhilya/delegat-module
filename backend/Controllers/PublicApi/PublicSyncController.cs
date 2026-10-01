@@ -130,7 +130,8 @@ public class PublicSyncController : ControllerBase
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-export",
             $"Export {productIds.Count} products",
             connectionId: connectionId, connectionName: connection.name,
-            batchId: batchId, batchType: "export", totalItems: productIds.Count);
+            batchId: batchId, batchType: "export", totalItems: productIds.Count,
+            authorApiKeyId: ApiKeyId());
 
         return PublicApiResults.AcceptedOperation(batchId, storeId);
     }
@@ -206,7 +207,8 @@ public class PublicSyncController : ControllerBase
         await _operationLogger.StartAsync(batchId, storeId, userId, "batch-import",
             $"Import {queued} products",
             connectionId: connectionId, connectionName: connection.name,
-            batchId: batchId, batchType: "import", totalItems: queued);
+            batchId: batchId, batchType: "import", totalItems: queued,
+            authorApiKeyId: ApiKeyId());
 
         if (remainingSlots is int slotCap && queued >= slotCap && body.products.Count > queued)
         {
@@ -270,7 +272,8 @@ public class PublicSyncController : ControllerBase
         var operationId = Guid.NewGuid().ToString("N");
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "stock-import",
-            "Import stock levels", connectionId: connectionId, connectionName: connection.name);
+            "Import stock levels", connectionId: connectionId, connectionName: connection.name,
+            authorApiKeyId: ApiKeyId());
 
         var capturedConnectionId = connectionId;
         var capturedStoreId = storeId;
@@ -355,7 +358,8 @@ public class PublicSyncController : ControllerBase
         var operationId = Guid.NewGuid().ToString("N");
 
         await _operationLogger.StartAsync(operationId, storeId, userId, type, title,
-            connectionId: connectionId, connectionName: connection.name);
+            connectionId: connectionId, connectionName: connection.name,
+            authorApiKeyId: ApiKeyId());
 
         var capturedStoreId = storeId;
         var capturedOpId = operationId;
@@ -398,5 +402,11 @@ public class PublicSyncController : ControllerBase
 
         CatalogMatchService.EnsureConnectionActive(connection);
         return connection;
+    }
+
+    private int? ApiKeyId()
+    {
+        var raw = User.FindFirst("apiKeyId")?.Value;
+        return int.TryParse(raw, out var id) ? id : null;
     }
 }

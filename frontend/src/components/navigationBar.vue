@@ -88,7 +88,7 @@ export default {
         <div
           :class="
             hasCenter
-              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(0,min(32rem,42vw))_max-content] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
+              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(0,min(32rem,42vw))_minmax(0,1fr)] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
               : 'flex h-[var(--app-navbar-row)] items-center gap-2'
           "
         >

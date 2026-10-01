@@ -568,5 +568,10 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         /// Linked but mapping missing or deleted — UI should treat as error (not Synced green).
         /// </summary>
         public bool mappingMissing { get; set; }
+
+        /// <summary>
+        /// The product's category has several mappings on this connection and none is chosen.
+        /// </summary>
+        public bool mappingUnselected { get; set; }
     }
 }

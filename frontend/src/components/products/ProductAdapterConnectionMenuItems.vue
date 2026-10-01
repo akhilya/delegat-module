@@ -184,6 +184,7 @@ export default {
       if (!this.canManageAdapters) return true;
       if (this.exportBusy) return true;
       if (this.mode === "missingMapping") return true;
+      if (this.connection.mappingUnselected) return true;
       if (this.connection.mappingMissing) return true;
       if (!this.connection.canExport && this.mode !== "ready") return true;
       return false;

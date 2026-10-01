@@ -878,6 +878,7 @@
       "status": {
         "unlinked": "Не связан",
         "noMapping": "Нет маппинга",
+        "mappingNotSelected": "Маппинг не выбран",
         "synced": "Синхронизирован",
         "notSynced": "Не синхронизирован",
         "syncError": "Ошибка",
@@ -2160,6 +2161,7 @@
     "unlinkConfirmLabel": "Отвязать",
     "productUnlinked": "Товар отвязан от {adapter}",
     "noMapping": "Нет маппинга",
+    "mappingNotSelected": "Маппинг не выбран",
     "statusSynced": "Синхронизирован",
     "statusNotSynced": "Не синхронизирован",
     "statusError": "Ошибка",

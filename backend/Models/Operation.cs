@@ -6,6 +6,11 @@ public class Operation
     public string operationId { get; set; } = null!;
     public int storeId { get; set; }
     public int authorUserId { get; set; }
+
+    /// <summary>
+    /// Set when a Public API key started the operation. The cabinet shows API plus this key, not the user who created the key.
+    /// </summary>
+    public int? authorApiKeyId { get; set; }
     public string type { get; set; } = null!;
     public string title { get; set; } = null!;
     public string status { get; set; } = "running";

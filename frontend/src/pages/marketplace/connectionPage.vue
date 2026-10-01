@@ -2948,6 +2948,14 @@ export default {
           class: "text-muted-foreground",
         };
       }
+      if (product.mappingUnselected) {
+        return {
+          variant: "destructive",
+          icon: AlertTriangle,
+          label: this.$t("marketplace.connectionPage.status.mappingNotSelected"),
+          color: "text-error",
+        };
+      }
       if (product.mappingMissing) {
         return {
           variant: "destructive",
@@ -4529,7 +4537,8 @@ export default {
                                 @click="handleExportSingle(product)"
                                 :disabled="
                                   exportingLinkId === product.linkId ||
-                                  product.mappingMissing
+                                  product.mappingMissing ||
+                                  product.mappingUnselected
                                 "
                                 :title="
                                   $t(

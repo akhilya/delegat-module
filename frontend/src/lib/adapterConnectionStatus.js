@@ -30,6 +30,7 @@ export function exportModeLabel(mode) {
  */
 export function hasMappingIssue(conn) {
   if (!conn) return false;
+  if (conn.mappingUnselected) return true;
   if (conn.mappingMissing) return true;
   if (conn.hasMapping === false) return true;
   return false;
@@ -43,6 +44,9 @@ export function hasMappingIssue(conn) {
 export function adapterConnectionStatusLabel(conn, opts = {}) {
   if (!conn) return t("products.adaptersColumn.notLinked");
 
+  if (conn.mappingUnselected) {
+    return t("productMarketplaceIntegrations.mappingNotSelected");
+  }
   if (conn.mappingMissing) {
     return t("productMarketplaceIntegrations.noMapping");
   }
@@ -101,6 +105,14 @@ export function adapterConnectionButtonClass(conn) {
  * @param {Record<string, object>} icons { CheckCircle, AlertTriangle, XCircle, Unlink }
  */
 export function getConnectionStatusInfo(conn, icons = {}) {
+  if (conn.mappingUnselected) {
+    return {
+      variant: "destructive",
+      icon: icons.AlertTriangle || null,
+      label: t("productMarketplaceIntegrations.mappingNotSelected"),
+      color: "text-destructive",
+    };
+  }
   if (conn.mappingMissing) {
     return {
       variant: "destructive",

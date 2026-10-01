@@ -246,7 +246,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                     if (pending.batchId != null)
                         await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
-                            $"Exported: {pending.productName ?? pending.productId.ToString()}");
+                            $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}");
                 }
                 else
                 {
@@ -265,7 +265,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                     if (pending.batchId != null)
                         await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                            $"Error: {pending.productName ?? pending.productId.ToString()} - {pending.lastError}");
+                            $"Error: {OperationProductRef.Format(pending.productId, pending.productName)} - {pending.lastError}");
                 }
             }
         }
@@ -402,7 +402,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
-                        $"Exported: {pending.productName ?? pending.productId.ToString()}");
+                        $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}");
             }
             else
             {
@@ -418,7 +418,7 @@ public class ProductExportBackgroundService : BackgroundService
 
                 if (pending.batchId != null)
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Error: {pending.productName ?? pending.productId.ToString()} - {pending.lastError}");
+                        $"Error: {OperationProductRef.Format(pending.productId, pending.productName)} - {pending.lastError}");
             }
 
             await context.SaveChangesAsync(ct);

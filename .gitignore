@@ -147,6 +147,12 @@ artifacts/
 scripts/marketing-demo-seed/
 
 # ======================
+# Python
+# ======================
+__pycache__/
+*.py[cod]
+
+# ======================
 # Misc
 # ======================
 nul

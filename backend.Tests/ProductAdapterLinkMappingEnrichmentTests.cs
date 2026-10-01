@@ -29,11 +29,14 @@ public class ProductAdapterLinkMappingEnrichmentTests
             },
         };
 
-        var mappingPairs = new HashSet<(int categoryId, int connectionId)> { (5, 3) };
+        var mappingCounts = new Dictionary<(int categoryId, int connectionId), int>
+        {
+            [(5, 3)] = 1,
+        };
 
         ProductAdapterLinkMappingEnrichment.Apply(
             dtos,
-            mappingPairs,
+            mappingCounts,
             productById: new Dictionary<int, Product>());
 
         var link = Assert.Single(dtos[0].adapterLinks!);
@@ -67,11 +70,48 @@ public class ProductAdapterLinkMappingEnrichmentTests
 
         ProductAdapterLinkMappingEnrichment.Apply(
             dtos,
-            mappingPairs: [],
+            mappingCounts: new Dictionary<(int categoryId, int connectionId), int>(),
             productById: new Dictionary<int, Product>());
 
         var link = Assert.Single(dtos[0].adapterLinks!);
         Assert.False(link.hasMapping);
         Assert.True(link.mappingMissing);
+        Assert.False(link.mappingUnselected);
+    }
+
+    [Fact]
+    public void Apply_MarksUnselectedWhenSeveralMappingsAndNoneMatchTheCategory()
+    {
+        var dtos = new List<Product.ProductReviewDTO>
+        {
+            new()
+            {
+                id = 12,
+                categoryId = 5,
+                adapterLinks =
+                [
+                    new Product.AdapterLinkSummary
+                    {
+                        linkId = 102,
+                        connectionId = 3,
+                        adapterKey = "wildberries",
+                        status = "Synced",
+                    },
+                ],
+            },
+        };
+
+        ProductAdapterLinkMappingEnrichment.Apply(
+            dtos,
+            mappingCounts: new Dictionary<(int categoryId, int connectionId), int>
+            {
+                [(5, 3)] = 2,
+            },
+            productById: new Dictionary<int, Product>());
+
+        var link = Assert.Single(dtos[0].adapterLinks!);
+        Assert.True(link.hasMapping);
+        Assert.True(link.mappingUnselected);
+        Assert.False(link.mappingMissing);
     }
 }

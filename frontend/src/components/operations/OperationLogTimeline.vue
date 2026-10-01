@@ -2,6 +2,7 @@
 import { ref, watch, nextTick } from "vue";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import { t } from "@/i18n";
+import { splitOperationLog } from "@/lib/operationLogText";
 
 const props = defineProps({
   logs: { type: Array, required: true },
@@ -42,6 +43,10 @@ function dotClass(level) {
   }
 }
 
+function logParts(message) {
+  return splitOperationLog(message);
+}
+
 function textClass(level) {
   switch (level) {
     case "error":
@@ -71,8 +76,20 @@ function textClass(level) {
         class="mt-1.5 size-1.5 rounded-full shrink-0"
         :class="dotClass(log.level)"
       />
-      <span :class="textClass(log.level)" class="break-words min-w-0">
-        {{ log.message }}
+      <span :class="textClass(log.level)" class="min-w-0 break-words whitespace-pre-wrap">
+        <template v-for="(part, partIdx) in logParts(log.message)" :key="partIdx">
+          <pre
+            v-if="part.type === 'json'"
+            class="my-1 max-h-64 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[11px] leading-relaxed whitespace-pre text-foreground"
+          >{{ part.text }}</pre>
+          <RouterLink
+            v-else-if="part.type === 'product'"
+            :to="`/products/${part.productId}/edit`"
+            class="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+            @click.stop
+          >{{ part.text }}</RouterLink>
+          <template v-else>{{ part.text }}</template>
+        </template>
       </span>
     </div>
     <div v-if="logs.length >= 500" class="text-muted-foreground text-center py-1">

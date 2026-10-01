@@ -875,19 +875,28 @@ public class ProductSyncController : ControllerBase
             var isLinked = linkedExternalIds.TryGetValue(product.ExternalId, out var existingLink);
             CategoryMapping? resolvedMapping = null;
 
+            var productCategoryId = isLinked ? existingLink!.product?.categoryId : null;
             if (isLinked)
             {
-                if (existingLink!.categoryMappingId.HasValue)
+                if (existingLink!.categoryMappingId.HasValue
+                    && mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out var savedMapping)
+                    && savedMapping.localCategoryId == productCategoryId)
                 {
-                    mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out resolvedMapping);
+                    resolvedMapping = savedMapping;
                 }
-                else if (existingLink.product?.categoryId is int localCategoryId &&
+                else if (productCategoryId is int localCategoryId &&
                          mappingsByLocalCategoryId.TryGetValue(localCategoryId, out var localCategoryMappings) &&
                          localCategoryMappings.Count == 1)
                 {
                     resolvedMapping = localCategoryMappings[0];
                 }
             }
+
+            var mappingCount = productCategoryId is int categoryId
+                && mappingsByLocalCategoryId.TryGetValue(categoryId, out var categoryMappings)
+                ? categoryMappings.Count
+                : 0;
+            var mappingUnselected = isLinked && mappingCount > 1 && resolvedMapping == null;
 
             return new
             {
@@ -905,7 +914,8 @@ public class ProductSyncController : ControllerBase
                 linkStatus = isLinked ? existingLink!.status.ToString() : null,
                 categoryMappingId = resolvedMapping?.Id,
                 categoryMappingName = resolvedMapping?.name,
-                mappingMissing = isLinked && resolvedMapping == null,
+                mappingUnselected,
+                mappingMissing = isLinked && resolvedMapping == null && !mappingUnselected,
                 localProductId = isLinked ? existingLink!.productId : (int?)null,
                 localProductSku = isLinked ? existingLink!.product?.sku : null,
                 localProductName = isLinked ? existingLink!.product?.name : null,
@@ -1916,6 +1926,10 @@ public class ProductSyncController : ControllerBase
                 var isLinked = linkByConnectionId.ContainsKey(conn.Id);
                 var link = isLinked ? linkByConnectionId[conn.Id] : null;
                 var savedMappingWasDeleted = link?.categoryMappingId != null && link.categoryMapping == null;
+                var savedMatches = link?.categoryMapping != null
+                    && product.categoryId.HasValue
+                    && link.categoryMapping.localCategoryId == product.categoryId.Value;
+                var mappingUnselected = connMappings.Count > 1 && !savedMatches;
 
                 return new
                 {
@@ -1932,8 +1946,9 @@ public class ProductSyncController : ControllerBase
                     hasMapping,
                     needsMapping = !hasMapping && product.categoryId.HasValue,
                     // Multi-mapping: all available mappings + selected one from link
-                    selectedMappingId = link?.categoryMappingId,
-                    mappingMissing = isLinked && (!hasMapping || savedMappingWasDeleted),
+                    selectedMappingId = savedMatches ? link!.categoryMappingId : null,
+                    mappingUnselected,
+                    mappingMissing = isLinked && !mappingUnselected && (!hasMapping || savedMappingWasDeleted),
                     availableMappings = connMappings
                         .Select(m => (object)new {
                             id = m.Id,
@@ -3073,7 +3088,10 @@ public class ProductSyncController : ControllerBase
 
                 results.Add(new { linkId, success = true, updatedFields });
                 successCount++;
-                await _operationLogger.LogAsync(operationId, storeId, "success", $"Imported: {product?.name ?? link.externalProductId}");
+                await _operationLogger.LogAsync(operationId, storeId, "success",
+                    product != null
+                        ? $"Imported: {OperationProductRef.Format(product.Id, product.name)}"
+                        : $"Imported: {link.externalProductId}");
                 await _operationLogger.ProgressAsync(operationId, storeId, input.linkIds.Count, successCount, failedCount);
             }
             catch (Exception ex)
@@ -3175,19 +3193,23 @@ public class ProductSyncController : ControllerBase
                         {
                             results.Add(new { linkId, success = true, externalProductId = item.ExternalProductId });
                             successCount++;
-                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "success", $"Exported: #{item.ProductId}");
+                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "success",
+                                $"Exported: {OperationProductRef.Format(item.ProductId, null)}");
                             var details = FormatExportDetails(item.Details);
                             if (details != null)
-                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info", $"#{item.ProductId}: {details}");
+                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "info",
+                                    $"{OperationProductRef.Format(item.ProductId, null)}: {details}");
                         }
                         else
                         {
                             results.Add(new { linkId, success = false, error = item.ErrorMessage });
                             failedCount++;
-                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"Error #{item.ProductId}: {item.ErrorMessage}");
+                            await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error",
+                                $"Error: {OperationProductRef.Format(item.ProductId, null)} - {item.ErrorMessage}");
                             var details = FormatExportDetails(item.Details);
                             if (details != null)
-                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error", $"#{item.ProductId}: {details}");
+                                await _operationLogger.LogAsync(bulkOpId, bulkStoreId, "error",
+                                    $"{OperationProductRef.Format(item.ProductId, null)}: {details}");
                         }
                     }
                 }

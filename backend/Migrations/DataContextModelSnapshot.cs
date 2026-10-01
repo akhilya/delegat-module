@@ -1513,6 +1513,9 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("authorApiKeyId")
+                        .HasColumnType("int");
+
                     b.Property<int>("authorUserId")
                         .HasColumnType("int");
 

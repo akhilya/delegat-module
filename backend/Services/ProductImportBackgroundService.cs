@@ -281,8 +281,12 @@ public class ProductImportBackgroundService : BackgroundService
                     await _operationLogger.LogAsync(pending.batchId, pending.storeId,
                         result.AlreadyLinked ? "warning" : "success",
                         result.AlreadyLinked
-                            ? $"Already imported: {pending.productName ?? pending.externalProductId}"
-                            : $"Imported: {result.ProductName ?? pending.externalProductId} (ID: {result.ProductId})");
+                            ? result.ProductId is int alreadyId
+                                ? $"Already imported: {OperationProductRef.Format(alreadyId, pending.productName)}"
+                                : $"Already imported: {pending.productName ?? pending.externalProductId}"
+                            : result.ProductId is int importedId
+                                ? $"Imported: {OperationProductRef.Format(importedId, result.ProductName ?? pending.productName)}"
+                                : $"Imported: {result.ProductName ?? pending.externalProductId}");
             }
             else
             {

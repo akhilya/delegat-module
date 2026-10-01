@@ -50,35 +50,86 @@ public class OperationsController : ControllerBase
 
         var total = await query.CountAsync(ct);
 
-        var items = await query
+        var pageRows = await query
             .OrderByDescending(o => o.createdAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Join(
-                _context.Users,
-                o => o.authorUserId,
-                u => u.Id,
-                (o, u) => new
-                {
-                    o.operationId,
-                    o.storeId,
-                    o.authorUserId,
-                    authorUserName = u.UserName,
-                    o.type,
-                    o.title,
-                    o.status,
-                    o.connectionId,
-                    o.connectionName,
-                    o.batchId,
-                    o.batchType,
-                    o.totalItems,
-                    o.completedItems,
-                    o.failedItems,
-                    o.summary,
-                    o.createdAt,
-                    o.finishedAt
-                })
+            .Select(o => new
+            {
+                o.operationId,
+                o.storeId,
+                o.authorUserId,
+                o.authorApiKeyId,
+                o.type,
+                o.title,
+                o.status,
+                o.connectionId,
+                o.connectionName,
+                o.batchId,
+                o.batchType,
+                o.totalItems,
+                o.completedItems,
+                o.failedItems,
+                o.summary,
+                o.createdAt,
+                o.finishedAt
+            })
             .ToListAsync(ct);
+
+        var userIds = pageRows.Select(o => o.authorUserId).Distinct().ToList();
+        var userNames = await _context.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.UserName, ct);
+
+        var keyIds = pageRows
+            .Where(o => o.authorApiKeyId != null)
+            .Select(o => o.authorApiKeyId!.Value)
+            .Distinct()
+            .ToList();
+        var keyRows = await _context.userApiKeys
+            .AsNoTracking()
+            .Where(k => keyIds.Contains(k.Id))
+            .Select(k => new { k.Id, k.name, k.keyPrefix, k.last4 })
+            .ToListAsync(ct);
+        var keys = keyRows.ToDictionary(k => k.Id);
+
+        var items = pageRows.Select(o =>
+        {
+            string? authorUserName;
+            if (o.authorApiKeyId is int keyId)
+            {
+                authorUserName = keys.TryGetValue(keyId, out var key)
+                    ? OperationAuthor.ApiKey(key.name, key.keyPrefix, key.last4)
+                    : "API";
+            }
+            else
+            {
+                userNames.TryGetValue(o.authorUserId, out authorUserName);
+            }
+
+            return new
+            {
+                o.operationId,
+                o.storeId,
+                o.authorUserId,
+                o.authorApiKeyId,
+                authorUserName,
+                o.type,
+                o.title,
+                o.status,
+                o.connectionId,
+                o.connectionName,
+                o.batchId,
+                o.batchType,
+                o.totalItems,
+                o.completedItems,
+                o.failedItems,
+                o.summary,
+                o.createdAt,
+                o.finishedAt
+            };
+        }).ToList();
 
         return Ok(new
         {

@@ -1435,7 +1435,7 @@ public class ProductController : ControllerBase
             .Distinct()
             .ToList();
 
-        HashSet<(int categoryId, int connectionId)> mappingPairs = new();
+        Dictionary<(int categoryId, int connectionId), int> mappingCounts = new();
         if (categoryIds.Count > 0 && connectionIds.Count > 0)
         {
             var pairs = await _context.categoryMappings
@@ -1443,14 +1443,14 @@ public class ProductController : ControllerBase
                 .Where(m => categoryIds.Contains(m.localCategoryId) && connectionIds.Contains(m.connectionId))
                 .Select(m => new { m.localCategoryId, m.connectionId })
                 .ToListAsync();
-            mappingPairs = pairs
-                .Select(p => (p.localCategoryId, p.connectionId))
-                .ToHashSet();
+            mappingCounts = pairs
+                .GroupBy(p => (p.localCategoryId, p.connectionId))
+                .ToDictionary(g => g.Key, g => g.Count());
         }
 
         ProductAdapterLinkMappingEnrichment.Apply(
             dtos,
-            mappingPairs,
+            mappingCounts,
             products.ToDictionary(p => p.Id));
     }
 
