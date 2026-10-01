@@ -26,6 +26,12 @@ public static class AgentChatTurnGate
     public const string PythonBudgetSpent =
         "Not run. One script already ran for this question. Answer the user now from that result. Do not call another tool.";
 
+    /// <summary>Shown when a turn used tools and still produced no sentence and no plan.</summary>
+    public static string SilentTurnFallback(string? locale) =>
+        string.Equals(locale, "en", StringComparison.OrdinalIgnoreCase)
+            ? "I stopped without an answer. Send that again and I will reply."
+            : "Я остановился и ничего не ответил. Напишите ещё раз — отвечу.";
+
     /// <summary>
     /// The latest user message is only “answer now”, not a new question.
     /// </summary>
@@ -39,8 +45,10 @@ public static class AgentChatTurnGate
         return s is "ответь" or "отвечай" or "ответьте" or "ну ответь" or "дай ответ"
             or "скажи уже" or "хватит" or "хватит искать" or "достаточно"
             or "стоп" or "ответь пожалуйста"
+            or "и" or "ну" or "ну и" or "дальше" or "так" or "так что" or "и что"
             or "answer" or "answer now" or "just answer" or "please answer"
-            or "stop" or "enough" or "that's enough" or "that is enough";
+            or "stop" or "enough" or "that's enough" or "that is enough"
+            or "and" or "so" or "well";
     }
 
     public static bool IsRunPython(string? toolName) =>

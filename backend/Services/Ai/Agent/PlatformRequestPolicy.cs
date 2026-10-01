@@ -40,7 +40,7 @@ public static class PlatformRequestPolicy
           POST …/mappings/{mappingId}/graph/connect — wire one unwired sink
             { adapterFieldKey, sourceType: attribute|productField|static, sourceAttributeId|sourceField|staticValue, sink?: price }
             Attribute groups (Основные параметры) are local characteristics, not collection titles.
-          POST …/graph/modifiers { modifierType, params, paramSources?: [{ param, sourceType, sourceAttributeId|sourceField|staticValue }] }
+          POST …/graph/modifiers { adapterFieldKey, modifierType, params, paramSources?: [{ param, sourceType, sourceAttributeId|sourceField|staticValue }] }
             divide divisor 10 converts mm to cm; divisor 1000 converts g to kg.
             paramSources feeds p:divisor or p:factor (scale = 1700 / height).
           GET /api/ai/store-settings — personal settings (store description, style, brevity, emoji). PUT stays denied.

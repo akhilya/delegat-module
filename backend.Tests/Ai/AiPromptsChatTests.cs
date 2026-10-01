@@ -83,9 +83,20 @@ public class AiPromptsChatTests
         Assert.Contains("graph/group-titles", prompt, StringComparison.Ordinal);
         Assert.Contains("graph/connect", prompt, StringComparison.Ordinal);
         Assert.Contains("graph/modifiers", prompt, StringComparison.Ordinal);
+        Assert.Contains("adapterFieldKey", prompt, StringComparison.Ordinal);
+        Assert.Contains("regexReplace", prompt, StringComparison.Ordinal);
         Assert.Contains("mapping-graph/blocks", prompt, StringComparison.Ordinal);
         Assert.Contains("Attribute groups on this page are local characteristics", prompt, StringComparison.Ordinal);
         Assert.Contains("/mappings/9/graph", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_MappingSpelling_StillCarriesTheModifierBody()
+    {
+        var prompt = Prompt(turnText: "Измени мапинг, чтобы в описании все эмодзи заменялись регулярным выражением");
+        Assert.Contains("regexReplace", prompt, StringComparison.Ordinal);
+        Assert.Contains("adapterFieldKey", prompt, StringComparison.Ordinal);
+        Assert.Contains("propose_plan in that same turn", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -41,6 +41,9 @@ public class AgentChatTurnGateTests
     [InlineData("Ответь!")]
     [InlineData("  хватит искать  ")]
     [InlineData("answer")]
+    [InlineData("и?")]
+    [InlineData("ну")]
+    [InlineData("дальше")]
     [InlineData("just answer")]
     public void AsksToAnswerNow_IsOnlyADemandToReply(string text)
     {

@@ -270,7 +270,9 @@ public static class AiPrompts
         information_schema. Compose filters from that schema (NOT IN subquery,
         DISTINCT, MIN/MAX, OFFSET) instead of memorizing recipes. After a SQL error, do not
         invent a third variant — use SCHEMA, SHOW COLUMNS, GET /products, or propose_plan.
-        At most twelve tool calls per user message, then answer or propose_plan. Do not page
+        At most twelve tool calls per user message, then answer or propose_plan. A turn that
+        called tools still owes a sentence or a plan in that same turn. Stopping after tools
+        is not an answer. Do not page
         trash unless the user asked about trash. Do not probe MIN/MAX/IN lists to guess filters.
 
         Cabinet HTTP: after confirm, if a plan step is missing a path, search_actions once
@@ -375,7 +377,7 @@ public static class AiPrompts
     }
 
     private static readonly Regex MappingTurnRx = new(
-        @"mapping|маппинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи",
+        @"mapping|маппинг|мапинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex PriceTurnRx = new(
@@ -469,6 +471,13 @@ public static class AiPrompts
            Regex blocks: regexReplace rewrites by a pattern, regexExtract returns a
            match (group 0 is the whole match). Use them when a literal replace is
            not enough. An invalid pattern leaves the original text.
+           POST …/graph/modifiers always includes adapterFieldKey — the sink field
+           key from that graph (description for the description). modifierType
+           regexReplace, params pattern and replacement. Several literal replace
+           blocks on one field become one regexReplace on that same key, not
+           several posts. One graph GET, then propose_plan in that same turn.
+           Do not search_knowledge, get_doc, or run_python to reread a graph
+           you already have. The step args are what runs after confirm.
            Price block: sink "price".
            Do not invent ids. Do not PUT the whole graph. Do not call group-titles.
            graph/connect places nodes (catalog width/height). Output handle is out.

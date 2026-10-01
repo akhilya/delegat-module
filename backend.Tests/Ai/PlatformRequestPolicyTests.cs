@@ -116,6 +116,7 @@ public class PlatformRequestPolicyTests
             "POST", "/marketplace/connections/10/mappings/28/graph/group-titles"));
         Assert.Contains("mapping-graph/blocks", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("graph/modifiers", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("POST …/graph/modifiers { adapterFieldKey", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("valueMap", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.True(PlatformRequestPolicy.IsAllowed(
             "POST", "/marketplace/connections/10/mappings/28/graph/connect"));
