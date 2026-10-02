@@ -36,6 +36,10 @@ public sealed class AgentPlatformGateway
             return (new { error = "forbidden" }, "This account is read-only");
 
         var (apiPath, query) = PlatformRequestPolicy.SplitPathAndQuery(path);
+        var mismatch = AssistantBodyGuard.RejectReason(method, apiPath, body);
+        if (mismatch != null)
+            return (new { error = "body_mismatch", message = mismatch }, mismatch);
+
         if (IsAttachStagedFiles(method, apiPath, body, out var productId, out var attachmentIds, out var folderId))
         {
             try

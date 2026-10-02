@@ -16,6 +16,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- The cabinet assistant no longer reports a mapping edit as done when the request would not change the text. A field the action does not read, or a pattern left outside `params`, is rejected before it is saved. The prompt, the action list, and the request surface share one body sentence, and a test fails when those instructions drift from the controller.
+- A regex block on a mapping keeps its pattern and replacement. They belong inside `params`; a body that put them next to the modifier type used to save an empty block.
 - Changing a product’s category no longer keeps a connection looking synced when that category has several mappings and none is chosen. The connection status says the mapping is not selected.
 - A background job started with an API key is attributed to that key, not to the person who created it. Operation logs show JSON on its own lines, and a product named in a log opens that product.
 - Cabinet assistant strips emoji on a mapped field with one .NET regular expression and removes the old literal replacements on that field in the same step. A pattern written as `\u{…}` does not match, so the preview used to keep the original text.

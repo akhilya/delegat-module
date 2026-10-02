@@ -9,7 +9,7 @@ namespace Delegat.Services.Ai.Agent;
 /// </summary>
 public static class PlatformRequestPolicy
 {
-    public const string SurfaceDescription = """
+    private const string SurfaceBody = """
         Call the same cabinet JSON API the SPA uses (prefix /api is optional). Permissions,
         store membership, and quotas are those of the signed-in user. GET/HEAD are reads.
         POST/PUT/PATCH/DELETE are writes (propose_plan first).
@@ -48,8 +48,10 @@ public static class PlatformRequestPolicy
             divide divisor 10 converts mm to cm; divisor 1000 converts g to kg.
             paramSources feeds p:divisor or p:factor (scale = 1700 / height).
             regexReplace is .NET. \u{…} is invalid and the preview keeps the text.
-            Strip every emoji with replacement "" , removeModifierTypes ["replace"],
-            pattern [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
+            pattern, replacement, and ignoreCase live inside params.
+            An empty pattern is rejected. Strip every emoji with params.replacement "",
+            removeModifierTypes ["replace"], params.pattern
+            [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
             (surrogate pairs; copy it). That same call removes literal replace blocks on the field.
           GET /api/ai/store-settings — personal settings (store description, style, brevity, emoji). PUT stays denied.
           POST …/graph/group-titles { mappings: [{from,to}] }
@@ -83,6 +85,8 @@ public static class PlatformRequestPolicy
         Notes, folders, barcodes, operations, storage lists, and reference catalogs use the
         same /api paths as the cabinet. Prefer small pageSize.
         """;
+
+    public static readonly string SurfaceDescription = SurfaceBody + "\n" + AssistantWriteContract.AllText;
 
     private static readonly Regex PermanentDelete = new(
         @"/(bulk-)?permanent(-delete)?$",

@@ -410,7 +410,7 @@ public static class AiPrompts
         A slice is those names plus AND (price >= 1000 AND categoryId = 3).
         GET /products?where=… and PATCH /products/bulk { where, updates } use that clause too.
         Named cards: productIds. Do not send an empty body. HTTP 200 pending is Operations.
-        """;
+        """ + "\n" + AssistantWriteContract.For("products/export-batch");
 
     private static bool IncludeRouteCatalog(string? turnText) =>
         !string.IsNullOrWhiteSpace(turnText) && RouteTurnRx.IsMatch(turnText);
@@ -474,10 +474,18 @@ public static class AiPrompts
            and the preview keeps the original text. Use \u and exactly four hex
            digits. An emoji above U+FFFF is a surrogate pair, not one class of
            code points.
-           To strip every emoji, one POST …/graph/modifiers on that field:
-           adapterFieldKey (description for the description), modifierType
-           regexReplace, replacement "", removeModifierTypes ["replace"],
-           pattern exactly
+           A regex block is one POST …/graph/modifiers. pattern and replacement
+           belong inside params. Beside modifierType they used to be dropped and
+           the block was saved empty.
+           { adapterFieldKey, modifierType: "regexReplace",
+             params: { pattern, replacement, ignoreCase },
+             removeModifierTypes }
+           adapterFieldKey is the field key (name, description).
+           params.pattern is the .NET pattern. params.replacement is the new
+           text; an empty string deletes the match. params.ignoreCase true
+           ignores case. One call per field.
+           To strip every emoji, params.replacement "", removeModifierTypes
+           ["replace"], params.pattern exactly
            [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
            removeModifierTypes drops those literal replace blocks on that same
            field in this call. Do not leave them. Do not post one block per emoji.
@@ -557,7 +565,9 @@ public static class AiPrompts
         { selections: [{ productId, categoryMappingId }] }.
         categoryMappingId must be one of that product’s availableMappings.
         Do not PUT the graph for this.
-        """;
+        """ + "\n" + AssistantWriteContract.For(
+            "graph/modifiers", "graph/connect", "graph/group-titles",
+            "save-mapping-selections", "resolve-mappings");
 
     private static string PricePlaybook() => """
         Raise every catalog price: propose_plan only — PATCH /products/bulk
@@ -567,7 +577,7 @@ public static class AiPrompts
         instead of allMatching — gallery photos are @withGallery.
         wait so shop export sees the new amounts.
         Do not GET …/prices, do not search_knowledge, do not invent a per-card PATCH loop.
-        """;
+        """ + "\n" + AssistantWriteContract.For("products/bulk", "export-all-prices/run");
 
     private static string RouteCatalog() => """
         Lists (no id): /products  /products?page=2&pageSize=15  /products?trash=1

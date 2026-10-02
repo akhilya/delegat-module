@@ -34,9 +34,7 @@ public sealed class CabinetActionCatalog
         var take = Math.Clamp(limit <= 0 ? 8 : limit, 1, 20);
         var tokens = Tokens(query);
         if (tokens.Count == 0)
-        {
-            return Extras.Take(take).ToArray();
-        }
+            return Extras.Take(take).Select(Present).ToArray();
 
         return _all.Value
             .Select(h => (hit: h, score: Score(h, tokens)))
@@ -44,8 +42,33 @@ public sealed class CabinetActionCatalog
             .OrderByDescending(x => x.score)
             .ThenBy(x => x.hit.Path, StringComparer.OrdinalIgnoreCase)
             .Take(take)
-            .Select(x => x.hit)
+            .Select(x => Present(x.hit))
             .ToArray();
+    }
+
+    /// <summary>Notes the model sees, including the shared body contract.</summary>
+    internal static string InstructionText() =>
+        string.Join("\n", Extras.Select(h =>
+        {
+            var shown = Present(h);
+            return shown.Method + " " + shown.Path + "\n" + shown.Note;
+        }));
+
+    private static ActionHit Present(ActionHit hit)
+    {
+        var note = hit.Note;
+        var contract = AssistantWriteContract.Match(hit.Method, hit.Path);
+        if (contract != null)
+        {
+            var line = contract.Method + " " + contract.PathSuffix + " " + contract.Sentence;
+            if (!note.Contains(line, StringComparison.Ordinal))
+                note += " " + line;
+        }
+
+        var fields = AssistantBodySchema.AcceptedFields(hit.Method, hit.Path);
+        if (!string.IsNullOrEmpty(fields) && !note.Contains("Accepted body fields:", StringComparison.Ordinal))
+            note += " Accepted body fields: " + fields + ".";
+        return hit with { Note = note };
     }
 
     internal static readonly ActionHit[] Extras =
@@ -108,7 +131,7 @@ public sealed class CabinetActionCatalog
             "Wire one marketplace field. Body: adapterFieldKey, sourceType attribute|productField|groupName|static, sourceAttributeId or sourceField or staticValue, sink price for the price block. Use this to finish a mapping. Not group-titles. staticValue sets a constant.",
             "mapping connect доделать маппинг связать поля характеристики основные параметры вложенные параметры attribute productField sourceAttributeId staticValue бренд материал"),
         new("POST", "/marketplace/connections/{id}/mappings/{mappingId}/graph/modifiers", true,
-            "Insert a canvas modifier on that sink. Body requires adapterFieldKey (the field key, such as description) and modifierType (divide|multiply|round|template|valueMap|replace|regexReplace|regexExtract|…). regexReplace params: pattern, replacement. The engine is .NET: \\u{…} is invalid and the preview keeps the text. To strip every emoji copy pattern [\\uD83C-\\uD83E][\\uDC00-\\uDFFF]|[\\u2600-\\u27BF]|[\\u2B00-\\u2BFF]|\\uFE0F|\\u200D|\\u20E3, replacement empty, and removeModifierTypes [\"replace\"] so literal replace blocks on that field are removed in the same call. divide params.divisor 10 is mm to cm, 1000 is g to kg. paramSources item: param divisor or factor, sourceType attribute|productField|static. valueMap params.mappings is [{from,to},…]. Call after graph/connect. One graph GET then propose_plan — do not reread the graph with a script.",
+            "Insert a canvas modifier on that sink. Body requires adapterFieldKey (the field key, such as name or description) and modifierType (divide|multiply|round|template|valueMap|replace|regexReplace|regexExtract|…). regexReplace and regexExtract put pattern, replacement, and ignoreCase inside params. Beside modifierType those fields used to save an empty block. The engine is .NET: \\u{…} is invalid and the preview keeps the text. To strip every emoji set params.pattern to [\\uD83C-\\uD83E][\\uDC00-\\uDFFF]|[\\u2600-\\u27BF]|[\\u2B00-\\u2BFF]|\\uFE0F|\\u200D|\\u20E3, params.replacement empty, and removeModifierTypes [\"replace\"]. divide params.divisor 10 is mm to cm, 1000 is g to kg. paramSources item: param divisor or factor, sourceType attribute|productField|static. valueMap params.mappings is [{from,to},…]. One call per field. One graph GET then propose_plan — do not reread the graph with a script.",
             "mapping modifier блок divide multiply единицы измерения мм см масштаб valueMap replace regexReplace regex эмодзи описание adapterFieldKey"),
         new("POST", "/marketplace/connections/{id}/resolve-mappings", false,
             "Which marketplace-category mapping each product uses on this connection, and the other mappings of the same local category. Body: { productIds }. Read this before reassigning. Does not edit the canvas.",

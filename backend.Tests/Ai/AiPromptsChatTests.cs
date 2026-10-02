@@ -97,6 +97,7 @@ public class AiPromptsChatTests
         Assert.Contains("regexReplace", prompt, StringComparison.Ordinal);
         Assert.Contains("adapterFieldKey", prompt, StringComparison.Ordinal);
         Assert.Contains("removeModifierTypes", prompt, StringComparison.Ordinal);
+        Assert.Contains("inside params", prompt, StringComparison.Ordinal);
         Assert.Contains(@"[\uD83C-\uD83E][\uDC00-\uDFFF]", prompt, StringComparison.Ordinal);
         Assert.Contains(@"\u{…} is invalid", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan in that same turn", prompt, StringComparison.Ordinal);

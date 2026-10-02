@@ -605,7 +605,13 @@ public class CategoryMappingController : ControllerBase
                 mappingId,
                 input.adapterFieldKey.Trim(),
                 input.modifierType.Trim(),
-                ToModifierParams(input.@params),
+                GraphModifierParams.Merge(
+                    input.modifierType,
+                    ToModifierParams(input.@params),
+                    input.pattern,
+                    input.replacement,
+                    input.ignoreCase,
+                    input.group),
                 input.sink,
                 StubField(input.adapterFieldKey),
                 input.removeModifierTypes,
@@ -1535,6 +1541,12 @@ public class CategoryMappingController : ControllerBase
         public string adapterFieldKey { get; set; }
         public string modifierType { get; set; }
         public Dictionary<string, JsonElement>? @params { get; set; }
+        /// <summary>Accepted beside modifierType and copied into params when params.pattern is absent.</summary>
+        public string? pattern { get; set; }
+        /// <summary>Accepted beside modifierType and copied into params when params.replacement is absent.</summary>
+        public string? replacement { get; set; }
+        public bool? ignoreCase { get; set; }
+        public int? group { get; set; }
         public string? sink { get; set; }
         /// <summary>
         /// Modifier types to splice off this field before the new block is inserted
