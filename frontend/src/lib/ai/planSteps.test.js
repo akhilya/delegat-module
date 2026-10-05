@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import {
   PLAN_STEP_PREVIEW,
+  planHasContent,
   planHiddenStepCount,
   planStepsNeedCollapse,
 } from "./planSteps.js";
@@ -17,6 +18,16 @@ describe("plan step preview", () => {
   it("hides the tail of a long plan", () => {
     assert.equal(planStepsNeedCollapse(4), true);
     assert.equal(planHiddenStepCount(8), 5);
+  });
+
+  it("rejects a plan that has nothing to confirm", () => {
+    assert.equal(planHasContent(null), false);
+    assert.equal(planHasContent({ summary: "  ", steps: [] }), false);
+    assert.equal(planHasContent({ summary: "Export products with photos" }), true);
+    assert.equal(
+      planHasContent({ steps: [{ description: "Export to Wildberries" }] }),
+      true,
+    );
   });
 });
 

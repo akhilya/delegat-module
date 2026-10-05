@@ -94,6 +94,7 @@ import {
 } from "@/lib/ai/timeline";
 import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
+import { planHasContent } from "@/lib/ai/planSteps";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
@@ -825,7 +826,7 @@ function isLatestTurn(msg) {
                   />
 
                   <div
-                    v-if="msg.plan"
+                    v-if="planHasContent(msg.plan)"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard

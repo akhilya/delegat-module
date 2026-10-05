@@ -6,6 +6,12 @@ export function planStepList(plan) {
   return Array.isArray(steps) ? steps : [];
 }
 
+/** A plan with no summary and no steps is not something the user can confirm. */
+export function planHasContent(plan) {
+  if (String(plan?.summary || "").trim()) return true;
+  return planStepList(plan).length > 0;
+}
+
 export function planHiddenStepCount(count, max = PLAN_STEP_PREVIEW) {
   const n = Number(count) || 0;
   const limit = Number.isFinite(max) && max > 0 ? max : PLAN_STEP_PREVIEW;

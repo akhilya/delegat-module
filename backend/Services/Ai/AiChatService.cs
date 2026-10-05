@@ -311,7 +311,18 @@ public class AiChatService
                 {
                     if (AgentChatTurnGate.IsProposePlan(toolName))
                     {
-                        var planInput = ParseInput<ProposePlanInput>(toolInputJson);
+                        var planInput = ProposePlanReader.Read(toolInputJson);
+                        if (!planInput.HasContent)
+                        {
+                            toolResults.Add(new
+                            {
+                                type = "tool_result",
+                                tool_use_id = toolId,
+                                content = "Plan was empty. Call propose_plan again with a summary and at least one step. Each step needs description in the store language and exact args. Do not call other tools."
+                            });
+                            continue;
+                        }
+
                         yield return Sse(SseEventType.Plan, new
                         {
                             summary = planInput.Summary,
@@ -609,24 +620,9 @@ public class AiChatService
     private static string Sse(string type, object data)
         => AiSseTurnRecorder.Format(type, data);
 
-    private static T ParseInput<T>(string json) where T : new()
-    {
-        if (string.IsNullOrWhiteSpace(json)) return new T();
-        try { return JsonSerializer.Deserialize<T>(json, _jsonOpts) ?? new T(); }
-        catch { return new T(); }
-    }
-
     private static object ParseJsonOrEmpty(string json)
     {
         try { return JsonDocument.Parse(json).RootElement; }
         catch { return new { }; }
-    }
-
-    private class ProposePlanInput
-    {
-        public string Summary { get; set; } = "";
-        public List<object>? Steps { get; set; }
-        public int AffectedCount { get; set; }
-        public bool IsDestructive { get; set; }
     }
 }

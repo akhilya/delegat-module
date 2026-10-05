@@ -11,6 +11,7 @@ import { InsetGroup } from "@/components/ui/inset-group";
 import {
   PLAN_STEP_PREVIEW,
   planHiddenStepCount,
+  planHasContent,
   planStepList,
   planStepsNeedCollapse,
 } from "@/lib/ai/planSteps";
@@ -52,7 +53,10 @@ const statusLabel = computed(() => {
   <InsetGroup class="w-full gap-0">
     <div class="px-3 pt-2.5 pb-2">
       <p class="text-xs text-muted-foreground">{{ t("ai.planTitle") }}</p>
-      <p class="mt-0.5 text-[15px] font-medium leading-snug tracking-tight">
+      <p
+        v-if="planHasContent(plan) && plan.summary"
+        class="mt-0.5 text-[15px] font-medium leading-snug tracking-tight"
+      >
         {{ plan.summary }}
       </p>
       <p

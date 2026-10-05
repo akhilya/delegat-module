@@ -17,6 +17,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- An assistant plan with no summary and no steps no longer shows an empty card with only Execute. A steps list sent as text is still read.
 - Ozon price export applies the category mapping when the product link has not saved one and the category has a single mapping. A raised price was sent without the mapped old price, and Ozon rejected it because the strikethrough already on the card was lower (`Old price is less than price`).
 - Ozon list responses still report the full count when the marketplace sends `total_items` instead of `total`. Catalog import and removing every product from a promotion use that count. Product list, prices, and stocks switch on 23 November 2026.
 - Ozon promotions use the methods that stay after 13 October 2026: product list `POST /v2/actions/products`, add or remove by price `POST /v1/actions/products/update`, and promo-code removal `POST /v2/actions/products/deactivate`. A price in the reply may be a number or a Money object.
