@@ -122,7 +122,7 @@ Sync starters return **202 Accepted**:
 }
 ```
 
-Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is terminal (`completed`, `failed`, `partial`, etc.). Response may include recent `logs`.
+Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is terminal (`completed`, `failed`, `partial`, etc.). `logs` are the latest 200 lines, oldest of that window first.
 
 ---
 

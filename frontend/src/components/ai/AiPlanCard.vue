@@ -21,6 +21,7 @@ const props = defineProps({
   plan: { type: Object, required: true },
   confirmed: { type: Boolean, default: false },
   cancelled: { type: Boolean, default: false },
+  superseded: { type: Boolean, default: false },
   executed: { type: Boolean, default: false },
   failed: { type: Boolean, default: false },
 });
@@ -39,9 +40,12 @@ const rest = computed(() =>
   needsCollapse.value ? steps.value.slice(PLAN_STEP_PREVIEW) : [],
 );
 
-const pending = computed(() => !props.confirmed && !props.cancelled);
+const pending = computed(
+  () => !props.confirmed && !props.cancelled && !props.superseded,
+);
 
 const statusLabel = computed(() => {
+  if (props.superseded) return t("ai.planSuperseded");
   if (props.cancelled) return t("ai.planCancelled");
   if (props.failed) return t("ai.planFailed");
   if (props.executed) return t("ai.planExecuted");

@@ -17,6 +17,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- A waiting assistant plan is outdated when the next message does not confirm or cancel it. Execute is hidden, and the assistant revises the plan instead of running the old steps.
+- Cleaning a mapped description keeps Latin, Cyrillic, digits, and ordinary punctuation. The assistant replaces the regex on that field. It does not invent a cleanup field and does not start an export unless asked.
 - An assistant plan with no summary and no steps no longer shows an empty card with only Execute. A steps list sent as text is still read.
 - Ozon price export applies the category mapping when the product link has not saved one and the category has a single mapping. A raised price was sent without the mapped old price, and Ozon rejected it because the strikethrough already on the card was lower (`Old price is less than price`).
 - Ozon list responses still report the full count when the marketplace sends `total_items` instead of `total`. Catalog import and removing every product from a promotion use that count. Product list, prices, and stocks switch on 23 November 2026.
@@ -64,6 +66,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Partner operation status returns the latest 200 log lines. The cabinet shows the latest 500, so a long run stays visible at the end. Explain with AI appears after the operation finishes.
 - A cabinet question runs one calculation script, then the assistant answers. It does not keep searching the shop or the documentation. A message that only says to answer (“ответь”) replies from what is already known.
 - Mapping canvas adds Regex replace and Regex find. A standard-value block asks for the shop field first, then a dictionary entry, and that source stays fixed. A category or store attribute that stores a dictionary key can send the key or the name. On a directory field the assistant prefers that standard-value block.
 - On a field mapping, the cabinet assistant sees how many exports of that category succeeded or failed since the canvas was last saved, and the text the adapter returned on the failures. Results from before that save are not treated as open problems.

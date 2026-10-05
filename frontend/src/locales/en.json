@@ -602,6 +602,7 @@
     "planExecuted": "Done",
     "planFailed": "Didn't succeed",
     "planCancelled": "Cancelled",
+    "planSuperseded": "Outdated",
     "planAffected": "Affected:",
     "planTitle": "Plan",
     "planShowMore": "Show {n} more",
@@ -2043,7 +2044,7 @@
     "explainWithAi": "Explain with AI",
     "aiExplainPrompt": "Explain this background operation. Summarize what happened, highlight errors and warnings, and suggest concrete next steps. Use only the metadata and log lines below - do not invent missing events.",
     "aiNoModels": "AI is enabled, but no models are configured yet.",
-    "maxLogEntries": "Showing a maximum of 500 entries",
+    "maxLogEntries": "Showing the latest 500 entries",
     "showButtons": "Show buttons",
     "hideButtons": "Hide buttons"
   },

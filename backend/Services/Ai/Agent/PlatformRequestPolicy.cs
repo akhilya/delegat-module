@@ -53,6 +53,10 @@ public static class PlatformRequestPolicy
             removeModifierTypes ["replace"], params.pattern
             [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
             (surrogate pairs; copy it). That same call removes literal replace blocks on the field.
+            To keep only Latin, Cyrillic, digits, and ordinary punctuation, replace that regex:
+            removeModifierTypes ["regexReplace", "replace"], params.replacement "",
+            params.pattern [^0-9A-Za-z\u0400-\u04FF\r\n .,;:!?()\[\]{}«»"'…\-+–—=%№@#&*/|_~$^<>]
+            There is no descriptionCleanup field. Do not PATCH the graph. Do not export unless asked.
           GET /api/ai/store-settings — personal settings (store description, style, brevity, emoji). PUT stays denied.
           POST …/graph/group-titles { mappings: [{from,to}] }
             group-titles is only Merge into card (__group__) shop collection titles,

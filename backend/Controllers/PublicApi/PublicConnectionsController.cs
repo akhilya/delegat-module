@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Services;
 using Delegat.Services.Marketplace;
 
 namespace Delegat.Controllers.PublicApi;
@@ -201,13 +202,11 @@ public class PublicConnectionsController : ControllerBase
         if (op == null)
             throw ApiException.NotFound("Operation not found", code: "operation_not_found");
 
-        var logs = await _db.operationLogEntries
-            .AsNoTracking()
-            .Where(l => l.operationId == operationId)
-            .OrderBy(l => l.timestamp)
-            .Take(200)
-            .Select(l => new { l.level, l.message, l.timestamp })
-            .ToListAsync(ct);
+        var logs = await OperationLogQuery.LatestAsync(
+            _db.operationLogEntries.AsNoTracking().Where(l => l.operationId == operationId),
+            skip: 0,
+            take: 200,
+            ct);
 
         return Ok(new
         {

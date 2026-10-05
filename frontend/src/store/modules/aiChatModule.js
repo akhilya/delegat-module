@@ -48,6 +48,24 @@ async function uploadChatAttachments(sessionId, attached) {
 let abortController = null;
 let userStopped = false;
 
+function isOpenPlan(m) {
+  return !!(
+    m?.plan &&
+    !m.planConfirmed &&
+    !m.planCancelled &&
+    !m.planSuperseded &&
+    !m.planExecuted
+  );
+}
+
+function planHistoryStatus(m) {
+  if (m.planConfirmed) return "confirmed by user";
+  if (m.planCancelled) return "cancelled by user";
+  if (m.planSuperseded)
+    return "outdated — the user sent a new message without confirming or cancelling. Revise the plan to match that message. Do not run these steps.";
+  return "pending";
+}
+
 function titleSeedFromUserMessage(msg) {
   if (msg?.contextCard?.title) {
     return msg.contextCard.title;
@@ -95,11 +113,7 @@ function buildHistory(messages) {
         const steps = (m.plan.steps || [])
           .map((s) => `- ${s.description || s.tool}`)
           .join("\n");
-        const status = m.planConfirmed
-          ? "confirmed by user"
-          : m.planCancelled
-            ? "cancelled by user"
-            : "pending";
+        const status = planHistoryStatus(m);
         result.push({
           role: "assistant",
           content: `[Plan: "${m.plan.summary || ""}" | Steps:\n${steps}\n| Status: ${status}]`,
@@ -129,11 +143,7 @@ function buildHistory(messages) {
       const steps = (m.plan.steps || [])
         .map((s) => `- ${s.description || s.tool}`)
         .join("\n");
-      const status = m.planConfirmed
-        ? "confirmed by user"
-        : m.planCancelled
-          ? "cancelled by user"
-          : "pending";
+      const status = planHistoryStatus(m);
       content += `\n[Plan: "${m.plan.summary || m.plan.description || ""}" | Steps:\n${steps}\n| Status: ${status}]`;
     }
 
@@ -443,7 +453,7 @@ export default {
     setLastPlanConfirmed(state) {
       const planMsg = [...state.messages]
         .reverse()
-        .find((m) => m.plan && !m.planConfirmed && !m.planCancelled);
+        .find((m) => isOpenPlan(m));
       if (!planMsg) return;
       planMsg.planConfirmed = true;
       planMsg.planFailed = false;
@@ -467,8 +477,13 @@ export default {
     setLastPlanCancelled(state) {
       const planMsg = [...state.messages]
         .reverse()
-        .find((m) => m.plan && !m.planConfirmed);
+        .find((m) => m.plan && !m.planConfirmed && !m.planSuperseded);
       if (planMsg) planMsg.planCancelled = true;
+    },
+    supersedePendingPlans(state) {
+      for (const m of state.messages) {
+        if (isOpenPlan(m)) m.planSuperseded = true;
+      }
     },
   },
 
@@ -601,6 +616,9 @@ export default {
         (attachments.length ? t("ai.attachedFilesMessage") : "");
       if (!text) return;
 
+      if (!formReply && !isAiControlMessage(text))
+        commit("supersedePendingPlans");
+
       userStopped = false;
       commit("setLoading", true);
 
@@ -704,7 +722,7 @@ export default {
     async confirmPlan({ state, commit, dispatch }) {
       const planMsg = [...state.messages]
         .reverse()
-        .find((m) => m.plan && !m.planConfirmed && !m.planCancelled);
+        .find((m) => isOpenPlan(m));
       const steps = planMsg?.plan?.steps || [];
       const executable =
         steps.length > 0 && steps.every((s) => s.tool && s.args);
@@ -765,7 +783,9 @@ export default {
         (m) =>
           (m.role === "user" && !isAiControlMessage(m)) ||
           (m.role === "assistant" &&
-            (m.done || (m.plan && (m.planConfirmed || m.planCancelled))) &&
+            (m.done ||
+              (m.plan &&
+                (m.planConfirmed || m.planCancelled || m.planSuperseded))) &&
             (m.content || m.toolCalls?.length || m.plan)),
       );
       if (msgs.length < 1) return;

@@ -10,6 +10,7 @@ import { parseServerUtc } from "@/utils/dateTime";
 import { randomUuidCompact } from "@/utils/uuid";
 import {
   OPERATION_TERMINAL_STATUSES,
+  appendOperationLog,
   isOperationActive,
   shouldApplyOperationFinish,
 } from "@/lib/operationsControl";
@@ -97,8 +98,7 @@ const mutations = {
   ADD_LOG(state, { id, log }) {
     const op = state.operations.find((o) => o.id === id);
     if (!op) return;
-    if (op.logs.length >= 500) return;
-    op.logs.push(log);
+    op.logs = appendOperationLog(op.logs, log);
   },
   SET_OPERATION_LOGS(state, { id, logs }) {
     const op = state.operations.find((o) => o.id === id);
@@ -124,7 +124,7 @@ const mutations = {
         (log) => log.message === summary && log.level === level,
       );
       if (!alreadyLogged) {
-        op.logs.push({
+        op.logs = appendOperationLog(op.logs, {
           timestamp: new Date().toISOString(),
           level,
           message: summary,
@@ -447,6 +447,7 @@ const actions = {
       const response = await http.get(`/operations/${operationId}/logs`, {
         cache: false,
         timeout: 10000, // 10s safety - don't hang the spinner forever
+        params: { take: 500 },
       });
       const logs = (response.data.logs || []).map((l) => ({
         timestamp: l.timestamp,

@@ -1,4 +1,5 @@
 using Delegat.Models;
+using Delegat.Services;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
@@ -191,6 +192,28 @@ public class OperationsDomainTests
             .OrderBy(e => e.timestamp).Select(e => e.message).ToListAsync();
 
         Assert.Equal(new[] { "earlier", "later" }, messages);
+    }
+
+    [Fact]
+    public async Task OperationLogs_LatestWindow_IsTheNewestLinesInOrder()
+    {
+        var (db, data, _) = Create();
+        var operation = data.AddOperation(data.AddStore().Id, operationId: "tail");
+        await data.SaveAsync();
+        var start = DateTime.UtcNow.AddMinutes(-5);
+        db.operationLogEntries.AddRange(
+            new OperationLogEntry { operationId = operation.operationId, level = "info", message = "first", timestamp = start },
+            new OperationLogEntry { operationId = operation.operationId, level = "info", message = "second", timestamp = start.AddMinutes(1) },
+            new OperationLogEntry { operationId = operation.operationId, level = "info", message = "third", timestamp = start.AddMinutes(2) });
+        await db.SaveChangesAsync();
+
+        var logs = await OperationLogQuery.LatestAsync(
+            db.operationLogEntries.Where(e => e.operationId == operation.operationId),
+            skip: 0,
+            take: 2,
+            CancellationToken.None);
+
+        Assert.Equal(new[] { "second", "third" }, logs.Select(l => l.Message).ToArray());
     }
 
     [Fact]

@@ -280,7 +280,7 @@ const hasAiModels = computed(() => {
   return src.some((m) => m.isEnabled !== false && (m.id ?? m.Id) != null);
 });
 
-const showExplainAi = computed(() => aiAvailable.value);
+const showExplainAi = computed(() => aiAvailable.value && isFinished.value);
 
 const MAX_LOG_CHARS = 48000;
 

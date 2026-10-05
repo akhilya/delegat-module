@@ -186,6 +186,15 @@ public class GraphEvaluatorModifierTests
     }
 
     [Fact]
+    public void RegexReplace_KeepsLettersDigitsAndOrdinaryPunctuation()
+    {
+        const string pattern = @"[^0-9A-Za-z\u0400-\u04FF\r\n .,;:!?()\[\]{}«»""'…\-+–—=%№@#&*/|_~$^<>]";
+        var input = "Фигурка ёж UZ-1: hello (12)!_) ↘ ★";
+        var stripped = ModifierPipeline.ApplySingle("regexReplace", input, P(("pattern", pattern), ("replacement", "")));
+        Assert.Equal("Фигурка ёж UZ-1: hello (12)!_)  ", stripped);
+    }
+
+    [Fact]
     public void ApplySingle_TruncateAndUppercase_MatchGraphSamples()
     {
         Assert.Equal("abc", ModifierPipeline.ApplySingle("truncate", "abcdef", P(("maxLength", 3))));

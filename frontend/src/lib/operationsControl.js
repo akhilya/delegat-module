@@ -17,6 +17,15 @@ export const OPERATION_TERMINAL_STATUSES = new Set([
   "cancelled",
 ]);
 
+/** Live and loaded operation logs keep the newest lines. */
+export const OPERATION_LOG_LIMIT = 500;
+
+export function appendOperationLog(logs, log, limit = OPERATION_LOG_LIMIT) {
+  const next = [...(logs || []), log];
+  if (next.length <= limit) return next;
+  return next.slice(next.length - limit);
+}
+
 export function isOperationActive(status) {
   return status === "running" || status === "paused";
 }

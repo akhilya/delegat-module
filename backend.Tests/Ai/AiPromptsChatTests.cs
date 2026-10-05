@@ -100,6 +100,9 @@ public class AiPromptsChatTests
         Assert.Contains("inside params", prompt, StringComparison.Ordinal);
         Assert.Contains(@"[\uD83C-\uD83E][\uDC00-\uDFFF]", prompt, StringComparison.Ordinal);
         Assert.Contains(@"\u{…} is invalid", prompt, StringComparison.Ordinal);
+        Assert.Contains(@"[^0-9A-Za-z\u0400-\u04FF", prompt, StringComparison.Ordinal);
+        Assert.Contains("descriptionCleanup", prompt, StringComparison.Ordinal);
+        Assert.Contains("plan is outdated", prompt, StringComparison.Ordinal);
         Assert.Contains("propose_plan in that same turn", prompt, StringComparison.Ordinal);
         Assert.Contains("save-mapping-selections", prompt, StringComparison.Ordinal);
         Assert.Contains("resolve-mappings", prompt, StringComparison.Ordinal);

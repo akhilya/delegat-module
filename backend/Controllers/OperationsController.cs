@@ -161,19 +161,11 @@ public class OperationsController : ControllerBase
         if (!opExists)
             return NotFound(new { message = "Operation not found" });
 
-        var logs = await _context.operationLogEntries
-            .AsNoTracking()
-            .Where(e => e.operationId == operationId)
-            .OrderBy(e => e.timestamp)
-            .Skip(skip)
-            .Take(take)
-            .Select(e => new
-            {
-                e.level,
-                e.message,
-                e.timestamp
-            })
-            .ToListAsync(ct);
+        var logs = await OperationLogQuery.LatestAsync(
+            _context.operationLogEntries.AsNoTracking().Where(e => e.operationId == operationId),
+            skip,
+            take,
+            ct);
 
         return Ok(new { logs });
     }

@@ -120,6 +120,8 @@ public class PlatformRequestPolicyTests
         Assert.Contains("removeModifierTypes", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("inside params", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains(@"[\uD83C-\uD83E][\uDC00-\uDFFF]", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains(@"[^0-9A-Za-z\u0400-\u04FF", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
+        Assert.Contains("descriptionCleanup", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("save-mapping-selections", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("resolve-mappings", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);
         Assert.Contains("valueMap", PlatformRequestPolicy.SurfaceDescription, StringComparison.Ordinal);

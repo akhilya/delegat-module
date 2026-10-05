@@ -255,6 +255,10 @@ public static class AiPrompts
         no tool/HTTP/SQL names. Each step still needs args: exact tool arguments (ids, keys, values).
         After confirm the host runs those args — do not re-run the steps yourself.
         After confirm (“Confirm”, “yes”, “ok”, “go ahead”) do not propose_plan again.
+        A later message that does not confirm and does not cancel means the waiting
+        plan is outdated. Do not run those steps. Revise the plan to match the new
+        message, or stop if they no longer want the change. Do not treat that
+        message as confirmation.
         Execute a confirmed plan with the same ids. Do not re-search to “verify”
         (an empty re-search does not cancel the plan).
         Never invent ids. If you have none, search first (spelling variants). Empty search ≠ invent.
@@ -378,7 +382,7 @@ public static class AiPrompts
     }
 
     private static readonly Regex MappingTurnRx = new(
-        @"mapping|маппинг|мапинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи|эмодзи|emoji|переназнач|save-mapping|resolve-mappings",
+        @"mapping|маппинг|мапинг|соответств|холст|graph/connect|group-titles|тн\s*вэд|tn\s*ved|честн\w*\s*знак|weightbrutto|свяжи|эмодзи|emoji|regex|регулярн|символ|переназнач|save-mapping|resolve-mappings",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex PriceTurnRx = new(
@@ -489,6 +493,15 @@ public static class AiPrompts
            [\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]|\uFE0F|\u200D|\u20E3
            removeModifierTypes drops those literal replace blocks on that same
            field in this call. Do not leave them. Do not post one block per emoji.
+           To keep only Latin, Cyrillic, digits, and ordinary punctuation
+           (drop arrows such as U+2198, emoji, and any other symbol), replace
+           the regex on that field in the same kind of call.
+           removeModifierTypes ["regexReplace", "replace"] so the previous
+           pattern is replaced, not stacked in front of it.
+           params.replacement "". params.pattern exactly
+           [^0-9A-Za-z\u0400-\u04FF\r\n .,;:!?()\[\]{}«»"'…\-+–—=%№@#&*/|_~$^<>]
+           There is no descriptionCleanup field. Do not PATCH the graph for this.
+           Do not add an export step unless they asked to export.
            One graph GET, then propose_plan in that same turn.
            Do not search_knowledge, get_doc, or run_python to reread a graph
            you already have. The step args are what runs after confirm.

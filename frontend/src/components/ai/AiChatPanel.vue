@@ -833,6 +833,7 @@ function isLatestTurn(msg) {
                       :plan="msg.plan"
                       :confirmed="msg.planConfirmed"
                       :cancelled="msg.planCancelled"
+                      :superseded="msg.planSuperseded"
                       :executed="msg.planExecuted"
                       :failed="msg.planFailed"
                       @confirm="confirmPlan"

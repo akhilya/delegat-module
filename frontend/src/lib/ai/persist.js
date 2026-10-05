@@ -124,6 +124,7 @@ export function parsePersistedMessageMeta(toolCallsJson) {
         plan: parsed.plan || null,
         planConfirmed: !!parsed.planConfirmed,
         planCancelled: !!parsed.planCancelled,
+        planSuperseded: !!parsed.planSuperseded,
         planExecuted: !!parsed.planExecuted,
         planFailed: !!parsed.planFailed,
         planExecStart: Number.isInteger(parsed.planExecStart)
@@ -156,6 +157,7 @@ export function mapStoredMessage(m) {
     plan,
     planConfirmed,
     planCancelled,
+    planSuperseded,
     planExecuted,
     planFailed,
     planExecStart,
@@ -178,6 +180,7 @@ export function mapStoredMessage(m) {
     plan: plan || null,
     planConfirmed: !!planConfirmed,
     planCancelled: !!planCancelled,
+    planSuperseded: !!planSuperseded,
     planExecuted: !!planExecuted,
     planFailed: !!planFailed,
     planExecStart,
@@ -226,6 +229,7 @@ export function serializeToolCallsJson(m) {
       plan: m.plan || null,
       planConfirmed: m.planConfirmed || undefined,
       planCancelled: m.planCancelled || undefined,
+      planSuperseded: m.planSuperseded || undefined,
       planExecuted: m.planExecuted || undefined,
       planFailed: m.planFailed || undefined,
       planExecStart: Number.isInteger(m.planExecStart) ? m.planExecStart : undefined,
@@ -349,6 +353,19 @@ export function applyPlanDecisions(messages) {
           next[j].planCancelled = true;
           break;
         }
+      }
+    } else if (!m.formReply) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (!next[j].plan) continue;
+        if (
+          next[j].planConfirmed ||
+          next[j].planCancelled ||
+          next[j].planExecuted ||
+          next[j].planSuperseded
+        )
+          break;
+        next[j].planSuperseded = true;
+        break;
       }
     }
   }

@@ -169,6 +169,41 @@ describe("applyPlanDecisions", () => {
       { role: "user", content: AI_CONFIRM_PLAN },
     ]);
     assert.equal(messages[0].planConfirmed, true);
+    assert.ok(!messages[0].planSuperseded);
+  });
+
+  it("marks an open plan outdated when the next message is not confirm or cancel", () => {
+    const messages = applyPlanDecisions([
+      { role: "assistant", plan: { summary: "Clean descriptions" } },
+      { role: "user", content: "do not export again" },
+    ]);
+    assert.equal(messages[0].planSuperseded, true);
+    assert.ok(!messages[0].planConfirmed);
+    assert.ok(!messages[0].planCancelled);
+  });
+
+  it("leaves a confirmed plan in place when the user writes again", () => {
+    const messages = applyPlanDecisions([
+      { role: "assistant", plan: { summary: "Clean" }, planConfirmed: true },
+      { role: "user", content: "one more thing" },
+    ]);
+    assert.ok(!messages[0].planSuperseded);
+  });
+
+  it("round-trips planSuperseded", () => {
+    const json = serializeToolCallsJson({
+      plan: { summary: "Clean descriptions" },
+      planSuperseded: true,
+      toolCalls: [],
+      timeline: [{ type: "text", text: "Ready." }],
+    });
+    const m = mapStoredMessage({
+      dbId: 9,
+      role: "assistant",
+      content: "Ready.",
+      toolCallsJson: json,
+    });
+    assert.equal(m.planSuperseded, true);
   });
 });
 
