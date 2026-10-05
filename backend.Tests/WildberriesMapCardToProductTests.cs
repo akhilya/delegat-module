@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Delegat.Marketplace.Wildberries;
 using Delegat.Marketplace.Wildberries.Models;
 
@@ -143,5 +144,86 @@ public class WildberriesMapCardToProductTests
             ["_FI43"] = ["Недопустимое значение ТНВЭД"],
         };
         Assert.Equal("Недопустимое значение ТНВЭД", WildberriesPlugin.VendorErrorText(errors, "_fi43"));
+    }
+
+    [Fact]
+    public void BarcodeCharacteristic_IsSentAsGtin_AndStaysInSkusOnce()
+    {
+        Assert.True(WildberriesPlugin.IsGtinCharacteristic("charc:14177453", null));
+        Assert.True(WildberriesPlugin.IsGtinCharacteristic("charc:1", "Штрихкод"));
+        Assert.True(WildberriesPlugin.IsGtinCharacteristic("charc:2", "GTIN"));
+        Assert.False(WildberriesPlugin.IsGtinCharacteristic("charc:17596", "Материал изделия"));
+
+        var data = new Dictionary<string, object>
+        {
+            ["name"] = "Mini",
+            ["barcode"] = "2037374506867",
+            ["charc:14177453"] = "2037374506867",
+            ["charc:17596"] = "смола",
+            ["price"] = 3900,
+        };
+
+        var chars = WildberriesPlugin.BuildCharacteristics(data)!;
+        Assert.DoesNotContain(14177453, chars.Select(c => c.Id));
+        Assert.Contains(17596, chars.Select(c => c.Id));
+
+        var variant = WildberriesPlugin.BuildVariant(data, "_WA151");
+        Assert.Equal("2037374506867", variant.Gtin);
+        Assert.Equal(new[] { "2037374506867" }, variant.Sizes![0].Skus);
+    }
+
+    [Fact]
+    public void GtinCharacteristic_IsAddedBesideTheExistingBarcode()
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["barcode"] = "2037374506867",
+            ["charc:999"] = "04601234567890",
+            ["_fieldLabels"] = new Dictionary<string, string>
+            {
+                ["charc:999"] = "GTIN",
+            },
+        };
+
+        Assert.Null(WildberriesPlugin.BuildCharacteristics(data));
+        var variant = WildberriesPlugin.BuildVariant(data, "SKU");
+        Assert.Equal("04601234567890", variant.Gtin);
+        Assert.Equal(new[] { "2037374506867", "04601234567890" }, variant.Sizes![0].Skus);
+    }
+
+    [Fact]
+    public void CardUpdate_MovesExistingBarcodeCharacteristicOntoGtin()
+    {
+        var card = new WbCard
+        {
+            NmId = 5,
+            VendorCode = "WA151",
+            Characteristics = new List<WbCardCharacteristic>
+            {
+                new()
+                {
+                    Id = 14177453,
+                    Name = "Штрихкод",
+                    Value = JsonDocument.Parse("\"2037374506867\"").RootElement.Clone(),
+                },
+                new()
+                {
+                    Id = 17596,
+                    Name = "Материал",
+                    Value = JsonDocument.Parse("\"смола\"").RootElement.Clone(),
+                },
+            },
+            Sizes = new List<WbCardSize>
+            {
+                new() { ChrtId = 9, Skus = new List<string> { "2037374506867" } },
+            },
+        };
+
+        var item = WildberriesPlugin.BuildUpdateItem(card, new Dictionary<string, object>());
+        var ids = item.Characteristics!.Select(c => c.Id).ToList();
+        Assert.Equal("2037374506867", item.Gtin);
+        Assert.DoesNotContain(14177453, ids);
+        Assert.Contains(17596, ids);
+        Assert.Equal(new[] { "2037374506867" }, item.Sizes![0].Skus);
     }
 }

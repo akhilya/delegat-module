@@ -11,11 +11,13 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- A watch prompt lists each marketplace adapter and the official API news and documentation pages to read for upcoming, legacy, and breaking changes. Adding or removing an adapter requires a new copy of that prompt.
 - Partners can list a connection’s category mappings and assign a product to one of them when a local category exports to several marketplace categories (`GET …/mappings`, `POST …/product-mappings/resolve`, `POST …/product-mappings`). The cabinet assistant uses the same choice (`resolve-mappings`, then `save-mapping-selections`) and does not edit the field canvas for it.
 - Public API Swagger splits marketplace commerce into Prices, Orders, Fulfillment, Shipments, and Promotions. Paths are unchanged. Sections start collapsed, each operation is one line, and the longer contract sits inside it. Errors share one `{ error: { code, message, details } }` schema.
 
 ### Fixed
 
+- Wildberries card export sends a barcode or GTIN characteristic in the card field `gtin` and in the size barcodes. The same code inside characteristics was rejected (`The GTIN code must be specified in a separate "gtin" field`).
 - The cabinet assistant no longer reports a mapping edit as done when the request would not change the text. A field the action does not read, or a pattern left outside `params`, is rejected before it is saved. The prompt, the action list, and the request surface share one body sentence, and a test fails when those instructions drift from the controller.
 - A regex block on a mapping keeps its pattern and replacement. They belong inside `params`; a body that put them next to the modifier type used to save an empty block.
 - Changing a product’s category no longer keeps a connection looking synced when that category has several mappings and none is chosen. The connection status says the mapping is not selected.

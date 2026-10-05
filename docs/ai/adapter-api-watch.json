@@ -1,0 +1,84 @@
+{
+  "adapters": [
+    {
+      "key": "wildberries",
+      "name": "Wildberries",
+      "folderName": "Delegat.Marketplace.Wildberries",
+      "repository": "https://github.com/akhilya/delegat-adapter-wildberries",
+      "news": [
+        "https://dev.wildberries.ru/en/release-notes",
+        "https://dev.wildberries.ru/"
+      ],
+      "docs": [
+        "https://dev.wildberries.ru/"
+      ],
+      "scope": "Seller Content, Prices, and Marketplace APIs. Card create and update are POST /content/v2/cards/upload and POST /content/v2/cards/update."
+    },
+    {
+      "key": "ozon",
+      "name": "Ozon",
+      "folderName": "Delegat.Marketplace.Ozon",
+      "repository": "https://github.com/akhilya/delegat-adapter-ozon",
+      "news": [
+        "https://docs.ozon.ru/api/seller/#tag/News"
+      ],
+      "docs": [
+        "https://docs.ozon.ru/api/seller/"
+      ],
+      "scope": "Seller API. Product create and update go through POST /v3/product/import. Prices, stocks, and orders use the methods in OzonApiClient.cs."
+    },
+    {
+      "key": "yandex",
+      "name": "Yandex Market",
+      "folderName": "Delegat.Marketplace.YandexMarket",
+      "repository": "https://github.com/akhilya/delegat-adapter-yandex-market",
+      "news": [
+        "https://yandex.ru/dev/market/partner-api/doc/ru/changelog/all"
+      ],
+      "docs": [
+        "https://yandex.ru/dev/market/partner-api/doc/ru/"
+      ],
+      "scope": "Partner API. Offers, cards, prices, and stocks use the /v2/businesses and /v2/campaigns methods in YandexMarketApiClient.cs."
+    },
+    {
+      "key": "opencart",
+      "name": "OpenCart",
+      "folderName": "Delegat.Marketplace.OpenCart",
+      "repository": "https://github.com/akhilya/delegat-adapter-opencart",
+      "news": [
+        "https://github.com/opencart/opencart/releases"
+      ],
+      "docs": [
+        "https://docs.opencart.com/"
+      ],
+      "scope": "The plugin calls the Delegat bridge, not the stock OpenCart API. A release matters when it changes the extension system, catalog tables, or request routing that bridge is built on."
+    },
+    {
+      "key": "woocommerce",
+      "name": "WooCommerce",
+      "folderName": "Delegat.Marketplace.WooCommerce",
+      "repository": "https://github.com/akhilya/delegat-adapter-woocommerce",
+      "news": [
+        "https://developer.woocommerce.com/changelog/"
+      ],
+      "docs": [
+        "https://developer.woocommerce.com/docs/apis/rest-api/"
+      ],
+      "scope": "The plugin calls the Delegat bridge at wp-json/delegat/v1, not wc/v3 directly. A release matters when its REST, admin, or database notes would break that bridge. Posts titled What's coming are upcoming changes."
+    },
+    {
+      "key": "medusa",
+      "name": "Medusa",
+      "folderName": "Delegat.Marketplace.Medusa",
+      "repository": "https://github.com/akhilya/delegat-module/tree/main/plugins/Delegat.Marketplace.Medusa",
+      "news": [
+        "https://medusajs.com/changelog",
+        "https://github.com/medusajs/medusa/releases"
+      ],
+      "docs": [
+        "https://docs.medusajs.com/"
+      ],
+      "scope": "Medusa 2. The plugin calls the shop bridge /admin/delegat, not the stock Admin API. A release matters when its breaking changes, or the admin product, price, inventory, and order docs, would change that bridge."
+    }
+  ]
+}

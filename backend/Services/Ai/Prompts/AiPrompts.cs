@@ -513,6 +513,11 @@ public static class AiPrompts
            weight with packaging (Вес товара с упаковкой). The API rejects
            that characteristic and requires dimensions.weightBrutto in
            kilograms. Weight without packaging may stay a characteristic.
+           A barcode or GTIN characteristic (Штрихкод, charc 14177453) is not
+           a characteristic on the card. Wildberries requires the separate
+           field gtin, and the same code stays in the size barcodes. Wire the
+           product barcode to the card field barcode; do not also fill that
+           characteristic.
            A divisor that changes per product (scale from
            figurine height) goes in paramSources: param "divisor", sourceType
            "attribute", sourceAttributeId. That pin is p:divisor. Multiply uses

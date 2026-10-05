@@ -18,6 +18,7 @@ This instance repo keeps **stubs** only — do not maintain a second CP canon he
 - [**ai-assistant.md**](architecture/ai-assistant.md) - AI assistant maintenance (thin tools, prompts)
 - [**ai-system.md**](architecture/ai-system.md) - Instance AI / MCP architecture
 - [**operator-playbook.md**](ai/operator-playbook.md) - How-tos indexed for the cabinet assistant (export, Medusa collection titles, import)
+- [**adapter-api-watch.md**](ai/adapter-api-watch.md) - Prompt for the bot that reads each adapter’s official API news and docs. Regenerated when the adapter catalog changes.
 
 ## Design canon (impeccable)
 
