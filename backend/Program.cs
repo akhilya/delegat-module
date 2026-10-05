@@ -48,12 +48,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 
-// Configure Kestrel for large file uploads
+// Configure Kestrel for large file uploads and slow downloads.
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = null; // No limit (endpoint-level control via attributes)
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
+    // Defaults are 240 bytes/s. A slow browser (or nginx waiting on one)
+    // falls under that and Kestrel aborts the response mid-file.
+    options.Limits.MinResponseDataRate = null;
+    options.Limits.MinRequestBodyDataRate = null;
 });
 
 // Configuration from environment variables
