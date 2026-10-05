@@ -978,6 +978,7 @@ public class ProductSyncService
                         itemResults.Add(new BulkProductExportItemResult(
                             pid, true,
                             ExternalProductId: exportItemResult.ExternalProductId,
+                            ErrorMessage: exportItemResult.ErrorMessage,
                             IsNewProduct: isNew,
                             Details: exportItemResult.Details));
                         await ApplyExportedVariantIdsAsync(

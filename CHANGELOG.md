@@ -17,6 +17,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Wildberries bulk export uploads the product gallery. A photo list built on the mapping (gallery plus extra files) was not a plain string list, so the upload was skipped and the cards stayed without photos. A failed photo upload is written on the operation.
 - A waiting assistant plan is outdated when the next message does not confirm or cancel it. Execute is hidden, and the assistant revises the plan instead of running the old steps.
 - Cleaning a mapped description keeps Latin, Cyrillic, digits, and ordinary punctuation. The assistant replaces the regex on that field. It does not invent a cleanup field and does not start an export unless asked.
 - An assistant plan with no summary and no steps no longer shows an empty card with only Execute. A steps list sent as text is still read.

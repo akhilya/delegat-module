@@ -245,8 +245,14 @@ public class ProductExportBackgroundService : BackgroundService
                         pending.productId, itemResult.ExternalProductId);
 
                     if (pending.batchId != null)
-                        await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success",
-                            $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}");
+                    {
+                        var line = $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}";
+                        if (string.IsNullOrWhiteSpace(itemResult.ErrorMessage))
+                            await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success", line);
+                        else
+                            await _operationLogger.LogAsync(pending.batchId, pending.storeId, "warning",
+                                $"{line}. {itemResult.ErrorMessage}");
+                    }
                 }
                 else
                 {
