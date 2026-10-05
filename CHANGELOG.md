@@ -17,6 +17,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Ozon price export applies the category mapping when the product link has not saved one and the category has a single mapping. A raised price was sent without the mapped old price, and Ozon rejected it because the strikethrough already on the card was lower (`Old price is less than price`).
+- Ozon list responses still report the full count when the marketplace sends `total_items` instead of `total`. Catalog import and removing every product from a promotion use that count. Product list, prices, and stocks switch on 23 November 2026.
+- Ozon promotions use the methods that stay after 13 October 2026: product list `POST /v2/actions/products`, add or remove by price `POST /v1/actions/products/update`, and promo-code removal `POST /v2/actions/products/deactivate`. A price in the reply may be a number or a Money object.
 - Wildberries card export sends a barcode or GTIN characteristic in the card field `gtin` and in the size barcodes. The same code inside characteristics was rejected (`The GTIN code must be specified in a separate "gtin" field`).
 - The cabinet assistant no longer reports a mapping edit as done when the request would not change the text. A field the action does not read, or a pattern left outside `params`, is rejected before it is saved. The prompt, the action list, and the request surface share one body sentence, and a test fails when those instructions drift from the controller.
 - A regex block on a mapping keeps its pattern and replacement. They belong inside `params`; a body that put them next to the modifier type used to save an empty block.

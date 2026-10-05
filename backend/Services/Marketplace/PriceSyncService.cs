@@ -273,11 +273,6 @@ public class PriceSyncService
         if (!links.Any())
             return PriceSyncResult.Success(0, 0, "No products to sync");
 
-        var mappingIds = links.Where(l => l.categoryMappingId != null).Select(l => l.categoryMappingId!.Value).Distinct().ToList();
-        var mappings = await _context.categoryMappings
-            .Where(m => mappingIds.Contains(m.Id))
-            .ToDictionaryAsync(m => m.Id, ct);
-
         var storeSettings = await _context.stores.AsNoTracking()
             .Where(s => s.Id == connection.storeId)
             .Select(s => new { s.extendedPriceParameters, s.baseCurrency })
@@ -309,12 +304,42 @@ public class PriceSyncService
             .Select(g => g.First())
             .ToList();
 
+        var categoryIds = uniqueExportableLinks
+            .Select(l => l.product?.categoryId)
+            .Where(id => id != null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var categoryMappings = categoryIds.Count == 0
+            ? new List<CategoryMapping>()
+            : await _context.categoryMappings
+                .Where(cm => cm.connectionId == connectionId && categoryIds.Contains(cm.localCategoryId))
+                .ToListAsync(ct);
+        var mappingsById = categoryMappings.ToDictionary(m => m.Id);
+        var mappingsByCategoryId = categoryMappings
+            .GroupBy(m => m.localCategoryId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var pricesToExport = new List<PriceInfo>();
+        var mappingNotSelected = 0;
         foreach (var l in uniqueExportableLinks)
         {
-            CategoryMapping? mapping = null;
-            if (l.categoryMappingId != null)
-                mappings.TryGetValue(l.categoryMappingId.Value, out mapping);
+            var mapping = ResolvePriceMapping(
+                l.categoryMappingId,
+                l.product?.categoryId,
+                mappingsById,
+                mappingsByCategoryId);
+            if (mapping == null
+                && l.product?.categoryId != null
+                && mappingsByCategoryId.TryGetValue(l.product.categoryId.Value, out var options)
+                && options.Count > 1)
+            {
+                mappingNotSelected++;
+            }
+            else if (mapping != null && l.categoryMappingId != mapping.Id)
+            {
+                l.categoryMappingId = mapping.Id;
+            }
 
             PriceInfo? fromGraph = null;
             if (mapping != null)
@@ -341,7 +366,12 @@ public class PriceSyncService
         var skippedNoPrice = 0;
         foreach (var l in exportableLinks)
         {
-            if (l.categoryMappingId != null && mappings.TryGetValue(l.categoryMappingId.Value, out var mapping)
+            var mapping = ResolvePriceMapping(
+                l.categoryMappingId,
+                l.product?.categoryId,
+                mappingsById,
+                mappingsByCategoryId);
+            if (mapping != null
                 && MappingService.SchemaPriceFields(mapping.graphJson).Count > 0)
             {
                 var info = await _mappingService.BuildPriceInfoFromGraphAsync(
@@ -368,6 +398,9 @@ public class PriceSyncService
         if (canLog && skippedDuplicateExternalIds > 0)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                 $"Skipped {skippedDuplicateExternalIds} duplicate external IDs in one request");
+        if (canLog && mappingNotSelected > 0)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
+                $"Price mapping was not applied for {mappingNotSelected} products because the category has several mappings and none is selected");
 
         if (!pricesToExport.Any())
         {
@@ -624,6 +657,30 @@ public class PriceSyncService
             stock.ExternalProductId,
             stock.VariantId ?? "",
             stock.WarehouseId ?? "");
+    }
+
+    /// <summary>
+    /// Saved link choice when it still matches the product category.
+    /// One mapping on the category is used when the link has not saved a choice, same as product export.
+    /// </summary>
+    internal static CategoryMapping? ResolvePriceMapping(
+        int? savedMappingId,
+        int? productCategoryId,
+        IReadOnlyDictionary<int, CategoryMapping> mappingsById,
+        IReadOnlyDictionary<int, List<CategoryMapping>> mappingsByCategoryId)
+    {
+        if (productCategoryId == null)
+            return null;
+
+        if (savedMappingId != null
+            && mappingsById.TryGetValue(savedMappingId.Value, out var saved)
+            && saved.localCategoryId == productCategoryId.Value)
+            return saved;
+
+        if (mappingsByCategoryId.TryGetValue(productCategoryId.Value, out var list) && list.Count == 1)
+            return list[0];
+
+        return null;
     }
 
     private static PriceInfo BuildLegacyPriceInfo(ProductMarketplaceLink l, bool extendedPriceParameters, string storeBaseCurrency)
