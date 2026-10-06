@@ -34,6 +34,7 @@ import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
 import { http } from "@/main";
+import { mapPool } from "@/lib/runPool";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
@@ -333,10 +334,8 @@ export default {
       if (!sortedImages.value.length) return true;
 
       try {
-        const fileIds = [];
-        for (const img of sortedImages.value) {
-          if (!img.localFile) continue;
-
+        const pending = sortedImages.value.filter((img) => img.localFile);
+        const idGroups = await mapPool(pending, async (img) => {
           const formData = new FormData();
           formData.append("files", img.localFile);
           const response = await http({
@@ -350,8 +349,9 @@ export default {
           const uploaded = Array.isArray(response.data)
             ? response.data
             : [response.data];
-          fileIds.push(...uploaded.map((f) => f.id));
-        }
+          return uploaded.map((f) => f.id);
+        });
+        const fileIds = idGroups.flat();
 
         if (!fileIds.length) return true;
 

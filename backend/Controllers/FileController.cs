@@ -2,9 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Net.Http.Headers;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
@@ -224,85 +222,34 @@ public class FileController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads one or more files for a product using standard model binding (up to 10 GB).
+    /// Uploads one or more files for a product. The body is stored as it arrives (up to 10 GB).
     /// </summary>
     /// <param name="productId">The product identifier.</param>
-    /// <param name="files">The files to upload.</param>
     /// <param name="folderId">Optional target folder.</param>
+    /// <param name="ct">Cancels the upload.</param>
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPut]
     [Route("/products/{productId}/files")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
-    [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)] // 10GB
-    public async Task<IActionResult> PutProductFiles(int productId, IFormFile[] files, [FromQuery] int? folderId = null)
-    {
-        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
-        if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
-
-        var productRepo = _unitOfWork.Repository<Product>();
-        var product = await productRepo.GetByIdAsync(productId);
-
-        if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
-
-        if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
-
-        await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value, files.Length);
-        await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value, files.Sum(f => f.Length));
-
-        if (folderId.HasValue)
-        {
-            var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
-            var folder = await folderRepo.GetByIdAsync(folderId.Value);
-            if (folder == null || folder.productId != productId)
-                throw ApiException.NotFound("Folder not found");
-        }
-
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null)
-            throw ApiException.Unauthorized();
-
-        var fileRepo = _unitOfWork.Repository<Models.File>();
-        var fileEntities = new List<Models.File>();
-
-        foreach (var file in files)
-        {
-            var uniqueKey = Guid.NewGuid().ToString("N");
-            var safeName = FileNameSafety.Sanitize(file.FileName);
-            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{safeName}";
-
-            var fileEntity = new Models.File();
-            fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, file.ContentType, file.Length));
-            fileEntity.folderId = folderId;
-
-            // Stream directly to storage without buffering entire file in memory
-            using var stream = file.OpenReadStream();
-            var uploaded = await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
-            if (!uploaded)
-                throw ApiException.InternalServerError($"Failed to upload file {file.FileName} to storage");
-            await fileRepo.AddWithoutSaveAsync(fileEntity);
-            fileEntities.Add(fileEntity);
-        }
-
-        await _unitOfWork.SaveChangesAsync();
-
-        return Ok(fileEntities.Select(e => e.MapToDTO(_serviceProvider)).ToList());
-    }
+    public Task<IActionResult> PutProductFiles(int productId, [FromQuery] int? folderId = null, CancellationToken ct = default)
+        => SaveUploadedProductFiles(productId, folderId, ct);
 
     /// <summary>
-    /// Streaming upload for very large files (multi-GB). Reads multipart form data directly without model binding.
+    /// Streaming upload for very large files (multi-GB). Same path as <see cref="PutProductFiles"/>.
     /// </summary>
     /// <param name="productId">The product identifier.</param>
     /// <param name="folderId">Optional target folder.</param>
+    /// <param name="ct">Cancels the upload.</param>
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPost]
     [Route("/products/{productId}/files/stream")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> StreamUploadFiles(int productId, [FromQuery] int? folderId = null)
+    public Task<IActionResult> StreamUploadFiles(int productId, [FromQuery] int? folderId = null, CancellationToken ct = default)
+        => SaveUploadedProductFiles(productId, folderId, ct);
+
+    private async Task<IActionResult> SaveUploadedProductFiles(int productId, int? folderId, CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -332,73 +279,33 @@ public class FileController : ControllerBase
         if (user == null)
             throw ApiException.Unauthorized();
 
-        if (!Request.HasFormContentType)
-            throw ApiException.BadRequest("Expected multipart/form-data");
+        var saved = await MultipartObjectUpload.SaveAsync(
+            Request,
+            _storageService,
+            fileName => $"{selectedStoreId}/{productId}/{Guid.NewGuid():N}/{fileName}",
+            ct);
 
-        var boundary = Request.GetMultipartBoundary();
-        if (string.IsNullOrEmpty(boundary))
-            throw ApiException.BadRequest("Missing boundary in content-type header");
+        if (saved.Count == 0)
+            return Ok(Array.Empty<object>());
+
+        try
+        {
+            await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value, saved.Count);
+            await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value, saved.Sum(file => file.Length));
+        }
+        catch
+        {
+            foreach (var item in saved)
+                await _storageService.DeleteAsync(item.Path, ct);
+            throw;
+        }
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var fileEntities = new List<Models.File>();
-
-        var reader = new MultipartReader(boundary, Request.Body);
-        MultipartSection? section;
-
-        while ((section = await reader.ReadNextSectionAsync()) != null)
+        foreach (var item in saved)
         {
-            var contentDisposition = ContentDispositionHeaderValue.Parse(section.ContentDisposition);
-
-            if (!contentDisposition.IsFileDisposition())
-                continue;
-
-            var fileName = FileNameSafety.Sanitize(contentDisposition.FileName.Value);
-            var contentType = section.ContentType ?? "application/octet-stream";
-
-            var uniqueKey = Guid.NewGuid().ToString("N");
-            var filePath = $"{selectedStoreId}/{productId}/{uniqueKey}/{fileName}";
-
-            // Get content length from headers if available
-            long contentLength = 0;
-            if (section.Headers != null && section.Headers.TryGetValue("Content-Length", out var lengthHeader))
-            {
-                long.TryParse(lengthHeader.FirstOrDefault(), out contentLength);
-            }
-
-            // For streaming upload, we need to buffer to temp file first if size unknown
-            if (contentLength == 0)
-            {
-                // Stream to temp file first to get size
-                var tempPath = Path.GetTempFileName();
-                try
-                {
-                    using (var tempStream = System.IO.File.Create(tempPath))
-                    {
-                        await section.Body.CopyToAsync(tempStream);
-                        contentLength = tempStream.Length;
-                    }
-
-                    using var fileStream = System.IO.File.OpenRead(tempPath);
-                    var uploaded = await _storageService.UploadAsync(fileStream, filePath, contentLength, contentType);
-                    if (!uploaded)
-                        throw ApiException.InternalServerError($"Failed to upload file {fileName} to storage");
-                }
-                finally
-                {
-                    if (System.IO.File.Exists(tempPath))
-                        System.IO.File.Delete(tempPath);
-                }
-            }
-            else
-            {
-                // Direct stream upload when size is known
-                var uploaded = await _storageService.UploadAsync(section.Body, filePath, contentLength, contentType);
-                if (!uploaded)
-                    throw ApiException.InternalServerError($"Failed to upload file {fileName} to storage");
-            }
-
             var fileEntity = new Models.File();
-            fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, contentType, contentLength));
+            fileEntity.AddFill(new Models.File.AddForm(item.Path, user.Id, productId, item.ContentType, item.Length));
             fileEntity.folderId = folderId;
             await fileRepo.AddWithoutSaveAsync(fileEntity);
             fileEntities.Add(fileEntity);

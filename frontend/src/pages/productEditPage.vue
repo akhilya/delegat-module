@@ -84,6 +84,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
+import { mapPool } from "@/lib/runPool";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
@@ -1205,9 +1206,7 @@ export default {
       // and the final fetchProduct only runs if the user hasn't navigated away.
       const targetProductId = productId.value;
       try {
-        // Upload each file
-        const newFileIds = [];
-        for (const file of fileList) {
+        const idGroups = await mapPool(Array.from(fileList), async (file) => {
           const formData = new FormData();
           formData.append("files", file);
           const response = await http({
@@ -1217,13 +1216,14 @@ export default {
             headers: { "Content-Type": "multipart/form-data" },
             timeout: 60 * 60 * 1000,
           });
-          if (response.data) {
-            const uploaded = Array.isArray(response.data)
-              ? response.data
-              : [response.data];
-            newFileIds.push(...uploaded.map((f) => f.id));
-          }
-        }
+          const uploaded = Array.isArray(response.data)
+            ? response.data
+            : response.data
+              ? [response.data]
+              : [];
+          return uploaded.map((f) => f.id);
+        });
+        const newFileIds = idGroups.flat();
 
         // Attach new files as images at end of current list.
         // sortedImages is a reactive ref, and if the user has already navigated

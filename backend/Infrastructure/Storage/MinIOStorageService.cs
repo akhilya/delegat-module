@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Minio;
 using Minio.DataModel.Args;
@@ -104,6 +105,54 @@ public class MinIOStorageService : IStorageService
         {
             _logger.LogError(ex, "Failed to upload stream to MinIO: {Path}, ContentLength: {ContentLength}", path, contentLength);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Small files go in one PUT. Larger files are multipart from the bytes already read,
+    /// so storage starts before the browser has finished sending the file.
+    /// </summary>
+    public async Task<FileUploadResult?> UploadStreamAsync(
+        Stream stream,
+        string path,
+        string contentType,
+        long? contentLength,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+            contentType = "application/octet-stream";
+
+        if (contentLength is > 0)
+        {
+            var uploaded = await UploadAsync(stream, path, contentLength.Value, contentType, ct);
+            return uploaded ? new FileUploadResult(contentType, contentLength.Value) : null;
+        }
+
+        try
+        {
+            await EnsureBucketExistsAsync(ct);
+            var (prefix, fitsSinglePut) = await UploadPrefix.ReadAsync(stream, ct);
+            if (fitsSinglePut)
+            {
+                using var buffered = new MemoryStream(prefix, writable: false);
+                var uploaded = await UploadAsync(buffered, path, prefix.Length, contentType, ct);
+                return uploaded ? new FileUploadResult(contentType, prefix.Length) : null;
+            }
+
+            var counting = new CountingReadStream(new PrefixThenRemainingStream(prefix, stream));
+            var request = new PutObjectArgs()
+                .WithBucket(_bucket)
+                .WithObject(path)
+                .WithObjectSize(-1)
+                .WithStreamData(counting)
+                .WithContentType(contentType);
+            await _client.PutObjectAsync(request, ct);
+            return new FileUploadResult(contentType, counting.Total);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to stream upload to MinIO: {Path}", path);
+            return null;
         }
     }
 
@@ -251,21 +300,34 @@ public class MinIOStorageService : IStorageService
     {
         try
         {
-            using var response = await OpenObjectGetAsync(path, ct);
-            if (!response.IsSuccessStatusCode)
+            var ms = new MemoryStream();
+            var copied = await StorageObjectCopy.CopyAsync(
+                (offset, token) => OpenObjectGetAsync(path, offset, token),
+                ms,
+                _logger,
+                path,
+                ct,
+                response =>
+                {
+                    if (!response.IsSuccessStatusCode)
+                        return false;
+
+                    var contentLength = response.Content.Headers.ContentLength;
+                    if (contentLength is > MaxBufferedDownloadBytes)
+                    {
+                        _logger.LogWarning(
+                            "Skipping buffered MinIO download for {Path}: Content-Length {Length} exceeds {Max} bytes; use StreamToAsync",
+                            path, contentLength, MaxBufferedDownloadBytes);
+                        return false;
+                    }
+
+                    if (contentLength is > 0 and <= int.MaxValue)
+                        ms.Capacity = (int)contentLength.Value;
+                    return true;
+                });
+            if (!copied)
                 return null;
 
-            var contentLength = response.Content.Headers.ContentLength;
-            if (contentLength is > MaxBufferedDownloadBytes)
-            {
-                _logger.LogWarning(
-                    "Skipping buffered MinIO download for {Path}: Content-Length {Length} exceeds {Max} bytes; use StreamToAsync",
-                    path, contentLength, MaxBufferedDownloadBytes);
-                return null;
-            }
-
-            var ms = new MemoryStream(contentLength is > 0 and <= int.MaxValue ? (int)contentLength.Value : 0);
-            await CopyHttpContentAsync(response, ms, ct);
             if (ms.Length > MaxBufferedDownloadBytes)
             {
                 _logger.LogWarning(
@@ -322,15 +384,17 @@ public class MinIOStorageService : IStorageService
         await EnsureBucketExistsAsync(ct);
 
         // Presigned GET + HttpClient (SDK GetObjectAsync can XML-parse binary bodies).
-        // Copy until EOF — HttpContent.CopyToAsync uses Content-Length and throws
-        // HttpRequestException ("response ended prematurely") when MinIO closes early
-        // or the advertised length is wrong.
-        using var response = await OpenObjectGetAsync(path, ct);
-        response.EnsureSuccessStatusCode();
-        await CopyHttpContentAsync(response, outputStream, ct);
+        // A dropped MinIO socket resumes with Range; CopyToAsync would throw ResponseEnded
+        // and fail the download after the client had already received part of the file.
+        await StorageObjectCopy.CopyAsync(
+            (offset, token) => OpenObjectGetAsync(path, offset, token),
+            outputStream,
+            _logger,
+            path,
+            ct);
     }
 
-    private async Task<HttpResponseMessage> OpenObjectGetAsync(string path, CancellationToken ct)
+    private async Task<HttpResponseMessage> OpenObjectGetAsync(string path, long offset, CancellationToken ct)
     {
         HttpRequestException? last = null;
         for (var attempt = 1; attempt <= 3; attempt++)
@@ -345,6 +409,9 @@ public class MinIOStorageService : IStorageService
                     Version = HttpVersion.Version11,
                     VersionPolicy = HttpVersionPolicy.RequestVersionExact
                 };
+                // Range is not part of the presigned signature; MinIO accepts it on GET.
+                if (offset > 0)
+                    request.Headers.Range = new RangeHeaderValue(offset, null);
                 var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 return response;
             }
@@ -357,12 +424,6 @@ public class MinIOStorageService : IStorageService
         }
 
         throw last ?? new HttpRequestException($"Failed to download '{path}' from MinIO");
-    }
-
-    private static async Task CopyHttpContentAsync(HttpResponseMessage response, Stream outputStream, CancellationToken ct)
-    {
-        await using var source = await response.Content.ReadAsStreamAsync(ct);
-        await source.CopyToAsync(outputStream, 81920, ct);
     }
 
     /// <summary>

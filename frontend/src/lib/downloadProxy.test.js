@@ -14,6 +14,7 @@ describe("file download proxy", () => {
       const conf = readFileSync(new URL(`../../${name}`, import.meta.url), "utf8");
       const api = apiLocation(conf);
       assert.match(api, /proxy_buffering off;/);
+      assert.match(api, /proxy_request_buffering off;/);
       assert.match(api, /send_timeout 86400s;/);
       assert.match(api, /proxy_read_timeout 86400s;/);
       assert.match(api, /proxy_send_timeout 86400s;/);

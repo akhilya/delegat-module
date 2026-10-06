@@ -17,6 +17,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- A batch of files is stored while it is still uploading. The browser no longer waits for each file to be copied again after the progress bar reaches the end, and several files upload at once.
+- A file download continues from the last received byte when object storage closes the connection early, instead of failing the request.
 - A slow file download is no longer cut off. The API no longer aborts a response that stays under a few hundred bytes a second, and the web proxy streams the file instead of buffering it and closing the connection.
 - Wildberries bulk export uploads the product gallery. A photo list built on the mapping (gallery plus extra files) was not a plain string list, so the upload was skipped and the cards stayed without photos. A failed photo upload is written on the operation.
 - A waiting assistant plan is outdated when the next message does not confirm or cancel it. Execute is hidden, and the assistant revises the plan instead of running the old steps.

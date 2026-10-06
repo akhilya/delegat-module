@@ -21,6 +21,34 @@ public interface IStorageService
     Task<bool> UploadAsync(Stream stream, string path, long contentLength, string contentType, CancellationToken ct = default);
 
     /// <summary>
+    /// Store a request body while it is still arriving.
+    /// <paramref name="contentLength"/> is set only when the part declares its size.
+    /// </summary>
+    Task<FileUploadResult?> UploadStreamAsync(
+        Stream stream,
+        string path,
+        string contentType,
+        long? contentLength,
+        CancellationToken ct = default)
+    {
+        return UploadCore(this, stream, path, contentType, contentLength, ct);
+
+        static async Task<FileUploadResult?> UploadCore(
+            IStorageService storage,
+            Stream stream,
+            string path,
+            string contentType,
+            long? contentLength,
+            CancellationToken ct)
+        {
+            var length = contentLength ?? 0;
+            var type = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType;
+            var ok = await storage.UploadAsync(stream, path, length, type, ct);
+            return ok ? new FileUploadResult(type, length) : null;
+        }
+    }
+
+    /// <summary>
     /// Upload from URI
     /// </summary>
     Task<bool> UploadFromUriAsync(string uri, string path, CancellationToken ct = default);
