@@ -62,11 +62,7 @@ export default {
      */
     async uploadPlugin(ctx, { formData, onSuccess, onError }) {
       try {
-        const response = await http.post(`/plugins/upload`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+        const response = await http.post(`/plugins/upload`, formData);
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);

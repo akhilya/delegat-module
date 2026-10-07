@@ -306,9 +306,7 @@ export default {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await http.post(`/products/import-preview`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const response = await http.post(`/products/import-preview`, formData);
         if (onSuccess) onSuccess(response.data);
       } catch (error) {
         if (onError) onError(error);
@@ -319,9 +317,7 @@ export default {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await http.post(`/products/import-apply`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const response = await http.post(`/products/import-apply`, formData);
         if (onSuccess) onSuccess(response.data);
       } catch (error) {
         if (onError) onError(error);

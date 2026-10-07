@@ -17,6 +17,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Uploading a file sends the file body. A preset multipart content type left the declared size in the header and an empty body, so the upload failed as soon as it reached the API.
 - A failed file upload records the declared size, how many bytes actually arrived, and the start of the body. A cut-off upload can be told apart from a parser fault.
 - Uploading a file no longer fails when the web proxy streams the body. A normal API request was marked as a WebSocket upgrade, so the file never reached the server.
 - A batch of files is stored while it is still uploading. The browser no longer waits for each file to be copied again after the progress bar reaches the end, and several files upload at once.

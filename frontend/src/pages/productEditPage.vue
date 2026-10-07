@@ -1213,7 +1213,6 @@ export default {
             url: `/products/${targetProductId}/files`,
             method: "PUT",
             data: formData,
-            headers: { "Content-Type": "multipart/form-data" },
             timeout: 60 * 60 * 1000,
           });
           const uploaded = Array.isArray(response.data)

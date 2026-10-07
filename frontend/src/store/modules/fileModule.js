@@ -17,9 +17,6 @@ export default {
       const config = {
         method: "PUT",
         data: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
         timeout: 60 * 60 * 1000,
         cache: false,
         onUploadProgress: (progressEvent) => {

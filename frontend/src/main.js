@@ -66,6 +66,16 @@ export const http = setupCache(
 http.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers["X-UI-Locale"] = getLocale();
+  // A preset multipart type has no boundary. Firefox then sends Content-Length
+  // and an empty body, so the file never arrives.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    if (typeof config.headers.setContentType === "function") {
+      config.headers.setContentType(false);
+    } else {
+      delete config.headers["Content-Type"];
+      delete config.headers["content-type"];
+    }
+  }
   if (shouldBlockCabinetViewOnlyRequest(getCachedMe(), config)) {
     toast.error(t("errors.cabinet_view_only"));
     config.__cabinetViewOnlyToast = true;

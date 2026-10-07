@@ -997,7 +997,6 @@ async function uploadFiles(fileList) {
         url,
         method: 'PUT',
         data: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 15 * 60 * 1000,
         cache: false,
         signal: entry.abortController.signal,

@@ -342,7 +342,6 @@ export default {
             url: `/products/${productId}/files`,
             method: "PUT",
             data: formData,
-            headers: { "Content-Type": "multipart/form-data" },
             timeout: 60 * 60 * 1000,
           });
 
