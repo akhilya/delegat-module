@@ -17,6 +17,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Uploading a file no longer fails when the web proxy streams the body. A normal API request was marked as a WebSocket upgrade, so the file never reached the server.
 - A batch of files is stored while it is still uploading. The browser no longer waits for each file to be copied again after the progress bar reaches the end, and several files upload at once.
 - A file download continues from the last received byte when object storage closes the connection early, instead of failing the request.
 - A slow file download is no longer cut off. The API no longer aborts a response that stays under a few hundred bytes a second, and the web proxy streams the file instead of buffering it and closing the connection.

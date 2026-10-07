@@ -60,9 +60,8 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket support
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        # WebSocket upgrade stays on /hubs/. On this location it would drop a streamed upload.
+        proxy_set_header Connection "";
 
         # Stream the body both ways. Response buffering fills a temp file and then
         # stops reading the API. Request buffering does the same on upload: the

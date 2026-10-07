@@ -15,6 +15,8 @@ describe("file download proxy", () => {
       const api = apiLocation(conf);
       assert.match(api, /proxy_buffering off;/);
       assert.match(api, /proxy_request_buffering off;/);
+      assert.match(api, /proxy_set_header Connection "";/);
+      assert.doesNotMatch(api, /proxy_set_header Connection "upgrade"/);
       assert.match(api, /send_timeout 86400s;/);
       assert.match(api, /proxy_read_timeout 86400s;/);
       assert.match(api, /proxy_send_timeout 86400s;/);
