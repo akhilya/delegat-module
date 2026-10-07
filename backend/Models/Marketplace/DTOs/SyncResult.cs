@@ -39,7 +39,8 @@ public record ExportResult(
     bool Success,
     string? ExternalProductId = null,
     string? ErrorMessage = null,
-    Dictionary<string, object>? Details = null
+    Dictionary<string, object>? Details = null,
+    bool Retryable = true
 );
 
 /// <summary>
@@ -63,7 +64,8 @@ public record ExportItemResult(
     bool Success,
     string? ExternalProductId = null,
     string? ErrorMessage = null,
-    Dictionary<string, object>? Details = null
+    Dictionary<string, object>? Details = null,
+    bool Retryable = true
 );
 
 /// <summary>

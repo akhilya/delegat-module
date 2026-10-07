@@ -259,10 +259,11 @@ public class ProductExportBackgroundService : BackgroundService
                     pending.status = ProductExportStatus.Failed;
                     pending.lastError = itemResult.ErrorMessage ?? "Unknown error";
 
-                    if (IsPermanentError(pending.lastError))
+                    if (!itemResult.Retryable || IsPermanentError(pending.lastError))
                     {
                         pending.retryCount = PendingProductExport.MAX_RETRIES;
-                        await CancelRemainingExportsAsync(context, pending, ct);
+                        if (IsPermanentError(pending.lastError))
+                            await CancelRemainingExportsAsync(context, pending, ct);
                     }
 
                     _logger.LogWarning(
@@ -270,8 +271,14 @@ public class ProductExportBackgroundService : BackgroundService
                         pending.productId, pending.lastError);
 
                     if (pending.batchId != null)
-                        await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                            $"Error: {OperationProductRef.Format(pending.productId, pending.productName)} - {pending.lastError}");
+                    {
+                        var subject = OperationProductRef.Format(pending.productId, pending.productName);
+                        var line = itemResult.Retryable
+                            ? $"Error: {subject} - {pending.lastError}"
+                            : $"{subject} - {pending.lastError}";
+                        await _operationLogger.LogAsync(
+                            pending.batchId, pending.storeId, itemResult.Retryable ? "error" : "warning", line);
+                    }
                 }
             }
         }
@@ -415,7 +422,7 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.status = ProductExportStatus.Failed;
                 pending.lastError = result.ErrorMessage ?? "Unknown error";
 
-                if (IsPermanentError(pending.lastError))
+                if (!result.Retryable || IsPermanentError(pending.lastError))
                     pending.retryCount = PendingProductExport.MAX_RETRIES;
 
                 _logger.LogWarning(
@@ -423,8 +430,14 @@ public class ProductExportBackgroundService : BackgroundService
                     pending.productId, pending.lastError, pending.retryCount);
 
                 if (pending.batchId != null)
-                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "error",
-                        $"Error: {OperationProductRef.Format(pending.productId, pending.productName)} - {pending.lastError}");
+                {
+                    var subject = OperationProductRef.Format(pending.productId, pending.productName);
+                    var line = result.Retryable
+                        ? $"Error: {subject} - {pending.lastError}"
+                        : $"{subject} - {pending.lastError}";
+                    await _operationLogger.LogAsync(
+                        pending.batchId, pending.storeId, result.Retryable ? "error" : "warning", line);
+                }
             }
 
             await context.SaveChangesAsync(ct);

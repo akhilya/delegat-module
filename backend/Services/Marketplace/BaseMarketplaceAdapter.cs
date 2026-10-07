@@ -186,7 +186,9 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
                     item.LocalProductId,
                     result.Success,
                     result.ExternalProductId,
-                    result.ErrorMessage));
+                    result.ErrorMessage,
+                    result.Details,
+                    result.Retryable));
 
                 if (result.Success) successCount++;
                 else failedCount++;

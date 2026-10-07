@@ -368,10 +368,11 @@ public class ProductSyncService
 
             if (!result.Success)
             {
-                await Log("error", $"Marketplace returned an error: {result.ErrorMessage ?? "unknown"}");
+                var level = result.Retryable ? "error" : "warning";
+                await Log(level, $"Marketplace returned an error: {result.ErrorMessage ?? "unknown"}");
                 var detailsMessage = FormatExportDetails(result.Details);
                 if (detailsMessage != null)
-                    await Log("error", detailsMessage);
+                    await Log(level, detailsMessage);
 
                 // Update the link status on error
                 if (existingLink != null)
@@ -385,7 +386,7 @@ public class ProductSyncService
                     await _context.SaveChangesAsync(ct);
                 }
 
-                return ProductExportResult.Failure(result.ErrorMessage ?? "Export error");
+                return ProductExportResult.Failure(result.ErrorMessage ?? "Export error", result.Retryable);
             }
 
             await Log("success", $"Marketplace responded: ExternalID = {result.ExternalProductId}");
@@ -868,7 +869,8 @@ public class ProductSyncService
                             itemResults.Add(new BulkProductExportItemResult(
                                 exportItemResult.LocalProductId, false,
                                 ErrorMessage: exportItemResult.ErrorMessage ?? "Export error",
-                                Details: exportItemResult.Details));
+                                Details: exportItemResult.Details,
+                                Retryable: exportItemResult.Retryable));
                             continue;
                         }
 
@@ -2996,6 +2998,7 @@ public class ProductExportResult
     public string? ExternalProductId { get; private set; }
     public bool IsNewProduct { get; private set; }
     public string? Message { get; private set; }
+    public bool Retryable { get; private set; } = true;
 
     /// <summary>
     /// Create a successful export result.
@@ -3015,12 +3018,13 @@ public class ProductExportResult
     /// <summary>
     /// Create a failure export result.
     /// </summary>
-    public static ProductExportResult Failure(string error)
+    public static ProductExportResult Failure(string error, bool retryable = true)
     {
         return new ProductExportResult
         {
             IsSuccess = false,
-            ErrorMessage = error
+            ErrorMessage = error,
+            Retryable = retryable
         };
     }
 }
@@ -3185,7 +3189,8 @@ public record BulkProductExportItemResult(
     string? ExternalProductId = null,
     string? ErrorMessage = null,
     bool IsNewProduct = false,
-    Dictionary<string, object>? Details = null
+    Dictionary<string, object>? Details = null,
+    bool Retryable = true
 );
 
 #endregion

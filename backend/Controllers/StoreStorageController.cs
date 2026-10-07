@@ -117,19 +117,16 @@ public class StoreStorageController : ControllerBase
     [Route("/store-storage/files")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
-    [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)]
-    public async Task<IActionResult> UploadFiles(IFormFile[] files, [FromQuery] int? folderId = null, CancellationToken ct = default)
+    [DisableFormValueModelBinding]
+    public async Task<IActionResult> UploadFiles([FromQuery] int? folderId = null, CancellationToken ct = default)
     {
-        if (files == null || files.Length == 0)
-            throw ApiException.BadRequest("No file was received");
-
         var storeId = await GetSelectedStoreId(ct);
         var user = await _currentUserService.GetUserAsync();
         if (user == null)
             throw ApiException.Unauthorized();
 
-        await _quotaService.EnsureFileQuotaAsync(storeId, files.Length);
-        await _quotaService.EnsureStorageQuotaAsync(storeId, files.Sum(f => f.Length));
+        await _quotaService.EnsureFileQuotaAsync(storeId);
+        await _quotaService.EnsureStorageQuotaAsync(storeId);
 
         if (folderId.HasValue)
         {
@@ -139,22 +136,35 @@ public class StoreStorageController : ControllerBase
                 throw ApiException.NotFound("Folder not found");
         }
 
-        var fileEntities = new List<StoreFile>();
-        foreach (var file in files)
+        var saved = await MultipartObjectUpload.SaveAsync(
+            Request,
+            _storageService,
+            fileName => $"{storeId}/store/{Guid.NewGuid():N}/{fileName}",
+            ct);
+
+        if (saved.Count == 0)
+            throw ApiException.BadRequest("No file was received");
+
+        try
         {
-            var safeName = FileNameSafety.Sanitize(file.FileName);
-            var filePath = $"{storeId}/store/{Guid.NewGuid():N}/{safeName}";
+            await _quotaService.EnsureFileQuotaAsync(storeId, saved.Count);
+            await _quotaService.EnsureStorageQuotaAsync(storeId, saved.Sum(file => file.Length));
+        }
+        catch
+        {
+            foreach (var item in saved)
+                await _storageService.DeleteAsync(item.Path, ct);
+            throw;
+        }
 
-            await using var stream = file.OpenReadStream();
-            var uploaded = await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType, ct);
-            if (!uploaded)
-                throw ApiException.InternalServerError($"Failed to upload file {file.FileName} to storage");
-
+        var fileEntities = new List<StoreFile>();
+        foreach (var item in saved)
+        {
             var entity = new StoreFile
             {
                 folderId = folderId
             };
-            entity.Fill(filePath, user.Id, storeId, file.ContentType, file.Length);
+            entity.Fill(item.Path, user.Id, storeId, item.ContentType, item.Length);
             _context.storeFiles.Add(entity);
             fileEntities.Add(entity);
         }

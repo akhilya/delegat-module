@@ -428,7 +428,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
             result.Success,
             result.ExternalProductId,
             result.ErrorMessage,
-            result.Details
+            result.Details,
+            result.Retryable
         );
     }
 
@@ -458,7 +459,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
                 i.Success,
                 i.ExternalProductId,
                 i.ErrorMessage,
-                i.Details
+                i.Details,
+                i.Retryable
             )).ToList()
         );
     }

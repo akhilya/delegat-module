@@ -136,8 +136,12 @@ public class WildberriesMapCardToProductTests
             WildberriesPlugin.ClassifyCardCreateWait(false, false, max, max));
 
         var unresolved = WildberriesPlugin.CardCreateUnresolvedMessage(max);
-        Assert.Contains("did not return a reason", unresolved, StringComparison.Ordinal);
+        Assert.Contains("was not sent again", unresolved, StringComparison.Ordinal);
         Assert.DoesNotContain("may still be processing", unresolved, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(TimeSpan.FromMinutes(8), WildberriesPlugin.CardCreateBulkMaxWait);
+        Assert.True(WildberriesPlugin.IsCardUpdatedBefore("2026-10-07T11:00:00Z", new DateTime(2026, 10, 7, 11, 40, 0, DateTimeKind.Utc)));
+        Assert.False(WildberriesPlugin.IsCardUpdatedBefore("2026-10-07T11:50:00Z", new DateTime(2026, 10, 7, 11, 40, 0, DateTimeKind.Utc)));
+        Assert.False(WildberriesPlugin.IsCardUpdatedBefore(null, new DateTime(2026, 10, 7, 11, 40, 0, DateTimeKind.Utc)));
 
         var errors = new Dictionary<string, List<string>>
         {

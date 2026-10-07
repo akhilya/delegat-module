@@ -222,69 +222,19 @@ public class FileController : ControllerBase
     }
 
     /// <summary>
-    /// Uploads one or more files for a product. The form is read before any database work (up to 10 GB).
+    /// Uploads one or more files for a product. The body is stored as it arrives (up to 10 GB).
     /// </summary>
     /// <param name="productId">The product identifier.</param>
-    /// <param name="files">Files from the multipart body.</param>
     /// <param name="folderId">Optional target folder.</param>
+    /// <param name="ct">Cancels the upload.</param>
     /// <returns>A list of file DTOs for the uploaded files.</returns>
     [HttpPut]
     [Route("/products/{productId}/files")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
-    [RequestFormLimits(MultipartBodyLengthLimit = 10L * 1024 * 1024 * 1024)]
-    public async Task<IActionResult> PutProductFiles(int productId, IFormFile[] files, [FromQuery] int? folderId = null)
-    {
-        if (files == null || files.Length == 0)
-            throw ApiException.BadRequest("No file was received");
-
-        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
-        if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
-
-        var productRepo = _unitOfWork.Repository<Product>();
-        var product = await productRepo.GetByIdAsync(productId);
-        if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
-        if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
-
-        await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value, files.Length);
-        await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value, files.Sum(f => f.Length));
-
-        if (folderId.HasValue)
-        {
-            var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
-            var folder = await folderRepo.GetByIdAsync(folderId.Value);
-            if (folder == null || folder.productId != productId)
-                throw ApiException.NotFound("Folder not found");
-        }
-
-        var user = await _currentUserService.GetUserAsync();
-        if (user == null)
-            throw ApiException.Unauthorized();
-
-        var fileRepo = _unitOfWork.Repository<Models.File>();
-        var fileEntities = new List<Models.File>();
-        foreach (var file in files)
-        {
-            var safeName = FileNameSafety.Sanitize(file.FileName);
-            var filePath = $"{selectedStoreId}/{productId}/{Guid.NewGuid():N}/{safeName}";
-            var fileEntity = new Models.File();
-            fileEntity.AddFill(new Models.File.AddForm(filePath, user.Id, productId, file.ContentType, file.Length));
-            fileEntity.folderId = folderId;
-
-            await using var stream = file.OpenReadStream();
-            var uploaded = await _storageService.UploadAsync(stream, filePath, file.Length, file.ContentType);
-            if (!uploaded)
-                throw ApiException.InternalServerError($"Failed to upload file {file.FileName} to storage");
-            await fileRepo.AddWithoutSaveAsync(fileEntity);
-            fileEntities.Add(fileEntity);
-        }
-
-        await _unitOfWork.SaveChangesAsync();
-        return Ok(fileEntities.Select(e => e.MapToDTO(_serviceProvider)).ToList());
-    }
+    [DisableFormValueModelBinding]
+    public Task<IActionResult> PutProductFiles(int productId, [FromQuery] int? folderId = null, CancellationToken ct = default)
+        => SaveUploadedProductFiles(productId, folderId, ct);
 
     /// <summary>
     /// Streaming upload for very large files (multi-GB). Same path as <see cref="PutProductFiles"/>.
@@ -297,6 +247,7 @@ public class FileController : ControllerBase
     [Route("/products/{productId}/files/stream")]
     [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
     [DisableRequestSizeLimit]
+    [DisableFormValueModelBinding]
     public Task<IActionResult> StreamUploadFiles(int productId, [FromQuery] int? folderId = null, CancellationToken ct = default)
         => SaveUploadedProductFiles(productId, folderId, ct);
 
