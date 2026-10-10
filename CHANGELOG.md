@@ -17,6 +17,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- A large file keeps a steady download speed for people who are not next to the server. The web proxy holds about 8 MB of the response in memory so a distant link does not stall between tiny chunks, and it still does not spool the file to a temporary disk file.
 - A file upload streams to storage again. MVC was reading the multipart body before the action ran, so the file arrived with its size declared and no bytes left to store.
 - A large Wildberries export no longer stops the queue for half an hour on every batch, and an article the marketplace already accepted is not uploaded again when it is slow to appear in the catalog.
 - Uploading a file sends the file body. A preset multipart content type left the declared size in the header and an empty body, so the upload failed as soon as it reached the API.
