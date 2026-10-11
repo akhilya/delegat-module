@@ -17,11 +17,41 @@ public sealed class MarketplaceOrderSyncService
 {
     public const string InFlightIdsStatus = "__inflight_ids";
     public const string PageCapReason = "page_cap";
+    public const string HotStatePrefix = "hot:";
     public const int MaxPagesPerStatusPerRun = 20;
+    public const int MaxHotPagesPerRun = 1;
     public const int MaxInFlightIdRefreshesPerRun = 200;
 
-    private static readonly TimeSpan PageCooldown = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan BackgroundCooldown = TimeSpan.FromMinutes(15);
+    /// <summary>
+    /// Cabinet and background recent pulls share this debounce.
+    /// A new order is one marketplace page, so this stays short.
+    /// </summary>
+    public static readonly TimeSpan LiveCooldown = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Full status pagination and per-id refresh of older in-flight orders.
+    /// </summary>
+    public static readonly TimeSpan DeepCooldown = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Recent pull window. Adapters that honor <see cref="OrderQuery.From"/>
+    /// (Ozon, Wildberries, Yandex Market, WooCommerce) do not scan full history
+    /// on every tick. New orders and status changes inside the window are on
+    /// the first page when the adapter returns newest first.
+    /// </summary>
+    public static readonly TimeSpan HotWindow = TimeSpan.FromDays(2);
+
+    public static string HotStateKey(string status)
+    {
+        var key = HotStatePrefix + (status ?? "");
+        return key.Length <= 32 ? key : key[..32];
+    }
+
+    private enum PullKind
+    {
+        Hot,
+        Deep
+    }
 
     private readonly DataContext _db;
     private readonly IMarketplaceAdapterRegistry _adapters;
@@ -59,6 +89,7 @@ public sealed class MarketplaceOrderSyncService
             };
         }
 
+        var kind = IsHot(reason) ? PullKind.Hot : PullKind.Deep;
         var upserted = 0;
         var pulledCount = 0;
         var skippedCount = 0;
@@ -67,7 +98,7 @@ public sealed class MarketplaceOrderSyncService
 
         foreach (var status in statuses)
         {
-            var one = await PullStatusAsync(connection, adapter, status, reason, upsertedIds, ct);
+            var one = await PullStatusAsync(connection, adapter, status, kind, upsertedIds, ct);
             upserted += one.Upserted;
             if (one.Pulled)
                 pulledCount++;
@@ -76,7 +107,7 @@ public sealed class MarketplaceOrderSyncService
             resultReason = CombineReason(resultReason, one);
         }
 
-        if (IsBackground(reason))
+        if (kind == PullKind.Deep)
         {
             var inflight = await RefreshInFlightByIdAsync(connection, adapter, upsertedIds, ct);
             upserted += inflight.Upserted;
@@ -145,12 +176,13 @@ public sealed class MarketplaceOrderSyncService
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
         string status,
-        string reason,
+        PullKind kind,
         HashSet<string> upsertedIds,
         CancellationToken ct)
     {
-        var state = await GetOrCreateStateAsync(connection.Id, status, ct);
-        var cooldown = CooldownFor(reason);
+        var stateKey = kind == PullKind.Hot ? HotStateKey(status) : status;
+        var state = await GetOrCreateStateAsync(connection.Id, stateKey, ct);
+        var cooldown = kind == PullKind.Hot ? LiveCooldown : DeepCooldown;
         if (IsCoolingDown(state, cooldown))
         {
             return new OrderSyncResult { Skipped = true, Reason = "cooldown" };
@@ -164,6 +196,15 @@ public sealed class MarketplaceOrderSyncService
             var pagesFetched = 0;
             var terminal = MarketplaceOrderBuckets.IsTerminal(status);
             var hitPageCap = false;
+            var maxPages = kind == PullKind.Hot ? MaxHotPagesPerRun : MaxPagesPerStatusPerRun;
+            DateTimeOffset? from = null;
+            DateTimeOffset? to = null;
+            if (kind == PullKind.Hot)
+            {
+                var now = _time.GetUtcNow();
+                from = now - HotWindow;
+                to = now.AddDays(1);
+            }
 
             while (true)
             {
@@ -172,7 +213,9 @@ public sealed class MarketplaceOrderSyncService
                     Status = status,
                     PageSize = 50,
                     Page = page,
-                    Cursor = cursor
+                    Cursor = cursor,
+                    From = from,
+                    To = to
                 };
                 var batch = await adapter.GetOrdersAsync(connection, query, ct);
                 pagesFetched++;
@@ -189,9 +232,12 @@ public sealed class MarketplaceOrderSyncService
                 if (terminal || !batch.HasMore)
                     break;
 
-                if (pagesFetched >= MaxPagesPerStatusPerRun)
+                if (pagesFetched >= maxPages)
                 {
-                    hitPageCap = true;
+                    // A hot pull is the newest page on purpose. Only the deep scan
+                    // reports a cap when it could not finish the status.
+                    if (kind == PullKind.Deep)
+                        hitPageCap = true;
                     break;
                 }
 
@@ -245,7 +291,7 @@ public sealed class MarketplaceOrderSyncService
         CancellationToken ct)
     {
         var state = await GetOrCreateStateAsync(connection.Id, InFlightIdsStatus, ct);
-        if (IsCoolingDown(state, BackgroundCooldown))
+        if (IsCoolingDown(state, DeepCooldown))
             return new OrderSyncResult { Skipped = true, Reason = "cooldown" };
 
         var upserted = 0;
@@ -334,11 +380,9 @@ public sealed class MarketplaceOrderSyncService
         return now - state.lastPulledAt.Value < cooldown;
     }
 
-    private static TimeSpan CooldownFor(string reason) =>
-        IsBackground(reason) ? BackgroundCooldown : PageCooldown;
-
-    private static bool IsBackground(string reason) =>
-        string.Equals(reason, "background", StringComparison.OrdinalIgnoreCase);
+    private static bool IsHot(string reason) =>
+        string.Equals(reason, "page", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(reason, "hot", StringComparison.OrdinalIgnoreCase);
 
     private static string? CombineReason(string? current, OrderSyncResult one)
     {

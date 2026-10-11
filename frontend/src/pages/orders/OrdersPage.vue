@@ -76,11 +76,13 @@ import {
   marketplaceOrderLabelUrl,
   shouldFetchMailboxAfterRouteSync,
   statusesForBucket,
+  applyOrderStatusToList,
   storedOrderListPageParams,
   tabCountsFromPayload,
   writeStoredConnectionId,
   writeStoredMailbox,
 } from "@/lib/ordersUi";
+import { shouldPullLiveOrders, startOrderLiveSync } from "@/lib/orderLiveSync";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
@@ -328,6 +330,13 @@ export default {
   },
   async mounted() {
     await this.bootstrap();
+    if (this.liveOrdersStopped) return;
+    this.stopLiveOrders = startOrderLiveSync(() => this.pullLiveOrders());
+  },
+  beforeUnmount() {
+    this.liveOrdersStopped = true;
+    this.stopLiveOrders?.();
+    this.stopLiveOrders = null;
   },
   methods: {
     ...mapActions(["getConnections", "getAvailableAdapters"]),
@@ -593,12 +602,31 @@ export default {
     },
 
     onOrderUpdated(order) {
+      if (order) this.applySellerStatus(order);
       if (this.searchQuery.trim()) {
         const page = order ? orderSearchHitPage(order) : null;
         if (page) this.statusPages = { search: page };
         return;
       }
       this.fetchOrders({ silent: true });
+    },
+
+    applySellerStatus(order) {
+      const statuses = statusesForBucket(
+        this.bucketId,
+        this.rowAdapterKey,
+      );
+      const next = { ...this.statusPages };
+      for (const key of Object.keys(next)) {
+        const page = next[key];
+        if (!page) continue;
+        next[key] = {
+          ...page,
+          items: applyOrderStatusToList(page.items, order, statuses),
+        };
+      }
+      this.statusPages = next;
+      this.pruneSelection();
     },
 
     resetAndFetch() {
@@ -683,7 +711,25 @@ export default {
       };
     },
 
-    async fetchOrders({ append = false, silent = false } = {}) {
+    pullLiveOrders() {
+      const pagedFurther = Object.values(this.statusPages).some(
+        (page) => Number(page?.page) > 1,
+      );
+      if (
+        !shouldPullLiveOrders({
+          bootstrapping: this.bootstrapping,
+          busy: this.isLoading || this.isLoadingMore,
+          search: this.searchQuery,
+          pagedFurther,
+          hidden: document.visibilityState === "hidden",
+        })
+      ) {
+        return;
+      }
+      return this.fetchOrders({ silent: true, quiet: true });
+    },
+
+    async fetchOrders({ append = false, silent = false, quiet = false } = {}) {
       if (!this.connectionId || !this.canListOrders) {
         this.statusPages = {};
         this.mailboxCounts = {};
@@ -720,8 +766,8 @@ export default {
               nextCursor: null,
               hasMore: false,
             };
-            displaySonnerError(result.reason);
-          } else {
+            if (!quiet) displaySonnerError(result.reason);
+          } else if (!quiet) {
             displaySonnerError(result.reason);
           }
         });
@@ -757,7 +803,7 @@ export default {
           }
         }
       } catch (error) {
-        if (gen === this.fetchGen) displaySonnerError(error);
+        if (gen === this.fetchGen && !quiet) displaySonnerError(error);
       } finally {
         if (gen === this.fetchGen) {
           this.isLoading = false;
@@ -908,7 +954,7 @@ export default {
     },
 
     async postOrderStatus(orderId, job) {
-      await postMarketplaceOrderStatus({
+      const next = await postMarketplaceOrderStatus({
         http,
         connectionId: job.connectionId ?? this.connectionId,
         orderId,
@@ -917,6 +963,7 @@ export default {
         adapterKey: job.adapterKey ?? this.rowAdapterKey,
         update: job.statusUpdate,
       });
+      if (next) this.applySellerStatus(next);
     },
 
     async downloadOrderLabel(orderId, connectionId = this.connectionId) {

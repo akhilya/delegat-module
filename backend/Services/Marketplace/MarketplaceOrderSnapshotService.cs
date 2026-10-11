@@ -64,7 +64,12 @@ public sealed class MarketplaceOrderSnapshotService
         {
             var payload = JsonSerializer.Serialize(order, JsonOptions);
             if (byId.TryGetValue(order.ExternalId, out var row))
+            {
+                if (MarketplaceSellerOrderStatus.ShouldKeepStoredStatus(
+                        row.status, row.syncedAt, order.Status, now))
+                    continue;
                 Apply(row, order, payload, now);
+            }
             else
             {
                 var added = new MarketplaceOrder

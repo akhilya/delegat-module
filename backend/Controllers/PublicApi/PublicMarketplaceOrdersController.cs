@@ -117,15 +117,8 @@ public class PublicMarketplaceOrdersController : ControllerBase
         if (!result.Success)
             throw ApiException.BadRequest(result.ErrorMessage ?? "Order status update failed", code: "order_status_failed");
 
-        if (result.Order != null)
-            await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, [result.Order], ct);
-        await _commerce.PersistOrderAsync(storeId, connection.Id, result.Order, ct);
-        if (result.Order == null)
-        {
-            var fresh = await MarketplaceCommerceService.InvokeAsync(
-                () => adapter.GetOrderAsync(connection, orderId, ct));
-            await _commerce.PersistOrderAsync(storeId, connection.Id, fresh, ct);
-        }
+        await _commerce.FinishSellerStatusAsync(
+            connection, adapter, orderId, body.Action, result, ct);
         return Ok(result);
     }
 
