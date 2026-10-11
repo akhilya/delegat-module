@@ -1,6 +1,6 @@
 # Stored orders and overview tabs
 
-Locked 2026-09-04. English. Supersedes the pass-through / “assembly-only, no tabs” parts of [`2026-09-04-orders-assembly-overview-design.md`](2026-09-04-orders-assembly-overview-design.md). Mail-style groups and connection sidebar rows stay.
+Locked 2026-09-04. Revised 2026-10-11 for order freshness. English. Supersedes the pass-through / “assembly-only, no tabs” parts of [`2026-09-04-orders-assembly-overview-design.md`](2026-09-04-orders-assembly-overview-design.md). Mail-style groups and connection sidebar rows stay.
 
 ## Problem
 
@@ -37,13 +37,13 @@ Labels, supplies, and shipment mutations stay live. Not stored.
 
 Silent `BackgroundService` (not an Operations job). Every active GetOrders connection:
 
-- **In-flight statuses** (`new` … `delivering`): paginate adapter lists until exhausted, upsert each row.
-- **Terminal** (`delivered`, `cancelled`, `returned`): first list page only, plus `GetOrder` for ids we already store that are not terminal.
+- **Recent pull** (open cabinet screen, and the background cycle while a full scan is cooling down): first page of each in-flight status (`new` … `delivering`) over the last 2 days.
+- **Full scan:** in-flight statuses paginate until exhausted. Terminal statuses (`delivered`, `cancelled`, `returned`) are the first page only, plus `GetOrder` for stored in-flight ids the list did not return.
 
-Per `(connectionId, status)` last-pull timestamp:
+Per `(connectionId, status)` last-pull timestamp. A recent pull and a full scan use different rows, so a full scan does not block the next recent pull.
 
-- Page load (overview tab or connection mailbox): SPA paints from DB, then `POST` sync for that slice. Skip if last pull was under **5 minutes**.
-- Background cycle: **15 minutes**; skip a slice the page already pulled.
+- Cabinet orders screens paint from the snapshot, then `POST` sync. While the screen is open they pull again about every **20 seconds**. That pull is the first page of each requested status over the last **2 days**, and it is skipped only when that slice was pulled under **15 seconds** ago.
+- Background cycle: **30 seconds**. When the full scan is still cooling down, the same recent pull runs for in-flight statuses. Full pagination of each status, plus `GetOrder` for stored in-flight ids the list did not return, runs when that slice is older than **5 minutes**.
 
 Pull errors leave the last snapshot. No wipe.
 

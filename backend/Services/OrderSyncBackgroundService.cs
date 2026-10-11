@@ -7,12 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Delegat.Services;
 
 /// <summary>
-/// Pulls marketplace orders into the local snapshot on a 15-minute cycle.
+/// Pulls marketplace orders into the local snapshot.
+/// Every cycle tries a full scan; when that scan is still cooling down it pulls
+/// the recent window instead, so a new order is not stuck behind the deep cooldown.
 /// </summary>
 public sealed class OrderSyncBackgroundService : BackgroundService
 {
-    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(20);
+    internal static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OrderSyncBackgroundService> _logger;
@@ -80,7 +82,17 @@ public sealed class OrderSyncBackgroundService : BackgroundService
             try
             {
                 var statuses = MarketplaceOrderBuckets.ListStatusesForAdapter(connection.adapterKey);
-                await sync.SyncConnectionStatusesAsync(connection, statuses, "background", ct);
+                var deep = await sync.SyncConnectionStatusesAsync(connection, statuses, "background", ct);
+                if (!deep.Skipped)
+                    continue;
+
+                var hot = statuses
+                    .Where(status => !MarketplaceOrderBuckets.IsTerminal(status))
+                    .ToList();
+                if (hot.Count == 0)
+                    continue;
+
+                await sync.SyncConnectionStatusesAsync(connection, hot, "hot", ct);
             }
             catch (OperationCanceledException)
             {

@@ -74,6 +74,7 @@ import {
   runPendingOrderJob,
   saveOrderLabelFile,
 } from "@/lib/ordersUi";
+import { shouldPullLiveOrders, startOrderLiveSync } from "@/lib/orderLiveSync";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
   displaySonnerError,
@@ -309,6 +310,13 @@ export default {
   },
   async mounted() {
     await this.bootstrap();
+    if (this.liveOrdersStopped) return;
+    this.stopLiveOrders = startOrderLiveSync(() => this.pullLiveOrders());
+  },
+  beforeUnmount() {
+    this.liveOrdersStopped = true;
+    this.stopLiveOrders?.();
+    this.stopLiveOrders = null;
   },
   methods: {
     ...mapActions(["getConnections", "getAvailableAdapters"]),
@@ -448,7 +456,7 @@ export default {
       await this.fetchOrders();
     },
 
-    async fetchStorePage(page, { append = false } = {}) {
+    async fetchStorePage(page, { append = false, countsOnly = false } = {}) {
       const params = {
         tab: this.overviewTab,
         page,
@@ -461,6 +469,14 @@ export default {
         cache: false,
       });
       const data = this.unwrapPage(response);
+      this.tabCounts = tabCountsFromPayload(
+        data,
+        ORDER_OVERVIEW_TABS.map((tab) => tab.id),
+      );
+      if (countsOnly) {
+        this.storeHasMore = Boolean(data.hasMore);
+        return;
+      }
       const rows = Array.isArray(data.items) ? data.items : [];
       const next = append ? { ...this.pagesByConnection } : {};
       for (const row of rows) {
@@ -481,13 +497,24 @@ export default {
       this.pagesByConnection = next;
       this.storePage = Number(data.page) || page;
       this.storeHasMore = Boolean(data.hasMore);
-      this.tabCounts = tabCountsFromPayload(
-        data,
-        ORDER_OVERVIEW_TABS.map((tab) => tab.id),
-      );
     },
 
-    async fetchOrders({ silent = false } = {}) {
+    pullLiveOrders() {
+      if (
+        !shouldPullLiveOrders({
+          bootstrapping: this.bootstrapping,
+          busy: this.isLoading || this.loadingMore,
+          search: this.searchQuery,
+          pagedFurther: this.storePage > 1,
+          hidden: document.visibilityState === "hidden",
+        })
+      ) {
+        return;
+      }
+      return this.fetchOrders({ silent: true, quiet: true });
+    },
+
+    async fetchOrders({ silent = false, quiet = false } = {}) {
       if (!this.orderConnections.length) {
         this.pagesByConnection = {};
         this.storeHasMore = false;
@@ -501,28 +528,49 @@ export default {
       const gen = this.fetchGen;
       if (!silent) this.isLoading = true;
 
-      try {
-        await this.fetchStorePage(1);
-      } catch (error) {
-        if (gen === this.fetchGen) displaySonnerError(error);
-      } finally {
-        if (gen === this.fetchGen) this.isLoading = false;
+      if (!quiet) {
+        try {
+          await this.fetchStorePage(1);
+        } catch (error) {
+          if (gen === this.fetchGen) displaySonnerError(error);
+        } finally {
+          if (gen === this.fetchGen) this.isLoading = false;
+        }
       }
-      if (gen === this.fetchGen) this.syncConnections(gen);
+
+      if (gen !== this.fetchGen) return;
+      const syncing = this.syncConnections(gen, {
+        quiet,
+        forceRefresh: quiet,
+      });
+      if (quiet) {
+        try {
+          await syncing;
+          if (gen === this.fetchGen) {
+            await this.fetchStorePage(1, { countsOnly: true });
+          }
+        } catch {
+          // The snapshot stays. The next tick tries again.
+        }
+      }
     },
 
-    syncConnections(gen) {
-      const loading = { ...this.loadingByConnection };
-      for (const connection of this.orderConnections) {
-        loading[connectionIdOf(connection)] = true;
+    syncConnections(gen, { quiet = false, forceRefresh = false } = {}) {
+      if (!quiet) {
+        const loading = { ...this.loadingByConnection };
+        for (const connection of this.orderConnections) {
+          loading[connectionIdOf(connection)] = true;
+        }
+        this.loadingByConnection = loading;
       }
-      this.loadingByConnection = loading;
-      for (const connection of this.orderConnections) {
-        this.syncOneConnection(connection, gen);
-      }
+      return Promise.all(
+        this.orderConnections.map((connection) =>
+          this.syncOneConnection(connection, gen, { quiet, forceRefresh }),
+        ),
+      );
     },
 
-    async syncOneConnection(connection, gen) {
+    async syncOneConnection(connection, gen, { quiet = false, forceRefresh = false } = {}) {
       const id = connectionIdOf(connection);
       const statuses = statusesForOverviewTab(this.overviewTab);
       try {
@@ -541,13 +589,17 @@ export default {
           const payload = extractResponseData(result.value, {});
           return Boolean(payload?.pulled);
         });
-        if (pulled || !(this.pagesByConnection[id]?.all?.items || []).length) {
-          await this.refreshConnectionOrders(id, gen);
+        if (
+          forceRefresh ||
+          pulled ||
+          !(this.pagesByConnection[id]?.all?.items || []).length
+        ) {
+          await this.refreshConnectionOrders(id, gen, { quiet });
         }
       } catch (error) {
-        if (gen === this.fetchGen) displaySonnerError(error);
+        if (gen === this.fetchGen && !quiet) displaySonnerError(error);
       } finally {
-        if (gen === this.fetchGen) {
+        if (!quiet && gen === this.fetchGen) {
           this.loadingByConnection = {
             ...this.loadingByConnection,
             [id]: false,
@@ -556,7 +608,7 @@ export default {
       }
     },
 
-    async refreshConnectionOrders(connectionId, gen) {
+    async refreshConnectionOrders(connectionId, gen, { quiet = false } = {}) {
       const statuses = statusesForOverviewTab(this.overviewTab);
       const paramsBase = {
         page: 1,
@@ -577,7 +629,7 @@ export default {
       let hasMore = false;
       for (const result of settled) {
         if (result.status !== "fulfilled") {
-          displaySonnerError(result.reason);
+          if (!quiet) displaySonnerError(result.reason);
           continue;
         }
         const data = this.unwrapPage(result.value);

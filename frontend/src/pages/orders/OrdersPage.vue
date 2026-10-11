@@ -81,6 +81,7 @@ import {
   writeStoredConnectionId,
   writeStoredMailbox,
 } from "@/lib/ordersUi";
+import { shouldPullLiveOrders, startOrderLiveSync } from "@/lib/orderLiveSync";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
 import {
@@ -328,6 +329,13 @@ export default {
   },
   async mounted() {
     await this.bootstrap();
+    if (this.liveOrdersStopped) return;
+    this.stopLiveOrders = startOrderLiveSync(() => this.pullLiveOrders());
+  },
+  beforeUnmount() {
+    this.liveOrdersStopped = true;
+    this.stopLiveOrders?.();
+    this.stopLiveOrders = null;
   },
   methods: {
     ...mapActions(["getConnections", "getAvailableAdapters"]),
@@ -683,7 +691,25 @@ export default {
       };
     },
 
-    async fetchOrders({ append = false, silent = false } = {}) {
+    pullLiveOrders() {
+      const pagedFurther = Object.values(this.statusPages).some(
+        (page) => Number(page?.page) > 1,
+      );
+      if (
+        !shouldPullLiveOrders({
+          bootstrapping: this.bootstrapping,
+          busy: this.isLoading || this.isLoadingMore,
+          search: this.searchQuery,
+          pagedFurther,
+          hidden: document.visibilityState === "hidden",
+        })
+      ) {
+        return;
+      }
+      return this.fetchOrders({ silent: true, quiet: true });
+    },
+
+    async fetchOrders({ append = false, silent = false, quiet = false } = {}) {
       if (!this.connectionId || !this.canListOrders) {
         this.statusPages = {};
         this.mailboxCounts = {};
@@ -720,8 +746,8 @@ export default {
               nextCursor: null,
               hasMore: false,
             };
-            displaySonnerError(result.reason);
-          } else {
+            if (!quiet) displaySonnerError(result.reason);
+          } else if (!quiet) {
             displaySonnerError(result.reason);
           }
         });
@@ -757,7 +783,7 @@ export default {
           }
         }
       } catch (error) {
-        if (gen === this.fetchGen) displaySonnerError(error);
+        if (gen === this.fetchGen && !quiet) displaySonnerError(error);
       } finally {
         if (gen === this.fetchGen) {
           this.isLoading = false;

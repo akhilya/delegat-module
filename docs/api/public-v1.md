@@ -229,7 +229,7 @@ Paths are unchanged. Swagger lists them as separate sections: Prices, Orders, Fu
 
 Base: `/stores/{storeId}/connections/{connectionId}/…`
 
-Order **lists and gets** read Delegat’s snapshot (eventually consistent; additive `syncedAt`). They do **not** call the marketplace. A background worker plus cabinet page-load (5-minute cooldown) pull new rows. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`. Seller status POST still goes to the marketplace, then upserts. Labels, shipments, prices, and promotions stay live pass-through.
+Order **lists and gets** read Delegat’s snapshot (additive `syncedAt`). They do **not** call the marketplace on that read. A background worker pulls the recent window of every GetOrders connection about every 30 seconds, and a fuller scan of older open orders about every 5 minutes. The cabinet orders screen pulls again about every 20 seconds while it is open. Inactive connection → `400 connection_inactive`. Missing adapter capability → `400 adapter_capability_missing`. Seller status POST still goes to the marketplace, then upserts. Labels, shipments, prices, and promotions stay live pass-through.
 
 #### Prices
 
