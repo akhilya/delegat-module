@@ -43,6 +43,27 @@ public class MarketplaceOrderSnapshotServiceTests
     }
 
     [Fact]
+    public async Task Upsert_StaleListDoesNotReturnOrderToPreviousMailbox()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (svc, time, store, connection) = await CreateSutAsync(db);
+        var packed = MakeOrder("123-1", status: MarketplaceOrderStatuses.AwaitingDeliver);
+        await svc.UpsertAsync(store.Id, connection.Id, packed, CancellationToken.None);
+
+        time.UtcNow = time.UtcNow.AddSeconds(20);
+        var stale = MakeOrder("123-1", status: MarketplaceOrderStatuses.AwaitingPack);
+        await svc.UpsertAsync(store.Id, connection.Id, stale, CancellationToken.None);
+
+        var row = await db.marketplaceOrders.SingleAsync();
+        Assert.Equal(MarketplaceOrderStatuses.AwaitingDeliver, row.status);
+
+        time.UtcNow = time.UtcNow.Add(MarketplaceSellerOrderStatus.StaleListHold);
+        await svc.UpsertAsync(store.Id, connection.Id, stale, CancellationToken.None);
+        row = await db.marketplaceOrders.SingleAsync();
+        Assert.Equal(MarketplaceOrderStatuses.AwaitingPack, row.status);
+    }
+
+    [Fact]
     public async Task UpsertMany_InsertsAndUpdatesInOneBatch()
     {
         await using var db = TestDbFactory.CreateDb();

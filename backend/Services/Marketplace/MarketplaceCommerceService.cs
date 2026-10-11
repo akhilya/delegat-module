@@ -235,6 +235,39 @@ public class MarketplaceCommerceService
         return _snapshots.UpsertAsync(storeId, connectionId, order, ct);
     }
 
+    /// <summary>
+    /// Stores the order on the status the seller action just produced.
+    /// A marketplace read-back that is still the previous status does not
+    /// leave the row in the old mailbox.
+    /// </summary>
+    public async Task FinishSellerStatusAsync(
+        MarketplaceConnection connection,
+        IMarketplaceAdapter adapter,
+        string orderId,
+        string action,
+        OrderStatusUpdateResult result,
+        CancellationToken ct)
+    {
+        var live = result.Order;
+        if (live == null)
+            live = await adapter.GetOrderAsync(connection, orderId, ct);
+
+        if (live == null || string.IsNullOrWhiteSpace(live.ExternalId))
+        {
+            var row = await _snapshots.FindAsync(connection.storeId, connection.Id, orderId, ct);
+            if (row != null)
+                live = _snapshots.ToExternalOrder(row);
+        }
+
+        if (live == null || string.IsNullOrWhiteSpace(live.ExternalId))
+            return;
+
+        MarketplaceSellerOrderStatus.Advance(connection.adapterKey, action, live);
+        await AttachLocalOrderItemImagesAsync(connection.Id, [live], ct);
+        await _snapshots.UpsertAsync(connection.storeId, connection.Id, live, ct);
+        result.Order = live;
+    }
+
     public static PromotionQuery BuildPromotionQuery(
         int page,
         int pageSize,

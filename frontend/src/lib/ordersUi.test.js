@@ -20,6 +20,7 @@ import {
   orderDeliveryIsMarketplaceOwned,
   orderDisplayId,
   orderExternalId,
+  applyOrderStatusToList,
   orderLabelContentType,
   orderLabelFileName,
   orderMailboxPath,
@@ -904,6 +905,35 @@ describe("order job helpers", () => {
     assert.deepEqual(result, { ok: 1, failedIds: ["b"] });
     assert.equal(errors[0], "nope");
     assert.match(errors[1], /bulkPartialFailed/);
+  });
+});
+
+describe("applyOrderStatusToList", () => {
+  it("drops an assembled order from the to-pack list", () => {
+    const items = [
+      { externalId: "a-1", status: "awaiting_pack" },
+      { externalId: "b-1", status: "awaiting_pack" },
+    ];
+    const next = applyOrderStatusToList(
+      items,
+      { externalId: "a-1", status: "awaiting_deliver" },
+      ["new", "unpaid", "confirmed", "awaiting_pack"],
+    );
+    assert.deepEqual(
+      next.map((row) => row.externalId),
+      ["b-1"],
+    );
+  });
+
+  it("keeps the row when the new status is still in this mailbox", () => {
+    const items = [{ externalId: "a-1", status: "awaiting_deliver", total: 1 }];
+    const next = applyOrderStatusToList(
+      items,
+      { externalId: "a-1", status: "awaiting_deliver", total: 9 },
+      ["awaiting_deliver"],
+    );
+    assert.equal(next.length, 1);
+    assert.equal(next[0].total, 9);
   });
 });
 

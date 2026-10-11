@@ -57,6 +57,7 @@ import {
   ORDER_OVERVIEW_TABS,
   tabCountsFromPayload,
   statusesForOverviewTab,
+  applyOrderStatusToList,
   orderDisplayId,
   orderExternalId,
   orderMailboxPath,
@@ -774,8 +775,26 @@ export default {
       this.$router.replace({ path: "/orders", query });
     },
 
-    onOrderUpdated() {
+    onOrderUpdated(order) {
+      if (order) this.applySellerStatus(order, this.selectedConnectionId);
       this.fetchOrders({ silent: true });
+    },
+
+    applySellerStatus(order, connectionId) {
+      const id = Number(connectionId);
+      const page = this.pagesByConnection[id];
+      if (!page?.all) return;
+      const statuses = statusesForOverviewTab(this.overviewTab);
+      this.pagesByConnection = {
+        ...this.pagesByConnection,
+        [id]: {
+          ...page,
+          all: {
+            ...page.all,
+            items: applyOrderStatusToList(page.all.items, order, statuses),
+          },
+        },
+      };
     },
 
     groupCanMutate(group) {
@@ -882,7 +901,7 @@ export default {
     },
 
     async postOrderStatus(orderId, job) {
-      await postMarketplaceOrderStatus({
+      const next = await postMarketplaceOrderStatus({
         http,
         connectionId: job.connectionId,
         orderId,
@@ -891,6 +910,7 @@ export default {
         adapterKey: job.adapterKey,
         update: job.statusUpdate,
       });
+      if (next) this.applySellerStatus(next, job.connectionId);
     },
 
     async downloadOrderLabel(orderId, connectionId) {

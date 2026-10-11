@@ -76,6 +76,7 @@ import {
   marketplaceOrderLabelUrl,
   shouldFetchMailboxAfterRouteSync,
   statusesForBucket,
+  applyOrderStatusToList,
   storedOrderListPageParams,
   tabCountsFromPayload,
   writeStoredConnectionId,
@@ -601,12 +602,31 @@ export default {
     },
 
     onOrderUpdated(order) {
+      if (order) this.applySellerStatus(order);
       if (this.searchQuery.trim()) {
         const page = order ? orderSearchHitPage(order) : null;
         if (page) this.statusPages = { search: page };
         return;
       }
       this.fetchOrders({ silent: true });
+    },
+
+    applySellerStatus(order) {
+      const statuses = statusesForBucket(
+        this.bucketId,
+        this.rowAdapterKey,
+      );
+      const next = { ...this.statusPages };
+      for (const key of Object.keys(next)) {
+        const page = next[key];
+        if (!page) continue;
+        next[key] = {
+          ...page,
+          items: applyOrderStatusToList(page.items, order, statuses),
+        };
+      }
+      this.statusPages = next;
+      this.pruneSelection();
     },
 
     resetAndFetch() {
@@ -934,7 +954,7 @@ export default {
     },
 
     async postOrderStatus(orderId, job) {
-      await postMarketplaceOrderStatus({
+      const next = await postMarketplaceOrderStatus({
         http,
         connectionId: job.connectionId ?? this.connectionId,
         orderId,
@@ -943,6 +963,7 @@ export default {
         adapterKey: job.adapterKey ?? this.rowAdapterKey,
         update: job.statusUpdate,
       });
+      if (next) this.applySellerStatus(next);
     },
 
     async downloadOrderLabel(orderId, connectionId = this.connectionId) {

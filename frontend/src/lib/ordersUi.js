@@ -625,6 +625,23 @@ export function orderStatusOf(row) {
   return String(raw || ORDER_STATUS.Unknown);
 }
 
+/**
+ * After a seller action, drop the row when it left this mailbox, or keep the
+ * returned order when it is still listed here.
+ */
+export function applyOrderStatusToList(items, order, statuses) {
+  const id = orderExternalId(order);
+  if (!id) return Array.isArray(items) ? items : [];
+  const list = Array.isArray(items) ? items : [];
+  const allowed = new Set(statuses || []);
+  if (!allowed.has(orderStatusOf(order))) {
+    return list.filter((row) => orderExternalId(row) !== id);
+  }
+  return list.map((row) =>
+    orderExternalId(row) === id ? { ...row, ...order } : row,
+  );
+}
+
 export function orderChannelOf(row) {
   return String(row?.channel ?? row?.Channel ?? "")
     .trim()
@@ -1042,13 +1059,15 @@ export async function postMarketplaceOrderStatus({
   adapterKey,
   update,
 }) {
-  await http.post(
+  const response = await http.post(
     marketplaceOrderStatusUrl(connectionId, orderId),
     mergeOrderStatusPayload(
       orderStatusUpdatePayload(action, order, adapterKey),
       update || {},
     ),
   );
+  const body = response?.data?.value ?? response?.data ?? {};
+  return body?.order ?? body?.Order ?? null;
 }
 
 export async function runPendingOrderJob(
