@@ -5,6 +5,7 @@ using Delegat.Services;
 using Delegat.Services.Marketplace;
 using Delegat.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -18,9 +19,10 @@ public class CategoryImportBackgroundServiceTests
         var (worker, db, logger) = CreateWorker("category-import");
 
         await worker.ProcessOnceAsync(CancellationToken.None);
+        db.ChangeTracker.Clear();
 
         var job = await db.pendingCategoryImports.SingleAsync();
-        Assert.Equal(CategoryImportStatus.Completed, job.status);
+        Assert.True(job.status == CategoryImportStatus.Completed, job.lastError);
         Assert.NotNull(job.resultLocalCategoryId);
         Assert.True(await db.categoryMappings.AnyAsync(m => m.externalCategoryId == "236"));
         Assert.Equal("completed", logger.LastFinishStatus);
@@ -32,9 +34,10 @@ public class CategoryImportBackgroundServiceTests
         var (worker, db, logger) = CreateWorker("batch-import");
 
         await worker.ProcessOnceAsync(CancellationToken.None);
+        db.ChangeTracker.Clear();
 
         var job = await db.pendingCategoryImports.SingleAsync();
-        Assert.Equal(CategoryImportStatus.Completed, job.status);
+        Assert.True(job.status == CategoryImportStatus.Completed, job.lastError);
         Assert.True(await db.categoryMappings.AnyAsync(m => m.externalCategoryId == "236"));
         Assert.Null(logger.LastFinishStatus);
         Assert.Equal("running", (await db.operations.SingleAsync()).status);
@@ -49,6 +52,7 @@ public class CategoryImportBackgroundServiceTests
         await db.SaveChangesAsync();
 
         await worker.ProcessOnceAsync(CancellationToken.None);
+        db.ChangeTracker.Clear();
 
         var job = await db.pendingCategoryImports.SingleAsync();
         Assert.Equal(CategoryImportStatus.Cancelled, job.status);
@@ -61,7 +65,8 @@ public class CategoryImportBackgroundServiceTests
         DataContext db,
         RecordingOperationLogger logger) CreateWorker(string operationType)
     {
-        var db = TestDbFactory.CreateDb();
+        var databaseName = Guid.NewGuid().ToString();
+        var db = TestDbFactory.CreateDb(databaseName);
         var data = new TestDataBuilder(db);
         var store = data.AddStore();
         var connection = data.AddConnection(store.Id, adapterKey: "fake");
@@ -93,8 +98,14 @@ public class CategoryImportBackgroundServiceTests
             });
 
         var services = new ServiceCollection();
-        services.AddSingleton(db);
-        services.AddScoped(_ => new CategoryImportService(db, new SingleAdapterRegistry(adapter)));
+        // Each scope gets its own context on the same store. The stop watcher
+        // polls from another thread; a shared instance throws and fails the job.
+        services.AddDbContext<DataContext>(o => o
+            .UseInMemoryDatabase(databaseName)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        services.AddScoped(sp => new CategoryImportService(
+            sp.GetRequiredService<DataContext>(),
+            new SingleAdapterRegistry(adapter)));
         var sp = services.BuildServiceProvider();
 
         var logger = new RecordingOperationLogger();
