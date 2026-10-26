@@ -72,6 +72,28 @@ public class UserApiKeyServiceTests
     }
 
     [Fact]
+    public async Task RenameAsync_ChangesOnlyTheOwnedKeysLabel()
+    {
+        await using var db = CreateDb();
+        db.Users.AddRange(
+            new User { Id = 41, UserName = "owner", Email = "owner@example.com", NormalizedUserName = "OWNER", NormalizedEmail = "OWNER@EXAMPLE.COM", isActive = true, SecurityStamp = Guid.NewGuid().ToString() },
+            new User { Id = 42, UserName = "other", Email = "other@example.com", NormalizedUserName = "OTHER", NormalizedEmail = "OTHER@EXAMPLE.COM", isActive = true, SecurityStamp = Guid.NewGuid().ToString() });
+        await db.SaveChangesAsync();
+
+        var svc = new UserApiKeyService(db);
+        var (_, plaintext) = await svc.CreateAsync(41, "MCP");
+        var key = await db.userApiKeys.SingleAsync();
+        var hash = key.keyHash;
+
+        await Assert.ThrowsAsync<ApiException>(() => svc.RenameAsync(42, key.Id, "stolen"));
+        await svc.RenameAsync(41, key.Id, "  Studio MCP  ");
+
+        Assert.Equal("Studio MCP", key.name);
+        Assert.Equal(hash, key.keyHash);
+        Assert.Equal(ApiKeyAuthenticationHandler.HashKey(plaintext), key.keyHash);
+    }
+
+    [Fact]
     public async Task CreateAsync_EmptyName_Throws()
     {
         await using var db = CreateDb();

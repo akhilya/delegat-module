@@ -66,6 +66,23 @@ public class UserApiKeyService
         }
     }
 
+    public async Task RenameAsync(int userId, int keyId, string name, CancellationToken ct = default)
+    {
+        name = name?.Trim() ?? "";
+        if (string.IsNullOrEmpty(name))
+            throw ApiException.BadRequest("Key name is required");
+        if (name.Length > 100)
+            throw ApiException.BadRequest("Key name is too long");
+
+        var key = await _db.userApiKeys
+            .FirstOrDefaultAsync(k => k.Id == keyId && k.userId == userId, ct);
+        if (key == null)
+            throw ApiException.NotFound("API key not found");
+
+        key.name = name;
+        await _db.SaveChangesAsync(ct);
+    }
+
     private static object MapToListDto(UserApiKey k) => new
     {
         id = k.Id,

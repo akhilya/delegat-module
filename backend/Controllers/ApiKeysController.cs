@@ -58,6 +58,16 @@ public class ApiKeysController : ControllerBase
         return Ok(new { success = true });
     }
 
+    [HttpPatch]
+    [Route("/api-keys/{id:int}")]
+    public async Task<IActionResult> Rename(int id, [FromBody] CreateApiKeyRequest request, CancellationToken ct)
+    {
+        var userId = _currentUser.GetUserId()
+            ?? throw ApiException.Unauthorized();
+        await _apiKeys.RenameAsync(userId, id, request.name ?? "", ct);
+        return Ok(new { success = true });
+    }
+
     [HttpGet]
     [Route("/api-keys/logs")]
     public async Task<IActionResult> ListLogs(

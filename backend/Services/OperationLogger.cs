@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Hubs;
 using Delegat.Models;
+using Delegat.Services.Ai.Agent;
 
 namespace Delegat.Services;
 
@@ -10,15 +11,18 @@ public class OperationLogger : IOperationLogger
     private readonly IHubContext<OperationHub> _hub;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OperationLogger> _logger;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public OperationLogger(
         IHubContext<OperationHub> hub,
         IServiceScopeFactory scopeFactory,
-        ILogger<OperationLogger> logger)
+        ILogger<OperationLogger> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         _hub = hub;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
@@ -26,6 +30,8 @@ public class OperationLogger : IOperationLogger
                                   string? batchId = null, string? batchType = null, int? totalItems = null,
                                   int? authorApiKeyId = null)
     {
+        if (authorApiKeyId == null && _httpContextAccessor?.HttpContext?.Items[CabinetRequestInvoker.OriginApiKeyIdItemKey] is int originApiKeyId)
+            authorApiKeyId = originApiKeyId;
         string? authorUserName = null;
         try
         {

@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
 using Delegat.Infrastructure.Storage;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Processing;
+using ImageMagick;
 
 namespace Delegat.Services;
 
@@ -53,19 +51,7 @@ public class ThumbnailService
             if (originalStream is null)
                 return null;
 
-            // Resize to WebP (AutoOrient applies EXIF rotation to pixels)
-            using var image = await Image.LoadAsync(originalStream, ct);
-            image.Mutate(x => x
-                .AutoOrient()
-                .Resize(new ResizeOptions
-                {
-                    Size = new Size(width, 0),
-                    Mode = ResizeMode.Max,
-                }));
-
-            var outputStream = new MemoryStream();
-            await image.SaveAsWebpAsync(outputStream, new WebpEncoder { Quality = WebPQuality }, ct);
-            outputStream.Position = 0;
+            var outputStream = CreateWebpThumbnail(originalStream, width, ct);
 
             // Store in MinIO cache
             var length = outputStream.Length;
@@ -107,4 +93,21 @@ public class ThumbnailService
 
     private static string GetThumbnailPath(string originalPath, int width)
         => $"{ThumbnailPrefix}/{width}/{originalPath}";
+
+    internal static MemoryStream CreateWebpThumbnail(Stream originalStream, int width, CancellationToken ct)
+    {
+        // Apply EXIF orientation before measuring width. Do not enlarge small images.
+        ct.ThrowIfCancellationRequested();
+        using var image = new MagickImage(originalStream);
+        image.AutoOrient();
+        if (image.Width > (uint)width)
+            image.Resize((uint)width, 0);
+        image.Format = MagickFormat.WebP;
+        image.Quality = WebPQuality;
+
+        var output = new MemoryStream();
+        image.Write(output);
+        output.Position = 0;
+        return output;
+    }
 }

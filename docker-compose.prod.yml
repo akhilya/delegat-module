@@ -152,7 +152,7 @@ services:
 
   # MinIO Object Storage
   minio:
-    image: quay.io/minio/minio:latest
+    image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
@@ -170,13 +170,13 @@ services:
 
   # MinIO bucket initialization
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
+      set -e;
       mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
       mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
       mc anonymous set none myminio/$${MINIO_BUCKET};

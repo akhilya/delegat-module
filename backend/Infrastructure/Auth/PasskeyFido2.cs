@@ -23,7 +23,6 @@ public static class PasskeyFido2
     public static AuthenticatorSelection CreateSelection() => new()
     {
         ResidentKey = ResidentKeyRequirement.Required,
-        RequireResidentKey = true,
         UserVerification = UserVerificationRequirement.Preferred,
     };
 

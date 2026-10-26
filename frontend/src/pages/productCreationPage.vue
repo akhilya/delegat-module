@@ -21,7 +21,7 @@ import { Plus } from "lucide-vue-next";
 import { useStore } from "vuex";
 import { useRouter, useRoute } from "vue-router";
 import { ref, watch, computed, nextTick, onMounted, onUnmounted } from "vue";
-import { toTypedSchema } from "@vee-validate/zod";
+import { toTypedSchema } from "../lib/zodSchema";
 import { useForm } from "vee-validate";
 import { z } from "zod";
 import {

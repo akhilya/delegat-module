@@ -7,6 +7,14 @@ import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   InsetGroup,
   InsetGroupItem,
   InsetGroupLabel,
@@ -33,6 +41,7 @@ import {
   Copy,
   ExternalLink,
   KeyRound,
+  Pencil,
   ScrollText,
   Trash2,
 } from "lucide-vue-next";
@@ -46,6 +55,12 @@ export default {
     Input,
     SettingsFormField,
     FieldGroup,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
     InsetGroup,
     InsetGroupItem,
     InsetGroupLabel,
@@ -61,6 +76,7 @@ export default {
     Copy,
     ExternalLink,
     KeyRound,
+    Pencil,
     ScrollText,
     Trash2,
     RouterLink,
@@ -79,9 +95,12 @@ export default {
       isCreatingKey: false,
       createdPlaintext: null,
       revokingId: null,
+      renamingKey: null,
+      renameValue: "",
+      isRenamingKey: false,
       logApiRequestsEnabled: false,
       publicApiEnabled: true,
-      _onMeUpdated: null,
+      onMeUpdatedHandler: null,
     };
   },
   computed: {
@@ -169,6 +188,36 @@ export default {
       }
     },
 
+    openRename(key) {
+      this.renamingKey = key;
+      this.renameValue = key.name;
+    },
+
+    async renameApiKey() {
+      if (!this.renamingKey || this.isRenamingKey) return;
+      const issue = fieldLimitIssue(this.renameValue, FIELD_LIMITS.apiKeyName);
+      if (issue === "empty") return;
+      if (issue === "tooLong") {
+        displaySonnerError(
+          this.$t("common.tooLong", { max: FIELD_LIMITS.apiKeyName }),
+        );
+        return;
+      }
+      this.isRenamingKey = true;
+      try {
+        await http.patch(`/api-keys/${this.renamingKey.id}`, {
+          name: this.renameValue.trim(),
+        });
+        this.renamingKey = null;
+        displaySonnerSuccess(this.$t("pages.apiPage.keys.renamed"));
+        await this.fetchApiKeys();
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.isRenamingKey = false;
+      }
+    },
+
     async revokeApiKey(id) {
       const ok = await confirm({
         title: this.$t("pages.apiPage.keys.revokeTitle"),
@@ -189,12 +238,12 @@ export default {
     },
   },
   async mounted() {
-    this._onMeUpdated = (event) => {
+    this.onMeUpdatedHandler = (event) => {
       if (event?.detail && typeof event.detail === "object") {
         this.applyLoggingFlag(event.detail);
       }
     };
-    window.addEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    window.addEventListener(ME_UPDATED_EVENT, this.onMeUpdatedHandler);
 
     try {
       this.applyLoggingFlag(await loadMe());
@@ -208,8 +257,8 @@ export default {
     }
   },
   beforeUnmount() {
-    if (this._onMeUpdated) {
-      window.removeEventListener(ME_UPDATED_EVENT, this._onMeUpdated);
+    if (this.onMeUpdatedHandler) {
+      window.removeEventListener(ME_UPDATED_EVENT, this.onMeUpdatedHandler);
     }
   },
 };
@@ -328,7 +377,7 @@ export default {
                   <TableHead class="w-28">{{
                     $t("pages.apiPage.keys.columnStatus")
                   }}</TableHead>
-                  <TableHead class="w-14 text-right" />
+                  <TableHead class="w-24 text-right" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -368,6 +417,14 @@ export default {
                   </TableCell>
                   <TableCell class="text-right">
                     <Button
+                      variant="ghost"
+                      size="icon"
+                      :aria-label="$t('pages.apiPage.keys.rename')"
+                      @click="openRename(key)"
+                    >
+                      <Pencil class="size-4" />
+                    </Button>
+                    <Button
                       v-if="!key.isRevoked"
                       variant="ghost"
                       size="icon"
@@ -385,6 +442,53 @@ export default {
         </PageSection>
       </PageSection>
     </div>
+
+    <Dialog
+      :open="Boolean(renamingKey)"
+      @update:open="
+        (open) => {
+          if (!open) renamingKey = null;
+        }
+      "
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{{ $t("pages.apiPage.keys.rename") }}</DialogTitle>
+          <DialogDescription>{{
+            $t("pages.apiPage.keys.renameDescription")
+          }}</DialogDescription>
+        </DialogHeader>
+        <form id="rename-api-key-form" @submit.prevent="renameApiKey">
+          <SettingsFormField
+            :label="$t('pages.apiPage.keys.nameLabel')"
+            label-for="rename-api-key-name"
+          >
+            <Input
+              id="rename-api-key-name"
+              v-model="renameValue"
+              :maxlength="FIELD_LIMITS.apiKeyName"
+              :disabled="isRenamingKey"
+            />
+          </SettingsFormField>
+        </form>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            :disabled="isRenamingKey"
+            @click="renamingKey = null"
+            >{{ $t("common.cancel") }}</Button
+          >
+          <Button
+            type="submit"
+            form="rename-api-key-form"
+            :disabled="isRenamingKey || !renameValue.trim()"
+          >
+            <Spinner v-if="isRenamingKey" class="mr-2" />
+            {{ $t("common.save") }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <div v-if="showLogs && !logsEnabled" class="max-w-xl">
       <InsetGroup>

@@ -36,6 +36,7 @@ public interface ICabinetRequestInvoker
 public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
 {
     public const string NestedItemKey = "delegat.agent.nested";
+    public const string OriginApiKeyIdItemKey = "delegat.agent.originApiKeyId";
     public const int MaxResponseBytes = 256_000;
     public const int MaxListItems = 12;
 
@@ -86,6 +87,8 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         var inner = new DefaultHttpContext();
         inner.RequestServices = scope.ServiceProvider;
         inner.Items[NestedItemKey] = true;
+        if (int.TryParse(_http.HttpContext?.User.FindFirst("apiKeyId")?.Value, out var originApiKeyId))
+            inner.Items[OriginApiKeyIdItemKey] = originApiKeyId;
         inner.Request.Method = method;
         inner.Request.Scheme = "http";
         inner.Request.Host = _http.HttpContext?.Request.Host.HasValue == true

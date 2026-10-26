@@ -411,7 +411,7 @@ public class AiApiClient
         };
     }
 
-    private Anthropic.Models.Messages.MessageCreateParams BuildAnthropicParams(AiRequest request)
+    internal Anthropic.Models.Messages.MessageCreateParams BuildAnthropicParams(AiRequest request)
     {
         var messageParams = new List<Anthropic.Models.Messages.MessageParam>();
         var rawMessages = JsonSerializer.Serialize(request.messages, _jsonOptions);
@@ -420,18 +420,15 @@ public class AiApiClient
         foreach (var msgEl in doc.RootElement.EnumerateArray())
         {
             var roleStr = msgEl.GetProperty("role").GetString()!;
-            var role = roleStr == "assistant"
-                ? Anthropic.Models.Messages.Role.Assistant
-                : Anthropic.Models.Messages.Role.User;
+            var isAssistant = roleStr == "assistant";
             var contentEl = msgEl.GetProperty("content");
 
             if (contentEl.ValueKind == JsonValueKind.String)
             {
-                messageParams.Add(new Anthropic.Models.Messages.MessageParam
-                {
-                    Role = role,
-                    Content = contentEl.GetString() ?? "",
-                });
+                var content = contentEl.GetString() ?? "";
+                messageParams.Add(isAssistant
+                    ? new Anthropic.Models.Messages.AssistantMessageParam { Content = content }
+                    : new Anthropic.Models.Messages.UserMessageParam { Content = content });
                 continue;
             }
 
@@ -464,11 +461,9 @@ public class AiApiClient
                         break;
                 }
             }
-            messageParams.Add(new Anthropic.Models.Messages.MessageParam
-            {
-                Role = role,
-                Content = blocks,
-            });
+            messageParams.Add(isAssistant
+                ? new Anthropic.Models.Messages.AssistantMessageParam { Content = blocks }
+                : new Anthropic.Models.Messages.UserMessageParam { Content = blocks });
         }
 
         var systemPrompt = string.IsNullOrEmpty(request.system)

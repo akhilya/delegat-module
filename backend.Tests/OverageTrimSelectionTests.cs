@@ -32,11 +32,11 @@ public class OverageTrimSelectionTests
 
         var selected = OverageTrimService.SelectProductEntities(products, 1);
         Assert.Equal(4, selected.Count);
-        Assert.True(selected.Any(p => p.Id == 4));
-        Assert.True(selected.Any(p => p.Id == 5));
-        Assert.True(selected.Any(p => p.Id == 2));
-        Assert.True(selected.Any(p => p.Id == 3));
-        Assert.False(selected.Any(p => p.Id == 1));
+        Assert.Contains(selected, p => p.Id == 4);
+        Assert.Contains(selected, p => p.Id == 5);
+        Assert.Contains(selected, p => p.Id == 2);
+        Assert.Contains(selected, p => p.Id == 3);
+        Assert.DoesNotContain(selected, p => p.Id == 1);
     }
 
     [Fact]

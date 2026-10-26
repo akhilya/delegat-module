@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const style = readFileSync(new URL("../style.css", import.meta.url), "utf8");
-const nginx = readFileSync(new URL("../../nginx.conf", import.meta.url), "utf8");
+const nginx = readFileSync(
+  new URL("../../nginx.conf", import.meta.url),
+  "utf8",
+);
 const brand = readFileSync(new URL("../brand.js", import.meta.url), "utf8");
 const button = readFileSync(
   new URL("../components/ui/button/index.js", import.meta.url),
@@ -55,7 +58,10 @@ const sidebarMenuSub = readFileSync(
   "utf8",
 );
 const collapsibleContent = readFileSync(
-  new URL("../components/ui/collapsible/CollapsibleContent.vue", import.meta.url),
+  new URL(
+    "../components/ui/collapsible/CollapsibleContent.vue",
+    import.meta.url,
+  ),
   "utf8",
 );
 const emptyState = readFileSync(
@@ -208,11 +214,13 @@ describe("product motion tokens", () => {
 
 describe("button lift (Control Plane)", () => {
   it("adds a short white sheen and hairline drop shadow on default/outline/secondary/destructive", () => {
-    assert.match(
-      style,
-      /\[data-variant="secondary"\],\s*\[data-slot="button"\]\[data-variant="destructive"\]/,
-    );
-    assert.match(style, /box-shadow:\s*0 1px 2px oklch\(0 0 0 \/ 0\.1\)/);
+    for (const variant of ["default", "outline", "secondary", "destructive"]) {
+      assert.match(
+        style,
+        new RegExp(`\\[data-slot="button"\\]\\[data-variant="${variant}"\\]`),
+      );
+    }
+    assert.match(style, /0 1px 2px oklch\(0 0 0 \/ 0\.1\)/);
     assert.match(
       style,
       /linear-gradient\(\s*180deg,\s*oklch\(1 0 0 \/ 0\.08\)/,
@@ -267,7 +275,10 @@ describe("scrollbars", () => {
     assert.match(style, /\.dark \{\s*color-scheme:\s*dark/);
     assert.match(style, /scrollbar-width:\s*thin/);
     assert.match(style, /\*::-webkit-scrollbar \{\s*width:\s*6px/);
-    assert.match(style, /scrollbar-color:\s*color-mix\(in oklch, var\(--muted-foreground\)/);
+    assert.match(
+      style,
+      /scrollbar-color:\s*color-mix\(in oklch, var\(--muted-foreground\)/,
+    );
   });
 });
 

@@ -69,7 +69,7 @@ import AppImage from "@/components/AppImage.vue";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { getCachedMe } from "@/lib/meCache";
 import { canAct, PERMS } from "@/lib/permissions";
-import { toTypedSchema } from "@vee-validate/zod";
+import { toTypedSchema } from "../lib/zodSchema";
 import { useForm } from "vee-validate";
 import { z } from "zod";
 import {

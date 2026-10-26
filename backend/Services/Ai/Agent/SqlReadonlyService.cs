@@ -943,7 +943,7 @@ public sealed class SqlReadonlyService
         {
             var id = typeof(T).GetProperty("Id");
             if (id != null && id.PropertyType == typeof(int))
-                src = src.OrderBy(e => EF.Property<int>(e, "Id"));
+                src = src.OrderBy(e => EF.Property<int>(e!, "Id"));
         }
 
         var list = await Page(src, q).ToListAsync(ct);

@@ -9,7 +9,7 @@ import { FormField } from "@/components/ui/form";
 import { FieldGroup } from "@/components/ui/field";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 
-import { toTypedSchema } from "@vee-validate/zod";
+import { toTypedSchema } from "../lib/zodSchema";
 import { z } from "zod";
 import { useForm } from "vee-validate";
 import { useStore } from "vuex";
