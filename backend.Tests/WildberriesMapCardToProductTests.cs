@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Delegat.Marketplace.SDK;
+using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Marketplace.Wildberries;
 using Delegat.Marketplace.Wildberries.Models;
 
@@ -148,6 +150,49 @@ public class WildberriesMapCardToProductTests
             ["_FI43"] = ["Недопустимое значение ТНВЭД"],
         };
         Assert.Equal("Недопустимое значение ТНВЭД", WildberriesPlugin.VendorErrorText(errors, "_fi43"));
+    }
+
+    [Fact]
+    public void BulkCreate_FiftyProductsShareOneWbRequest()
+    {
+        var items = Enumerable.Range(1, 50)
+            .Select(id => new BulkExportItem(id, new Dictionary<string, object>
+            {
+                ["sku"] = $"SKU-{id}",
+                ["_categoryId"] = 42,
+                ["name"] = $"Product {id}",
+            }))
+            .ToList();
+
+        var requests = WildberriesPlugin.BuildCreateChunks(items);
+
+        var request = Assert.Single(requests);
+        Assert.Equal(2, request.Count); // WB allows 30 variants per subject group.
+        Assert.Equal(50, request.Sum(group => group.Variants.Count));
+        Assert.All(request.SelectMany(group => group.Variants), variant =>
+            Assert.StartsWith("SKU-", variant.VendorCode, StringComparison.Ordinal));
+
+        // The opposite category distribution is still one WB request: 50 groups < the 100-group limit.
+        foreach (var item in items)
+            item.ProductData["_categoryId"] = item.LocalProductId;
+
+        var mixedCategoryRequest = Assert.Single(WildberriesPlugin.BuildCreateChunks(items));
+        Assert.Equal(50, mixedCategoryRequest.Count);
+        Assert.Equal(50, mixedCategoryRequest.Sum(group => group.Variants.Count));
+    }
+
+    [Fact]
+    public void Wildberries_DeclaresAndOverridesBulkExport()
+    {
+        var plugin = new WildberriesPlugin();
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportProductBulk));
+
+        var method = typeof(WildberriesPlugin).GetMethod(
+            nameof(WildberriesPlugin.ExportProductsBulkAsync),
+            [typeof(ConnectionContext), typeof(List<BulkExportItem>), typeof(CancellationToken)]);
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(WildberriesPlugin), method!.DeclaringType);
     }
 
     [Fact]

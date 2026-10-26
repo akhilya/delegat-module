@@ -583,7 +583,8 @@ public class ProductSyncService
     public async Task<BulkProductExportResult> ExportProductsBulkAsync(
         List<int> productIds,
         int connectionId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Func<string, CancellationToken, Task>? progress = null)
     {
         var itemResults = new List<BulkProductExportItemResult>();
 
@@ -839,7 +840,9 @@ public class ProductSyncService
         {
             try
             {
-                var bulkResult = await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
+                var bulkResult = progress != null && adapter is IBulkExportProgressAdapter progressAdapter
+                    ? await progressAdapter.ExportProductsBulkAsync(connection, bulkItems, progress, ct)
+                    : await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
 
                 // Pre-load existing links by externalProductId to avoid N+1 queries
                     Dictionary<string, ProductMarketplaceLink> dupLinksByExternalId = new();

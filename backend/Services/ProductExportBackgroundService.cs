@@ -205,7 +205,8 @@ public class ProductExportBackgroundService : BackgroundService
         if (firstItem.batchId != null)
         {
             await _operationLogger.LogAsync(firstItem.batchId, firstItem.storeId, "info",
-                $"Processing {pendingItems.Count} products…");
+                $"Batch mode confirmed: all {pendingItems.Count} products are in progress and are being sent in one adapter call. " +
+                "Item counters update when the marketplace returns the batch result.");
 
             var snapshot = await context.pendingProductExports
                 .AsNoTracking()
@@ -224,7 +225,13 @@ public class ProductExportBackgroundService : BackgroundService
             : Task.CompletedTask;
         try
         {
-            var result = await productSyncService.ExportProductsBulkAsync(productIds, connectionId, linked.Token);
+            Func<string, CancellationToken, Task>? progress = firstItem.batchId == null
+                ? null
+                : (message, _) => _operationLogger.LogAsync(
+                    firstItem.batchId, firstItem.storeId, "info", message);
+
+            var result = await productSyncService.ExportProductsBulkAsync(
+                productIds, connectionId, linked.Token, progress);
 
             foreach (var itemResult in result.Items
                 .GroupBy(r => r.ProductId)

@@ -481,6 +481,20 @@ public interface IMarketplaceAdapter
 }
 
 /// <summary>
+/// Optional extension implemented by adapters that can forward live progress from
+/// a long-running bulk export. Keeping this separate preserves compatibility with
+/// adapters and test fakes that only implement <see cref="IMarketplaceAdapter"/>.
+/// </summary>
+public interface IBulkExportProgressAdapter
+{
+    Task<BulkExportResult> ExportProductsBulkAsync(
+        MarketplaceConnection connection,
+        List<BulkExportItem> items,
+        Func<string, CancellationToken, Task> progress,
+        CancellationToken ct = default);
+}
+
+/// <summary>
 /// Connection settings field schema
 /// </summary>
 public class CredentialsSchema

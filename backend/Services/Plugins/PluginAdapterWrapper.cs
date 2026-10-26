@@ -13,7 +13,7 @@ namespace Delegat.Services.Plugins;
 /// Wraps an IMarketplacePlugin to implement IMarketplaceAdapter.
 /// Handles conversion between MarketplaceConnection and ConnectionContext.
 /// </summary>
-public class PluginAdapterWrapper : IMarketplaceAdapter
+public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdapter
 {
     private readonly IMarketplacePlugin _plugin;
     private readonly ILogger _logger;
@@ -437,8 +437,23 @@ public class PluginAdapterWrapper : IMarketplaceAdapter
         MarketplaceConnection connection,
         List<Models.Marketplace.DTOs.BulkExportItem> items,
         CancellationToken ct = default)
+        => await ExportProductsBulkCoreAsync(connection, items, progress: null, ct);
+
+    public async Task<Models.Marketplace.DTOs.BulkExportResult> ExportProductsBulkAsync(
+        MarketplaceConnection connection,
+        List<Models.Marketplace.DTOs.BulkExportItem> items,
+        Func<string, CancellationToken, Task> progress,
+        CancellationToken ct = default)
+        => await ExportProductsBulkCoreAsync(connection, items, progress, ct);
+
+    private async Task<Models.Marketplace.DTOs.BulkExportResult> ExportProductsBulkCoreAsync(
+        MarketplaceConnection connection,
+        List<Models.Marketplace.DTOs.BulkExportItem> items,
+        Func<string, CancellationToken, Task>? progress,
+        CancellationToken ct)
     {
         var context = CreateContext(connection);
+        context.Progress = progress;
 
         // Convert backend BulkExportItem → SDK BulkExportItem
         var sdkItems = items.Select(i => new Delegat.Marketplace.SDK.DTOs.BulkExportItem(
