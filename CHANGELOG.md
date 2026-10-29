@@ -191,6 +191,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Adapter HTTP log retention deletes in smaller batches so pruning large log tables does not exceed the regular database command timeout.
 - Cabinet assistant preserves Anthropic tool-call/result order across multi-round chat history, avoiding provider rejections on later turns.
 - Cabinet assistant questionnaire submissions reliably include typed answers instead of sending a blank follow-up.
 - Cabinet assistant preserves questionnaire/attachment metadata when the live server has already inserted the matching user message before client history sync.

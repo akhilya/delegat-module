@@ -90,6 +90,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
 
     public const int DefaultRetentionDays = 7;
     public const int MaxRowsSafety = 200_000;
+    private const int CleanupDeleteBatchSize = 500;
 
     private static readonly HashSet<string> SensitiveHeaderNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -296,7 +297,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             if (before.HasValue)
                 idsQuery = idsQuery.Where(l => l.createdAt < before.Value);
             var ids = await idsQuery.OrderBy(l => l.createdAt).ThenBy(l => l.Id)
-                .Select(l => l.Id).Take(Math.Min(5_000, maxRows - deleted)).ToListAsync(ct);
+                .Select(l => l.Id).Take(Math.Min(CleanupDeleteBatchSize, maxRows - deleted)).ToListAsync(ct);
             if (ids.Count == 0) break;
             if (db.Database.IsRelational())
                 deleted += await db.adapterHttpLogs.Where(l => ids.Contains(l.Id)).ExecuteDeleteAsync(ct);

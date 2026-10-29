@@ -22,16 +22,16 @@ public class AdapterHttpLogCleanupTests
             GetAsync(ct);
     }
     [Fact]
-    public async Task CleanupAsync_RemovesOnlyLogsOlderThanConfiguredRetention()
+    public async Task CleanupAsync_RemovesOnlyOldLogsAcrossMultipleSmallBatches()
     {
         var previous = Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS");
         Environment.SetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS", "1");
         try
         {
             await using var db = TestDbFactory.CreateDb();
-            db.adapterHttpLogs.AddRange(
-                CreateLog(DateTime.UtcNow.AddDays(-3), "old"),
-                CreateLog(DateTime.UtcNow.AddHours(-12), "recent"));
+            db.adapterHttpLogs.AddRange(Enumerable.Range(0, 1_201)
+                .Select(i => CreateLog(DateTime.UtcNow.AddDays(-3).AddSeconds(i), $"old-{i}"))
+                .Append(CreateLog(DateTime.UtcNow.AddHours(-12), "recent")));
             await db.SaveChangesAsync();
 
             await using var provider = new ServiceCollection()
