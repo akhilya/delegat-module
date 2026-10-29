@@ -548,6 +548,36 @@ public class ProductSyncController : ControllerBase
     }
 
     /// <summary>
+    /// Check which selected products can be exported without sending anything to the marketplace.
+    /// </summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/products/export-readiness")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> CheckExportReadiness(
+        int connectionId,
+        [FromBody] ExportBulkInput input,
+        CancellationToken ct)
+    {
+        await GetConnectionAsync(connectionId);
+        var items = await _productSyncService.CheckExportReadinessAsync(
+            input.productIds ?? [], connectionId, ct);
+
+        return Ok(new
+        {
+            total = items.Count,
+            readyCount = items.Count(item => item.IsReady),
+            blockedCount = items.Count(item => !item.IsReady),
+            products = items.Select(item => new
+            {
+                productId = item.ProductId,
+                productName = item.ProductName,
+                isReady = item.IsReady,
+                issues = item.Issues,
+            }),
+        });
+    }
+
+    /// <summary>
     /// Bulk export products
     /// </summary>
     [HttpPost]

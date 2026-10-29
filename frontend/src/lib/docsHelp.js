@@ -9,10 +9,13 @@ const ADAPTER_DOC_KEYS = new Set([
   "yandex",
   "opencart",
   "woocommerce",
+  "avito",
 ]);
 
 function normalizePath(pathname) {
-  const path = String(pathname || "").split("?")[0].split("#")[0];
+  const path = String(pathname || "")
+    .split("?")[0]
+    .split("#")[0];
   const trimmed = path.replace(/\/+$/, "");
   return trimmed || "/";
 }
@@ -74,7 +77,10 @@ export function docsSlugForPath(pathname, opts = {}) {
   if (path === "/settings/admin/ai" || path.startsWith("/settings/admin/ai/")) {
     return "workspace/ai";
   }
-  if (path === "/settings/admin/api" || path.startsWith("/settings/admin/api/")) {
+  if (
+    path === "/settings/admin/api" ||
+    path.startsWith("/settings/admin/api/")
+  ) {
     return "workspace/public-api";
   }
   if (path === "/settings" || path.startsWith("/settings/")) {

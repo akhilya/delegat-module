@@ -84,7 +84,7 @@ public class PublicCategoriesController : ControllerBase
             .FirstOrDefaultAsync(c => c.Id == categoryId && c.storeId == storeId, ct);
 
         if (category == null)
-            throw ApiException.NotFound("Category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
 
         var dto = ((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(_sp);
         dto.productsCount = await _db.products.CountAsync(p => p.categoryId == categoryId, ct);
@@ -119,7 +119,7 @@ public class PublicCategoriesController : ControllerBase
         var category = await _uow.Repository<Category>().QueryTracking()
             .FirstOrDefaultAsync(c => c.Id == categoryId && c.storeId == storeId, ct);
         if (category == null)
-            throw ApiException.NotFound("Category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
 
         category.UpdateFill(input);
         await _uow.SaveChangesAsync();
@@ -134,11 +134,11 @@ public class PublicCategoriesController : ControllerBase
         var category = await _db.categories
             .FirstOrDefaultAsync(c => c.Id == categoryId && c.storeId == storeId, ct);
         if (category == null)
-            throw ApiException.NotFound("Category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
 
         var hasProducts = await _db.products.AnyAsync(p => p.categoryId == categoryId, ct);
         if (hasProducts)
-            throw ApiException.Conflict("Cannot delete a category that has products", code: "category_has_products");
+            throw ApiException.Conflict(code: "category_has_products");
 
         _db.categories.Remove(category);
         await _db.SaveChangesAsync(ct);

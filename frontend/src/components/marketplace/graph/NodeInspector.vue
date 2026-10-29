@@ -8,9 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -27,7 +25,10 @@ import {
   opLabel,
   opParamLabel,
 } from "./graphModel.js";
-import { localizeExternalFieldName, localizeStandardSourceName } from "./fieldLabels.js";
+import {
+  localizeExternalFieldName,
+  localizeStandardSourceName,
+} from "./fieldLabels.js";
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -67,7 +68,9 @@ watch(
       highlightedField.value = null;
       nextTick(() => {
         highlightedField.value = key;
-        setTimeout(() => { highlightedField.value = null; }, 700);
+        setTimeout(() => {
+          highlightedField.value = null;
+        }, 700);
       });
       emit("field-focused");
     });
@@ -144,15 +147,26 @@ const heading = computed(() => {
   }
   if (isOp.value) return opSpec.value ? opLabel(type.value) : type.value;
   if (type.value === "static") {
-    const vt = ["number", "boolean", "array", "string"].includes(data.value.valueType)
+    const vt = ["number", "boolean", "array", "string"].includes(
+      data.value.valueType,
+    )
       ? data.value.valueType
       : "default";
     return t(`marketplace.graph.inspector.staticTypeTitles.${vt}`);
   }
   const titleKeys = [
-    "attribute", "storeAttribute", "productField", "static", "groupName",
-    "storeFileUrl", "storeFileContent", "productFileByName", "productFileContentByName",
-    "productFilesByExtension", "adapterFields", "adapterPriceFields",
+    "attribute",
+    "storeAttribute",
+    "productField",
+    "static",
+    "groupName",
+    "storeFileUrl",
+    "storeFileContent",
+    "productFileByName",
+    "productFileContentByName",
+    "productFilesByExtension",
+    "adapterFields",
+    "adapterPriceFields",
   ];
   return titleKeys.includes(type.value)
     ? t(`marketplace.graph.inspector.titleByType.${type.value}`)
@@ -187,9 +201,13 @@ const dictionaryAttribute = computed(() => {
   const sources = props.availableSources || {};
   const sameId = (a, b) => a != null && b != null && String(a) === String(b);
   if (type.value === "attribute")
-    return sources.categoryAttributes?.find((x) => sameId(x.id, data.value.attributeId));
+    return sources.categoryAttributes?.find((x) =>
+      sameId(x.id, data.value.attributeId),
+    );
   if (type.value === "storeAttribute")
-    return sources.storeAttributes?.find((x) => sameId(x.id, data.value.attributeId));
+    return sources.storeAttributes?.find((x) =>
+      sameId(x.id, data.value.attributeId),
+    );
   return null;
 });
 
@@ -206,7 +224,9 @@ const adapterValueLocked = computed(() => {
 
 const adapterValueSourceName = computed(() => {
   if (data.value.optionSourceLabel) return data.value.optionSourceLabel;
-  const hit = props.adapterFieldsWithOptions.find((f) => f.fieldKey === data.value.optionSourceKey);
+  const hit = props.adapterFieldsWithOptions.find(
+    (f) => f.fieldKey === data.value.optionSourceKey,
+  );
   return hit?.label || "";
 });
 const adapterPreview = computed(() => data.value.preview || {});
@@ -259,7 +279,8 @@ const filteredAdapterFields = computed(() => {
   const list = adapterFields.value;
   if (!q) return list;
   return list.filter((f) => {
-    const hay = `${f.label || ""} ${f.fieldKey || ""} ${f.description || ""}`.toLowerCase();
+    const hay =
+      `${f.label || ""} ${f.fieldKey || ""} ${f.description || ""}`.toLowerCase();
     return hay.includes(q);
   });
 });
@@ -330,20 +351,23 @@ const currentSourceLabel = (f) => {
   if (s.type === "productField")
     return localizeStandardSourceName(
       s.field,
-      mergeProductFieldSources(adapterAvail.value).find((x) => x.key === s.field)
-        ?.displayName ||
+      mergeProductFieldSources(adapterAvail.value).find(
+        (x) => x.key === s.field,
+      )?.displayName ||
         s.field ||
         t("marketplace.graph.inspector.productField"),
     );
   if (s.type === "attribute")
     return (
       adapterAvail.value.categoryAttributes?.find((x) => x.id === s.attributeId)
-        ?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId })
+        ?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
     );
   if (s.type === "storeAttribute")
     return (
       adapterAvail.value.storeAttributes?.find((x) => x.id === s.attributeId)
-        ?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId })
+        ?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
     );
   return t("marketplace.graph.inspector.byWire");
 };
@@ -389,7 +413,12 @@ function onAdapterFieldPick(fieldKey) {
 
 const selectedArrayValues = computed(() => {
   const v = data.value.staticValue;
-  return v ? String(v).split(",").map((s) => s.trim()).filter(Boolean) : [];
+  return v
+    ? String(v)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
 });
 
 function toggleArrayValue(val) {
@@ -397,7 +426,9 @@ function toggleArrayValue(val) {
   const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
   const keys = next.join(",");
   const labels = next
-    .map((k) => (data.value.options || []).find((o) => o.value === k)?.label ?? k)
+    .map(
+      (k) => (data.value.options || []).find((o) => o.value === k)?.label ?? k,
+    )
     .join(", ");
   emit("update", { staticValue: keys, label: labels });
 }
@@ -408,10 +439,11 @@ const isLlmGenerate = computed(
 const llmFieldPins = computed(() => fieldPinsFor(data.value));
 
 function slugPinId(label, existing) {
-  const base = String(label || "pin")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0400-\u04FF]+/gi, "_")
-    .replace(/^_+|_+$/g, "") || "pin";
+  const base =
+    String(label || "pin")
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0400-\u04FF]+/gi, "_")
+      .replace(/^_+|_+$/g, "") || "pin";
   let id = base;
   let n = 2;
   const taken = new Set((existing || []).map((p) => p.id));
@@ -463,29 +495,43 @@ function resolvePreview(fieldKey, raw) {
   <div v-if="node" class="flex h-full w-full flex-col border-l bg-card">
     <div class="flex items-center justify-between gap-2 border-b px-3 py-2">
       <div class="truncate text-sm font-semibold">{{ heading }}</div>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         class="text-muted-foreground hover:text-foreground"
+        :aria-label="t('common.close')"
         @click="emit('close')"
       >
         <X class="size-4" />
-      </button>
+      </Button>
     </div>
 
-    <div ref="scrollEl" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 thin-scrollbar">
+    <div
+      ref="scrollEl"
+      class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 thin-scrollbar"
+    >
       <!-- Store shared-storage file picker (URL / text content) -->
       <template v-if="isStoreFile">
         <div class="space-y-1.5">
-          <Label>{{ t("marketplace.graph.inspector.storeFileFieldLabel") }}</Label>
+          <Label>{{
+            t("marketplace.graph.inspector.storeFileFieldLabel")
+          }}</Label>
           <Select
             :model-value="storeFileValue"
             @update:model-value="pickStoreFile($event)"
           >
             <SelectTrigger class="h-9 w-full">
-              <SelectValue :placeholder="t('marketplace.graph.inspector.chooseFilePlaceholder')" />
+              <SelectValue
+                :placeholder="
+                  t('marketplace.graph.inspector.chooseFilePlaceholder')
+                "
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem :value="NONE">{{ t("marketplace.graph.inspector.notSelected") }}</SelectItem>
+              <SelectItem :value="NONE">{{
+                t("marketplace.graph.inspector.notSelected")
+              }}</SelectItem>
               <SelectItem
                 v-for="f in storeFileOptions"
                 :key="fileId(f)"
@@ -514,10 +560,14 @@ function resolvePreview(fieldKey, raw) {
       <!-- Product file by name (URL / text content) -->
       <template v-else-if="isProductFileByName">
         <div class="space-y-1.5">
-          <Label>{{ t("marketplace.graph.inspector.productFileNameLabel") }}</Label>
+          <Label>{{
+            t("marketplace.graph.inspector.productFileNameLabel")
+          }}</Label>
           <Input
             :model-value="data.fileName"
-            :placeholder="t('marketplace.graph.inspector.productFileNamePlaceholder')"
+            :placeholder="
+              t('marketplace.graph.inspector.productFileNamePlaceholder')
+            "
             @update:model-value="
               setData({
                 fileName: $event,
@@ -546,7 +596,8 @@ function resolvePreview(fieldKey, raw) {
               setData({
                 fileExtension: $event,
                 label: $event
-                  ? t('marketplace.graph.productFilesByExtensionPrefix') + $event
+                  ? t('marketplace.graph.productFilesByExtensionPrefix') +
+                    $event
                   : t('marketplace.graph.productFilesByExtensionLabel'),
               })
             "
@@ -570,14 +621,28 @@ function resolvePreview(fieldKey, raw) {
         </div>
         <div v-if="hasDictionaryKey" class="space-y-1.5">
           <div class="flex items-center gap-2">
-            <span class="text-xs" :class="data.emitLabel === true ? 'text-muted-foreground' : 'font-medium'">
+            <span
+              class="text-xs"
+              :class="
+                data.emitLabel === true
+                  ? 'text-muted-foreground'
+                  : 'font-medium'
+              "
+            >
               {{ t("marketplace.graph.inspector.dictionaryKey") }}
             </span>
             <Switch
               :model-value="data.emitLabel === true"
               @update:model-value="setData({ emitLabel: $event })"
             />
-            <span class="text-xs" :class="data.emitLabel === true ? 'font-medium' : 'text-muted-foreground'">
+            <span
+              class="text-xs"
+              :class="
+                data.emitLabel === true
+                  ? 'font-medium'
+                  : 'text-muted-foreground'
+              "
+            >
               {{ t("marketplace.graph.inspector.dictionaryValue") }}
             </span>
           </div>
@@ -593,7 +658,11 @@ function resolvePreview(fieldKey, raw) {
             />
             <Label
               class="cursor-pointer font-normal"
-              @click="setData({ importable: data.importable !== false ? false : true })"
+              @click="
+                setData({
+                  importable: data.importable !== false ? false : true,
+                })
+              "
             >
               {{ t("marketplace.graph.inspector.importableLabel") }}
             </Label>
@@ -607,17 +676,24 @@ function resolvePreview(fieldKey, raw) {
       <!-- "standard value" - static node with predefined options from adapter field -->
       <template v-else-if="type === 'static' && data.isAdapterValue">
         <div v-if="!adapterValueLocked" class="space-y-1.5">
-          <Label>{{ t("marketplace.graph.inspector.dictionarySourceLabel") }}</Label>
+          <Label>{{
+            t("marketplace.graph.inspector.dictionarySourceLabel")
+          }}</Label>
           <Select @update:model-value="onAdapterFieldPick($event)">
             <SelectTrigger class="h-9 text-xs">
-              <SelectValue :placeholder="t('marketplace.graph.inspector.chooseDictionarySource')" />
+              <SelectValue
+                :placeholder="
+                  t('marketplace.graph.inspector.chooseDictionarySource')
+                "
+              />
             </SelectTrigger>
             <SelectContent>
               <SelectItem
                 v-for="f in adapterFieldsWithOptions"
                 :key="f.fieldKey"
                 :value="f.fieldKey"
-              >{{ f.label }}</SelectItem>
+                >{{ f.label }}</SelectItem
+              >
             </SelectContent>
           </Select>
           <p class="text-[11px] text-muted-foreground">
@@ -625,9 +701,14 @@ function resolvePreview(fieldKey, raw) {
           </p>
         </div>
         <div v-else class="space-y-1.5">
-          <Label>{{ t("marketplace.graph.inspector.dictionarySourceLabel") }}</Label>
+          <Label>{{
+            t("marketplace.graph.inspector.dictionarySourceLabel")
+          }}</Label>
           <div class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
-            {{ adapterValueSourceName || t("marketplace.graph.inspector.dictionarySourceLocked") }}
+            {{
+              adapterValueSourceName ||
+              t("marketplace.graph.inspector.dictionarySourceLocked")
+            }}
           </div>
           <p class="text-[11px] text-muted-foreground">
             {{ t("marketplace.graph.inspector.dictionarySourceLockedHint") }}
@@ -644,8 +725,12 @@ function resolvePreview(fieldKey, raw) {
             />
           </template>
 
-          <template v-else-if="data.options?.length && data.valueType === 'array'">
-            <div class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5">
+          <template
+            v-else-if="data.options?.length && data.valueType === 'array'"
+          >
+            <div
+              class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5"
+            >
               <label
                 v-for="opt in data.options"
                 :key="opt.value"
@@ -694,7 +779,9 @@ function resolvePreview(fieldKey, raw) {
               @update:model-value="
                 setData({
                   staticValue: $event ? 'true' : 'false',
-                  label: $event ? t('marketplace.graph.inspector.yes') : t('marketplace.graph.inspector.no'),
+                  label: $event
+                    ? t('marketplace.graph.inspector.yes')
+                    : t('marketplace.graph.inspector.no'),
                 })
               "
             />
@@ -727,13 +814,17 @@ function resolvePreview(fieldKey, raw) {
       </template>
 
       <!-- Adapter fields: mode radios + binding dialog -->
-      <template v-else-if="type === 'adapterFields' || type === 'adapterPriceFields'">
+      <template
+        v-else-if="type === 'adapterFields' || type === 'adapterPriceFields'"
+      >
         <div class="space-y-3">
           <div
             class="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground"
           >
-            {{ t("marketplace.graph.inspector.fieldsCount") }} <b class="text-foreground">{{ fieldsCount }}</b> ·
-            {{ t("marketplace.graph.inspector.requiredCount") }} <b class="text-foreground">{{ requiredCount }}</b>
+            {{ t("marketplace.graph.inspector.fieldsCount") }}
+            <b class="text-foreground">{{ fieldsCount }}</b> ·
+            {{ t("marketplace.graph.inspector.requiredCount") }}
+            <b class="text-foreground">{{ requiredCount }}</b>
           </div>
           <p class="text-xs text-muted-foreground">
             {{ t("marketplace.graph.inspector.adapterFieldsHint") }}
@@ -741,7 +832,9 @@ function resolvePreview(fieldKey, raw) {
           <Input
             v-model="adapterFieldFilter"
             type="search"
-            :placeholder="t('marketplace.graph.inspector.fieldSearchPlaceholder')"
+            :placeholder="
+              t('marketplace.graph.inspector.fieldSearchPlaceholder')
+            "
             class="h-8"
           />
 
@@ -750,7 +843,10 @@ function resolvePreview(fieldKey, raw) {
               v-for="f in filteredAdapterFields"
               :key="f.fieldKey"
               :data-fk="f.fieldKey"
-              :class="['space-y-1.5 rounded-md border border-transparent px-1 py-1', highlightedField === f.fieldKey && 'vf-field-flash']"
+              :class="[
+                'space-y-1.5 rounded-md border border-transparent px-1 py-1',
+                highlightedField === f.fieldKey && 'vf-field-flash',
+              ]"
             >
               <div class="min-w-0">
                 <div
@@ -760,7 +856,9 @@ function resolvePreview(fieldKey, raw) {
                   <Input
                     class="h-7 text-xs"
                     :model-value="f.label || f.fieldKey"
-                    :placeholder="t('marketplace.graph.customFieldLabelPlaceholder')"
+                    :placeholder="
+                      t('marketplace.graph.customFieldLabelPlaceholder')
+                    "
                     @blur="commitCustomName(f, $event.target.value)"
                   />
                   <Button
@@ -774,11 +872,7 @@ function resolvePreview(fieldKey, raw) {
                     <Trash2 class="size-3.5" />
                   </Button>
                 </div>
-                <Label
-                  v-else
-                  class="text-xs"
-                  :title="adapterFieldTooltip(f)"
-                >
+                <Label v-else class="text-xs" :title="adapterFieldTooltip(f)">
                   {{ adapterFieldLabel(f)
                   }}<span v-if="f.isRequired" class="text-destructive"> *</span>
                 </Label>
@@ -801,30 +895,43 @@ function resolvePreview(fieldKey, raw) {
                   class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
                   :for="`af-mode-omit-${f.fieldKey}`"
                 >
-                  <RadioGroupItem :id="`af-mode-omit-${f.fieldKey}`" value="omit" />
+                  <RadioGroupItem
+                    :id="`af-mode-omit-${f.fieldKey}`"
+                    value="omit"
+                  />
                   <span>{{ t("marketplace.graph.inspector.modeOmit") }}</span>
                 </label>
                 <label
                   class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
                   :for="`af-mode-wire-${f.fieldKey}`"
                 >
-                  <RadioGroupItem :id="`af-mode-wire-${f.fieldKey}`" value="wire" />
+                  <RadioGroupItem
+                    :id="`af-mode-wire-${f.fieldKey}`"
+                    value="wire"
+                  />
                   <span>{{ t("marketplace.graph.inspector.modeWire") }}</span>
                 </label>
                 <label
                   class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-accent/60"
                   :for="`af-mode-bind-${f.fieldKey}`"
                 >
-                  <RadioGroupItem :id="`af-mode-bind-${f.fieldKey}`" value="bind" />
+                  <RadioGroupItem
+                    :id="`af-mode-bind-${f.fieldKey}`"
+                    value="bind"
+                  />
                   <span>{{ t("marketplace.graph.inspector.modeBind") }}</span>
                 </label>
               </RadioGroup>
 
               <div v-if="fieldMode(f) === 'bind'" class="pl-1 text-xs">
-                <span class="text-muted-foreground">{{ currentSourceLabel(f) }}</span>
-                <button
+                <span class="text-muted-foreground">{{
+                  currentSourceLabel(f)
+                }}</span>
+                <Button
                   type="button"
-                  class="ml-1.5 text-primary underline-offset-2 hover:underline"
+                  variant="link"
+                  size="xs"
+                  class="ml-1.5 h-auto p-0 text-primary"
                   @click="openBindingDialog(f)"
                 >
                   {{
@@ -832,17 +939,18 @@ function resolvePreview(fieldKey, raw) {
                       ? t("marketplace.graph.inspector.changeBinding")
                       : t("marketplace.graph.inspector.chooseBinding")
                   }}
-                </button>
+                </Button>
               </div>
 
               <div
                 v-if="adapterPreview[f.fieldKey] != null"
                 class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-                :title="String(resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]))"
+                :title="
+                  String(resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]))
+                "
               >
                 {{ resolvePreview(f.fieldKey, adapterPreview[f.fieldKey]) }}
               </div>
-
             </div>
 
             <p
@@ -870,7 +978,9 @@ function resolvePreview(fieldKey, raw) {
             :field="bindingDialogField"
             :available-sources="adapterAvail"
             :adapter-fields="adapterFields"
-            :current-value="bindingDialogField ? adapterSourceValue(bindingDialogField) : ''"
+            :current-value="
+              bindingDialogField ? adapterSourceValue(bindingDialogField) : ''
+            "
             @update:open="onBindingDialogOpen"
             @select="onBindingSelect"
           />
@@ -903,10 +1013,13 @@ function resolvePreview(fieldKey, raw) {
       <!-- Modifier params -->
       <template v-else-if="type === 'modifier'">
         <div v-if="isLlmGenerate" class="mb-4 space-y-2 rounded-md border p-3">
-          <Label class="text-xs font-medium">{{ t("marketplace.graph.inspector.additionalInputs") }}</Label>
+          <Label class="text-xs font-medium">{{
+            t("marketplace.graph.inspector.additionalInputs")
+          }}</Label>
           <p class="text-[11px] text-muted-foreground">
             {{ t("marketplace.graph.inspector.llmPinsHint") }}
-            <code v-pre class="font-mono text-[10px]">{{pin:id}}</code>.
+            <code v-pre class="font-mono text-[10px]">{{pin:id}}</code
+            >.
           </p>
           <div
             v-for="(pin, idx) in llmFieldPins"
@@ -922,7 +1035,8 @@ function resolvePreview(fieldKey, raw) {
             <span
               class="shrink-0 font-mono text-[10px] text-muted-foreground"
               :title="`{{pin:${pin.id}}}`"
-            >{{ pin.id }}</span>
+              >{{ pin.id }}</span
+            >
             <Button
               variant="ghost"
               size="icon"
@@ -932,7 +1046,12 @@ function resolvePreview(fieldKey, raw) {
               <Trash2 class="size-3.5" />
             </Button>
           </div>
-          <Button variant="outline" size="sm" class="h-7 w-full text-xs" @click="addFieldPin">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 w-full text-xs"
+            @click="addFieldPin"
+          >
             <Plus class="size-3 mr-1" />
             {{ t("marketplace.graph.inspector.addPin") }}
           </Button>
@@ -963,11 +1082,21 @@ function resolvePreview(fieldKey, raw) {
 
           <div v-else-if="p.type === 'aiModel'" class="space-y-1.5">
             <Select
-              :model-value="data.params?.[p.key] != null ? String(data.params[p.key]) : undefined"
-              @update:model-value="setParam(p.key, $event ? Number($event) : undefined)"
+              :model-value="
+                data.params?.[p.key] != null
+                  ? String(data.params[p.key])
+                  : undefined
+              "
+              @update:model-value="
+                setParam(p.key, $event ? Number($event) : undefined)
+              "
             >
               <SelectTrigger class="h-9 w-full">
-                <SelectValue :placeholder="t('marketplace.graph.inspector.chooseModelPlaceholder')" />
+                <SelectValue
+                  :placeholder="
+                    t('marketplace.graph.inspector.chooseModelPlaceholder')
+                  "
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -1015,7 +1144,9 @@ function resolvePreview(fieldKey, raw) {
               @update:model-value="setParam(p.key, $event)"
             />
             <span class="text-sm text-muted-foreground">{{
-              data.params?.[p.key] ? t("marketplace.graph.inspector.yes") : t("marketplace.graph.inspector.no")
+              data.params?.[p.key]
+                ? t("marketplace.graph.inspector.yes")
+                : t("marketplace.graph.inspector.no")
             }}</span>
           </div>
 
@@ -1069,11 +1200,10 @@ function resolvePreview(fieldKey, raw) {
       </template>
     </div>
 
-    <div
-      v-if="data.previewValue != null"
-      class="border-t px-3 py-2"
-    >
-      <div class="text-xs text-muted-foreground">{{ t("marketplace.graph.inspector.outputValueLabel") }}</div>
+    <div v-if="data.previewValue != null" class="border-t px-3 py-2">
+      <div class="text-xs text-muted-foreground">
+        {{ t("marketplace.graph.inspector.outputValueLabel") }}
+      </div>
       <div class="mt-0.5 break-words font-mono text-xs">
         {{ data.previewValue }}
       </div>
@@ -1086,7 +1216,8 @@ function resolvePreview(fieldKey, raw) {
         class="w-full"
         @click="emit('delete')"
       >
-        <Trash2 class="mr-2 size-4" /> {{ t("marketplace.graph.inspector.deleteNode") }}
+        <Trash2 class="mr-2 size-4" />
+        {{ t("marketplace.graph.inspector.deleteNode") }}
         <span class="ml-1 text-xs opacity-80">(Delete)</span>
       </Button>
     </div>
@@ -1095,8 +1226,12 @@ function resolvePreview(fieldKey, raw) {
 
 <style scoped>
 @keyframes vf-flash {
-  0%   { background-color: rgba(120, 120, 120, 0.18); }
-  100% { background-color: rgba(120, 120, 120, 0); }
+  0% {
+    background-color: rgba(120, 120, 120, 0.18);
+  }
+  100% {
+    background-color: rgba(120, 120, 120, 0);
+  }
 }
 .vf-field-flash {
   animation: vf-flash 0.9s ease-out forwards;

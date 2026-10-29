@@ -108,7 +108,7 @@ public class ApiKeysController : ControllerBase
 
         var detail = await _logs.GetDetailAsync(userId, id, ct);
         if (detail == null)
-            throw ApiException.NotFound("Log entry not found");
+            throw ApiException.NotFound(code: "log_entry_not_found");
 
         return Ok(detail);
     }
@@ -150,7 +150,7 @@ public class ApiKeysController : ControllerBase
 
         var body = await _logs.GetStoredBodyAsync(userId, id, response, ct);
         if (body == null)
-            throw ApiException.NotFound("Log entry not found");
+            throw ApiException.NotFound(code: "log_entry_not_found");
 
         var kind = response ? "response" : "request";
         var bytes = Encoding.UTF8.GetBytes(body);

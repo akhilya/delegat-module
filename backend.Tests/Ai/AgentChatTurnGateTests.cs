@@ -18,14 +18,14 @@ public class AgentChatTurnGateTests
     [Fact]
     public void GetPlatformRequest_IsNotAChatWrite()
     {
-        Assert.False(AgentChatTurnGate.IsMutatingChatTool(
+        Assert.False(AgentChatTurnGate.RequiresPlanConfirmation(
             "platform_request", """{"method":"GET","path":"/marketplace/connections/10/mappings/28/graph"}"""));
     }
 
     [Fact]
     public void PostGroupTitles_IsAChatWrite()
     {
-        Assert.True(AgentChatTurnGate.IsMutatingChatTool(
+        Assert.True(AgentChatTurnGate.RequiresPlanConfirmation(
             "platform_request",
             """{"method":"POST","path":"/marketplace/connections/10/mappings/28/graph/group-titles"}"""));
     }
@@ -33,7 +33,22 @@ public class AgentChatTurnGateTests
     [Fact]
     public void SearchActions_IsNotAChatWrite()
     {
-        Assert.False(AgentChatTurnGate.IsMutatingChatTool("search_actions", """{"query":"group-titles"}"""));
+        Assert.False(AgentChatTurnGate.RequiresPlanConfirmation("search_actions", """{"query":"group-titles"}"""));
+    }
+
+    [Theory]
+    [InlineData("run_python", "{\"code\":\"print(1)\"}")]
+    [InlineData("mcp3_query_docs", "{}")]
+    [InlineData("mcp21_update_product", "{\"id\":42}")]
+    public void PythonAndConnectedMcp_RequirePlanConfirmation(string tool, string input)
+    {
+        Assert.True(AgentChatTurnGate.RequiresPlanConfirmation(tool, input));
+    }
+
+    [Fact]
+    public void InvalidMcpLikeName_DoesNotAcquireConfirmationSemantics()
+    {
+        Assert.False(AgentChatTurnGate.RequiresPlanConfirmation("mcp_not_a_valid_name", "{}"));
     }
 
     [Theory]
@@ -41,9 +56,6 @@ public class AgentChatTurnGateTests
     [InlineData("Ответь!")]
     [InlineData("  хватит искать  ")]
     [InlineData("answer")]
-    [InlineData("и?")]
-    [InlineData("ну")]
-    [InlineData("дальше")]
     [InlineData("just answer")]
     public void AsksToAnswerNow_IsOnlyADemandToReply(string text)
     {
@@ -53,11 +65,26 @@ public class AgentChatTurnGateTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
+    [InlineData("и?")]
+    [InlineData("ну")]
+    [InlineData("дальше")]
+    [InlineData("and")]
+    [InlineData("so")]
+    [InlineData("well")]
     [InlineData("сколько брендов у меня на вб?")]
     [InlineData("ответь сколько брендов")]
     public void AsksToAnswerNow_LeavesARealQuestionAlone(string? text)
     {
         Assert.False(AgentChatTurnGate.AsksToAnswerNow(text));
+    }
+
+    [Theory]
+    [InlineData("и?")]
+    [InlineData("дальше")]
+    [InlineData("and")]
+    public void ContinuationWords_DoNotDisableTools(string text)
+    {
+        Assert.False(AgentChatTurnGate.SpeakOnly(AgentChatTurnGate.AsksToAnswerNow(text), toolRounds: 0));
     }
 
     [Fact]

@@ -3,6 +3,8 @@
 **Date:** 2026-07-22  
 **Status:** Implemented
 
+> Historical design record. The behavior is shipped; verify the current route and API handling in code before making changes.
+
 ## Problem
 
 When the backend process is down, restarting, or behind a gateway during an instance update, the UI previously fell through to sign-in or raw request failures. Partners and operators need a dedicated, calm screen that matches the product design code.

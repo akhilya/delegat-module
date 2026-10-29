@@ -1,3 +1,4 @@
+using Delegat.Infrastructure.Configuration;
 using Delegat.Services.Ai;
 
 namespace Delegat.Services.Ai.Agent;
@@ -23,6 +24,9 @@ public sealed class McpToolGateway : IMcpToolGateway
 
     public async Task<IReadOnlyList<AiTool>> ListToolsAsync(CancellationToken ct)
     {
+        if (!FeatureFlags.IsConnectedMcpEnabled())
+            return Array.Empty<AiTool>();
+
         var rows = await _servers.GetEnabledAsync(ct);
         var tools = new List<AiTool>();
         foreach (var row in rows)
@@ -42,6 +46,9 @@ public sealed class McpToolGateway : IMcpToolGateway
 
     public async Task<(object result, string summary)> CallAsync(string llmName, string inputJson, CancellationToken ct)
     {
+        if (!FeatureFlags.IsConnectedMcpEnabled())
+            return (new { error = "connected_mcp_disabled" }, "Connected tools are disabled");
+
         if (!McpToolNames.TryParse(llmName, out var serverId, out _))
             return (new { error = $"Unknown tool: {llmName}" }, $"Unknown tool: {llmName}");
 

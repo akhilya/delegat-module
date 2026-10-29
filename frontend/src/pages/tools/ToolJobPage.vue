@@ -25,13 +25,18 @@ import {
 import { Wand2 } from "lucide-vue-next";
 import { mapActions } from "vuex";
 import { http } from "@/main";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
 import { PAGE_TOOLS, setPageTitle } from "@/router";
 import {
   isQuickRunTool,
   toolConfirmTitleKey,
   toolJobConfirmDescriptionKey,
   toolDescription,
+  isValidImportProductLimit,
   toolStageClass,
   toolStageLabelKey,
   toolTitle,
@@ -112,13 +117,24 @@ export default {
       return this.entry?.paramsSchema || [];
     },
     canRun() {
-      if (!this.entry || this.entry.mode !== "job" || this.entry.available === false) return false;
+      if (
+        !this.entry ||
+        this.entry.mode !== "job" ||
+        this.entry.available === false
+      )
+        return false;
       if (!hasPermission(getCachedMe(), PERMS.MarketplaceManage)) return false;
       if (this.entry.requiresConnection && !this.connectionId) return false;
       for (const field of this.paramFields) {
         if (!field.isRequired) continue;
         const value = this.paramValues[field.key];
         if (value == null || String(value).trim() === "") return false;
+      }
+      if (
+        this.entry.id === "import-products" &&
+        !isValidImportProductLimit(this.paramValues.maxProducts)
+      ) {
+        return false;
       }
       return true;
     },
@@ -149,6 +165,40 @@ export default {
     ...mapActions(["getConnections", "getAvailableAdapters"]),
     toolTitle,
     toolDescription,
+    paramLabel(field) {
+      if (this.entry?.id === "import-products") {
+        const key =
+          field.key === "maxProducts"
+            ? "pages.toolJob.maxProducts"
+            : field.key === "targetCategoryId"
+              ? "pages.toolJob.targetCategoryId"
+              : null;
+        if (key) return this.$t(key);
+      }
+      return field.displayName || field.key;
+    },
+    paramDescription(field) {
+      if (this.entry?.id === "import-products") {
+        const key =
+          field.key === "maxProducts"
+            ? "pages.toolJob.maxProductsHint"
+            : field.key === "targetCategoryId"
+              ? "pages.toolJob.targetCategoryIdHint"
+              : null;
+        if (key) return this.$t(key);
+      }
+      return field.description || "";
+    },
+    paramError(field) {
+      if (
+        this.entry?.id === "import-products" &&
+        field.key === "maxProducts" &&
+        !isValidImportProductLimit(this.paramValues[field.key])
+      ) {
+        return this.$t("pages.toolJob.maxProductsInvalid");
+      }
+      return "";
+    },
     goTools() {
       this.$router.push(PAGE_TOOLS);
     },
@@ -164,9 +214,12 @@ export default {
       this.table = null;
       const id = this.$route.params.toolId;
       try {
-        const response = await http.get(`/tools/${encodeURIComponent(id)}`, { cache: false });
+        const response = await http.get(`/tools/${encodeURIComponent(id)}`, {
+          cache: false,
+        });
         const entry = extractResponseData({ data: response.data }, null);
-        this.entry = entry?.value && typeof entry.value === "object" ? entry.value : entry;
+        this.entry =
+          entry?.value && typeof entry.value === "object" ? entry.value : entry;
         if (this.entry) {
           setPageTitle(toolTitle(this.entry, this.$t));
         }
@@ -246,10 +299,15 @@ export default {
           { cache: false, timeout: 5 * 60 * 1000 },
         );
         const result = extractResponseData({ data: response.data }, {});
-        const body = result?.value && typeof result.value === "object" ? result.value : result;
+        const body =
+          result?.value && typeof result.value === "object"
+            ? result.value
+            : result;
         this.$store.dispatch("operations/openPanel");
         if (body.table?.rows) this.table = body.table;
-        displaySonnerSuccess(body.message || this.$t("pages.toolJob.runStarted"));
+        displaySonnerSuccess(
+          body.message || this.$t("pages.toolJob.runStarted"),
+        );
       } catch (error) {
         displaySonnerError(error);
       } finally {
@@ -262,11 +320,7 @@ export default {
 
 <template>
   <AppPageChrome>
-    <EmptyState
-      v-if="loading"
-      loading
-      class="min-h-0 flex-1"
-    />
+    <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
     <EmptyState
       v-else-if="!entry"
       :title="$t('pages.toolJob.notFoundTitle')"
@@ -299,11 +353,15 @@ export default {
           :description="$t('pages.toolJob.connectionHint')"
         >
           <Select
-            :model-value="connectionId != null ? String(connectionId) : undefined"
+            :model-value="
+              connectionId != null ? String(connectionId) : undefined
+            "
             @update:model-value="connectionId = $event ? Number($event) : null"
           >
             <SelectTrigger id="tool-job-connection" class="w-full">
-              <SelectValue :placeholder="$t('pages.toolJob.connectionPlaceholder')" />
+              <SelectValue
+                :placeholder="$t('pages.toolJob.connectionPlaceholder')"
+              />
             </SelectTrigger>
             <SelectContent>
               <SelectItem
@@ -326,10 +384,11 @@ export default {
         <SettingsFormField
           v-for="field in paramFields"
           :key="field.key"
-          :label="field.displayName || field.key"
+          :label="paramLabel(field)"
           :label-for="`tool-param-${field.key}`"
           :required="field.isRequired"
-          :description="field.description || ''"
+          :description="paramDescription(field)"
+          :error="paramError(field)"
         >
           <PasswordInput
             v-if="field.isSecret"
@@ -342,22 +401,27 @@ export default {
             v-else
             :id="`tool-param-${field.key}`"
             v-model="paramValues[field.key]"
-            type="text"
+            :type="field.type === 'number' ? 'number' : 'text'"
+            :min="field.key === 'maxProducts' ? 1 : undefined"
+            :max="field.key === 'maxProducts' ? 200 : undefined"
+            :step="field.key === 'maxProducts' ? 1 : undefined"
+            :required="field.isRequired"
             :placeholder="field.placeholder || ''"
             autocomplete="off"
           />
         </SettingsFormField>
       </FieldGroup>
 
-      <Button class="mt-6 self-start" :disabled="!canRun || running" @click="requestRun">
+      <Button
+        class="mt-6 self-start"
+        :disabled="!canRun || running"
+        @click="requestRun"
+      >
         <Spinner v-if="running" />
         {{ $t("pages.toolJob.run") }}
       </Button>
 
-      <div
-        v-if="table"
-        class="mt-8"
-      >
+      <div v-if="table" class="mt-8">
         <Table>
           <TableHeader>
             <TableRow class="hover:bg-transparent">

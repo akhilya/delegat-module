@@ -17,6 +17,7 @@ public sealed class AgentToolHost
     private readonly CatalogSearchService _catalog;
     private readonly SqlReadonlyService _sql;
     private readonly KnowledgeIndexService _knowledge;
+    private readonly AiMemoryService _memory;
     private readonly AgentPlatformGateway _platform;
     private readonly PythonSandboxClient _python;
     private readonly IPermissionService _permissions;
@@ -37,11 +38,13 @@ public sealed class AgentToolHost
         ILogger<AgentToolHost> logger,
         IMcpToolGateway? mcp = null,
         IPublicDocsClient? publicDocs = null,
-        CabinetActionCatalog? actions = null)
+        CabinetActionCatalog? actions = null,
+        AiMemoryService? memory = null)
     {
         _catalog = catalog;
         _sql = sql;
         _knowledge = knowledge;
+        _memory = memory ?? new AiMemoryService(db);
         _platform = platform;
         _python = python;
         _permissions = permissions;
@@ -53,7 +56,12 @@ public sealed class AgentToolHost
     }
 
     public async Task<(object result, string summary)> DispatchAsync(
-        string toolName, string inputJson, int storeId, int userId, CancellationToken ct)
+        string toolName,
+        string inputJson,
+        int storeId,
+        int userId,
+        CancellationToken ct,
+        bool allowConnectedMcp = false)
     {
         var perms = new HashSet<string>(
             await _permissions.GetEffectivePermissionsAsync(userId, ct),
@@ -62,12 +70,21 @@ public sealed class AgentToolHost
         if (!AgentAccess.CanUseAgent(perms))
             return (new { error = "ai.use required" }, "ai.use required");
 
+        if (AgentAccess.IsReadOnly(perms)
+            && (string.Equals(toolName, "memory_save", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(toolName, "memory_delete", StringComparison.OrdinalIgnoreCase)))
+            return (new { error = "read_only" }, "This account is read-only");
+
         try
         {
             object result;
             string summary;
             if (McpToolNames.TryParse(toolName, out _, out _))
             {
+                if (!allowConnectedMcp)
+                    return (new { error = "connected_tool_not_available" }, "Connected tools are not available on this surface");
+                if (!perms.Contains(Permissions.AiUse, StringComparer.OrdinalIgnoreCase))
+                    return (new { error = "ai.use required for connected tools" }, "ai.use required for connected tools");
                 if (_mcp == null)
                     (result, summary) = ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}");
                 else
@@ -78,6 +95,9 @@ public sealed class AgentToolHost
                 (result, summary) = toolName switch
                 {
                     "search_knowledge" => await SearchKnowledgeAsync(inputJson, ct),
+                    "memory_search" => await MemorySearchAsync(inputJson, storeId, userId, ct),
+                    "memory_save" => await MemorySaveAsync(inputJson, storeId, userId, ct),
+                    "memory_delete" => await MemoryDeleteAsync(inputJson, storeId, userId, ct),
                     "get_doc" => await GetDocAsync(inputJson, ct),
                     "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
                     "search_actions" => SearchActions(inputJson),
@@ -119,6 +139,34 @@ public sealed class AgentToolHost
         var hits = await _knowledge.SearchAsync(q, take, ct);
         return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = h.Body.Length > 900 ? h.Body[..900] : h.Body }) },
             $"{hits.Count} knowledge hits");
+    }
+
+    private async Task<(object, string)> MemorySearchAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var query = doc.RootElement.TryGetProperty("query", out var q) ? q.GetString() ?? "" : "";
+        var items = await _memory.SearchAsync(storeId, userId, query, ct);
+        return (new { items = items.Select(m => new { m.Id, m.category, m.key, m.value, m.updatedAt }) },
+            $"{items.Count} memories");
+    }
+
+    private async Task<(object, string)> MemorySaveAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var root = doc.RootElement;
+        var category = root.TryGetProperty("category", out var c) ? c.GetString() ?? "general" : "general";
+        var key = root.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "";
+        var value = root.TryGetProperty("value", out var v) ? v.GetString() ?? "" : "";
+        var saved = await _memory.SaveAsync(storeId, userId, category, key, value, ct);
+        return (new { saved = true, saved.Id, saved.category, saved.key, saved.value }, $"saved memory {saved.Id}");
+    }
+
+    private async Task<(object, string)> MemoryDeleteAsync(string json, int storeId, int userId, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var id = doc.RootElement.TryGetProperty("id", out var i) && i.TryGetInt32(out var parsed) ? parsed : 0;
+        var deleted = await _memory.DeleteAsync(storeId, userId, id, ct);
+        return (new { deleted }, deleted ? $"deleted memory {id}" : "memory not found");
     }
 
     private (object, string) SearchActions(string json)

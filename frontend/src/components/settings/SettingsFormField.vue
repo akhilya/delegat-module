@@ -3,6 +3,7 @@ import { computed, useSlots } from "vue";
 import { CircleHelp } from "lucide-vue-next";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldLabel,
@@ -53,22 +54,31 @@ const showDescriptionTooltip = computed(
           <div class="flex min-w-0 items-center gap-1.5">
             <FieldLabel
               :for="labelFor"
-              :class="cn(
-                'cursor-pointer !text-sm font-medium leading-none',
-                hasError && 'text-destructive',
-              )"
+              :class="
+                cn(
+                  'cursor-pointer !text-sm font-medium leading-none',
+                  hasError && 'text-destructive',
+                )
+              "
             >
-              {{ label }}<span v-if="required" class="text-destructive"> *</span>
+              {{ label
+              }}<span v-if="required" class="text-destructive"> *</span>
             </FieldLabel>
             <Tooltip v-if="showDescriptionTooltip">
               <TooltipTrigger as-child>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   type="button"
-                  class="inline-flex shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                  :aria-label="t('components.settingsFormField.descriptionAriaLabel', { label })"
+                  class="shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                  :aria-label="
+                    t('components.settingsFormField.descriptionAriaLabel', {
+                      label,
+                    })
+                  "
                 >
                   <CircleHelp class="size-3.5" />
-                </button>
+                </Button>
               </TooltipTrigger>
               <TooltipContent
                 side="top"
@@ -81,10 +91,12 @@ const showDescriptionTooltip = computed(
         </div>
         <FieldDescription
           v-if="showInlineDescription"
-          :class="cn(
-            'text-xs pl-[calc(2.25rem+0.75rem)]',
-            hasError ? 'text-destructive' : 'text-muted-foreground',
-          )"
+          :class="
+            cn(
+              'text-xs pl-[calc(2.25rem+0.75rem)]',
+              hasError ? 'text-destructive' : 'text-muted-foreground',
+            )
+          "
         >
           <slot name="description">{{ description }}</slot>
         </FieldDescription>
@@ -95,19 +107,30 @@ const showDescriptionTooltip = computed(
           <FieldLabel
             :for="labelFor"
             :title="label"
-            :class="cn('min-w-0 max-w-full line-clamp-2 break-all', hasError && 'text-destructive')"
+            :class="
+              cn(
+                'min-w-0 max-w-full line-clamp-2 break-all',
+                hasError && 'text-destructive',
+              )
+            "
           >
             {{ label }}<span v-if="required" class="text-destructive"> *</span>
           </FieldLabel>
           <Tooltip v-if="showDescriptionTooltip">
             <TooltipTrigger as-child>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 type="button"
-                class="mt-0.5 inline-flex shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                :aria-label="t('components.settingsFormField.descriptionAriaLabel', { label })"
+                class="mt-0.5 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                :aria-label="
+                  t('components.settingsFormField.descriptionAriaLabel', {
+                    label,
+                  })
+                "
               >
                 <CircleHelp class="size-3.5" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent
               side="top"
@@ -122,7 +145,12 @@ const showDescriptionTooltip = computed(
         </FieldContent>
         <FieldDescription
           v-if="showInlineDescription"
-          :class="cn('text-xs', hasError ? 'text-destructive' : 'text-muted-foreground')"
+          :class="
+            cn(
+              'text-xs',
+              hasError ? 'text-destructive' : 'text-muted-foreground',
+            )
+          "
         >
           <slot name="description">{{ description }}</slot>
         </FieldDescription>

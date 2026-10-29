@@ -59,6 +59,8 @@
     <!-- AI provider SDKs (official) -->
     <PackageReference Include="Anthropic" Version="13.3.0" />
     <PackageReference Include="OpenAI" Version="*" />
+    <!-- Manual content-free AI turn traces. No ASP.NET request instrumentation. -->
+    <PackageReference Include="Sentry" Version="6.12.1" />
 
     <!-- Development tools -->
     <PackageReference Include="Dumpify" Version="0.6.6" />
@@ -93,6 +95,7 @@
       <PluginProjects Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.WooCommerce\Delegat.Marketplace.WooCommerce.csproj" />
       <PluginProjects Include="..\plugins\Delegat.Marketplace.Medusa\Delegat.Marketplace.Medusa.csproj" />
+      <PluginProjects Include="..\plugins\Delegat.Marketplace.Avito\Delegat.Marketplace.Avito.csproj" />
     </ItemGroup>
     <!-- SDK is already built via ProjectReference. Nested BuildProjectReferences=true races on deps.json. -->
     <MSBuild Projects="@(PluginProjects)" Targets="Build" BuildInParallel="false" Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;BuildProjectReferences=false" />
@@ -104,6 +107,7 @@
       <PluginDlls Include="..\plugins\Delegat.Marketplace.YandexMarket\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.YandexMarket.dll" />
       <PluginDlls Include="..\plugins\Delegat.Marketplace.WooCommerce\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.WooCommerce.dll" />
       <PluginDlls Include="..\plugins\Delegat.Marketplace.Medusa\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.Medusa.dll" />
+      <PluginDlls Include="..\plugins\Delegat.Marketplace.Avito\bin\$(Configuration)\$(TargetFramework)\Delegat.Marketplace.Avito.dll" />
       <StalePluginDlls Include="$(OutputPath)plugins\*.Tests.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(PluginDlls)" DestinationFolder="$(OutputPath)plugins" SkipUnchangedFiles="true" />

@@ -25,11 +25,11 @@ internal static class MultipartObjectUpload
         CancellationToken ct)
     {
         if (!request.HasFormContentType)
-            throw ApiException.BadRequest("Expected multipart/form-data");
+            throw ApiException.BadRequest(code: "multipart_content_type_invalid");
 
         var boundary = request.GetMultipartBoundary();
         if (string.IsNullOrEmpty(boundary))
-            throw ApiException.BadRequest("Missing boundary in content-type header");
+            throw ApiException.BadRequest(code: "multipart_boundary_missing");
 
         var saved = new List<SavedObject>();
         var body = new ObservedRequestBody(request.Body);
@@ -58,7 +58,7 @@ internal static class MultipartObjectUpload
                 var knownLength = ReadPartLength(section);
                 var result = await storage.UploadStreamAsync(section.Body, path, contentType, knownLength, ct);
                 if (result == null)
-                    throw ApiException.InternalServerError($"Failed to upload file {fileName} to storage");
+                    throw ApiException.InternalServerError(code: "storage_upload_failed");
 
                 saved.Add(new SavedObject(fileName, result.ContentType, path, result.Length));
             }

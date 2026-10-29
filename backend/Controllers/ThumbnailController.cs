@@ -40,13 +40,13 @@ public class ThumbnailController : ControllerBase
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         // Include soft-deleted products - files remain accessible in trash views
         var product = await _context.products
@@ -54,14 +54,14 @@ public class ThumbnailController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == file.productId, ct);
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("File does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         if (!file.contentType.StartsWith("image/"))
-            throw ApiException.BadRequest("File is not an image");
+            throw ApiException.BadRequest(code: "thumbnail_source_not_image");
 
         var stream = await _thumbnailService.GetOrGenerateAsync(file.filePath, w, ct);
         if (stream == null)
-            throw ApiException.InternalServerError("Failed to create thumbnail");
+            throw ApiException.InternalServerError(code: "thumbnail_failed");
 
         Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
         return File(stream, "image/webp");

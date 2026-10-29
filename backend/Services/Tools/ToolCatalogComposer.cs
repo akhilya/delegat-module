@@ -1,5 +1,8 @@
 using Delegat.Infrastructure.Auth;
 using Delegat.Marketplace.SDK;
+using Delegat.Services.Marketplace;
+using CredentialField = Delegat.Marketplace.SDK.CredentialField;
+using PlatformCredentialField = Delegat.Services.Marketplace.CredentialField;
 using HostCaps = Delegat.Services.Marketplace.MarketplaceCapabilities;
 
 namespace Delegat.Services.Tools;
@@ -49,6 +52,7 @@ public sealed class PlatformToolDefinition
     public bool Destructive { get; init; }
     public string Group { get; init; } = ToolGroups.Catalog;
     public string Stage { get; init; } = ToolStages.Stable;
+    public IReadOnlyList<PlatformCredentialField> Params { get; init; } = [];
 }
 
 public sealed class ToolCatalogEntry
@@ -86,6 +90,61 @@ public static class PlatformTools
     public const string PublicApiTryId = "public-api-try";
     public const string ExportAllPricesId = "export-all-prices";
     public const string ClearPromotionProductsId = "clear-promotion-products";
+    public const string ExportPricesId = "export-prices";
+    public const string ExportStocksId = "export-stocks";
+    public const string ImportPricesId = "import-prices";
+    public const string ImportProductsId = "import-products";
+    public const string VerifyProductLinksId = "verify-product-links";
+    public const string CheckExportReadinessId = "check-export-readiness";
+    public const string ComparePricesId = "compare-prices";
+
+    private static PlatformToolDefinition MarketplaceAction(
+        string id, string titleKey, string descriptionKey, HostCaps capability,
+        string icon, string group = ToolGroups.Prices, bool destructive = false,
+        IReadOnlyList<PlatformCredentialField>? parameters = null) => new()
+    {
+        Id = id,
+        Mode = ToolModes.Job,
+        Path = $"/tools/{id}",
+        TitleKey = titleKey,
+        DescriptionKey = descriptionKey,
+        Icon = icon,
+        Permissions = [Permissions.MarketplaceManage],
+        RequiresConnection = true,
+        RequiredCapability = capability,
+        RequiredCapabilityName = capability.ToString(),
+        QuickRun = true,
+        Destructive = destructive,
+        Group = group,
+        Params = parameters ?? [],
+    };
+
+    public static readonly PlatformToolDefinition ExportPrices = MarketplaceAction(
+        ExportPricesId, "pages.toolsPage.exportPricesTitle", "pages.toolsPage.exportPricesDescription",
+        HostCaps.ExportPrices, "DollarSign", destructive: true);
+    public static readonly PlatformToolDefinition ExportStocks = MarketplaceAction(
+        ExportStocksId, "pages.toolsPage.exportStocksTitle", "pages.toolsPage.exportStocksDescription",
+        HostCaps.ExportStocks, "Boxes", destructive: true);
+    public static readonly PlatformToolDefinition ImportPrices = MarketplaceAction(
+        ImportPricesId, "pages.toolsPage.importPricesTitle", "pages.toolsPage.importPricesDescription",
+        HostCaps.ImportPrices, "Download", destructive: true);
+    public static readonly PlatformToolDefinition ImportProducts = MarketplaceAction(
+        ImportProductsId, "pages.toolsPage.importProductsTitle", "pages.toolsPage.importProductsDescription",
+        HostCaps.ImportAllProducts, "PackagePlus", group: ToolGroups.Catalog, destructive: true,
+        parameters:
+        [
+            new PlatformCredentialField { Key = "maxProducts", DisplayName = "Maximum products per run", Type = "number", IsRequired = true, DefaultValue = "50", Description = "Between 1 and 200." },
+            new PlatformCredentialField { Key = "targetCategoryId", DisplayName = "Local category ID", Type = "number", IsRequired = false, Description = "Optional. Imported products remain uncategorized when empty." },
+        ]);
+    public static readonly PlatformToolDefinition VerifyProductLinks = MarketplaceAction(
+        VerifyProductLinksId, "pages.toolsPage.verifyProductLinksTitle", "pages.toolsPage.verifyProductLinksDescription",
+        HostCaps.ImportProduct, "Link", group: ToolGroups.Catalog, destructive: true);
+    public static readonly PlatformToolDefinition CheckExportReadiness = MarketplaceAction(
+        CheckExportReadinessId, "pages.toolsPage.checkExportReadinessTitle", "pages.toolsPage.checkExportReadinessDescription",
+        HostCaps.ExportProduct, "ClipboardCheck", group: ToolGroups.Catalog);
+    public static readonly PlatformToolDefinition ComparePrices = MarketplaceAction(
+        ComparePricesId, "pages.toolsPage.comparePricesTitle", "pages.toolsPage.comparePricesDescription",
+        HostCaps.ImportPrices, "Scale");
 
     public static readonly PlatformToolDefinition CatalogConnect = new()
     {
@@ -160,7 +219,9 @@ public static class PlatformTools
     };
 
     public static IReadOnlyList<PlatformToolDefinition> All { get; } =
-        [CatalogConnect, CatalogScrape, ExportAllPrices, ClearPromotionProducts, PublicApiTry];
+        [CatalogConnect, CatalogScrape, ExportAllPrices, ExportPrices, ExportStocks, ImportPrices,
+            ImportProducts, VerifyProductLinks, CheckExportReadiness, ComparePrices,
+            ClearPromotionProducts, PublicApiTry];
 
     public static HostCaps? RequiredCapabilityFor(string id)
     {
@@ -168,12 +229,22 @@ public static class PlatformTools
             return HostCaps.ExportPrices;
         if (string.Equals(id, ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase))
             return HostCaps.GetPromotions | HostCaps.UpdatePromotions;
+        if (MarketplaceActionIds.Contains(id, StringComparer.OrdinalIgnoreCase))
+            return MarketplaceActionExecutor.RequiredCapability(id);
         return null;
     }
 
+    public static readonly string[] MarketplaceActionIds =
+        [ExportPricesId, ExportStocksId, ImportPricesId, ImportProductsId,
+            VerifyProductLinksId, CheckExportReadinessId, ComparePricesId];
+
+    public static bool IsMarketplaceAction(string id)
+        => MarketplaceActionIds.Contains(id, StringComparer.OrdinalIgnoreCase);
+
     public static bool IsPlatformJob(string id)
         => string.Equals(id, ExportAllPricesId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(id, ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(id, ClearPromotionProductsId, StringComparison.OrdinalIgnoreCase)
+            || IsMarketplaceAction(id);
 }
 
 /// <summary>
@@ -261,6 +332,17 @@ public static class ToolCatalogComposer
                 Destructive = tool.Destructive,
                 Group = tool.Group,
                 Stage = string.IsNullOrWhiteSpace(tool.Stage) ? ToolStages.Stable : tool.Stage,
+                Params = tool.Params.Select(field => new CredentialField
+                {
+                    Key = field.Key,
+                    DisplayName = field.DisplayName,
+                    Description = field.Description,
+                    Type = field.Type,
+                    IsRequired = field.IsRequired,
+                    IsSecret = field.IsSecret,
+                    DefaultValue = field.DefaultValue,
+                    Placeholder = field.Placeholder,
+                }).ToList(),
                 ResultKind = tool.Mode == ToolModes.Job ? "none" : null,
             });
         }

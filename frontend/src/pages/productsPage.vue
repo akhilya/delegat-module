@@ -11,12 +11,9 @@ import BulkAdapterDialog from "@/components/products/BulkAdapterDialog.vue";
 import ImportExcelDialog from "@/components/products/importExcelDialog.vue";
 import ProductTransferDialog from "@/components/products/ProductTransferDialog.vue";
 import {
-  columns as baseProductColumns,
   defaultVisibleColumns,
-  buildColumnsWithStoreAttributes,
   buildColumnsWithPreset,
   getDefaultVisibilityWithStoreAttributes,
-  combinedColumnPresets,
 } from "@/components/products/columns";
 import { getBaseCurrency } from "@/lib/currency";
 import {
@@ -44,9 +41,6 @@ import {
   X,
   Download,
   Upload,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   Check,
   FileSpreadsheet,
   Undo2,
@@ -58,7 +52,6 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -92,7 +85,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PAGE_PRODUCT_EDIT, setPageTitle } from "@/router";
-import { MENU_ITEM_CHECK, MENU_ITEM_INDICATOR, MENU_SEPARATOR } from "@/lib/menuSurface";
+import {
+  MENU_ITEM_CHECK,
+  MENU_ITEM_INDICATOR,
+  MENU_SEPARATOR,
+} from "@/lib/menuSurface";
 import {
   PRODUCTS_LIST_NS,
   PRODUCTS_TRASH_NS,
@@ -133,9 +130,6 @@ export default {
     X,
     Download,
     Upload,
-    ArrowUpDown,
-    ArrowUp,
-    ArrowDown,
     Check,
     FileSpreadsheet,
     Undo2,
@@ -155,7 +149,6 @@ export default {
     SelectContent,
     SelectGroup,
     SelectItem,
-    SelectLabel,
     SelectTrigger,
     SelectValue,
     Popover,
@@ -168,7 +161,7 @@ export default {
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
-    AlertDialogTitle
+    AlertDialogTitle,
   },
   setup() {
     return { toast };
@@ -213,7 +206,7 @@ export default {
       this.isTransferDialogOpen = true;
     },
 
-    onTransferred(payload) {
+    onTransferred() {
       // Transfer is queued, not done - actual completion happens in background.
       // Side panel shows progress; row will only disappear (for move) once the
       // background worker soft-deletes the original. We don't refresh now -
@@ -359,7 +352,8 @@ export default {
         this.getMyMemberships({
           onSuccess: (response) => {
             const stores = response.data.value || [];
-            const store = stores.find((s) => s.id === selectedStoreId) || stores[0];
+            const store =
+              stores.find((s) => s.id === selectedStoreId) || stores[0];
             this.storeBaseCurrency = getBaseCurrency(store);
             resolve();
           },
@@ -411,7 +405,11 @@ export default {
       await this.bulkDeleteProducts({
         productIds,
         onSuccess: ({ deletedCount }) => {
-          toast.success(this.$t("pages.productsPage.toast.bulkDeleted", { count: deletedCount }));
+          toast.success(
+            this.$t("pages.productsPage.toast.bulkDeleted", {
+              count: deletedCount,
+            }),
+          );
           this.isBulkDeleteDialogOpen = false;
           this.rowSelection = {};
           this.selectedProductsMap = {};
@@ -421,7 +419,8 @@ export default {
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || this.$t("pages.productsPage.toast.bulkDeleteFailed"),
+            error.response?.data?.message ||
+              this.$t("pages.productsPage.toast.bulkDeleteFailed"),
           );
         },
       });
@@ -478,7 +477,9 @@ export default {
         onSuccess: (response) => {
           this.trashCount = response.data.value.count;
         },
-        onError: () => { this.trashCount = 0; },
+        onError: () => {
+          this.trashCount = 0;
+        },
       });
     },
 
@@ -519,7 +520,8 @@ export default {
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || this.$t("pages.productsPage.toast.moveToTrashFailed"),
+            error.response?.data?.message ||
+              this.$t("pages.productsPage.toast.moveToTrashFailed"),
           );
         },
       });
@@ -550,7 +552,7 @@ export default {
       // Sync query param
       const query = { ...this.$route.query };
       if (this.isTrashMode) {
-        query.trash = '1';
+        query.trash = "1";
         this.trashStartIndex = 0;
         this.fetchTrashProducts();
       } else {
@@ -565,7 +567,11 @@ export default {
       await this.bulkRestoreProducts({
         productIds: this.selectedProductIds,
         onSuccess: ({ data }) => {
-          toast.success(this.$t("pages.productsPage.toast.bulkRestored", { count: data.value.restoredCount }));
+          toast.success(
+            this.$t("pages.productsPage.toast.bulkRestored", {
+              count: data.value.restoredCount,
+            }),
+          );
           this.clearSelection();
           invalidateProductsListCache();
           this.fetchTrashProducts();
@@ -581,7 +587,11 @@ export default {
       await this.bulkPermanentDeleteProducts({
         productIds: this.selectedProductIds,
         onSuccess: ({ data }) => {
-          toast.success(this.$t("pages.productsPage.toast.bulkPermanentlyDeleted", { count: data.value.deletedCount }));
+          toast.success(
+            this.$t("pages.productsPage.toast.bulkPermanentlyDeleted", {
+              count: data.value.deletedCount,
+            }),
+          );
           this.isBulkPermanentDeleteDialogOpen = false;
           this.clearSelection();
           invalidateProductsListCache();
@@ -609,7 +619,8 @@ export default {
         },
         onError: (error) => {
           toast.error(
-            error.response?.data?.message || this.$t("pages.productsPage.toast.exportFailed"),
+            error.response?.data?.message ||
+              this.$t("pages.productsPage.toast.exportFailed"),
           );
         },
       });
@@ -699,9 +710,10 @@ export default {
 
       // Categories for filter (restore from query)
       categories: [],
-      filterCategoryId: this.$route.query.categoryId != null
-        ? Number(this.$route.query.categoryId)
-        : null,
+      filterCategoryId:
+        this.$route.query.categoryId != null
+          ? Number(this.$route.query.categoryId)
+          : null,
       categoryFilterOpen: false,
       categoryMenuQuery: "",
       MENU_ITEM_CHECK,
@@ -766,13 +778,13 @@ export default {
   },
   watch: {
     // React to ?trash=1 query param changes (e.g. from navbar dropdown)
-    '$route.query.trash'(newVal) {
-      const wantTrash = newVal === '1';
+    "$route.query.trash"(newVal) {
+      const wantTrash = newVal === "1";
       if (wantTrash !== this.isTrashMode) {
         this.toggleTrashMode();
       }
     },
-    '$route.query.sort'() {
+    "$route.query.sort"() {
       const next = parseSortFromQuery(this.$route.query);
       if (serializeSortKey(this.sortColumns) === serializeSortKey(next)) return;
       this.sortColumns = next;
@@ -878,7 +890,9 @@ export default {
       const q = (this.categoryMenuQuery || "").trim().toLowerCase();
       if (!q) return this.categories;
       return this.categories.filter((cat) =>
-        String(cat.name || "").toLowerCase().includes(q),
+        String(cat.name || "")
+          .toLowerCase()
+          .includes(q),
       );
     },
     showCategoryMenuSearch() {
@@ -886,11 +900,25 @@ export default {
     },
     // Dynamic columns including store attributes and preset
     productColumns() {
-      return buildColumnsWithPreset(this.storeAttributes, this.selectedPreset, this.storeBaseCurrency);
+      return buildColumnsWithPreset(
+        this.storeAttributes,
+        this.selectedPreset,
+        this.storeBaseCurrency,
+      );
     },
     sortableColumnIds() {
-      const base = ['name', 'sku', 'price', 'storageQuantity', 'category', 'createdAt', 'updatedAt'];
-      const storeAttrIds = (this.storeAttributes || []).map((a) => `storeAttr_${a.id}`);
+      const base = [
+        "name",
+        "sku",
+        "price",
+        "storageQuantity",
+        "category",
+        "createdAt",
+        "updatedAt",
+      ];
+      const storeAttrIds = (this.storeAttributes || []).map(
+        (a) => `storeAttr_${a.id}`,
+      );
       return [...base, ...storeAttrIds];
     },
     lastPossiblePage() {
@@ -998,9 +1026,11 @@ export default {
               <template #trailing>
                 <Popover v-model:open="categoryFilterOpen">
                   <PopoverTrigger as-child>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      class="inline-flex h-7 max-w-[8rem] cursor-pointer items-center gap-0.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/80 hover:text-foreground active:scale-[0.97]"
+                      class="h-7 max-w-[8rem] min-w-0 cursor-pointer gap-0.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                       :class="
                         filterCategoryId != null
                           ? 'bg-muted text-foreground shadow-none'
@@ -1012,7 +1042,7 @@ export default {
                         categoryFilterLabel
                       }}</span>
                       <ChevronDown class="size-3.5 shrink-0 opacity-60" />
-                    </button>
+                    </Button>
                   </PopoverTrigger>
                   <PopoverContent
                     align="end"
@@ -1033,8 +1063,10 @@ export default {
                       </div>
                     </div>
                     <div class="max-h-64 overflow-y-auto p-1">
-                      <button
+                      <Button
+                        variant="ghost"
                         type="button"
+                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
                         :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
                         @click="selectCategoryFilter(null)"
                       >
@@ -1045,9 +1077,11 @@ export default {
                           v-if="filterCategoryId == null"
                           :class="MENU_ITEM_CHECK + ' text-foreground'"
                         />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
                         type="button"
+                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
                         :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
                         @click="selectCategoryFilter(-1)"
                       >
@@ -1058,12 +1092,14 @@ export default {
                           v-if="filterCategoryId === -1"
                           :class="MENU_ITEM_CHECK + ' text-foreground'"
                         />
-                      </button>
+                      </Button>
                       <div :class="MENU_SEPARATOR" />
-                      <button
+                      <Button
                         v-for="cat in filteredMenuCategories"
                         :key="cat.id"
+                        variant="ghost"
                         type="button"
+                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
                         :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
                         :title="cat.name"
                         @click="selectCategoryFilter(cat.id)"
@@ -1075,7 +1111,7 @@ export default {
                           v-if="filterCategoryId === cat.id"
                           :class="MENU_ITEM_CHECK + ' text-foreground'"
                         />
-                      </button>
+                      </Button>
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -1160,99 +1196,173 @@ export default {
       <!-- Combined Footer -->
       <PageDockFooter v-if="!isProductsLoading">
         <div class="flex min-w-0 flex-1 items-center justify-between gap-3">
-        <!-- Left: Page size + Selection info -->
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-2">
-            <p class="text-sm text-muted-foreground">{{ $t("pages.productsPage.perPageLabel") }}</p>
-            <Select
-              :model-value="String(pageSize)"
-              @update:model-value="(val) => pageSize = Number(val)"
-            >
-              <SelectTrigger class="h-8 w-[100px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem as="button" value="10">10</SelectItem>
-                  <SelectItem as="button" value="25">25</SelectItem>
-                  <SelectItem as="button" value="50">50</SelectItem>
-                  <SelectItem as="button" value="100">100</SelectItem>
-                  <SelectItem as="button" value="250">250</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+          <!-- Left: Page size + Selection info -->
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+              <p class="text-sm text-muted-foreground">
+                {{ $t("pages.productsPage.perPageLabel") }}
+              </p>
+              <Select
+                :model-value="String(pageSize)"
+                @update:model-value="(val) => (pageSize = Number(val))"
+              >
+                <SelectTrigger class="h-8 w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem as="button" value="10">10</SelectItem>
+                    <SelectItem as="button" value="25">25</SelectItem>
+                    <SelectItem as="button" value="50">50</SelectItem>
+                    <SelectItem as="button" value="100">100</SelectItem>
+                    <SelectItem as="button" value="250">250</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <template v-if="hasSelection">
+              <div class="h-4 w-px bg-border" />
+              <span class="text-sm font-medium">
+                {{
+                  $t("pages.productsPage.selectedCount", {
+                    count: selectedProductIds.length,
+                  })
+                }}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-8"
+                @click="clearSelection"
+              >
+                <X class="h-4 w-4" />
+              </Button>
+
+              <!-- Normal mode actions -->
+              <template v-if="!isTrashMode && canManageCatalog">
+                <div class="flex">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 rounded-r-none border-r-0"
+                    @click="openBulkEditDialog"
+                  >
+                    <Pencil class="h-4 w-4 mr-1" />
+                    {{ $t("common.edit") }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 rounded-l-none"
+                    @click="isExcelDialogOpen = true"
+                  >
+                    <FileSpreadsheet class="h-4 w-4 mr-1" />
+                    {{ $t("pages.productsPage.bulkEditFromTable") }}
+                  </Button>
+                </div>
+                <Button
+                  v-if="canManageAdapters"
+                  variant="outline"
+                  size="sm"
+                  class="h-8"
+                  @click="isBulkAdapterDialogOpen = true"
+                >
+                  <RefreshCw class="h-4 w-4 mr-1" />
+                  {{ $t("nav.adapters") }}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  class="h-8"
+                  @click="openBulkDeleteDialog"
+                >
+                  <Trash2 class="h-4 w-4 mr-1" />
+                  {{ $t("pages.productsPage.moveToTrash") }}
+                </Button>
+              </template>
+
+              <!-- Trash mode actions -->
+              <template v-else>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-8"
+                  :disabled="isRestoring"
+                  @click="handleBulkRestore"
+                >
+                  <Undo2 class="h-4 w-4 mr-1" />
+                  {{
+                    isRestoring
+                      ? $t("pages.productsPage.restoring")
+                      : $t("trashRowActions.restore")
+                  }}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  class="h-8"
+                  @click="isBulkPermanentDeleteDialogOpen = true"
+                >
+                  <Trash2 class="h-4 w-4 mr-1" />
+                  {{ $t("trashRowActions.deleteForever") }}
+                </Button>
+              </template>
+            </template>
           </div>
-          <template v-if="hasSelection">
-            <div class="h-4 w-px bg-border" />
-            <span class="text-sm font-medium">
-              {{ $t("pages.productsPage.selectedCount", { count: selectedProductIds.length }) }}
-            </span>
-            <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
-              <X class="h-4 w-4" />
+
+          <!-- Right: Pagination -->
+          <div class="flex items-center gap-2">
+            <p class="text-sm text-muted-foreground mr-2">
+              {{ isTrashMode ? trashPage : page }} /
+              {{ isTrashMode ? trashLastPossiblePage : lastPossiblePage }}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="(isTrashMode ? trashPage : page) <= 1"
+              @click="isTrashMode ? (trashPage = 1) : (page = 1)"
+            >
+              <ChevronsLeft class="size-4" />
             </Button>
-
-            <!-- Normal mode actions -->
-            <template v-if="!isTrashMode && canManageCatalog">
-              <div class="flex">
-                <Button variant="outline" size="sm" class="h-8 rounded-r-none border-r-0" @click="openBulkEditDialog">
-                  <Pencil class="h-4 w-4 mr-1" />
-                  {{ $t("common.edit") }}
-                </Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-l-none" @click="isExcelDialogOpen = true">
-                  <FileSpreadsheet class="h-4 w-4 mr-1" />
-                  {{ $t("pages.productsPage.bulkEditFromTable") }}
-                </Button>
-              </div>
-              <Button v-if="canManageAdapters" variant="outline" size="sm" class="h-8" @click="isBulkAdapterDialogOpen = true">
-                <RefreshCw class="h-4 w-4 mr-1" />
-                {{ $t("nav.adapters") }}
-              </Button>
-              <Button variant="destructive" size="sm" class="h-8" @click="openBulkDeleteDialog">
-                <Trash2 class="h-4 w-4 mr-1" />
-                {{ $t("pages.productsPage.moveToTrash") }}
-              </Button>
-            </template>
-
-            <!-- Trash mode actions -->
-            <template v-else>
-              <Button variant="outline" size="sm" class="h-8" :disabled="isRestoring" @click="handleBulkRestore">
-                <Undo2 class="h-4 w-4 mr-1" />
-                {{ isRestoring ? $t("pages.productsPage.restoring") : $t("trashRowActions.restore") }}
-              </Button>
-              <Button variant="destructive" size="sm" class="h-8" @click="isBulkPermanentDeleteDialogOpen = true">
-                <Trash2 class="h-4 w-4 mr-1" />
-                {{ $t("trashRowActions.deleteForever") }}
-              </Button>
-            </template>
-          </template>
-        </div>
-
-        <!-- Right: Pagination -->
-        <div class="flex items-center gap-2">
-          <p class="text-sm text-muted-foreground mr-2">
-            {{ isTrashMode ? trashPage : page }} / {{ isTrashMode ? trashLastPossiblePage : lastPossiblePage }}
-          </p>
-          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="(isTrashMode ? trashPage : page) <= 1"
-            @click="isTrashMode ? trashPage = 1 : page = 1">
-            <ChevronsLeft class="size-4" />
-          </Button>
-          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="(isTrashMode ? trashPage : page) <= 1"
-            @click="isTrashMode ? trashPage-- : page--">
-            <ChevronLeft class="size-4" />
-          </Button>
-          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="(isTrashMode ? trashPage : page) >= (isTrashMode ? trashLastPossiblePage : lastPossiblePage)"
-            @click="isTrashMode ? trashPage++ : page++">
-            <ChevronRight class="size-4" />
-          </Button>
-          <Button variant="outline" size="sm" class="h-8 w-8 p-0"
-            :disabled="(isTrashMode ? trashPage : page) >= (isTrashMode ? trashLastPossiblePage : lastPossiblePage)"
-            @click="isTrashMode ? (trashPage = trashLastPossiblePage) : (page = lastPossiblePage)">
-            <ChevronsRight class="size-4" />
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="(isTrashMode ? trashPage : page) <= 1"
+              @click="isTrashMode ? trashPage-- : page--"
+            >
+              <ChevronLeft class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="
+                (isTrashMode ? trashPage : page) >=
+                (isTrashMode ? trashLastPossiblePage : lastPossiblePage)
+              "
+              @click="isTrashMode ? trashPage++ : page++"
+            >
+              <ChevronRight class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-8 w-8 p-0"
+              :disabled="
+                (isTrashMode ? trashPage : page) >=
+                (isTrashMode ? trashLastPossiblePage : lastPossiblePage)
+              "
+              @click="
+                isTrashMode
+                  ? (trashPage = trashLastPossiblePage)
+                  : (page = lastPossiblePage)
+              "
+            >
+              <ChevronsRight class="size-4" />
+            </Button>
+          </div>
         </div>
       </PageDockFooter>
     </div>
@@ -1281,18 +1391,25 @@ export default {
             {{ $t("pages.productsPage.excelDialog.title") }}
           </DialogTitle>
           <DialogDescription>
-            {{ $t("pages.productsPage.excelDialog.description", { count: selectedProductIds.length }) }}
+            {{
+              $t("pages.productsPage.excelDialog.description", {
+                count: selectedProductIds.length,
+              })
+            }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="space-y-2 px-6 py-5">
-          <button
+          <Button
+            variant="outline"
             type="button"
-            class="flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-60"
+            class="h-auto min-h-0 w-full items-start justify-start gap-3 rounded-lg px-3.5 py-3 text-left whitespace-normal hover:bg-muted/40"
             :disabled="isExporting"
             @click="handleExportExcel"
           >
-            <div class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+            <div
+              class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background"
+            >
               <Spinner v-if="isExporting" class="text-muted-foreground" />
               <Download v-else class="size-4 text-muted-foreground" />
             </div>
@@ -1308,14 +1425,17 @@ export default {
                 {{ $t("pages.productsPage.excelDialog.exportHint") }}
               </p>
             </div>
-          </button>
+          </Button>
 
-          <button
+          <Button
+            variant="outline"
             type="button"
-            class="flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            class="h-auto min-h-0 w-full items-start justify-start gap-3 rounded-lg px-3.5 py-3 text-left whitespace-normal hover:bg-muted/40"
             @click="openImportFromExcelDialog"
           >
-            <div class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+            <div
+              class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-background"
+            >
               <Upload class="size-4 text-muted-foreground" />
             </div>
             <div class="min-w-0 flex-1">
@@ -1326,7 +1446,7 @@ export default {
                 {{ $t("pages.productsPage.excelDialog.importHint") }}
               </p>
             </div>
-          </button>
+          </Button>
         </div>
 
         <DialogFooter variant="bar" class="sm:justify-start">
@@ -1357,19 +1477,27 @@ export default {
     <AlertDialog v-model:open="isBulkDeleteDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{{ $t("productRowActions.confirmTrashTitle") }}</AlertDialogTitle>
+          <AlertDialogTitle>{{
+            $t("productRowActions.confirmTrashTitle")
+          }}</AlertDialogTitle>
           <AlertDialogDescription>
             {{ $t("pages.productsPage.bulkTrashConfirm.description") }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="isDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogCancel :disabled="isDeleting">{{
+            $t("common.cancel")
+          }}</AlertDialogCancel>
           <AlertDialogAction
             @click.prevent="handleBulkDelete"
             :disabled="isDeleting"
             variant="destructive"
           >
-            {{ isDeleting ? $t("pages.productsPage.bulkTrashConfirm.moving") : $t("productRowActions.toTrash") }}
+            {{
+              isDeleting
+                ? $t("pages.productsPage.bulkTrashConfirm.moving")
+                : $t("productRowActions.toTrash")
+            }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1379,19 +1507,31 @@ export default {
     <AlertDialog v-model:open="isBulkPermanentDeleteDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{{ $t("trashRowActions.confirmDeleteTitle") }}</AlertDialogTitle>
+          <AlertDialogTitle>{{
+            $t("trashRowActions.confirmDeleteTitle")
+          }}</AlertDialogTitle>
           <AlertDialogDescription>
-            {{ $t("pages.productsPage.bulkPermanentDeleteConfirm.description", { count: selectedProductIds.length }) }}
+            {{
+              $t("pages.productsPage.bulkPermanentDeleteConfirm.description", {
+                count: selectedProductIds.length,
+              })
+            }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="isPermanentDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogCancel :disabled="isPermanentDeleting">{{
+            $t("common.cancel")
+          }}</AlertDialogCancel>
           <AlertDialogAction
             @click.prevent="handleBulkPermanentDelete"
             :disabled="isPermanentDeleting"
             variant="destructive"
           >
-            {{ isPermanentDeleting ? $t("pages.productsPage.bulkPermanentDeleteConfirm.deleting") : $t("trashRowActions.deleteForever") }}
+            {{
+              isPermanentDeleting
+                ? $t("pages.productsPage.bulkPermanentDeleteConfirm.deleting")
+                : $t("trashRowActions.deleteForever")
+            }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -106,7 +106,8 @@ public sealed class ApiRequestLogService : IApiRequestLogger, IApiRequestLogQuer
     public const int MaxBodyChars = MaxStoredBodyChars;
 
     public const string TruncationMarker = "\n…[truncated]";
-    public const int DefaultRetentionDays = 30;
+    public const int DefaultRetentionDays = 7;
+    public const int MaxRowsSafety = 200_000;
 
     private static readonly Regex SensitiveJsonValue = new(
         @"""(?i:api[_-]?key|password|secret|token|authorization)""\s*:\s*""[^""]*""",
@@ -464,18 +465,49 @@ public sealed class ApiRequestLogCleanupService : BackgroundService
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<DataContext>();
                 var cutoff = DateTime.UtcNow.AddDays(-ApiRequestLogService.DefaultRetentionDays);
-                var deleted = await db.apiRequestLogs
-                    .Where(l => l.createdAt < cutoff)
-                    .ExecuteDeleteAsync(stoppingToken);
+                var deleted = await DeleteOldestAsync(db, cutoff, 100_000, stoppingToken);
                 if (deleted > 0)
                     _logger.LogInformation("Deleted {Count} expired API request logs", deleted);
+
+                var total = await db.apiRequestLogs.CountAsync(stoppingToken);
+                if (total > ApiRequestLogService.MaxRowsSafety)
+                {
+                    var capped = await DeleteOldestAsync(
+                        db, null, Math.Min(total - ApiRequestLogService.MaxRowsSafety, 100_000), stoppingToken);
+                    if (capped > 0)
+                        _logger.LogInformation("API request log safety cap removed {Count} oldest rows", capped);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "API request log cleanup failed");
             }
 
-            await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
+    }
+
+    private static async Task<int> DeleteOldestAsync(
+        DataContext db, DateTime? before, int maxRows, CancellationToken ct)
+    {
+        var deleted = 0;
+        while (deleted < maxRows)
+        {
+            var query = db.apiRequestLogs.AsNoTracking();
+            if (before.HasValue) query = query.Where(l => l.createdAt < before.Value);
+            var ids = await query.OrderBy(l => l.createdAt).ThenBy(l => l.Id)
+                .Select(l => l.Id).Take(Math.Min(5_000, maxRows - deleted)).ToListAsync(ct);
+            if (ids.Count == 0) break;
+            if (db.Database.IsRelational())
+                deleted += await db.apiRequestLogs.Where(l => ids.Contains(l.Id)).ExecuteDeleteAsync(ct);
+            else
+            {
+                var rows = await db.apiRequestLogs.Where(l => ids.Contains(l.Id)).ToListAsync(ct);
+                db.apiRequestLogs.RemoveRange(rows);
+                deleted += rows.Count;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        return deleted;
     }
 }

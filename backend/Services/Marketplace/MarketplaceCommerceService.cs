@@ -36,7 +36,7 @@ public class MarketplaceCommerceService
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         CatalogMatchService.EnsureConnectionActive(connection);
 

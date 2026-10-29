@@ -40,7 +40,11 @@ import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
 import { Spinner } from "@/components/ui/spinner";
-import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  resolveApiErrorMessage,
+} from "@/store/sonnerHelper";
 import {
   AlertTriangle,
   ArrowRight,
@@ -104,10 +108,12 @@ const copyFiles = ref(true);
 const isSubmitting = ref(false);
 
 const currentStoreName = computed(
-  () => memberships.value.find((m) => m.id === currentStoreId.value)?.name || null,
+  () =>
+    memberships.value.find((m) => m.id === currentStoreId.value)?.name || null,
 );
 const targetStoreName = computed(
-  () => memberships.value.find((m) => m.id === targetStoreId.value)?.name || null,
+  () =>
+    memberships.value.find((m) => m.id === targetStoreId.value)?.name || null,
 );
 
 const productLabel = computed(
@@ -136,7 +142,10 @@ const modeHint = computed(() => {
 
 /** Clone with only one accessible store — no destination picker. */
 const isSameStoreClone = computed(
-  () => mode.value === "clone" && !isLoadingMemberships.value && memberships.value.length <= 1,
+  () =>
+    mode.value === "clone" &&
+    !isLoadingMemberships.value &&
+    memberships.value.length <= 1,
 );
 
 const syncingMissingAttrs = computed(
@@ -146,14 +155,17 @@ const syncingMissingAttrs = computed(
 );
 
 // --- Lifecycle: open ↔ load memberships ---
-watch(() => props.open, async (isOpen) => {
-  if (!isOpen) {
-    resetState();
-    return;
-  }
-  await loadMemberships();
-  autoSelectTargetIfNeeded();
-});
+watch(
+  () => props.open,
+  async (isOpen) => {
+    if (!isOpen) {
+      resetState();
+      return;
+    }
+    await loadMemberships();
+    autoSelectTargetIfNeeded();
+  },
+);
 
 async function loadMemberships() {
   isLoadingMemberships.value = true;
@@ -246,7 +258,11 @@ watch(targetStoreId, async (newId) => {
       }
 
       // Default category action: match if matched, otherwise create
-      categoryAction.value = data.matchedCategory ? "match" : (data.sourceProduct?.categoryName ? "create" : "none");
+      categoryAction.value = data.matchedCategory
+        ? "match"
+        : data.sourceProduct?.categoryName
+          ? "create"
+          : "none";
 
       // No group by default
       groupAction.value = "none";
@@ -256,7 +272,10 @@ watch(targetStoreId, async (newId) => {
       confirmBreakLinks.value = false;
     },
     onError: (error) => {
-      previewError.value = error?.response?.data?.message || error?.message || t("products.productTransferDialog.previewLoadFailed");
+      previewError.value = resolveApiErrorMessage(
+        error,
+        "products.productTransferDialog.previewLoadFailed",
+      );
       preview.value = null;
     },
   });
@@ -287,11 +306,19 @@ const canSubmit = computed(() => {
 
   // Group=use needs a groupId, group=create needs a name
   if (groupAction.value === "use" && !groupUseId.value) return false;
-  if (groupAction.value === "create" && !isNonEmptyWithinLimit(groupNewName.value, FIELD_LIMITS.groupName)) return false;
+  if (
+    groupAction.value === "create" &&
+    !isNonEmptyWithinLimit(groupNewName.value, FIELD_LIMITS.groupName)
+  )
+    return false;
 
   // For move only: breaking marketplace links must be explicitly acknowledged.
   // Clone never breaks anything (original keeps its links), so no checkbox required.
-  if (mode.value === "move" && preview.value.marketplaceLinksToBreak?.length > 0 && !confirmBreakLinks.value) {
+  if (
+    mode.value === "move" &&
+    preview.value.marketplaceLinksToBreak?.length > 0 &&
+    !confirmBreakLinks.value
+  ) {
     return false;
   }
 
@@ -311,7 +338,8 @@ async function submit() {
     categoryId: categoryAction.value === "use" ? categoryUseId.value : null,
     groupAction: groupAction.value,
     groupId: groupAction.value === "use" ? groupUseId.value : null,
-    groupName: groupAction.value === "create" ? groupNewName.value.trim() : null,
+    groupName:
+      groupAction.value === "create" ? groupNewName.value.trim() : null,
     // Clone never breaks links (only move does); always send true so backend accepts.
     confirmBreakLinks: mode.value === "move" ? confirmBreakLinks.value : true,
     syncMissingCategoryAttributes: syncMissingAttrs.value,
@@ -325,15 +353,28 @@ async function submit() {
       // Backend now enqueues - returns { queued: true, operationId, totalFiles }.
       // Real progress lives in the operations side panel.
       const result = response.data.value;
-      const storeName = preview.value.targetStore?.name || t("products.productTransferDialog.targetStoreFallback");
-      const headline = mode.value === "move"
-        ? t("products.productTransferDialog.queuedMoveHeadline", { store: storeName })
-        : t("products.productTransferDialog.queuedCloneHeadline", { store: storeName });
+      const storeName =
+        preview.value.targetStore?.name ||
+        t("products.productTransferDialog.targetStoreFallback");
+      const headline =
+        mode.value === "move"
+          ? t("products.productTransferDialog.queuedMoveHeadline", {
+              store: storeName,
+            })
+          : t("products.productTransferDialog.queuedCloneHeadline", {
+              store: storeName,
+            });
       const tail = result?.totalFiles
-        ? t("products.productTransferDialog.progressWithFiles", { count: result.totalFiles })
+        ? t("products.productTransferDialog.progressWithFiles", {
+            count: result.totalFiles,
+          })
         : t("products.productTransferDialog.progressGeneric");
       displaySonnerSuccess(`${headline}. ${tail}`);
-      emit("transferred", { queued: true, operationId: result?.operationId, mode: mode.value });
+      emit("transferred", {
+        queued: true,
+        operationId: result?.operationId,
+        mode: mode.value,
+      });
       emit("update:open", false);
     },
     onError: (error) => {
@@ -360,16 +401,21 @@ function close() {
         <DialogTitle>
           {{ dialogTitle }}
         </DialogTitle>
-        <DialogDescription class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <DialogDescription
+          class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+        >
           <span class="font-medium text-foreground">{{ productLabel }}</span>
           <span
             v-if="productSku && productName"
             class="font-mono text-xs text-muted-foreground tabular-nums"
-          >{{ productSku }}</span>
+            >{{ productSku }}</span
+          >
         </DialogDescription>
       </DialogHeader>
 
-      <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4 thin-scrollbar">
+      <div
+        class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4 thin-scrollbar"
+      >
         <p class="text-sm text-muted-foreground">{{ modeHint }}</p>
 
         <FieldGroup v-if="!isSameStoreClone" class="gap-5">
@@ -380,14 +426,20 @@ function close() {
             <Select
               :model-value="targetStoreId == null ? '' : String(targetStoreId)"
               :disabled="isLoadingMemberships"
-              @update:model-value="(v) => (targetStoreId = v ? Number(v) : null)"
+              @update:model-value="
+                (v) => (targetStoreId = v ? Number(v) : null)
+              "
             >
               <SelectTrigger id="target-store" class="w-full">
                 <SelectValue
                   :placeholder="
                     isLoadingMemberships
-                      ? t('products.productTransferDialog.loadingStoresPlaceholder')
-                      : t('products.productTransferDialog.chooseStorePlaceholder')
+                      ? t(
+                          'products.productTransferDialog.loadingStoresPlaceholder',
+                        )
+                      : t(
+                          'products.productTransferDialog.chooseStorePlaceholder',
+                        )
                   "
                 />
               </SelectTrigger>
@@ -398,10 +450,16 @@ function close() {
                   :value="String(m.id)"
                   as="button"
                 >
-                  {{ m.name }}<span
+                  {{ m.name
+                  }}<span
                     v-if="m.id === currentStoreId"
                     class="text-muted-foreground"
-                  > · {{ t("products.productTransferDialog.currentStoreSuffix") }}</span>
+                  >
+                    ·
+                    {{
+                      t("products.productTransferDialog.currentStoreSuffix")
+                    }}</span
+                  >
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -415,10 +473,18 @@ function close() {
           aria-live="polite"
         >
           <span class="min-w-0 truncate text-muted-foreground">
-            {{ currentStoreName || t("products.productTransferDialog.currentStoreFallback") }}
+            {{
+              currentStoreName ||
+              t("products.productTransferDialog.currentStoreFallback")
+            }}
           </span>
-          <ArrowRight class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span class="min-w-0 truncate font-medium text-foreground">{{ targetStoreName }}</span>
+          <ArrowRight
+            class="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 truncate font-medium text-foreground">{{
+            targetStoreName
+          }}</span>
         </div>
 
         <div
@@ -451,17 +517,27 @@ function close() {
             <div
               :class="[
                 'flex items-center gap-2 text-sm font-medium',
-                skuResolved ? 'text-success-foreground' : 'text-warning-foreground',
+                skuResolved
+                  ? 'text-success-foreground'
+                  : 'text-warning-foreground',
               ]"
             >
               <CheckCircle2 v-if="skuResolved" class="size-4 shrink-0" />
               <AlertTriangle v-else class="size-4 shrink-0" />
               <span>
                 <template v-if="skuResolved">
-                  {{ t("products.productTransferDialog.skuResolvedLabel", { sku: newSku.trim() }) }}
+                  {{
+                    t("products.productTransferDialog.skuResolvedLabel", {
+                      sku: newSku.trim(),
+                    })
+                  }}
                 </template>
                 <template v-else>
-                  {{ t("products.productTransferDialog.skuConflictLabel", { sku: productSku }) }}
+                  {{
+                    t("products.productTransferDialog.skuConflictLabel", {
+                      sku: productSku,
+                    })
+                  }}
                 </template>
               </span>
             </div>
@@ -472,7 +548,9 @@ function close() {
               <Input
                 id="new-sku"
                 v-model="newSku"
-                :placeholder="t('products.productTransferDialog.newSkuPlaceholder')"
+                :placeholder="
+                  t('products.productTransferDialog.newSkuPlaceholder')
+                "
                 :maxlength="FIELD_LIMITS.productSku"
               />
             </SettingsFormField>
@@ -496,21 +574,42 @@ function close() {
                     class="mt-0.5 size-3.5 shrink-0 text-warning"
                   />
                   <span>
-                    {{ t("products.productTransferDialog.sourceCategoryLabel") }}
-                    <span class="font-medium text-foreground">«{{ preview.sourceProduct.categoryName }}»</span>.
+                    {{
+                      t("products.productTransferDialog.sourceCategoryLabel")
+                    }}
+                    <span class="font-medium text-foreground"
+                      >«{{ preview.sourceProduct.categoryName }}»</span
+                    >.
                     <template v-if="preview.matchedCategory">
-                      {{ t("products.productTransferDialog.foundSameNameInTarget") }}
+                      {{
+                        t(
+                          "products.productTransferDialog.foundSameNameInTarget",
+                        )
+                      }}
                       <span class="text-success-foreground">
                         {{ preview.matchedCategory.attributesMappable }}
                         {{
-                          pluralize(preview.matchedCategory.attributesMappable, [
-                            t("products.productTransferDialog.attrMappableOne"),
-                            t("products.productTransferDialog.attrMappableFew"),
-                            t("products.productTransferDialog.attrMappableMany"),
-                          ])
+                          pluralize(
+                            preview.matchedCategory.attributesMappable,
+                            [
+                              t(
+                                "products.productTransferDialog.attrMappableOne",
+                              ),
+                              t(
+                                "products.productTransferDialog.attrMappableFew",
+                              ),
+                              t(
+                                "products.productTransferDialog.attrMappableMany",
+                              ),
+                            ],
+                          )
                         }}
                       </span>
-                      <template v-if="preview.matchedCategory.attributesUnmappable?.length">
+                      <template
+                        v-if="
+                          preview.matchedCategory.attributesUnmappable?.length
+                        "
+                      >
                         ,
                         <span
                           :class="
@@ -519,22 +618,40 @@ function close() {
                               : 'text-warning-foreground'
                           "
                         >
-                          {{ preview.matchedCategory.attributesUnmappable.length }}
                           {{
-                            pluralize(preview.matchedCategory.attributesUnmappable.length, [
-                              syncingMissingAttrs
-                                ? t("products.productTransferDialog.attrWillBeAddedOne")
-                                : t("products.productTransferDialog.attrWontFitOne"),
-                              syncingMissingAttrs
-                                ? t("products.productTransferDialog.attrWillBeAddedFew")
-                                : t("products.productTransferDialog.attrWontFitFew"),
-                              syncingMissingAttrs
-                                ? t("products.productTransferDialog.attrWillBeAddedMany")
-                                : t("products.productTransferDialog.attrWontFitMany"),
-                            ])
+                            preview.matchedCategory.attributesUnmappable.length
                           }}
-                        </span>
-                      </template>.
+                          {{
+                            pluralize(
+                              preview.matchedCategory.attributesUnmappable
+                                .length,
+                              [
+                                syncingMissingAttrs
+                                  ? t(
+                                      "products.productTransferDialog.attrWillBeAddedOne",
+                                    )
+                                  : t(
+                                      "products.productTransferDialog.attrWontFitOne",
+                                    ),
+                                syncingMissingAttrs
+                                  ? t(
+                                      "products.productTransferDialog.attrWillBeAddedFew",
+                                    )
+                                  : t(
+                                      "products.productTransferDialog.attrWontFitFew",
+                                    ),
+                                syncingMissingAttrs
+                                  ? t(
+                                      "products.productTransferDialog.attrWillBeAddedMany",
+                                    )
+                                  : t(
+                                      "products.productTransferDialog.attrWontFitMany",
+                                    ),
+                              ],
+                            )
+                          }}
+                        </span> </template
+                      >.
                     </template>
                     <template v-else>
                       {{ t("products.productTransferDialog.notFoundInTarget") }}
@@ -547,7 +664,11 @@ function close() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem v-if="preview.matchedCategory" value="match" as="button">
+                  <SelectItem
+                    v-if="preview.matchedCategory"
+                    value="match"
+                    as="button"
+                  >
                     {{
                       t("products.productTransferDialog.useFoundCategory", {
                         name: preview.matchedCategory.name,
@@ -578,13 +699,31 @@ function close() {
               >
                 <template v-if="syncingMissingAttrs">
                   {{ t("products.productTransferDialog.willBeAddedPrefix") }}
-                  {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}
-                  <span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                  {{
+                    preview.matchedCategory.attributesUnmappable
+                      .slice(0, 5)
+                      .join(", ")
+                  }}
+                  <span
+                    v-if="
+                      preview.matchedCategory.attributesUnmappable.length > 5
+                    "
+                    >…</span
+                  >
                 </template>
                 <template v-else>
                   {{ t("products.productTransferDialog.wontFitPrefix") }}
-                  {{ preview.matchedCategory.attributesUnmappable.slice(0, 5).join(", ") }}
-                  <span v-if="preview.matchedCategory.attributesUnmappable.length > 5">…</span>
+                  {{
+                    preview.matchedCategory.attributesUnmappable
+                      .slice(0, 5)
+                      .join(", ")
+                  }}
+                  <span
+                    v-if="
+                      preview.matchedCategory.attributesUnmappable.length > 5
+                    "
+                    >…</span
+                  >
                 </template>
               </p>
               <label
@@ -597,14 +736,19 @@ function close() {
                   class="mt-0.5"
                 />
                 <span class="text-xs leading-snug">
-                  {{ t("products.productTransferDialog.addMissingAttrsPrefix") }}
+                  {{
+                    t("products.productTransferDialog.addMissingAttrsPrefix")
+                  }}
                   {{ preview.matchedCategory.attributesUnmappable.length }}
                   {{
-                    pluralize(preview.matchedCategory.attributesUnmappable.length, [
-                      t("products.productTransferDialog.missingAttrOne"),
-                      t("products.productTransferDialog.missingAttrFew"),
-                      t("products.productTransferDialog.missingAttrMany"),
-                    ])
+                    pluralize(
+                      preview.matchedCategory.attributesUnmappable.length,
+                      [
+                        t("products.productTransferDialog.missingAttrOne"),
+                        t("products.productTransferDialog.missingAttrFew"),
+                        t("products.productTransferDialog.missingAttrMany"),
+                      ],
+                    )
                   }}
                   {{
                     t("products.productTransferDialog.addMissingAttrsSuffix", {
@@ -616,7 +760,11 @@ function close() {
             </div>
 
             <p
-              v-if="preview.storeAttributesMappable + preview.storeAttributesUnmappable.length > 0"
+              v-if="
+                preview.storeAttributesMappable +
+                  preview.storeAttributesUnmappable.length >
+                0
+              "
               class="text-xs text-muted-foreground"
             >
               {{
@@ -629,9 +777,15 @@ function close() {
               }}
               <template v-if="preview.storeAttributesUnmappable.length">
                 .
-                {{ t("products.productTransferDialog.storeAttributesMissingInTarget") }}
+                {{
+                  t(
+                    "products.productTransferDialog.storeAttributesMissingInTarget",
+                  )
+                }}
                 {{ preview.storeAttributesUnmappable.slice(0, 3).join(", ") }}
-                <span v-if="preview.storeAttributesUnmappable.length > 3">…</span>
+                <span v-if="preview.storeAttributesUnmappable.length > 3"
+                  >…</span
+                >
               </template>
             </p>
 
@@ -663,7 +817,9 @@ function close() {
 
             <SettingsFormField
               v-if="groupAction === 'use'"
-              :label="t('products.productTransferDialog.chooseGroupPlaceholder')"
+              :label="
+                t('products.productTransferDialog.chooseGroupPlaceholder')
+              "
               label-for="group-use"
             >
               <Select
@@ -672,7 +828,9 @@ function close() {
               >
                 <SelectTrigger id="group-use" class="w-full">
                   <SelectValue
-                    :placeholder="t('products.productTransferDialog.chooseGroupPlaceholder')"
+                    :placeholder="
+                      t('products.productTransferDialog.chooseGroupPlaceholder')
+                    "
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -690,13 +848,17 @@ function close() {
 
             <SettingsFormField
               v-if="groupAction === 'create'"
-              :label="t('products.productTransferDialog.newGroupNamePlaceholder')"
+              :label="
+                t('products.productTransferDialog.newGroupNamePlaceholder')
+              "
               label-for="group-new-name"
             >
               <Input
                 id="group-new-name"
                 v-model="groupNewName"
-                :placeholder="t('products.productTransferDialog.newGroupNamePlaceholder')"
+                :placeholder="
+                  t('products.productTransferDialog.newGroupNamePlaceholder')
+                "
                 :maxlength="FIELD_LIMITS.groupName"
               />
             </SettingsFormField>
@@ -719,10 +881,17 @@ function close() {
               ]"
             >
               <AlertTriangle v-if="mode === 'move'" class="size-4 shrink-0" />
-              <ExternalLink v-else class="size-4 shrink-0 text-muted-foreground" />
+              <ExternalLink
+                v-else
+                class="size-4 shrink-0 text-muted-foreground"
+              />
               <span>
                 <template v-if="mode === 'move'">
-                  {{ t("products.productTransferDialog.linksWillBreakAfterMovePrefix") }}
+                  {{
+                    t(
+                      "products.productTransferDialog.linksWillBreakAfterMovePrefix",
+                    )
+                  }}
                   {{ preview.marketplaceLinksToBreak.length }}
                   {{
                     pluralize(preview.marketplaceLinksToBreak.length, [
@@ -734,7 +903,9 @@ function close() {
                   {{ t("products.productTransferDialog.withAdaptersSuffix") }}
                 </template>
                 <template v-else>
-                  {{ t("products.productTransferDialog.originalHasLinksPrefix") }}
+                  {{
+                    t("products.productTransferDialog.originalHasLinksPrefix")
+                  }}
                   {{ preview.marketplaceLinksToBreak.length }}
                   {{
                     pluralize(preview.marketplaceLinksToBreak.length, [
@@ -756,7 +927,9 @@ function close() {
                 <ExternalLink class="size-3 shrink-0" />
                 <span class="truncate">{{ l.connectionName }}</span>
                 <span class="text-border">·</span>
-                <span class="font-mono tabular-nums">{{ l.externalProductId }}</span>
+                <span class="font-mono tabular-nums">{{
+                  l.externalProductId
+                }}</span>
               </li>
             </ul>
             <p class="text-xs text-muted-foreground">
@@ -776,7 +949,9 @@ function close() {
                 v-model="confirmBreakLinks"
                 class="mt-0.5"
               />
-              <span>{{ t("products.productTransferDialog.confirmBreakLinksLabel") }}</span>
+              <span>{{
+                t("products.productTransferDialog.confirmBreakLinksLabel")
+              }}</span>
             </label>
           </div>
 
@@ -790,14 +965,15 @@ function close() {
               }}
             </p>
             <label
-              v-if="mode === 'clone' && (preview.filesCount > 0 || preview.foldersCount > 0 || preview.imagesCount > 0)"
+              v-if="
+                mode === 'clone' &&
+                (preview.filesCount > 0 ||
+                  preview.foldersCount > 0 ||
+                  preview.imagesCount > 0)
+              "
               class="mb-3 flex cursor-pointer items-start gap-2 text-sm"
             >
-              <Checkbox
-                id="copy-files"
-                v-model="copyFiles"
-                class="mt-0.5"
-              />
+              <Checkbox id="copy-files" v-model="copyFiles" class="mt-0.5" />
               <span class="leading-snug">
                 {{ t("products.productTransferDialog.copyFilesLabel") }}
                 <span class="block text-xs font-normal text-muted-foreground">
@@ -805,11 +981,15 @@ function close() {
                 </span>
               </span>
             </label>
-            <ul class="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
+            <ul
+              class="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2"
+            >
               <li
                 :class="[
                   'flex items-center gap-2',
-                  mode === 'clone' && !copyFiles && 'text-muted-foreground/60 line-through',
+                  mode === 'clone' &&
+                    !copyFiles &&
+                    'text-muted-foreground/60 line-through',
                 ]"
               >
                 <FileText class="size-3.5 shrink-0" />
@@ -838,7 +1018,9 @@ function close() {
               <li
                 :class="[
                   'flex items-center gap-2',
-                  mode === 'clone' && !copyFiles && 'text-muted-foreground/60 line-through',
+                  mode === 'clone' &&
+                    !copyFiles &&
+                    'text-muted-foreground/60 line-through',
                 ]"
               >
                 <Image class="size-3.5 shrink-0" />
@@ -866,7 +1048,10 @@ function close() {
                   }}
                 </span>
               </li>
-              <li v-if="preview.variantsCount > 0" class="flex items-center gap-2">
+              <li
+                v-if="preview.variantsCount > 0"
+                class="flex items-center gap-2"
+              >
                 <Package class="size-3.5 shrink-0" />
                 <span>
                   {{ preview.variantsCount }}

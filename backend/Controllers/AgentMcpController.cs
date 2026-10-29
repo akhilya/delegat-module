@@ -39,7 +39,7 @@ public class AgentMcpController : ControllerBase
     public async Task<IActionResult> Post([FromBody] JsonElement body, CancellationToken ct)
     {
         if (!FeatureFlags.IsAiEnabled())
-            throw ApiException.Forbidden("AI is disabled", code: "ai_disabled");
+            throw ApiException.Forbidden(code: "ai_disabled");
 
         var method = body.TryGetProperty("method", out var m) ? m.GetString() ?? "" : "";
         JsonElement id = body.TryGetProperty("id", out var idEl) ? idEl : default;
@@ -58,27 +58,8 @@ public class AgentMcpController : ControllerBase
                     serverInfo = new { name = "delegat-module", version = Delegat.PlatformVersion.Current },
                 },
                 "ping" => new { },
-                "tools/list" => new
-                {
-                    tools = AgentToolCatalog.Build()
-                        .Where(t => t.name != "propose_plan")
-                        .Select(t => new
-                        {
-                            name = t.name,
-                            description = t.description,
-                            inputSchema = t.input_schema,
-                        }),
-                },
-                "resources/list" => new
-                {
-                    resources = new object[]
-                    {
-                        new { uri = "delegat://openapi/operator.json", name = "Cabinet API denylist", mimeType = "application/json" },
-                        new { uri = "delegat://store/schema", name = "SQL schema", mimeType = "text/plain" },
-                        new { uri = "delegat://cabinet/actions", name = "Cabinet actions", mimeType = "application/json" },
-                        new { uri = "delegat://docs/index", name = "Knowledge search", mimeType = "text/markdown" },
-                    },
-                },
+                "tools/list" => await ListToolsAsync(ct),
+                "resources/list" => await ListResourcesAsync(ct),
                 "resources/read" => await ReadResourceAsync(body, ct),
                 "tools/call" => await CallToolAsync(body, ct),
                 _ => throw new InvalidOperationException($"Unknown method {method}"),
@@ -114,6 +95,7 @@ public class AgentMcpController : ControllerBase
 
     private async Task<object> ReadResourceAsync(JsonElement body, CancellationToken ct)
     {
+        await _session.ResolveAsync(null, ct);
         var uri = body.GetProperty("params").GetProperty("uri").GetString() ?? "";
         if (uri == "delegat://openapi/operator.json")
         {
@@ -147,6 +129,39 @@ public class AgentMcpController : ControllerBase
         }
 
         throw new InvalidOperationException("Unknown resource");
+    }
+
+    private async Task<object> ListToolsAsync(CancellationToken ct)
+    {
+        var session = await _session.ResolveAsync(null, ct);
+        var tools = AgentToolCatalog.Build()
+            .Where(t => t.name != "propose_plan");
+        if (AgentAccess.IsReadOnly(session.Permissions))
+            tools = tools.Where(t => t.name is not "run_python" and not "memory_save" and not "memory_delete");
+        return new
+        {
+            tools = tools.Select(t => new
+            {
+                name = t.name,
+                description = t.description,
+                inputSchema = t.input_schema,
+            }),
+        };
+    }
+
+    private async Task<object> ListResourcesAsync(CancellationToken ct)
+    {
+        await _session.ResolveAsync(null, ct);
+        return new
+        {
+            resources = new object[]
+            {
+                new { uri = "delegat://openapi/operator.json", name = "Cabinet API denylist", mimeType = "application/json" },
+                new { uri = "delegat://store/schema", name = "SQL schema", mimeType = "text/plain" },
+                new { uri = "delegat://cabinet/actions", name = "Cabinet actions", mimeType = "application/json" },
+                new { uri = "delegat://docs/index", name = "Knowledge search", mimeType = "text/markdown" },
+            },
+        };
     }
 
     private static object? UnwrapId(JsonElement id)

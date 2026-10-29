@@ -1,9 +1,6 @@
 <script setup>
 import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  X,
-} from "lucide-vue-next";
+import { Plus, X } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import AppImage from "@/components/AppImage.vue";
 import draggable from "vuedraggable";
@@ -63,7 +60,9 @@ function thumbSrc(element) {
           <div
             :class="[
               'gallery-item group relative overflow-hidden rounded-lg bg-muted cursor-grab active:cursor-grabbing hover:ring-2 ring-primary',
-              layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
+              layout === 'sidebar'
+                ? 'aspect-square w-full'
+                : 'size-28 sm:size-32',
               index === 0 ? 'ring-2 ring-primary' : '',
             ]"
             @click="emit('preview', index)"
@@ -71,7 +70,10 @@ function thumbSrc(element) {
             <!-- Blurred fill so letterboxed contain never shows empty muted bands -->
             <AppImage
               :src="thumbSrc(element)"
-              :alt="element.displayName || t('products.productGallerySidebar.productPhotoAlt')"
+              :alt="
+                element.displayName ||
+                t('products.productGallerySidebar.productPhotoAlt')
+              "
               blur-backdrop
               spinner-size="sm"
               class="pointer-events-none absolute inset-0 size-full"
@@ -87,7 +89,9 @@ function thumbSrc(element) {
               type="button"
               variant="ghost"
               size="icon"
+              :disabled="disabled"
               class="absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
+              :aria-label="t('products.productGallerySidebar.removePhoto')"
               @click.stop="emit('remove', index)"
             >
               <X class="size-3" />
@@ -95,32 +99,44 @@ function thumbSrc(element) {
           </div>
         </template>
         <template #footer>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            :disabled="disabled || isUploading"
+            :aria-label="t('products.productGallerySidebar.uploadPhoto')"
             :class="[
-              'flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent transition-colors hover:border-primary/50',
-              layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
+              'flex h-auto min-h-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent p-0 transition-colors hover:border-primary/50 hover:bg-transparent active:scale-[0.99]',
+              layout === 'sidebar'
+                ? 'aspect-square w-full'
+                : 'size-28 sm:size-32',
             ]"
             @click="emit('upload')"
           >
-            <Spinner v-if="isUploading" size="lg" class="text-muted-foreground" />
+            <Spinner
+              v-if="isUploading"
+              size="lg"
+              class="text-muted-foreground"
+            />
             <Plus v-else class="size-5 text-muted-foreground" />
-          </button>
+          </Button>
         </template>
       </draggable>
 
-      <button
+      <Button
         v-else
         type="button"
+        variant="ghost"
+        :disabled="disabled || isUploading"
+        :aria-label="t('products.productGallerySidebar.uploadPhoto')"
         :class="[
-          'flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent transition-colors hover:border-primary/50',
+          'flex h-auto min-h-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent p-0 transition-colors hover:border-primary/50 hover:bg-transparent active:scale-[0.99]',
           layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
         ]"
         @click="emit('upload')"
       >
         <Spinner v-if="isUploading" size="lg" class="text-muted-foreground" />
         <Plus v-else class="size-5 text-muted-foreground" />
-      </button>
+      </Button>
     </div>
   </div>
 </template>

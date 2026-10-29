@@ -56,7 +56,7 @@ public class DocsController : ControllerBase
     {
         var storeId = await _currentUser.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
     }
 
     private static ApiException Map(DocsClientException ex) =>

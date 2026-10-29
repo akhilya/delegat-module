@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Delegat.Models.Ai;
@@ -15,7 +17,7 @@ namespace Delegat.Services.Ai;
 public class AiChatService
 {
     private readonly AiModelConfigService _modelService;
-    private readonly AiApiClient _apiClient;
+    private readonly IAiApiClient _apiClient;
     private readonly DataContext _context;
     private readonly AgentToolHost _toolHost;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -45,7 +47,7 @@ public class AiChatService
 
     public AiChatService(
         AiModelConfigService modelService,
-        AiApiClient apiClient,
+        IAiApiClient apiClient,
         DataContext context,
         AgentToolHost toolHost,
         IHttpContextAccessor httpContextAccessor,
@@ -87,6 +89,9 @@ public class AiChatService
             }
 
             var model = _modelService.DecryptForUse(modelConfig);
+            using var turnTelemetry = new AiTurnTelemetry(
+                _logger, storeId, model.provider.ToString(), model.modelId,
+                AiPrompts.ChatPromptVersion);
             var storeInfo = await _context.stores.AsNoTracking()
                 .Where(s => s.Id == storeId)
                 .Select(s => new { s.name, s.timezone, s.extendedPriceParameters })
@@ -108,6 +113,13 @@ public class AiChatService
                 .FirstOrDefaultAsync(s => s.StoreId == storeId, ct);
             var catalogSlotsRemaining = await _quota.GetRemainingProductSlotsAsync(storeId);
             var catalogProductLimit = _quota.GetLimits().MaxProducts;
+            var durableMemories = await _context.aiMemories.AsNoTracking()
+                .Where(m => m.storeId == storeId && m.userId == userId)
+                .OrderByDescending(m => m.updatedAt)
+                .Take(AiMemoryService.MaxEntries).ToListAsync(ct);
+            var relevantMemories = AiMemoryService.RankRelevant(
+                durableMemories, MemorySearchQuery(userMessages));
+            var memoryBlock = AiMemoryService.BuildPromptBlock(relevantMemories);
 
             var extraMcp = new List<AiTool>();
             try
@@ -138,9 +150,16 @@ public class AiChatService
                 catalogProductsUsed,
                 storeInfo?.extendedPriceParameters ?? false,
                 turnText: TurnText(userMessages),
-                mappingExperience: mappingExperience);
+                mappingExperience: mappingExperience,
+                durableMemory: memoryBlock);
 
-            var messages = userMessages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
+            var history = AiChatHistoryBudget.Trim(
+                userMessages, AiChatHistoryBudget.GetMaxCharacters());
+            turnTelemetry.RecordHistoryTrim(history.RemovedTurns, history.RemovedCharacters, history.ExceedsBudget);
+            if (history.Trimmed)
+                systemPrompt += $"\n\n=== CONTEXT LIMIT ===\n{AiChatHistoryBudget.OmittedHistoryNotice}";
+
+            var messages = history.Messages.Select(m => new AiMessage { role = m.role, content = m.content }).ToList();
             if (!string.IsNullOrWhiteSpace(sessionId))
             {
                 var cutoff = AgentFileUploadService.LiveCutoffUtc();
@@ -179,6 +198,7 @@ public class AiChatService
                     tools = passTools,
                     stream = true,
                     user = sessionId,
+                    enable_prompt_cache = true,
                 };
 
                 if (iteration > 0)
@@ -186,6 +206,9 @@ public class AiChatService
 
                 var textBuffer = new StringBuilder();
                 var toolUses = new List<(string id, string name, string inputJson)>();
+                var inputCharacters = AiTurnTelemetry.EstimateInputCharacters(request);
+                var modelTimer = Stopwatch.StartNew();
+                var roundUsage = new AiStreamUsage();
                 var dsml = new DeepSeekDsmlGate();
                 var dsmlSeq = 0;
                 var currentToolId = "";
@@ -194,6 +217,7 @@ public class AiChatService
                 var isCollectingTool = false;
                 var gotApiError = false;
 
+                using var modelSpan = turnTelemetry.StartModelRound();
                 await foreach (var ev in _apiClient.StreamAsync(model, request, ct))
                 {
                     switch (ev.type)
@@ -237,11 +261,25 @@ public class AiChatService
                             gotApiError = true;
                             _logger.LogWarning("API error event in iteration {Iter}: {Err}", iteration, ev.error);
                             break;
+                        case "usage":
+                            roundUsage.MergeLatest(ev.usage);
+                            break;
                     }
                 }
 
+                modelSpan.SetOutcome(gotApiError ? "provider_error" : "completed");
+                modelSpan.Finish();
+
                 if (gotApiError)
                 {
+                    modelTimer.Stop();
+                    turnTelemetry.RecordModelRound(
+                        modelTimer.ElapsedMilliseconds,
+                        inputCharacters,
+                        textBuffer.Length + currentToolInput.Length
+                            + toolUses.Sum(t => (long)t.inputJson.Length),
+                        roundUsage);
+                    turnTelemetry.Complete("provider_error");
                     yield return Sse(SseEventType.Error, new
                     {
                         message = iteration > 0
@@ -265,6 +303,13 @@ public class AiChatService
                 foreach (var invoke in dsmlTail.Invokes)
                     toolUses.Add(($"dsml-{iteration}-{dsmlSeq++}", invoke.Name, invoke.ArgumentsJson));
 
+                modelTimer.Stop();
+                turnTelemetry.RecordModelRound(
+                    modelTimer.ElapsedMilliseconds,
+                    inputCharacters,
+                    textBuffer.Length + toolUses.Sum(t => (long)t.inputJson.Length),
+                    roundUsage);
+
                 if (toolUses.Count == 0)
                 {
                     var finalText = textBuffer.ToString();
@@ -275,7 +320,7 @@ public class AiChatService
                         messages.Add(new AiMessage
                         {
                             role = "user",
-                            content = "Continue in this turn. If you announced a catalog or mapping write, call propose_plan only — no GET, search_actions, or other tools until the user confirms. If you announced a live-data question, call that read now. Do not reply with text only."
+                            content = "Continue in this turn. If you announced a cabinet write, do only the minimum explicitly required read-only lookup(s) if needed, then call propose_plan by itself; if no lookup is needed, call propose_plan now. Never perform a write before confirmation. If you announced a live-data question, call the required read now. Do not reply with text only."
                         });
                         continue;
                     }
@@ -294,6 +339,8 @@ public class AiChatService
                     break;
                 }
 
+                turnTelemetry.RecordModelToolCalls(toolUses.Select(t => (t.name, t.inputJson)));
+
                 var assistantContent = new List<object>();
                 if (textBuffer.Length > 0)
                     assistantContent.Add(new { type = "text", text = textBuffer.ToString() });
@@ -311,6 +358,17 @@ public class AiChatService
                 {
                     if (AgentChatTurnGate.IsProposePlan(toolName))
                     {
+                        if (sawPlan)
+                        {
+                            toolResults.Add(new
+                            {
+                                type = "tool_result",
+                                tool_use_id = toolId,
+                                content = AgentChatTurnGate.AdditionalPlanDeferred
+                            });
+                            continue;
+                        }
+
                         var planInput = ProposePlanReader.Read(toolInputJson);
                         if (!planInput.HasContent)
                         {
@@ -323,8 +381,21 @@ public class AiChatService
                             continue;
                         }
 
+                        var planCreatedAt = DateTime.UtcNow;
+                        var serializedSteps = JsonSerializer.Serialize(planInput.Steps, _jsonOpts);
+                        var stepsNode = JsonNode.Parse(serializedSteps)!;
+                        var stepsHash = AiConversationTurnStore.ComputeStepsHash(stepsNode);
+                        var expiresAt = planCreatedAt.AddMinutes(15);
+                        var (proposalId, proposalNonce) = AiPlanProposalToken.Mint(
+                            sessionId ?? "", storeId, userId, stepsHash, expiresAt);
+                        turnTelemetry.Complete("plan_proposed");
                         yield return Sse(SseEventType.Plan, new
                         {
+                            proposalId,
+                            proposalNonce,
+                            stepsHash,
+                            createdAtUtc = planCreatedAt,
+                            expiresAtUtc = expiresAt,
                             summary = planInput.Summary,
                             steps = planInput.Steps,
                             affectedCount = planInput.AffectedCount,
@@ -352,13 +423,16 @@ public class AiChatService
                         continue;
                     }
 
-                    if (AgentChatTurnGate.IsMutatingChatTool(toolName, toolInputJson))
+                    if (AgentChatTurnGate.RequiresPlanConfirmation(toolName, toolInputJson))
                     {
                         toolResults.Add(new
                         {
                             type = "tool_result",
                             tool_use_id = toolId,
-                            content = AgentChatTurnGate.WriteNeedsPlan
+                            content = McpToolNames.TryParse(toolName, out _, out _)
+                                || string.Equals(toolName, "run_python", StringComparison.OrdinalIgnoreCase)
+                                ? AgentChatTurnGate.ExternalCapabilityNeedsPlan
+                                : AgentChatTurnGate.WriteNeedsPlan
                         });
                         continue;
                     }
@@ -366,9 +440,12 @@ public class AiChatService
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
                     object result;
                     string summary;
+                    var toolTimer = Stopwatch.StartNew();
+                    using var toolSpan = turnTelemetry.StartToolExecution(toolName);
                     try
                     {
-                        (result, summary) = await _toolHost.DispatchAsync(toolName, toolInputJson, storeId, userId, ct);
+                        (result, summary) = await _toolHost.DispatchAsync(
+                            toolName, toolInputJson, storeId, userId, ct, allowConnectedMcp: true);
                     }
                     catch (Exception ex)
                     {
@@ -376,6 +453,12 @@ public class AiChatService
                         result = new { error = ex.Message };
                         summary = $"Error: {ex.Message}";
                     }
+                    toolTimer.Stop();
+                    var toolFailed = AgentToolResult.IsFailure(result, summary);
+                    toolSpan.SetOutcome(toolFailed ? "failed" : "completed");
+                    toolSpan.Finish();
+                    turnTelemetry.RecordToolExecution(
+                        toolTimer.ElapsedMilliseconds, toolFailed);
                     var resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                     _toolEffects.TryGetValue(toolName, out var effects);
                     yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
@@ -394,6 +477,8 @@ public class AiChatService
                     });
                 }
             }
+
+            turnTelemetry.CompleteIfUnset(sawPlan ? "plan_proposed" : "completed");
 
             if (!spoke && !sawPlan)
             {
@@ -434,6 +519,51 @@ public class AiChatService
             return content.ToString();
         }
         return null;
+    }
+
+    private static string MemorySearchQuery(List<ChatMessage> messages)
+    {
+        const int MaxRecentUserTurns = 3;
+        const int MaxCharactersPerTurn = 600;
+        var recentText = new List<string>(MaxRecentUserTurns);
+
+        for (var i = messages.Count - 1; i >= 0 && recentText.Count < MaxRecentUserTurns; i--)
+        {
+            var message = messages[i];
+            if (!string.Equals(message.role, "user", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var content = message.content;
+            string text;
+            if (content.ValueKind == JsonValueKind.String)
+            {
+                text = content.GetString() ?? "";
+            }
+            else if (content.ValueKind == JsonValueKind.Array)
+            {
+                var builder = new StringBuilder();
+                foreach (var block in content.EnumerateArray())
+                {
+                    // Tool results are data returned by the agent, not part of the user's
+                    // search intent. Only user-authored text blocks influence memory ranking.
+                    if (block.ValueKind == JsonValueKind.Object
+                        && block.TryGetProperty("text", out var part)
+                        && part.ValueKind == JsonValueKind.String)
+                        builder.Append(part.GetString()).Append(' ');
+                }
+                text = builder.ToString();
+            }
+            else
+            {
+                continue;
+            }
+
+            text = text.Trim();
+            if (text.Length > 0)
+                recentText.Add(text[..Math.Min(text.Length, MaxCharactersPerTurn)]);
+        }
+
+        return string.Join(' ', recentText);
     }
 
     public async Task<string> ExplainErrorAsync(string errorMessage, string context,
@@ -544,16 +674,23 @@ public class AiChatService
     }
 
     public async IAsyncEnumerable<string> ExecutePlanStreamAsync(
-        List<PlanStepInput> steps, int storeId, int userId,
+        List<PlanStepInput> steps, int storeId, int userId, string proposalId,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var forbidden = new HashSet<string> { "propose_plan" };
         var ok = 0;
+        var queued = 0;
+        var cancelled = false;
         var errors = new List<string>();
 
         foreach (var step in steps)
         {
-            if (ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested)
+            {
+                cancelled = true;
+                errors.Add("Execution was cancelled; remaining steps were not run.");
+                break;
+            }
             var tool = step.Tool ?? "";
             if (tool.StartsWith("functions.", StringComparison.OrdinalIgnoreCase))
                 tool = tool["functions.".Length..];
@@ -574,10 +711,20 @@ public class AiChatService
             {
                 try
                 {
-                    var (result, s) = await _toolHost.DispatchAsync(tool, argsJson, storeId, userId, ct);
+                    var (result, s) = await _toolHost.DispatchAsync(
+                        tool, argsJson, storeId, userId, ct, allowConnectedMcp: true);
                     summary = s;
                     failed = AgentToolResult.IsFailure(result, s);
+                    if (!failed && AgentToolResult.IsQueuedJob(result))
+                        queued++;
                     resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    cancelled = true;
+                    summary = "Execution was cancelled.";
+                    failed = true;
+                    resultJson = JsonSerializer.Serialize(new { error = summary }, _jsonOpts);
                 }
                 catch (Exception ex)
                 {
@@ -598,10 +745,35 @@ public class AiChatService
             ok++;
         }
 
-        var text = AgentToolResult.FormatPlanOutcome(ok, steps.Count, errors, ResolveLocale());
+        var text = AgentToolResult.FormatPlanOutcome(ok, steps.Count, errors, ResolveLocale(), queued);
+        var audit = await _context.aiAgentAudits
+            .Where(a => a.storeId == storeId && a.userId == userId
+                && a.tool == "plan_confirmation"
+                && a.summary.StartsWith($"proposal:{proposalId}:"))
+            .OrderByDescending(a => a.createdAt)
+            .FirstOrDefaultAsync(CancellationToken.None);
+        if (audit != null)
+        {
+            var outcome = cancelled ? "cancelled"
+                : errors.Count == 0 ? (queued > 0 ? "queued" : "completed")
+                : ok > 0 ? "partial" : "failed";
+            audit.summary = $"proposal:{proposalId}: {outcome}; {ok}/{steps.Count} steps, {queued} queued";
+            if (errors.Count > 0)
+                audit.summary += $"; {errors[0]}";
+            if (audit.summary.Length > 500) audit.summary = audit.summary[..500];
+            await _context.SaveChangesAsync(CancellationToken.None);
+        }
         yield return Sse(SseEventType.Text, new { delta = text });
         yield return Sse(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count });
     }
+
+    public Task<IReadOnlyList<PlanStepInput>?> ConsumeConfirmedPlanAsync(
+        string sessionId,
+        string proposalId,
+        int storeId,
+        int userId,
+        CancellationToken ct) =>
+        AiConversationTurnStore.ConsumePendingPlanAsync(_context, sessionId, proposalId, storeId, userId, ct);
 
     private static readonly Regex _unfulfilledIntentRegex = new(
         "\\b(\u0432\u044b\u043f\u043e\u043b\u043d\u044e|\u043f\u0440\u043e\u0432\u0435\u0440\u044e|\u0432\u044b\u0437\u043e\u0432\u0443|\u043f\u043e\u043b\u0443\u0447\u0443|\u0441\u0434\u0435\u043b\u0430\u044e|\u043e\u0431\u043d\u043e\u0432\u043b\u044e|\u0441\u043e\u0437\u0434\u0430\u043c|\u0443\u0434\u0430\u043b\u044e|\u043d\u0430\u0439\u0434\u0443|\u043f\u043e\u0441\u043c\u043e\u0442\u0440\u044e|\u0437\u0430\u0433\u0440\u0443\u0436\u0443|\u0437\u0430\u043f\u0443\u0449\u0443|\u0437\u0430\u043f\u0440\u043e\u0448\u0443|\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0443|\u0437\u0430\u043f\u043e\u043b\u043d\u044e|\u043f\u0440\u0438\u0441\u0442\u0443\u043f\u0430\u044e|\u043d\u0430\u0447\u0438\u043d\u0430\u044e|\u0437\u0430\u043f\u0443\u0441\u043a\u0430\u044e|\u0432\u044b\u043f\u043e\u043b\u043d\u044f\u044e|\u043f\u043e\u043b\u0443\u0447\u0430\u044e|\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u044e|I(?:'|\u2019)?ll|I will|let me|going to|now I)\\b[^.!?\\n]{0,120}[.!\u2026:]?\\s*$",

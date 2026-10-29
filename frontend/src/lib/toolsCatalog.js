@@ -11,7 +11,8 @@ export function toolTitle(entry, t) {
 
 export function toolDescription(entry, t) {
   if (!entry) return "";
-  if (entry.descriptionKey && typeof t === "function") return t(entry.descriptionKey);
+  if (entry.descriptionKey && typeof t === "function")
+    return t(entry.descriptionKey);
   return entry.description || "";
 }
 
@@ -32,6 +33,25 @@ export function isQuickRunTool(entry) {
   return isJobTool(entry) && entry?.quickRun === true;
 }
 
+const SINGLE_CONNECTION_ACTION_IDS = new Set([
+  "export-prices",
+  "export-stocks",
+  "import-prices",
+  "import-products",
+  "verify-product-links",
+  "check-export-readiness",
+  "compare-prices",
+]);
+
+export function requiresSingleConnectionSelection(entry) {
+  return SINGLE_CONNECTION_ACTION_IDS.has(entry?.id);
+}
+
+export function isValidImportProductLimit(value) {
+  const limit = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(limit) && limit >= 1 && limit <= 200;
+}
+
 /** Maturity of a catalog tool. Stable is the default and is not labelled in the UI. */
 export const TOOL_STAGES = {
   stable: "stable",
@@ -41,7 +61,8 @@ export const TOOL_STAGES = {
 };
 
 export function toolStage(entry) {
-  const raw = typeof entry?.stage === "string" ? entry.stage.trim().toLowerCase() : "";
+  const raw =
+    typeof entry?.stage === "string" ? entry.stage.trim().toLowerCase() : "";
   if (
     raw === TOOL_STAGES.experimental ||
     raw === TOOL_STAGES.beta ||
@@ -54,22 +75,38 @@ export function toolStage(entry) {
 
 export function toolStageLabelKey(entry) {
   const stage = toolStage(entry);
-  if (stage === TOOL_STAGES.experimental) return "pages.toolsPage.stageExperimental";
+  if (stage === TOOL_STAGES.experimental)
+    return "pages.toolsPage.stageExperimental";
   if (stage === TOOL_STAGES.beta) return "pages.toolsPage.stageBeta";
-  if (stage === TOOL_STAGES.deprecated) return "pages.toolsPage.stageDeprecated";
+  if (stage === TOOL_STAGES.deprecated)
+    return "pages.toolsPage.stageDeprecated";
   return "";
 }
 
 export function toolStageClass(entry) {
   const stage = toolStage(entry);
   if (stage === TOOL_STAGES.deprecated) return "text-destructive";
-  if (stage === TOOL_STAGES.experimental || stage === TOOL_STAGES.beta) return "text-warning";
+  if (stage === TOOL_STAGES.experimental || stage === TOOL_STAGES.beta)
+    return "text-warning";
   return "";
 }
 
 export function toolConfirmTitleKey(entry) {
   if (!entry?.id) return "";
-  if (entry.id === "export-all-prices") return "pages.toolsPage.exportAllPricesConfirmTitle";
+  if (
+    [
+      "export-prices",
+      "export-stocks",
+      "import-prices",
+      "import-products",
+      "verify-product-links",
+      "check-export-readiness",
+      "compare-prices",
+    ].includes(entry.id)
+  )
+    return "pages.toolsPage.marketplaceActionConfirmTitle";
+  if (entry.id === "export-all-prices")
+    return "pages.toolsPage.exportAllPricesConfirmTitle";
   if (entry.id === "clear-promotion-products")
     return "pages.toolsPage.clearPromotionProductsConfirmTitle";
   return "";
@@ -86,6 +123,18 @@ export function toolConfirmDescriptionKey(entry) {
 
 export function toolJobConfirmDescriptionKey(entry) {
   if (!entry?.id) return "";
+  if (
+    [
+      "export-prices",
+      "export-stocks",
+      "import-prices",
+      "import-products",
+      "verify-product-links",
+      "check-export-readiness",
+      "compare-prices",
+    ].includes(entry.id)
+  )
+    return "pages.toolsPage.marketplaceActionConfirmDescription";
   if (entry.id === "export-all-prices")
     return "pages.toolsPage.exportAllPricesJobConfirmDescription";
   if (entry.id === "clear-promotion-products")
@@ -95,7 +144,8 @@ export function toolJobConfirmDescriptionKey(entry) {
 
 export function toolQuickTooltipKey(entry) {
   if (!entry?.id) return "";
-  if (entry.id === "export-all-prices") return "pages.toolsPage.exportAllPricesQuickTooltip";
+  if (entry.id === "export-all-prices")
+    return "pages.toolsPage.exportAllPricesQuickTooltip";
   if (entry.id === "clear-promotion-products")
     return "pages.toolsPage.clearPromotionProductsQuickTooltip";
   return "";
@@ -118,7 +168,8 @@ export function toolGroupId(entry) {
   if (entry.source === "adapter") {
     return entry.adapterKey ? `adapter:${entry.adapterKey}` : "adapters";
   }
-  const group = typeof entry.group === "string" ? entry.group.trim().toLowerCase() : "";
+  const group =
+    typeof entry.group === "string" ? entry.group.trim().toLowerCase() : "";
   if (TOOL_GROUP_ORDER.includes(group)) return group;
   if (entry.id === "export-all-prices") return "prices";
   if (entry.id === "clear-promotion-products") return "promotions";
@@ -192,7 +243,7 @@ export function toolSectionBlocks(tools) {
   };
   for (const entry of list) {
     if (!entry) continue;
-    if (isQuickRunTool(entry)) {
+    if (isQuickRunTool(entry) && !requiresSingleConnectionSelection(entry)) {
       flush();
       blocks.push({ key: `job:${entry.id}`, type: "job", entry });
     } else {
@@ -202,4 +253,3 @@ export function toolSectionBlocks(tools) {
   flush();
   return blocks;
 }
-

@@ -11,9 +11,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 import { computed, defineAsyncComponent, ref, Transition } from "vue";
 import { Button } from "@/components/ui/button";
-import {
-  Monitor,
-} from "lucide-vue-next";
+import { Monitor } from "lucide-vue-next";
 import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
@@ -22,7 +20,9 @@ import { loadMe } from "@/main";
 import { ME_UPDATED_EVENT } from "@/lib/meCache";
 import { resolveAiChromeEnabled } from "@/lib/ai/chrome";
 
-const AiChatPanel = defineAsyncComponent(() => import("@/components/ai/AiChatPanel.vue"));
+const AiChatPanel = defineAsyncComponent(
+  () => import("@/components/ai/AiChatPanel.vue"),
+);
 
 export default {
   components: {
@@ -40,7 +40,7 @@ export default {
     Monitor,
     AiChatPanel,
     FabGroup,
-    ConfirmDialogHost
+    ConfirmDialogHost,
   },
   setup() {
     const { t } = useI18n();
@@ -54,7 +54,7 @@ export default {
 
     // Mobile warning: show once, remember dismissal in localStorage
     const mobileWarningDismissed = ref(
-      localStorage.getItem("mobile-warning-dismissed") === "1"
+      localStorage.getItem("mobile-warning-dismissed") === "1",
     );
     const isMobileScreen = ref(window.innerWidth < 640);
 
@@ -63,7 +63,16 @@ export default {
       localStorage.setItem("mobile-warning-dismissed", "1");
     }
 
-    return { t, brandName, isPublicPage, isBareLayout, mobileWarningDismissed, isMobileScreen, dismissMobileWarning, aiEnabled };
+    return {
+      t,
+      brandName,
+      isPublicPage,
+      isBareLayout,
+      mobileWarningDismissed,
+      isMobileScreen,
+      dismissMobileWarning,
+      aiEnabled,
+    };
   },
   computed: {
     appKey() {
@@ -76,7 +85,11 @@ export default {
       return this.$store.getters["operations/hasLocalActiveUploads"];
     },
     showMobileWarning() {
-      return this.isMobileScreen && !this.mobileWarningDismissed && !this.isBareLayout;
+      return (
+        this.isMobileScreen &&
+        !this.mobileWarningDismissed &&
+        !this.isBareLayout
+      );
     },
   },
   watch: {
@@ -132,7 +145,10 @@ export default {
   <RouterView v-if="isBareLayout" v-slot="{ Component, route }">
     <div class="h-svh overflow-y-auto">
       <Transition enter-active-class="page-region-in">
-        <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+        <component
+          :is="Component"
+          :key="(route.meta.stableKey || route.path) + '-' + appKey"
+        />
       </Transition>
     </div>
   </RouterView>
@@ -150,7 +166,10 @@ export default {
       >
         <RouterView v-slot="{ Component, route }">
           <Transition enter-active-class="page-region-in">
-            <component :is="Component" :key="(route.meta.stableKey || route.path) + '-' + appKey" />
+            <component
+              :is="Component"
+              :key="(route.meta.stableKey || route.path) + '-' + appKey"
+            />
           </Transition>
         </RouterView>
       </div>
@@ -163,9 +182,9 @@ export default {
   </SidebarProvider>
   <Toaster />
   <ConfirmDialogHost />
+  <DocsSheet v-if="!isPublicPage" />
   <template v-if="!isBareLayout">
     <OperationsPanel />
-    <DocsSheet />
     <AiChatPanel v-if="aiEnabled" :key="appKey" />
     <FabGroup :ai-enabled="aiEnabled" />
   </template>
@@ -179,7 +198,9 @@ export default {
       <div class="max-w-sm w-full flex flex-col items-center text-center gap-5">
         <Monitor class="size-12 text-muted-foreground" />
         <div>
-          <h2 class="text-lg font-semibold mb-2">{{ t("app.mobileWarningTitle") }}</h2>
+          <h2 class="text-lg font-semibold mb-2">
+            {{ t("app.mobileWarningTitle") }}
+          </h2>
           <p class="text-sm text-muted-foreground leading-relaxed">
             {{ t("app.mobileWarningBody", { brand: brandName }) }}
           </p>
@@ -199,7 +220,9 @@ export default {
     >
       <div class="flex flex-col items-center gap-3">
         <Spinner size="xl" class="text-muted-foreground" />
-        <span class="text-sm text-muted-foreground">{{ t("app.switchingStore") }}</span>
+        <span class="text-sm text-muted-foreground">{{
+          t("app.switchingStore")
+        }}</span>
       </div>
     </div>
   </Transition>

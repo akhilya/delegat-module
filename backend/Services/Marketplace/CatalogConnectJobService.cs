@@ -112,7 +112,7 @@ public sealed class CatalogConnectJobService
     {
         CatalogMatchService.EnsureConnectionActive(connection);
         if (items.Count == 0)
-            throw ApiException.BadRequest("No match rows to apply", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "match_rows_required");
 
         var payload = JsonSerializer.Serialize(new CatalogConnectApplyPayload
         {

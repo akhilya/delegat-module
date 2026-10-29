@@ -65,11 +65,11 @@ public class AccountSecurityController : ControllerBase
         CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         if (await _users.GetTwoFactorEnabledAsync(user))
-            throw ApiException.Conflict("Authenticator is already enabled", code: "totp_already_enabled");
+            throw ApiException.Conflict(code: "totp_already_enabled");
 
         await _users.ResetAuthenticatorKeyAsync(user);
         var key = await _users.GetAuthenticatorKeyAsync(user)
-            ?? throw ApiException.InternalServerError("Could not create authenticator key", code: "authenticator_key_failed");
+            ?? throw ApiException.InternalServerError(code: "authenticator_key_failed");
 
         return Ok(new
         {
@@ -86,7 +86,7 @@ public class AccountSecurityController : ControllerBase
         CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequireUserAsync();
         if (await _users.GetTwoFactorEnabledAsync(user))
-            throw ApiException.Conflict("Authenticator is already enabled", code: "totp_already_enabled");
+            throw ApiException.Conflict(code: "totp_already_enabled");
 
         var code = TotpUri.NormalizeCode(input.code);
         var valid = await _users.VerifyTwoFactorTokenAsync(
@@ -97,8 +97,8 @@ public class AccountSecurityController : ControllerBase
         {
             await _users.AccessFailedAsync(user);
             if (await _users.IsLockedOutAsync(user))
-                throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
-            throw ApiException.Unauthorized("Invalid authenticator code", code: "invalid_totp");
+                throw ApiException.TooManyRequests(code: "account_locked");
+            throw ApiException.Unauthorized(code: "invalid_totp");
         }
 
         await _users.ResetAccessFailedCountAsync(user);
@@ -155,16 +155,16 @@ public class AccountSecurityController : ControllerBase
         var user = await RequireUserAsync();
         var password = body.TryGetProperty("password", out var passwordEl) ? passwordEl.GetString() : null;
         if (string.IsNullOrWhiteSpace(password) || !await _users.CheckPasswordAsync(user, password))
-            throw ApiException.Unauthorized("Current password is incorrect", code: "password_mismatch");
+            throw ApiException.Unauthorized(code: "password_mismatch");
 
         var json = PasskeyFido2.TakeChallenge(HttpContext, _cache, $"attestation:{user.Id}")
-            ?? throw ApiException.BadRequest("Passkey challenge expired", code: "challenge_expired");
+            ?? throw ApiException.BadRequest(code: "challenge_expired");
 
         var options = CredentialCreateOptions.FromJson(json);
         var attestation = JsonSerializer.Deserialize<AuthenticatorAttestationRawResponse>(
             body.GetRawText(),
             JsonOptions)
-            ?? throw ApiException.BadRequest("Attestation is required", code: "attestation_required");
+            ?? throw ApiException.BadRequest(code: "attestation_required");
 
         var fido2 = PasskeyFido2.Create(Request);
         var success = await fido2.MakeNewCredentialAsync(new MakeNewCredentialParams
@@ -197,7 +197,7 @@ public class AccountSecurityController : ControllerBase
         CabinetViewOnlyGuard.ThrowIfRestricted(User);
         var user = await RequirePasswordAsync(input.password);
         var row = await _db.webAuthnCredentials.FirstOrDefaultAsync(c => c.Id == id && c.userId == user.Id)
-            ?? throw ApiException.NotFound("Passkey not found", code: "passkey_not_found");
+            ?? throw ApiException.NotFound(code: "passkey_not_found");
         _db.webAuthnCredentials.Remove(row);
         await _db.SaveChangesAsync();
         return Ok(new { ok = true });
@@ -219,7 +219,7 @@ public class AccountSecurityController : ControllerBase
     {
         var user = await RequireUserAsync();
         if (string.IsNullOrWhiteSpace(password) || !await _users.CheckPasswordAsync(user, password))
-            throw ApiException.Unauthorized("Current password is incorrect", code: "password_mismatch");
+            throw ApiException.Unauthorized(code: "password_mismatch");
         return user;
     }
 

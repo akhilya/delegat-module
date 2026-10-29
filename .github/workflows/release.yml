@@ -25,6 +25,9 @@ jobs:
           # the workflow from failing with an empty token if the secret is unset.
           token: ${{ secrets.SUBMODULE_PAT || github.token }}
 
+      - name: Validate project documentation standards
+        run: npm run check:docs
+
       - name: Read version from VERSION file
         id: version
         run: |

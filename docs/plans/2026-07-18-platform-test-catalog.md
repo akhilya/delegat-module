@@ -1,5 +1,7 @@
 # Platform test catalog (Delegat)
 
+> **Historical snapshot (2026-07-18).** Test counts, suite names, and listed coverage describe that date only. Run the current test project and inspect its present suites for current coverage.
+
 Implementation status as of 2026-07-18:
 
 - Harness: `backend.Tests/Infrastructure/` (`TestDbFactory`, `TestDataBuilder`, `FakeCurrentUserService`)

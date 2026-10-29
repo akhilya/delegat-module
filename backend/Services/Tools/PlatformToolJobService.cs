@@ -12,17 +12,20 @@ public sealed class PlatformToolJobService
     private readonly IMarketplaceAdapterRegistry _adapters;
     private readonly PriceSyncService _prices;
     private readonly IOperationLogger _operations;
+    private readonly MarketplaceActionExecutor _marketplaceActions;
 
     public PlatformToolJobService(
         DataContext db,
         IMarketplaceAdapterRegistry adapters,
         PriceSyncService prices,
-        IOperationLogger operations)
+        IOperationLogger operations,
+        MarketplaceActionExecutor marketplaceActions)
     {
         _db = db;
         _adapters = adapters;
         _prices = prices;
         _operations = operations;
+        _marketplaceActions = marketplaceActions;
     }
 
     public async Task RunAsync(
@@ -30,6 +33,8 @@ public sealed class PlatformToolJobService
         MarketplaceConnection? connection,
         int storeId,
         string operationId,
+        int userId,
+        IReadOnlyDictionary<string, string?>? parameters,
         CancellationToken ct)
     {
         var targets = await ResolveTargetsAsync(entry, connection, storeId, ct);
@@ -42,12 +47,41 @@ public sealed class PlatformToolJobService
 
         await _operations.ProgressAsync(operationId, storeId, targets.Count, 0, 0);
 
-        if (entry.Id == PlatformTools.ExportAllPricesId)
+        if (PlatformTools.IsMarketplaceAction(entry.Id))
+            await RunMarketplaceActionAsync(entry, targets, storeId, operationId, userId, parameters, ct);
+        else if (entry.Id == PlatformTools.ExportAllPricesId)
             await ExportPricesAsync(targets, storeId, operationId, ct);
         else if (entry.Id == PlatformTools.ClearPromotionProductsId)
             await ClearPromotionsAsync(targets, storeId, operationId, ct);
         else
             throw ApiException.BadRequest("Platform job tools are not registered yet", code: "tool_not_a_job");
+    }
+
+    private async Task RunMarketplaceActionAsync(
+        ToolCatalogEntry entry,
+        List<(MarketplaceConnection Connection, IMarketplaceAdapter Adapter)> targets,
+        int storeId,
+        string operationId,
+        int userId,
+        IReadOnlyDictionary<string, string?>? rawParameters,
+        CancellationToken ct)
+    {
+        if (targets.Count != 1)
+            throw ApiException.BadRequest("Select one marketplace connection", code: "connection_required");
+        var values = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in rawParameters ?? new Dictionary<string, string?>())
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (!int.TryParse(value, out var parsed))
+                throw ApiException.BadRequest($"Parameter '{key}' must be a number", code: "invalid_tool_parameter");
+            values[key] = parsed;
+        }
+
+        var summary = await _marketplaceActions.ExecuteAsync(
+            entry.Id, targets[0].Connection, storeId, userId, values, operationId, ct);
+        await _operations.ProgressAsync(operationId, storeId, 1, 1, 0);
+        await _operations.LogAsync(operationId, storeId, "success", summary);
+        await _operations.FinishAsync(operationId, storeId, "completed", summary);
     }
 
     private async Task<List<(MarketplaceConnection Connection, IMarketplaceAdapter Adapter)>> ResolveTargetsAsync(

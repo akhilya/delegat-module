@@ -89,7 +89,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var result = await _db.marketplaceConnections
             .Where(c => c.storeId == selectedStoreId.Value)
@@ -118,14 +118,14 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var connection = await _db.marketplaceConnections
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var hasCredentials = !string.IsNullOrEmpty(connection.credentialsJson);
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
@@ -162,7 +162,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var connection = await _connectionCreate.CreateAsync(input, selectedStoreId.Value, ct);
         return Ok(new { id = connection.Id });
@@ -178,7 +178,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -186,7 +186,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         // Empty/null credentialsJson means "keep existing" - do not overwrite with blanks
         if (string.IsNullOrWhiteSpace(input.credentialsJson) || IsBlankCredentialsObject(input.credentialsJson))
@@ -211,7 +211,7 @@ public class MarketplaceConnectionController : ControllerBase
         }
         else
         {
-            throw ApiException.InternalServerError("Encryption is not configured");
+            throw ApiException.InternalServerError(code: "encryption_not_configured");
         }
 
         connection.UpdateFill(input);
@@ -254,7 +254,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         // Single DELETE + DB cascades. Avoids N SaveChanges and races when the UI retries
         // while a slow per-child delete is still running.
@@ -263,7 +263,7 @@ public class MarketplaceConnectionController : ControllerBase
             .ExecuteDeleteAsync();
 
         if (deleted == 0)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         return Ok(new { success = true });
     }
@@ -278,7 +278,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -286,7 +286,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -348,7 +348,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -356,7 +356,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -412,7 +412,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -420,7 +420,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -495,7 +495,7 @@ public class MarketplaceConnectionController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -503,7 +503,7 @@ public class MarketplaceConnectionController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)

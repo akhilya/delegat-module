@@ -1,5 +1,7 @@
 # Assistant reply UI — buttons and forms
 
+> **Validated design record.** The current tool and UI contract is documented in [`docs/architecture/ai-assistant.md`](../architecture/ai-assistant.md).
+
 Validated in chat (2026-09-09). Implementation lives in `AgentToolHost` / `AgentToolCatalog` / `AiPrompts.ChatSystem` and `frontend/src/lib/ai/replyUi.js` plus `AiChatActions` / `AiChatForm`.
 
 ## Reply buttons (`navigate_to`)

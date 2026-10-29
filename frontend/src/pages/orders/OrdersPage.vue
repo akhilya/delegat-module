@@ -1,7 +1,5 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
-import { Alert } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-vue-next";
 import NavSearchField from "@/components/NavSearchField.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
 import OrderItemsCell from "@/components/orders/OrderItemsCell.vue";
@@ -27,10 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { LogTableFrame } from "@/components/logs";
 import { http } from "@/main";
 import { getCachedMe } from "@/lib/meCache";
@@ -92,13 +87,7 @@ import {
 } from "@/store/sonnerHelper";
 import { mapActions } from "vuex";
 import { setBreadcrumbParentLabel } from "@/router";
-import {
-  Barcode,
-  ClipboardList,
-  Plug,
-  X,
-  XCircle,
-} from "lucide-vue-next";
+import { Barcode, ClipboardList, Plug, X, XCircle } from "lucide-vue-next";
 
 const CHANNEL_ALL = "__all__";
 const PAGE_SIZES = [25, 50, 100];
@@ -107,8 +96,6 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
-    Alert,
-    AlertTriangle,
     NavSearchField,
     OrderDetailSheet,
     OrderItemsCell,
@@ -299,7 +286,9 @@ export default {
     allVisibleSelected() {
       return (
         this.items.length > 0 &&
-        this.items.every((row) => this.selectedIds.includes(orderExternalId(row)))
+        this.items.every((row) =>
+          this.selectedIds.includes(orderExternalId(row)),
+        )
       );
     },
     someVisibleSelected() {
@@ -612,10 +601,7 @@ export default {
     },
 
     applySellerStatus(order) {
-      const statuses = statusesForBucket(
-        this.bucketId,
-        this.rowAdapterKey,
-      );
+      const statuses = statusesForBucket(this.bucketId, this.rowAdapterKey);
       const next = { ...this.statusPages };
       for (const key of Object.keys(next)) {
         const page = next[key];
@@ -774,20 +760,13 @@ export default {
         this.statusPages = next;
         this.pruneSelection();
         if (!append) {
-          const syncSettled = await Promise.allSettled(
-            statuses.map((status) =>
-              http.post(
-                `/marketplace/connections/${this.connectionId}/orders/sync`,
-                null,
-                { params: { status }, cache: false },
-              ),
-            ),
+          const syncResponse = await http.post(
+            `/marketplace/connections/${this.connectionId}/orders/sync`,
+            null,
+            { params: { statuses: statuses.join(",") }, cache: false },
           );
-          const pulled = syncSettled.some((result) => {
-            if (result.status !== "fulfilled") return false;
-            const payload = extractResponseData(result.value, {});
-            return Boolean(payload?.pulled);
-          });
+          const payload = extractResponseData(syncResponse, {});
+          const pulled = Boolean(payload?.pulled);
           if (pulled && gen === this.fetchGen) {
             const refreshed = await Promise.allSettled(
               statuses.map((status) => this.fetchStatusPage(status)),
@@ -879,8 +858,7 @@ export default {
       const key = String(id || "");
       return (
         this.items.find((row) => orderExternalId(row) === key) ||
-        (this.contextMenuRow &&
-        orderExternalId(this.contextMenuRow) === key
+        (this.contextMenuRow && orderExternalId(this.contextMenuRow) === key
           ? this.contextMenuRow
           : null)
       );
@@ -981,9 +959,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome
-    :has-nav-center="mailboxes.length > 0"
-  >
+  <AppPageChrome :has-nav-center="mailboxes.length > 0">
     <template v-if="mailboxes.length > 0" #nav-center>
       <Tabs :model-value="bucketId" @update:model-value="onMailboxTab">
         <TabsList>
@@ -992,23 +968,12 @@ export default {
             <span
               v-if="mailboxCount(box.id) > 0"
               class="text-muted-foreground text-xs font-normal tabular-nums"
-            >{{ mailboxCount(box.id) }}</span>
+              >{{ mailboxCount(box.id) }}</span
+            >
           </TabsTrigger>
         </TabsList>
       </Tabs>
     </template>
-
-    <Alert class="mb-4 px-3.5 py-3">
-      <AlertTriangle class="size-4 text-muted-foreground" />
-      <div class="space-y-1">
-        <p class="text-sm font-medium leading-snug">
-          {{ $t("common.stageExperimental") }}
-        </p>
-        <p class="text-xs leading-relaxed text-muted-foreground">
-          {{ $t("pages.ordersPage.experimentalDescription") }}
-        </p>
-      </div>
-    </Alert>
 
     <div
       v-if="orderConnections.length > 0"
@@ -1085,7 +1050,10 @@ export default {
     </EmptyState>
 
     <LogTableFrame v-else dock-footer>
-      <Table :contain="false" class="w-full table-fixed border-separate border-spacing-0">
+      <Table
+        :contain="false"
+        class="w-full table-fixed border-separate border-spacing-0"
+      >
         <colgroup>
           <col class="w-10" />
           <col class="w-40" />
@@ -1125,8 +1093,7 @@ export default {
                 :key="orderExternalId(row)"
                 class="cursor-pointer"
                 :data-state="
-                  isRowChecked(row) ||
-                  orderExternalId(row) === selectedOrderId
+                  isRowChecked(row) || orderExternalId(row) === selectedOrderId
                     ? 'selected'
                     : undefined
                 "
@@ -1146,9 +1113,7 @@ export default {
                         id: orderDisplayId(row),
                       })
                     "
-                    @update:model-value="
-                      (v) => toggleRow(row, v === true)
-                    "
+                    @update:model-value="(v) => toggleRow(row, v === true)"
                   />
                 </TableCell>
                 <TableCell

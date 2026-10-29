@@ -32,15 +32,15 @@ Store for API keys:
 X-Delegat-Store-Id: 1
 ```
 
-The key owner must have `api.access` (to possess a key) and `ai.use`. Underlying resource permissions still apply.
+The key owner must have `api.access` (to possess a key) and `ai.use`. Underlying resource permissions still apply. Except for protocol initialization, ping, and notifications, tool discovery and resource reads also resolve the selected store and require `ai.use` or `workspace.view` plus membership.
 
-Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_request`. No Python, no uploads, no writes.
+Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_request`. No Python, uploads, memory writes, connected MCP calls, or cabinet writes. The tool list omits Python and memory write tools; the host still enforces the restriction if a client sends a hidden or forged tool name.
 
 ## MCP tools
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
-Tools: `search_knowledge`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only while AI is on), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Writes go through `propose_plan` in the cabinet UI; Cursor confirms in the client. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+Tools: `search_knowledge`, `memory_search`, `memory_save`, `memory_delete`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only while AI is on), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Memory is scoped to the authenticated user and selected store and persists across conversations; MCP memory calls are scoped to the authenticated key owner and selected store. Cabinet chat writes, Python runs, and connected MCP calls require a standalone `propose_plan` and user confirmation. The operator MCP surface does not expose connected HTTP MCP servers; forged connected-tool names are rejected. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
 
 Resources:
 
@@ -107,6 +107,6 @@ Raise every catalog price: `PATCH /products/bulk` `{ allMatching: true, wait: tr
 
 ## Python SDK (sandbox)
 
-The sidecar receives `DELEGAT_BASE_URL`, `DELEGAT_TOKEN`, `DELEGAT_STORE_ID`, and `shops` (this store’s connection credentials, seller hosts, how to send the key, and `docs.platform` when Control Plane keeps that seller’s daily snapshot, which the script reads with `client.marketplace_doc` instead of fetching the documentation URL). The script calls those seller hosts with `urllib` directly. It never receives `MYSQL_*`. `from delegat_sdk import client` is prepended, and `shops` is already loaded. Secret values are redacted from the job output before it returns to the model. Compose caps the container at half a CPU and 512 MiB (no extra swap); jobs are one-at-a-time and BLAS is single-threaded so a script cannot pin the host.
+The sidecar receives `DELEGAT_BASE_URL`, `DELEGAT_TOKEN`, `DELEGAT_STORE_ID`, and `shops`. By default, `shops` retains the legacy connection credentials/hosts/auth metadata. For stores selected by `MARKETPLACE_BROKER_SANDBOX_STORES`, broker-capable connections contain metadata only and seller reads use `client.shop_request` (GET) or the adapter's discovered named operations (`client.shop_operations` / `client.shop_read`). Unsupported connections remain marked `access=legacy`. `docs.platform` is read with `client.marketplace_doc` instead of fetching documentation URLs. It never receives `MYSQL_*`. `from delegat_sdk import client` is prepended, and `shops` is already loaded. Legacy output values are redacted; broker responses redact credentials server-side. Compose caps the container at half a CPU and 512 MiB (no extra swap); jobs are one-at-a-time and BLAS is single-threaded so a script cannot pin the host.
 
 Local `pnpm dev`: compose publishes `sandbox` on `http://127.0.0.1:8091` **only when `AI_ENABLED` is on** (Compose profile `ai`). Set `SANDBOX_URL` to that URL and `SANDBOX_AGENT_BASE_URL=http://host.docker.internal:5000` so jobs inside Docker can reach the host API. A Control Plane stack does not need those URLs: while AI is on the API uses container name `d-{stack}-sandbox`, and the sidecar process itself exits unless `AI_ENABLED` is true. AI off omits `run_python` even if a URL is set. Unset URL with no stack id → `tools/list` omits `run_python`. The API posts a buffered JSON body with `Content-Length` (chunked empty bodies were 413 `invalid body` on the sidecar).

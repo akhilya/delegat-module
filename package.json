@@ -2,6 +2,7 @@
   "name": "delegat-dashboard",
   "private": true,
   "scripts": {
+    "check:docs": "node scripts/check-project-docs.mjs",
     "dev": "concurrently -n docker,api,web -c blue,green,cyan \"npm run dev:docker\" \"npm run dev:api:skip-vite\" \"npm run dev:web\"",
     "dev:docker": "node scripts/compose-dev.mjs up",
     "dev:api": "cd backend && dotenv -e ../.env.dev -o -- dotnet watch run",

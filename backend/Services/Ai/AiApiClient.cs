@@ -16,7 +16,7 @@ namespace Delegat.Services.Ai;
 /// <see cref="AiRequest"/> DTOs and stream events go out as Anthropic-shaped
 /// <see cref="AiStreamEvent"/>s - the agentic loop in AiChatService is unaware of the provider.
 /// </summary>
-public class AiApiClient
+public class AiApiClient : IAiApiClient
 {
     private readonly ILogger<AiApiClient> _logger;
 
@@ -162,7 +162,7 @@ public class AiApiClient
                 options.Tools.Add(ChatTool.CreateFunctionTool(
                     tool.name,
                     tool.description,
-                    BinaryData.FromString(JsonSerializer.Serialize(tool.input_schema, _jsonOptions))));
+                    BinaryData.FromString(JsonSerializer.Serialize(ToolSchemaElement(tool.input_schema), _jsonOptions))));
             }
         }
         return options;
@@ -316,6 +316,20 @@ public class AiApiClient
                 }
             }
 
+            if (update.Usage is { } tokenUsage)
+            {
+                yield return new AiStreamEvent
+                {
+                    type = "usage",
+                    usage = new AiStreamUsage
+                    {
+                        inputTokens = tokenUsage.InputTokenCount,
+                        outputTokens = tokenUsage.OutputTokenCount,
+                        cacheReadInputTokens = tokenUsage.InputTokenDetails?.CachedTokenCount,
+                    },
+                };
+            }
+
             foreach (StreamingChatToolCallUpdate tc in update.ToolCallUpdates)
             {
                 var index = tc.Index;
@@ -386,32 +400,61 @@ public class AiApiClient
     // Anthropic path (official anthropic-sdk-csharp)
     // =====================================================================
 
-    private Anthropic.AnthropicClient BuildAnthropicClient(AiModelConfig model)
+    internal Anthropic.AnthropicClient BuildAnthropicClient(AiModelConfig model, HttpClient? httpClient = null)
     {
-        // Custom endpoint (proxy) - only override when it's not the default API host
-        string? baseUrl = null;
-        if (!model.apiUrl.Contains("api.anthropic.com", StringComparison.OrdinalIgnoreCase))
-            baseUrl = new Uri(model.apiUrl).GetLeftPart(UriPartial.Authority);
+        // Keep custom path prefixes (e.g. DeepSeek's /anthropic); the SDK appends /v1/messages.
+        var baseUrl = GetAnthropicBaseUrl(model.apiUrl);
 
-        var proxied = CreateProxiedClient(model.proxyUrl);
+        var transport = CreateProxiedClient(model.proxyUrl) ?? httpClient;
 
         var apiKey = model.apiKeyEncrypted ?? string.Empty;
 
-        return (baseUrl, proxied) switch
+        return (baseUrl, transport) switch
         {
             (null, null) => new Anthropic.AnthropicClient { ApiKey = apiKey },
-            (null, not null) => new Anthropic.AnthropicClient { ApiKey = apiKey, HttpClient = proxied },
+            (null, not null) => new Anthropic.AnthropicClient { ApiKey = apiKey, HttpClient = transport },
             (not null, null) => new Anthropic.AnthropicClient { ApiKey = apiKey, BaseUrl = baseUrl },
             (not null, not null) => new Anthropic.AnthropicClient
             {
                 ApiKey = apiKey,
                 BaseUrl = baseUrl,
-                HttpClient = proxied,
+                HttpClient = transport,
             },
         };
     }
 
-    internal Anthropic.Models.Messages.MessageCreateParams BuildAnthropicParams(AiRequest request)
+    internal static string NormalizeAnthropicBaseUrl(string apiUrl)
+    {
+        var baseUrl = new Uri(apiUrl).GetLeftPart(UriPartial.Path).TrimEnd('/');
+        foreach (var suffix in new[] { "/v1/messages", "/messages", "/v1" })
+        {
+            if (baseUrl.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                baseUrl = baseUrl[..^suffix.Length].TrimEnd('/');
+                break;
+            }
+        }
+
+        return baseUrl;
+    }
+
+    private static string? GetAnthropicBaseUrl(string apiUrl)
+    {
+        var uri = new Uri(apiUrl);
+        var baseUrl = NormalizeAnthropicBaseUrl(apiUrl);
+        var origin = uri.GetLeftPart(UriPartial.Authority);
+
+        // Let the SDK use its default endpoint for Anthropic's canonical host.
+        if (uri.Host.Equals("api.anthropic.com", StringComparison.OrdinalIgnoreCase)
+            && baseUrl.Equals(origin, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return baseUrl;
+    }
+
+    internal Anthropic.Models.Messages.MessageCreateParams BuildAnthropicParams(
+        AiRequest request,
+        AiModelConfig? model = null)
     {
         var messageParams = new List<Anthropic.Models.Messages.MessageParam>();
         var rawMessages = JsonSerializer.Serialize(request.messages, _jsonOptions);
@@ -469,6 +512,28 @@ public class AiApiClient
         var systemPrompt = string.IsNullOrEmpty(request.system)
             ? null
             : (Anthropic.Models.Messages.MessageCreateParamsSystem)request.system!;
+        var cacheToolDefinitions = model != null && IsAnthropicPromptCacheEnabled(request, model)
+            && request.tools is { Count: > 0 };
+        // A breakpoint after the last tool caches the unchanged system + tool prefix,
+        // before per-round messages. Keep it opt-in: one-round turns pay cache-write cost
+        // without a same-turn cache read.
+        var anthropicTools = request.tools?.Select((toolConfig, index) =>
+        {
+            var cacheThisTool = cacheToolDefinitions && index == request.tools!.Count - 1;
+            return (Anthropic.Models.Messages.ToolUnion)new Anthropic.Models.Messages.Tool
+            {
+                Name = toolConfig.name,
+                Description = toolConfig.description,
+                InputSchema = Anthropic.Models.Messages.InputSchema.FromRawUnchecked(
+                    ToJsonDictionary(ToolSchemaElement(toolConfig.input_schema))),
+                CacheControl = cacheThisTool
+                    ? new Anthropic.Models.Messages.CacheControlEphemeral
+                    {
+                        Ttl = Anthropic.Models.Messages.Ttl.Ttl5m,
+                    }
+                    : null,
+            };
+        }).ToList();
 
         return new Anthropic.Models.Messages.MessageCreateParams
         {
@@ -479,14 +544,28 @@ public class AiApiClient
             Metadata = string.IsNullOrEmpty(request.user)
                 ? null
                 : new Anthropic.Models.Messages.Metadata { UserID = request.user },
-            Tools = request.tools?.Select(t => (Anthropic.Models.Messages.ToolUnion)new Anthropic.Models.Messages.Tool
-            {
-                Name = t.name,
-                Description = t.description,
-                InputSchema = Anthropic.Models.Messages.InputSchema.FromRawUnchecked(
-                    ToJsonDictionary(JsonSerializer.SerializeToElement(t.input_schema, _jsonOptions))),
-            }).ToList(),
+            Tools = anthropicTools,
         };
+    }
+
+    private static bool IsAnthropicPromptCacheEnabled(AiRequest request, AiModelConfig model)
+    {
+        if (!request.enable_prompt_cache
+            || !bool.TryParse(Environment.GetEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE"), out var enabled)
+            || !enabled
+            || !Uri.TryCreate(model.apiUrl, UriKind.Absolute, out var modelEndpoint)
+            || !Uri.TryCreate(
+                Environment.GetEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE_ENDPOINT"),
+                UriKind.Absolute,
+                out var pilotEndpoint))
+            return false;
+
+        // Require an explicit origin allowlist so enabling the feature for a pilot
+        // endpoint cannot silently turn it on for every Anthropic model in the app.
+        return string.Equals(
+            modelEndpoint.GetLeftPart(UriPartial.Authority),
+            pilotEndpoint.GetLeftPart(UriPartial.Authority),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // Some OpenAI-compatible models return tool names with a "functions." prefix (legacy Function
@@ -505,10 +584,15 @@ public class AiApiClient
         return element.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
     }
 
+    internal static JsonElement ToolSchemaElement(AiToolInputSchema schema) =>
+        schema.RawSchema is { } raw
+            ? raw.Clone()
+            : JsonSerializer.SerializeToElement(schema, _jsonOptions);
+
     private async Task<AiResponse> SendAnthropicAsync(AiModelConfig model, AiRequest request, CancellationToken ct)
     {
         var client = BuildAnthropicClient(model);
-        var createParams = BuildAnthropicParams(request);
+        var createParams = BuildAnthropicParams(request, model);
 
         var message = await client.Messages.Create(createParams, cancellationToken: ct);
 
@@ -542,12 +626,43 @@ public class AiApiClient
         [EnumeratorCancellation] CancellationToken ct)
     {
         var client = BuildAnthropicClient(model);
-        var createParams = BuildAnthropicParams(request);
+        var createParams = BuildAnthropicParams(request, model);
 
         await foreach (var streamEvent in client.Messages.CreateStreaming(createParams, cancellationToken: ct))
         {
-            // The SDK yields Anthropic-native events as a union - TryPick each variant
-            if (streamEvent.TryPickContentBlockStart(out var start))
+            // Usage events are kept separate from content so the model loop can log
+            // token counts without exposing them to the user-facing SSE stream.
+            if (streamEvent.TryPickStart(out var messageStart))
+            {
+                var usage = messageStart.Message.Usage;
+                yield return new AiStreamEvent
+                {
+                    type = "usage",
+                    usage = new AiStreamUsage
+                    {
+                        inputTokens = usage.InputTokens,
+                        outputTokens = usage.OutputTokens,
+                        cacheReadInputTokens = usage.CacheReadInputTokens,
+                        cacheCreationInputTokens = usage.CacheCreationInputTokens,
+                    },
+                };
+            }
+            else if (streamEvent.TryPickDelta(out var messageDelta))
+            {
+                var usage = messageDelta.Usage;
+                yield return new AiStreamEvent
+                {
+                    type = "usage",
+                    usage = new AiStreamUsage
+                    {
+                        inputTokens = usage.InputTokens,
+                        outputTokens = usage.OutputTokens,
+                        cacheReadInputTokens = usage.CacheReadInputTokens,
+                        cacheCreationInputTokens = usage.CacheCreationInputTokens,
+                    },
+                };
+            }
+            else if (streamEvent.TryPickContentBlockStart(out var start))
             {
                 var block = start.ContentBlock.TryPickToolUse(out var toolUse)
                     ? new AiContentBlock { type = "tool_use", id = toolUse.ID, name = toolUse.Name }

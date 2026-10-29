@@ -171,24 +171,21 @@ public class AiController : ControllerBase
 
         if (userId == null || storeId == null)
             return Unauthorized();
-        if (request.Steps.Count == 0)
-            return BadRequest("steps are required");
-
-        var steps = request.Steps;
         if (string.IsNullOrWhiteSpace(request.SessionId))
-        {
-            PrepareSseHeaders();
-            await WriteSseAsync(
-                _chatService.ExecutePlanStreamAsync(steps, storeId.Value, userId.Value, ct),
-                ct);
-            return new EmptyResult();
-        }
+            return BadRequest("sessionId required");
+        if (string.IsNullOrWhiteSpace(request.ProposalId))
+            return BadRequest("proposalId required");
+
+        var steps = await _chatService.ConsumeConfirmedPlanAsync(
+            request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+        if (steps == null)
+            return Conflict(new { error = "plan_not_pending_or_mismatched" });
 
         var sessionId = request.SessionId;
         _liveTurns.TryStart(
             sessionId, storeId.Value, userId.Value, userMessage: null,
             (sp, token) => sp.GetRequiredService<AiChatService>()
-                .ExecutePlanStreamAsync(steps, storeId.Value, userId.Value, token));
+                .ExecutePlanStreamAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token));
 
         var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
         if (turn == null)
@@ -340,7 +337,7 @@ public class AiChatRequest
 
 public class ExecutePlanRequest
 {
-    public List<PlanStepInput> Steps { get; set; } = [];
+    public string? ProposalId { get; set; }
     public string? SessionId { get; set; }
 }
 

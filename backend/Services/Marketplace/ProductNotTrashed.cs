@@ -26,7 +26,7 @@ public static class ProductNotTrashed
             .FirstOrDefaultAsync(ct);
 
         if (row == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (row.deletedAt != null)
             throw ApiException.BadRequest(Message, code: ErrorCode);
@@ -61,7 +61,7 @@ public static class ProductNotTrashed
             .FirstOrDefaultAsync(ct);
 
         if (productId == null)
-            throw ApiException.NotFound("Marketplace link not found");
+            throw ApiException.NotFound(code: "marketplace_link_not_found");
 
         await EnsureAsync(db, productId.Value, ct);
     }

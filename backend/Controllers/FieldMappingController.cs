@@ -58,14 +58,14 @@ public class FieldMappingController : ControllerBase
         var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+            throw ApiException.BadRequest(code: "adapter_not_found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
-            throw ApiException.BadRequest("Adapter does not support fetching category fields");
+            throw ApiException.BadRequest(code: "adapter_capability_missing");
 
         try
         {
@@ -105,7 +105,7 @@ public class FieldMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting category fields for mapping {MappingId}", mappingId);
-            throw ApiException.BadRequest($"Failed to get category fields: {ex.Message}");
+            throw ApiException.BadRequest(code: "external_fields_unavailable");
         }
     }
 
@@ -122,11 +122,11 @@ public class FieldMappingController : ControllerBase
         var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+            throw ApiException.BadRequest(code: "adapter_not_found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             return Ok(Array.Empty<object>());
@@ -160,7 +160,7 @@ public class FieldMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting price fields for mapping {MappingId}", mappingId);
-            throw ApiException.BadRequest($"Failed to get price fields: {ex.Message}");
+            throw ApiException.BadRequest(code: "external_price_fields_unavailable");
         }
     }
 
@@ -282,7 +282,7 @@ public class FieldMappingController : ControllerBase
         }
         else
         {
-            throw ApiException.BadRequest("Invalid type. Expected 'category' or 'store'.");
+            throw ApiException.BadRequest(code: "mapping_type_invalid");
         }
 
         return Ok(new { options });
@@ -293,7 +293,7 @@ public class FieldMappingController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<CategoryMapping>();
 
@@ -304,10 +304,10 @@ public class FieldMappingController : ControllerBase
                 .Include(m => m.localCategory));
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         if (mapping.connection?.storeId != selectedStoreId.Value)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         return mapping;
     }

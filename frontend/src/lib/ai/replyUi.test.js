@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   chatActionsFromTool,
+  answersFromFormData,
   interpolateFollowUp,
   normalizeAskForm,
   normalizeChatAction,
@@ -9,6 +10,16 @@ import {
 } from "./replyUi.js";
 
 describe("reply UI", () => {
+  it("includes typed questionnaire answers from form data", () => {
+    const formData = new FormData();
+    formData.set("product", "FI10");
+
+    assert.deepEqual(
+      answersFromFormData([{ key: "product", type: "text" }], formData),
+      { product: "FI10" },
+    );
+  });
+
   it("keeps open and continue as separate actions and drops a hidden prompt on a url button", () => {
     const open = normalizeChatAction({
       url: "/products/12/edit",
@@ -70,7 +81,10 @@ describe("reply UI", () => {
     assert.equal(form.kind, "questions");
     assert.equal(form.questions.length, 1);
     assert.equal(form.questions[0].key, "shop");
-    assert.equal(interpolateFollowUp(form.followUp, { shop: "https://a.example" }), "Shop is https://a.example");
+    assert.equal(
+      interpolateFollowUp(form.followUp, { shop: "https://a.example" }),
+      "Shop is https://a.example",
+    );
   });
 
   it("normalizes a questions questionnaire and drops secrets", () => {

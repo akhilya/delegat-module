@@ -57,6 +57,34 @@ public class CatalogMatchEngineTests
     }
 
     [Fact]
+    public void Match_SkuIgnoresSeparators()
+    {
+        var rows = CatalogMatchEngine.Match(
+            [Local(1, "AB_12-XY")], [Remote("wb-1", "ab 12_xy")]);
+        Assert.Equal(CatalogMatchStatus.Matched, Assert.Single(rows).Status);
+        Assert.Equal("sku", rows[0].MatchedBy);
+    }
+
+    [Fact]
+    public void Match_TruncatedNameCanMatchWhenPrefixIsDistinct()
+    {
+        var rows = CatalogMatchEngine.Match(
+            [Local(1, "LOCAL", name: "Женские кроссовки для бега демисезонные" )],
+            [Remote("wb-1", "REMOTE", name: "Женские кроссовки для бега")]);
+        Assert.Equal(CatalogMatchStatus.Matched, Assert.Single(rows).Status);
+        Assert.Equal("name", rows[0].MatchedBy);
+    }
+
+    [Fact]
+    public void Match_SimilarNamesWithMultipleCandidatesStayAmbiguous()
+    {
+        var rows = CatalogMatchEngine.Match(
+            [Local(1, "A", name: "Premium winter jacket black"), Local(2, "B", name: "Premium winter jacket blue")],
+            [Remote("wb-1", "REMOTE", name: "Premium winter jacket")]);
+        Assert.Equal(CatalogMatchStatus.Ambiguous, Assert.Single(rows).Status);
+    }
+
+    [Fact]
     public void Match_DuplicateLocalSku_IsAmbiguous()
     {
         var locals = new[]

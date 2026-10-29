@@ -71,7 +71,7 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         return Ok(store.MapToDTO(_serviceProvider));
     }
@@ -83,32 +83,30 @@ public class StoreController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isActive)
-            throw ApiException.Unauthorized("User not found", code: "user_not_found");
+            throw ApiException.Unauthorized(code: "user_not_found");
 
         var storeRepo = _unitOfWork.Repository<Store>();
         var name = (input.name ?? "").Trim();
         if (string.IsNullOrEmpty(name))
-            throw ApiException.BadRequest("Store name cannot be empty", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "store_name_required");
         if (name.Length > Store.STORE_NAME_MAX_LENGTH)
-            throw ApiException.BadRequest(
-                $"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters",
-                code: "store_name_too_long");
+            throw ApiException.BadRequest(code: "store_name_too_long");
 
         input.name = name;
         var existingStore = await storeRepo.FindAsync(s => s.name == name);
 
         if (existingStore != null)
-            throw ApiException.BadRequest("A store with this name already exists");
+            throw ApiException.BadRequest(code: "store_name_taken");
 
         if (!string.IsNullOrWhiteSpace(input.timezone)
             && !StoreTimeHelper.IsValidTimezoneId(input.timezone.Trim()))
-            throw ApiException.BadRequest("Invalid timezone");
+            throw ApiException.BadRequest(code: "timezone_invalid");
 
         if (!string.IsNullOrWhiteSpace(input.baseCurrency))
         {
             var normalized = input.baseCurrency.Trim().ToUpperInvariant();
             if (!CurrencyService.IsValidCurrencyCode(normalized))
-                throw ApiException.BadRequest("Invalid base currency");
+                throw ApiException.BadRequest(code: "currency_code_invalid");
         }
 
         var newStore = new Store();
@@ -128,7 +126,7 @@ public class StoreController : ControllerBase
         {
             var creator = await userRepo.GetByIdTrackingAsync(user.Id);
             if (creator == null || !creator.isActive)
-                throw ApiException.Unauthorized("User not found", code: "user_not_found");
+                throw ApiException.Unauthorized(code: "user_not_found");
 
             newStore.members.Add(creator);
         }
@@ -150,16 +148,16 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         if (store.members.Any(m => m.Id == input.userId))
-            throw ApiException.BadRequest("User is already a member");
+            throw ApiException.BadRequest(code: "user_already_store_member");
 
         var userRepo = _unitOfWork.Repository<User>();
         var inviteUser = await userRepo.GetByIdTrackingAsync(input.userId);
 
         if (inviteUser == null || !inviteUser.isActive)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+            throw ApiException.NotFound(code: "user_not_found");
 
         store.members.Add(inviteUser);
         await _unitOfWork.SaveChangesAsync();
@@ -176,11 +174,11 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         var memberToRemove = store.members.FirstOrDefault(m => m.Id == userId);
         if (memberToRemove == null)
-            throw ApiException.BadRequest("User is not a member of this store");
+            throw ApiException.BadRequest(code: "user_not_store_member");
 
         store.members.Remove(memberToRemove);
 
@@ -204,7 +202,7 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         return Ok(store.MapToDetailDTO(_serviceProvider));
     }
@@ -218,23 +216,21 @@ public class StoreController : ControllerBase
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, StoreIncludes);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         var nameChanged = false;
         if (input.name != null)
         {
             var name = input.name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                throw ApiException.BadRequest("Store name cannot be empty", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "store_name_required");
 
             if (name.Length > Store.STORE_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest(
-                    $"Store name cannot be longer than {Store.STORE_NAME_MAX_LENGTH} characters",
-                    code: "store_name_too_long");
+                throw ApiException.BadRequest(code: "store_name_too_long");
 
             var duplicate = await storeRepo.FindAsync(s => s.Id != id && s.name == name);
             if (duplicate != null)
-                throw ApiException.BadRequest("A store with this name already exists");
+                throw ApiException.BadRequest(code: "store_name_taken");
 
             if (!string.Equals(store.name, name, StringComparison.Ordinal))
             {
@@ -248,7 +244,7 @@ public class StoreController : ControllerBase
             var membersAuth = await _authorizationService.AuthorizeAsync(
                 User, PermissionPolicyProvider.StorePolicyName(Permissions.StoreMembersManage));
             if (!membersAuth.Succeeded)
-                throw ApiException.Forbidden("Insufficient permissions to change store members");
+                throw ApiException.Forbidden(code: "store_members_manage_forbidden");
 
             var memberIds = input.memberIds.Distinct().ToHashSet();
             var removedMembers = store.members.Where(member => !memberIds.Contains(member.Id)).ToList();
@@ -258,7 +254,7 @@ public class StoreController : ControllerBase
                 .ToListAsync();
 
             if (users.Count != memberIds.Count)
-                throw ApiException.BadRequest("One or more users not found", code: "user_not_found");
+                throw ApiException.BadRequest(code: "user_not_found");
 
             store.members.Clear();
             foreach (var user in users)
@@ -282,7 +278,7 @@ public class StoreController : ControllerBase
         {
             var tz = input.timezone.Trim();
             if (!StoreTimeHelper.IsValidTimezoneId(tz))
-                throw ApiException.BadRequest("Invalid timezone");
+                throw ApiException.BadRequest(code: "timezone_invalid");
             store.timezone = tz;
         }
 
@@ -304,7 +300,7 @@ public class StoreController : ControllerBase
     {
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         return Ok(store.MapCurrencyDtos());
     }
@@ -317,19 +313,19 @@ public class StoreController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         var code = CurrencyService.NormalizeCode(input.code);
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"{baseCurrency} is the base currency, no need to add it");
+            throw ApiException.BadRequest(code: "currency_is_base");
         if (!CurrencyService.IsValidCurrencyCode(code))
-            throw ApiException.BadRequest("Currency code must be 3 letters");
+            throw ApiException.BadRequest(code: "currency_code_invalid");
         if (input.rateToBase <= 0)
-            throw ApiException.BadRequest("Rate must be greater than zero");
+            throw ApiException.BadRequest(code: "currency_rate_invalid");
 
         if (store.currencies.Any(c => c.code == code))
-            throw ApiException.BadRequest("Currency has already been added");
+            throw ApiException.BadRequest(code: "currency_already_added");
 
         store.currencies.Add(new StoreCurrency
         {
@@ -353,20 +349,20 @@ public class StoreController : ControllerBase
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"The base currency {baseCurrency} cannot be changed");
+            throw ApiException.BadRequest(code: "base_currency_immutable");
 
         var currency = store.currencies.FirstOrDefault(c => c.code == code);
         if (currency == null)
-            throw ApiException.NotFound("Currency not found");
+            throw ApiException.NotFound(code: "currency_not_found");
 
         if (input.rateToBase.HasValue)
         {
             if (input.rateToBase.Value <= 0)
-                throw ApiException.BadRequest("Rate must be greater than zero");
+                throw ApiException.BadRequest(code: "currency_rate_invalid");
             currency.rateToBase = input.rateToBase.Value;
             currency.updatedAt = DateTime.UtcNow;
         }
@@ -386,15 +382,15 @@ public class StoreController : ControllerBase
 
         var store = await _unitOfWork.Repository<Store>().GetByIdWithIncludesTrackingAsync(id, q => q.Include(s => s.currencies));
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         var baseCurrency = CurrencyService.NormalizeCode(store.baseCurrency);
         if (code == baseCurrency)
-            throw ApiException.BadRequest($"The base currency {baseCurrency} cannot be removed");
+            throw ApiException.BadRequest(code: "base_currency_immutable");
 
         var currency = store.currencies.FirstOrDefault(c => c.code == code);
         if (currency == null)
-            throw ApiException.NotFound("Currency not found");
+            throw ApiException.NotFound(code: "currency_not_found");
 
         store.currencies.Remove(currency);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -418,9 +414,9 @@ public class StoreController : ControllerBase
     {
         var user = await _currentUserService.GetUserAsync();
         if (user == null || !user.isActive)
-            throw ApiException.Unauthorized("User not found", code: "user_not_found");
+            throw ApiException.Unauthorized(code: "user_not_found");
         if (!user.isAdmin)
-            throw ApiException.Forbidden("Only the instance owner can delete a store", code: "store_delete_forbidden");
+            throw ApiException.Forbidden(code: "store_delete_forbidden");
 
         await _storeDeletion.DeleteStoreAsync(id, input.confirmationName ?? "");
 
@@ -449,7 +445,7 @@ public class StoreController : ControllerBase
         CancellationToken ct)
     {
         if (request is null)
-            return BadRequest(new { error = "Body required" });
+            throw ApiException.BadRequest(code: "request_body_required");
 
         await EnsureStoreExistsAsync(id);
         return Ok(await _brandingSettings.UpdateAsync(id, request, ct));
@@ -492,7 +488,7 @@ public class StoreController : ControllerBase
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdTrackingAsync(id);
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         store.onboardingCompletedAt ??= DateTime.UtcNow;
         await _unitOfWork.SaveChangesAsync();
@@ -534,7 +530,7 @@ public class StoreController : ControllerBase
     {
         var exists = await _unitOfWork.Repository<Store>().FindAsync(s => s.Id == id);
         if (exists == null)
-            throw ApiException.NotFound("Store not found", code: "store_not_found");
+            throw ApiException.NotFound(code: "store_not_found");
     }
 
     private static IQueryable<Store> StoreIncludes(IQueryable<Store> query) =>

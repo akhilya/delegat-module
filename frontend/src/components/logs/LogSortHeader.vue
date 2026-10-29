@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-vue-next";
 import { TableHead } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -26,9 +27,10 @@ function onClick() {
 
 <template>
   <TableHead :class="props.class">
-    <button
+    <Button
       type="button"
-      class="inline-flex w-full items-center gap-1 text-left font-medium hover:text-foreground"
+      variant="ghost"
+      class="h-auto min-h-0 w-full justify-start gap-1 p-0 text-left text-xs font-medium hover:bg-transparent hover:text-foreground"
       :class="justify"
       @click="onClick"
     >
@@ -42,6 +44,6 @@ function onClick() {
         class="size-3.5 shrink-0 text-foreground"
       />
       <ArrowUpDown v-else class="size-3.5 shrink-0 opacity-30" />
-    </button>
+    </Button>
   </TableHead>
 </template>

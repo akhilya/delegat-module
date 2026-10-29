@@ -106,7 +106,7 @@ public class ProductMappingSelectionService
 
         var productIds = selections.Select(s => s.ProductId).Where(id => id > 0).Distinct().ToList();
         if (productIds.Count == 0)
-            throw ApiException.BadRequest("productId is required", code: "validation_error");
+            throw ApiException.BadRequest(code: "product_id_required");
 
         await ProductNotTrashed.EnsureNoneAsync(_db, productIds, ct);
 
@@ -115,7 +115,7 @@ public class ProductMappingSelectionService
             .Select(p => new { p.Id, p.categoryId })
             .ToListAsync(ct);
         if (products.Count != productIds.Count)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
         var categoryByProduct = products.ToDictionary(p => p.Id, p => p.categoryId);
 
         var mappingIds = selections.Select(s => s.CategoryMappingId).Where(id => id > 0).Distinct().ToList();
@@ -129,11 +129,11 @@ public class ProductMappingSelectionService
         foreach (var selection in selections)
         {
             if (selection.ProductId <= 0 || selection.CategoryMappingId <= 0)
-                throw ApiException.BadRequest("productId and categoryMappingId are required", code: "validation_error");
+                throw ApiException.BadRequest(code: "product_and_mapping_required");
             if (!categoryByProduct.TryGetValue(selection.ProductId, out var categoryId) || categoryId == null)
-                throw ApiException.BadRequest("Product has no category", code: "product_has_no_category");
+                throw ApiException.BadRequest(code: "product_has_no_category");
             if (!mappingById.TryGetValue(selection.CategoryMappingId, out var mapping))
-                throw ApiException.NotFound("Mapping not found on this connection", code: "mapping_not_found");
+                throw ApiException.NotFound(code: "mapping_not_found");
             if (mapping.localCategoryId != categoryId.Value)
                 throw ApiException.BadRequest(
                     "That mapping belongs to a different local category",
@@ -178,7 +178,7 @@ public class ProductMappingSelectionService
         var exists = await _db.marketplaceConnections.AsNoTracking()
             .AnyAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
         if (!exists)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
     }
 }
 

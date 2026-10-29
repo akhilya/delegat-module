@@ -43,12 +43,12 @@ public class MarketplaceOrderSyncServiceTests
     }
 
     [Fact]
-    public async Task PullStatus_Terminal_OnlyFirstPage()
+    public async Task HotPull_TerminalMailbox_UsesOneUnfilteredPage()
     {
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, _, connection, _, _, _) = await CreateSutAsync(db);
         adapter.EnqueuePages(
-            MarketplaceOrderStatuses.Delivered,
+            "",
             OrdersAdapterFake.Page(
                 [MakeOrder("d-1", status: MarketplaceOrderStatuses.Delivered)],
                 hasMore: true,
@@ -66,6 +66,7 @@ public class MarketplaceOrderSyncServiceTests
         Assert.True(result.Pulled);
         Assert.Equal(1, adapter.GetOrdersCalls);
         Assert.Equal(1, result.Upserted);
+        Assert.Null(Assert.Single(adapter.GetOrdersQueries)!.Status);
         Assert.Equal("d-1", (await db.marketplaceOrders.SingleAsync()).marketplaceOrderId);
         Assert.False(await db.marketplaceOrders.AnyAsync(o => o.marketplaceOrderId == "d-2"));
     }
@@ -76,7 +77,7 @@ public class MarketplaceOrderSyncServiceTests
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db);
         adapter.EnqueuePages(
-            MarketplaceOrderStatuses.AwaitingPack,
+            "",
             OrdersAdapterFake.Page([MakeOrder("a-1")], hasMore: false),
             OrdersAdapterFake.Page([MakeOrder("a-2")], hasMore: false));
 
@@ -100,13 +101,61 @@ public class MarketplaceOrderSyncServiceTests
         Assert.Equal(2, adapter.GetOrdersCalls);
     }
 
+    [Theory]
+    [InlineData("ozon", 200)]
+    [InlineData("wildberries", 100)]
+    [InlineData("yandex", 100)]
+    [InlineData("woocommerce", 100)]
+    [InlineData("opencart", 100)]
+    [InlineData("medusa", 100)]
+    public async Task HotPull_UsesOneUnfilteredRecentPageForAllStatuses(
+        string adapterKey, int expectedPageSize)
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db, adapterKey);
+        adapter.EnqueuePages(
+            "",
+            OrdersAdapterFake.Page(
+                [
+                    MakeOrder("new-1", status: MarketplaceOrderStatuses.New),
+                    MakeOrder("packing-1", status: MarketplaceOrderStatuses.AwaitingPack)
+                ],
+                hasMore: true,
+                nextCursor: "ignored-on-hot-pull"));
+        var statuses = MarketplaceOrderBuckets.ListStatusesForAdapter(adapterKey)
+            .Where(status => !MarketplaceOrderBuckets.IsTerminal(status))
+            .ToList();
+
+        var concurrent = await Task.WhenAll(
+            sync.SyncConnectionStatusesAsync(connection, statuses, "hot", CancellationToken.None),
+            sync.SyncConnectionStatusesAsync(
+                connection, [MarketplaceOrderStatuses.AwaitingPack], "page", CancellationToken.None));
+
+        Assert.Contains(concurrent, result => result.Pulled);
+        Assert.Contains(concurrent, result => result.Skipped);
+        Assert.Equal(1, adapter.GetOrdersCalls);
+        var query = Assert.Single(adapter.GetOrdersQueries);
+        Assert.Null(query!.Status);
+        Assert.Equal(expectedPageSize, query.PageSize);
+        Assert.Equal(1, query.MaxSourcePages);
+        Assert.Equal(time.UtcNow - MarketplaceOrderSyncService.HotWindow, query.From);
+        Assert.Equal(time.UtcNow.AddDays(1), query.To);
+        Assert.Equal(2, await db.marketplaceOrders.CountAsync());
+
+        var second = await sync.SyncConnectionStatusesAsync(
+            connection, statuses, "page", CancellationToken.None);
+
+        Assert.True(second.Skipped);
+        Assert.Equal(1, adapter.GetOrdersCalls);
+    }
+
     [Fact]
     public async Task HotPull_ReadsNewestPageOfRecentWindow()
     {
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db);
         adapter.EnqueuePages(
-            MarketplaceOrderStatuses.AwaitingPack,
+            "",
             OrdersAdapterFake.Page([MakeOrder("new-1")], hasMore: true, nextCursor: "2"),
             OrdersAdapterFake.Page([MakeOrder("older")], hasMore: false));
 
@@ -119,10 +168,12 @@ public class MarketplaceOrderSyncServiceTests
         var query = adapter.GetOrdersQueries.Single();
         Assert.Equal(time.UtcNow - MarketplaceOrderSyncService.HotWindow, query!.From);
         Assert.Equal(time.UtcNow.AddDays(1), query.To);
-        Assert.Equal(MarketplaceOrderStatuses.AwaitingPack, query.Status);
+        Assert.Null(query.Status);
+        Assert.Equal(100, query.PageSize);
+        Assert.Equal(1, query.MaxSourcePages);
         var state = await db.marketplaceOrderSyncStates.SingleAsync();
         Assert.Equal(
-            MarketplaceOrderSyncService.HotStateKey(MarketplaceOrderStatuses.AwaitingPack),
+            MarketplaceOrderSyncService.HotStateKey("all"),
             state.status);
     }
 
@@ -161,8 +212,11 @@ public class MarketplaceOrderSyncServiceTests
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db);
         adapter.EnqueuePages(
-            MarketplaceOrderStatuses.AwaitingPack,
+            "",
             OrdersAdapterFake.Page([MakeOrder("hot-1")], hasMore: false),
+            OrdersAdapterFake.Page([MakeOrder("hot-2")], hasMore: false));
+        adapter.EnqueuePages(
+            MarketplaceOrderStatuses.AwaitingPack,
             OrdersAdapterFake.Page([MakeOrder("deep-1")], hasMore: false));
 
         var page = await sync.SyncConnectionStatusesAsync(
@@ -178,9 +232,6 @@ public class MarketplaceOrderSyncServiceTests
         Assert.True(adapter.GetOrdersCalls > callsAfterPage);
 
         time.UtcNow = time.UtcNow.AddSeconds(1);
-        adapter.EnqueuePages(
-            MarketplaceOrderStatuses.AwaitingPack,
-            OrdersAdapterFake.Page([MakeOrder("hot-2")], hasMore: false));
         var again = await sync.SyncConnectionStatusesAsync(
             connection, [MarketplaceOrderStatuses.AwaitingPack], "page", CancellationToken.None);
         Assert.True(again.Pulled);
@@ -195,7 +246,7 @@ public class MarketplaceOrderSyncServiceTests
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, time, connection, _, _, _) = await CreateSutAsync(db);
         adapter.EnqueuePages(
-            MarketplaceOrderStatuses.AwaitingPack,
+            "",
             OrdersAdapterFake.Page([MakeOrder("keep-1")], hasMore: false));
 
         var first = await sync.SyncConnectionStatusesAsync(
@@ -215,7 +266,7 @@ public class MarketplaceOrderSyncServiceTests
         Assert.Equal("keep-1", (await db.marketplaceOrders.SingleAsync()).marketplaceOrderId);
         var state = await db.marketplaceOrderSyncStates.SingleAsync(s =>
             s.connectionId == connection.Id
-            && s.status == MarketplaceOrderSyncService.HotStateKey(MarketplaceOrderStatuses.AwaitingPack));
+            && s.status == MarketplaceOrderSyncService.HotStateKey("all"));
         Assert.Contains("ozon 500", state.lastError);
         Assert.NotNull(state.lastPulledAt);
 
@@ -256,8 +307,8 @@ public class MarketplaceOrderSyncServiceTests
     {
         await using var db = TestDbFactory.CreateDb();
         var (sync, adapter, _, first, _, data, store) = await CreateSutAsync(db);
-        var second = data.AddConnection(store.Id, "ozon", isActive: true);
-        var inactive = data.AddConnection(store.Id, "ozon", isActive: false);
+        var second = data.AddConnection(store.Id, "test", isActive: true);
+        var inactive = data.AddConnection(store.Id, "test", isActive: false);
         await data.SaveAsync();
 
         var result = await sync.SyncStoreTabAsync(store.Id, "assembly", "page", CancellationToken.None);
@@ -285,7 +336,7 @@ public class MarketplaceOrderSyncServiceTests
 
         var state = await db.marketplaceOrderSyncStates.FirstOrDefaultAsync(s =>
             s.connectionId == connection.Id
-            && s.status == MarketplaceOrderSyncService.HotStateKey(MarketplaceOrderStatuses.AwaitingPack));
+            && s.status == MarketplaceOrderSyncService.HotStateKey("all"));
         Assert.True(state == null || state.lastError == null);
     }
 
@@ -444,7 +495,9 @@ public class MarketplaceOrderSyncServiceTests
         var adapter = new OrdersAdapterFake { Key = "ozon" };
         adapter.EnqueuePages(
             MarketplaceOrderStatuses.AwaitingPack,
-            OrdersAdapterFake.Page([MakeOrder("from-deep")], hasMore: false),
+            OrdersAdapterFake.Page([MakeOrder("from-deep")], hasMore: false));
+        adapter.EnqueuePages(
+            "",
             OrdersAdapterFake.Page([MakeOrder("from-hot")], hasMore: false));
 
         var services = new ServiceCollection();
@@ -476,9 +529,10 @@ public class MarketplaceOrderSyncServiceTests
         Assert.Equal(
             "from-hot",
             (await db.marketplaceOrders.SingleAsync(o => o.marketplaceOrderId == "from-hot")).marketplaceOrderId);
-        var hotQuery = adapter.GetOrdersQueries.Last(q =>
-            q?.Status == MarketplaceOrderStatuses.AwaitingPack && q.From != null);
-        Assert.Equal(time.UtcNow - MarketplaceOrderSyncService.HotWindow, hotQuery!.From);
+        var hotQuery = adapter.GetOrdersQueries.Last(q => q?.From != null);
+        Assert.Null(hotQuery!.Status);
+        Assert.Equal(200, hotQuery.PageSize);
+        Assert.Equal(time.UtcNow - MarketplaceOrderSyncService.HotWindow, hotQuery.From);
     }
 
     private static async Task<(
@@ -488,17 +542,17 @@ public class MarketplaceOrderSyncServiceTests
         MarketplaceConnection Connection,
         MarketplaceOrderSnapshotService Snapshots,
         TestDataBuilder Data,
-        Store Store)> CreateSutAsync(DataContext db)
+        Store Store)> CreateSutAsync(DataContext db, string adapterKey = "test")
     {
         var data = new TestDataBuilder(db);
         var store = data.AddStore();
-        var connection = data.AddConnection(store.Id, "ozon");
+        var connection = data.AddConnection(store.Id, adapterKey);
         await data.SaveAsync();
         var time = new FixedTimeProvider
         {
             UtcNow = new DateTimeOffset(2026, 9, 4, 12, 0, 0, TimeSpan.Zero)
         };
-        var adapter = new OrdersAdapterFake { Key = "ozon" };
+        var adapter = new OrdersAdapterFake { Key = adapterKey };
         var snapshots = new MarketplaceOrderSnapshotService(db, time);
         var sync = new MarketplaceOrderSyncService(
             db,

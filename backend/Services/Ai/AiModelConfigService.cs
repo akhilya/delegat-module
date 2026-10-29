@@ -183,9 +183,9 @@ public class AiModelConfigService
     }
 
     /// <summary>
-    /// Fetches available model IDs from the provider's /v1/models endpoint.
-    /// OpenAI-compatible servers (LM Studio, Ollama, vLLM, api.openai.com) go through
-    /// the official OpenAI SDK; Anthropic uses a direct GET (trivial endpoint).
+    /// Fetches available model IDs from the provider. OpenAI-compatible servers (LM Studio,
+    /// Ollama, vLLM, api.openai.com) go through the official OpenAI SDK; Anthropic uses a
+    /// direct GET, with DeepSeek's Anthropic-compatible endpoint discovered at /models.
     /// </summary>
     public async Task<List<string>> DiscoverModelsAsync(
         string apiUrl, string? apiKey, AiModelProvider provider, string? proxyUrl = null, CancellationToken ct = default)
@@ -194,7 +194,7 @@ public class AiModelConfigService
         if (!UrlSafety.TryValidateProxyUrl(proxyUrl, out var proxyError, allowPrivateHosts: true))
             throw new ArgumentException(proxyError);
 
-        // Normalize: strip known completion paths
+        // Normalize OpenAI-compatible URLs: strip known completion paths.
         var baseUrl = apiUrl.TrimEnd('/');
         foreach (var suffix in new[] { "/chat/completions", "/v1/messages", "/messages", "/v1" })
         {
@@ -218,18 +218,39 @@ public class AiModelConfigService
             return models.Value.Select(m => m.Id).Where(id => !string.IsNullOrEmpty(id)).ToList();
         }
 
-        // Anthropic: plain GET /v1/models
+        // Anthropic: DeepSeek publishes model discovery at the API root rather than
+        // under its Anthropic-compatible /anthropic prefix.
         using var http = string.IsNullOrWhiteSpace(proxyUrl)
             ? new HttpClient { Timeout = TimeSpan.FromSeconds(15) }
             : AiApiClient.CreateProxiedClient(proxyUrl)!;
         if (http.Timeout == TimeSpan.Zero || http.Timeout == Timeout.InfiniteTimeSpan)
             http.Timeout = TimeSpan.FromSeconds(15);
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/v1/models");
+        return await FetchAnthropicModelsAsync(apiUrl, apiKey, http, ct);
+    }
+
+    internal static async Task<List<string>> FetchAnthropicModelsAsync(
+        string apiUrl, string? apiKey, HttpClient http, CancellationToken ct = default)
+    {
+        var normalizedBaseUrl = AiApiClient.NormalizeAnthropicBaseUrl(apiUrl);
+        var baseUri = new Uri(normalizedBaseUrl);
+        var isDeepSeekAnthropic = baseUri.Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase)
+            && baseUri.AbsolutePath.TrimEnd('/').EndsWith("/anthropic", StringComparison.OrdinalIgnoreCase);
+
+        var requestUri = isDeepSeekAnthropic
+            ? new UriBuilder(baseUri) { Path = "/models", Query = "", Fragment = "" }.Uri
+            : new Uri($"{normalizedBaseUrl}/v1/models");
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, requestUri);
         if (!string.IsNullOrEmpty(apiKey))
         {
-            req.Headers.Add("x-api-key", apiKey);
-            req.Headers.Add("anthropic-version", "2023-06-01");
+            if (isDeepSeekAnthropic)
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            else
+            {
+                req.Headers.Add("x-api-key", apiKey);
+                req.Headers.Add("anthropic-version", "2023-06-01");
+            }
         }
 
         using var resp = await http.SendAsync(req, ct);

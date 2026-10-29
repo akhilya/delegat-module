@@ -23,11 +23,8 @@ import {
   clearSetupStoreCountCache,
   fetchSetupState,
 } from "@/lib/setupStoreCount";
-import { adapterCanLink } from "@/lib/adapterCapabilities";
-import {
-  FIELD_LIMITS,
-  isNonEmptyWithinLimit,
-} from "@/lib/fieldLimits";
+import { adapterCanImportAll } from "@/lib/adapterCapabilities";
+import { FIELD_LIMITS, isNonEmptyWithinLimit } from "@/lib/fieldLimits";
 
 const STEP_WELCOME = "welcome";
 const STEP_STORE = "store";
@@ -162,7 +159,7 @@ export default {
     hasImportCapableConnection() {
       return this.connections.some((conn) => {
         const adapter = this.adapters.find((a) => a.key === conn.adapterKey);
-        return adapterCanLink(adapter || conn);
+        return adapterCanImportAll(adapter || conn);
       });
     },
     showBack() {
@@ -490,7 +487,10 @@ export default {
           clearSetupStoreCountCache();
         }
         if (this.hasImportCapableConnection) {
-          this.$router.push(PAGE_CATALOG_CONNECT);
+          this.$router.push({
+            path: PAGE_CATALOG_CONNECT,
+            query: { setupPipeline: "1" },
+          });
         } else {
           this.$router.push(PAGE_PRODUCTS);
         }

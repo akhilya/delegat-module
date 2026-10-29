@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Middleware;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.PlatformLink;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Delegat.Controllers;
 
@@ -18,6 +19,7 @@ public class AgentController : ControllerBase
     private readonly AgentFileUploadService _uploads;
     private readonly KnowledgeIndexService _knowledge;
     private readonly IPlatformLinkClient _platform;
+    private readonly MarketplaceCredentialBroker _marketplaceBroker;
     private static readonly JsonSerializerOptions Camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public AgentController(
@@ -25,13 +27,15 @@ public class AgentController : ControllerBase
         AgentToolHost tools,
         AgentFileUploadService uploads,
         KnowledgeIndexService knowledge,
-        IPlatformLinkClient platform)
+        IPlatformLinkClient platform,
+        MarketplaceCredentialBroker marketplaceBroker)
     {
         _session = session;
         _tools = tools;
         _uploads = uploads;
         _knowledge = knowledge;
         _platform = platform;
+        _marketplaceBroker = marketplaceBroker;
     }
 
     [HttpPut("stores/{storeId:int}/products/{productId:int}/files")]
@@ -132,6 +136,101 @@ public class AgentController : ControllerBase
         return Ok(doc);
     }
 
+    /// <summary>
+    /// Read-only GET broker endpoint used by selected sandbox stores and available to
+    /// authenticated agent sessions. Credentials remain server-side.
+    /// </summary>
+    [HttpPost("stores/{storeId:int}/marketplace/{connectionId:int}/read")]
+    [EnableRateLimiting("marketplace-broker")]
+    public async Task<IActionResult> MarketplaceRead(
+        int storeId,
+        int connectionId,
+        [FromBody] AgentMarketplaceReadBody body,
+        CancellationToken ct)
+    {
+        EnsureAi();
+        var (session, err) = await TryResolve(storeId, ct);
+        if (err != null) return err;
+        if (!AgentAccess.CanRunPython(session!.Permissions))
+            return StatusCode(403, new { error = "ai.use required" });
+
+        var result = await _marketplaceBroker.ReadAsync(
+            session.StoreId,
+            session.UserId,
+            connectionId,
+            body.Host,
+            body.Path,
+            ct);
+        if (result.Ok) return Ok(result);
+
+        return result.Error switch
+        {
+            "connection_not_found" => NotFound(new { error = result.Error }),
+            "connection_inactive" or "credentials_missing" => Conflict(new { error = result.Error }),
+            "upstream_unavailable" => StatusCode(502, new { error = result.Error }),
+            "upstream_timeout" => StatusCode(504, new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error }),
+        };
+    }
+
+    /// <summary>Execute a named adapter-owned read operation, including upstream POST reads.</summary>
+    [HttpPost("stores/{storeId:int}/marketplace/{connectionId:int}/read-operation")]
+    [RequestSizeLimit(32_768)]
+    [EnableRateLimiting("marketplace-broker")]
+    public async Task<IActionResult> MarketplaceReadOperation(
+        int storeId,
+        int connectionId,
+        [FromBody] AgentMarketplaceReadOperationBody body,
+        CancellationToken ct)
+    {
+        EnsureAi();
+        var (session, err) = await TryResolve(storeId, ct);
+        if (err != null) return err;
+        if (!AgentAccess.CanRunPython(session!.Permissions))
+            return StatusCode(403, new { error = "ai.use required" });
+
+        var result = await _marketplaceBroker.ReadOperationAsync(
+            session.StoreId,
+            session.UserId,
+            connectionId,
+            body.Operation,
+            body.Arguments,
+            ct);
+        if (result.Ok) return Ok(result);
+
+        return result.Error switch
+        {
+            "connection_not_found" => NotFound(new { error = result.Error }),
+            "connection_inactive" or "credentials_missing" => Conflict(new { error = result.Error }),
+            "upstream_unavailable" => StatusCode(502, new { error = result.Error }),
+            "upstream_timeout" => StatusCode(504, new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error }),
+        };
+    }
+
+    /// <summary>List the named read operations exposed by the selected Marketplace adapter.</summary>
+    [HttpGet("stores/{storeId:int}/marketplace/{connectionId:int}/read-operations")]
+    [EnableRateLimiting("marketplace-broker")]
+    public async Task<IActionResult> MarketplaceReadOperations(
+        int storeId, int connectionId, CancellationToken ct)
+    {
+        EnsureAi();
+        var (session, err) = await TryResolve(storeId, ct);
+        if (err != null) return err;
+        if (!AgentAccess.CanRunPython(session!.Permissions))
+            return StatusCode(403, new { error = "ai.use required" });
+
+        var result = await _marketplaceBroker.GetReadOperationsAsync(session.StoreId, connectionId, ct);
+        if (result.Ok) return Ok(new { operations = result.Operations });
+
+        return result.Error switch
+        {
+            "connection_not_found" => NotFound(new { error = result.Error }),
+            "connection_inactive" => Conflict(new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error }),
+        };
+    }
+
     [HttpGet("stores/{storeId:int}/openapi")]
     public async Task<IActionResult> OpenApi(int storeId, CancellationToken ct)
     {
@@ -186,6 +285,18 @@ public class AgentPlatformBody
     public string Method { get; set; } = "GET";
     public string Path { get; set; } = "";
     public JsonElement? Body { get; set; }
+}
+
+public sealed class AgentMarketplaceReadBody
+{
+    public string? Host { get; set; }
+    public string? Path { get; set; }
+}
+
+public sealed class AgentMarketplaceReadOperationBody
+{
+    public string? Operation { get; set; }
+    public JsonElement Arguments { get; set; }
 }
 
 public class AgentMatchBody

@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <!-- Reference the main backend project -->
-    <!-- Skip CopyPlugins: tests already reference YandexMarket, and nested plugin builds race on SDK deps.json -->
+    <!-- Skip CopyPlugins: plugins are referenced explicitly below; nested builds race on SDK deps.json -->
     <ProjectReference Include="..\backend\Delegat.csproj"
                       AdditionalProperties="BuildPlugins=false" />
     <ProjectReference Include="..\plugins\Delegat.Marketplace.YandexMarket\Delegat.Marketplace.YandexMarket.csproj"
@@ -35,6 +35,14 @@
     <ProjectReference Include="..\plugins\Delegat.Marketplace.Ozon\Delegat.Marketplace.Ozon.csproj"
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
     <ProjectReference Include="..\plugins\Delegat.Marketplace.Wildberries\Delegat.Marketplace.Wildberries.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.Avito\Delegat.Marketplace.Avito.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.WooCommerce\Delegat.Marketplace.WooCommerce.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.OpenCart\Delegat.Marketplace.OpenCart.csproj"
+                      AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+    <ProjectReference Include="..\plugins\Delegat.Marketplace.Medusa\Delegat.Marketplace.Medusa.csproj"
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
   </ItemGroup>
 

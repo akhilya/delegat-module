@@ -1,61 +1,56 @@
-# Documentation
+# Documentation map
 
-## Control Plane (canon elsewhere)
+This repository documents the **Delegat.Module instance**. The Control Plane has its own canonical documentation in the sibling `delegat-module-platform` repository; this repo must not become a second source of truth for it.
 
-Control Plane product, billing, Ops, Platform Link **server**, and provisioning docs live in **`delegat-module-platform`** (local: `C:\Users\ARTEM\projects\delegat-module-platform\docs\`).  
-This instance repo keeps **stubs** only — do not maintain a second CP canon here.
+## Which document wins?
 
-| Stub | Points to |
-|------|-----------|
-| [architecture/control-plane.md](architecture/control-plane.md) | CP `docs/control-plane.md` |
-| [platform/platform-link.md](platform/platform-link.md) | CP contract + instance client notes |
-| [plans/2026-07-21-control-plane-mvp-brief.md](plans/2026-07-21-control-plane-mvp-brief.md) | CP `docs/mvp-brief.md` |
-| [plans/2026-07-21-control-plane-init-prompt.md](plans/2026-07-21-control-plane-init-prompt.md) | (historical; CP already scaffolded) |
+1. **Implemented behavior:** code and API contract tests.
+2. **Partner contract:** [Public API v1](api/public-v1.md); keep it in sync with `backend/Controllers/PublicApi/` and Swagger.
+3. **Instance architecture and operator API:** the current docs below. `docs/plans/` is a dated design/history record, not a competing architecture canon.
+4. **Product and design:** root [PRODUCT.md](../PRODUCT.md), [DESIGN.md](../DESIGN.md), and [DESIGN.json](../DESIGN.json).
+5. **Agent workflow:** [.github/copilot-instructions.md](../.github/copilot-instructions.md) is the project-specific entry point. Read root [MEMORY.md](../MEMORY.md) before substantive work; it is a compact decision log, not a changelog or a substitute for the docs.
 
-## Architecture (instance)
+If sources disagree, trust verified implementation and its contract tests; update the canonical doc and mark the stale design/history entry as superseded. Never silently treat an old plan, roadmap, or audit as current behavior.
 
-- [**saas-architecture.md**](architecture/saas-architecture.md) - Per-instance SaaS: provisioning sketch, quotas, Redis
-- [**ai-assistant.md**](architecture/ai-assistant.md) - AI assistant maintenance (thin tools, prompts)
-- [**ai-system.md**](architecture/ai-system.md) - Instance AI / MCP architecture
-- [**operator-playbook.md**](ai/operator-playbook.md) - How-tos indexed for the cabinet assistant (export, Medusa collection titles, import)
-- [**adapter-api-watch.md**](ai/adapter-api-watch.md) - Prompt for the bot that reads each adapter’s official API news and docs. Regenerated when the adapter catalog changes.
+## Product and design
 
-## Design canon (impeccable)
+- [Product purpose and audience](../PRODUCT.md)
+- [Visual design system](../DESIGN.md)
+- [Design tooling sidecar](../DESIGN.json) — structured companion to `DESIGN.md`, not an independent design canon
+- [Instance UX brief](platform/product.md) — supplementary context; root `PRODUCT.md` wins on conflicts
 
-- [**PRODUCT.md**](../PRODUCT.md) - Strategic product context for agents
-- [**DESIGN.md**](../DESIGN.md) - Visual system tokens and Do/Don't
-- [**DESIGN.json**](../DESIGN.json) - Sidecar for live panel / tooling
+## Current instance reference
 
-## Platform (instance)
+- [Capabilities and roadmap](platform/capabilities.md) — feature overview; roadmap items are proposals and require verification
+- [Releasing](platform/releasing.md) — `VERSION`, `CHANGELOG.md`, SemVer, release process
+- [SaaS distribution architecture](architecture/saas-architecture.md) — **technical draft**; provisioning and Control Plane product decisions are maintained in the sibling repo
+- [Platform Link](platform/platform-link.md) — instance client notes; Control Plane contract is maintained in the sibling repo
+- [Control Plane stub](architecture/control-plane.md) — pointer only
 
-- [**capabilities.md**](platform/capabilities.md) - Current instance features and roadmap
-- [**platform-link.md**](platform/platform-link.md) - Instance Platform Link **client** notes (contract in CP)
-- [**product.md**](platform/product.md) - Instance UX brief
-- [**releasing.md**](platform/releasing.md) - SemVer / VERSION / CHANGELOG
+## API and integrations
 
-## API
+- [Partner Public API v1](api/public-v1.md) — external REST contract
+- [Operator MCP and Agent HTTP](api/mcp.md) — tools for operators and MCP clients; not partner API
+- [OpenCart bridge](adapters/opencart.md)
+- [WooCommerce bridge](adapters/woocommerce.md)
+- [Avito adapter](adapters/avito.md) — experimental; listing import and price operations, no listing publication
 
-- [**public-v1.md**](api/public-v1.md) - Partner Public API v1
-- [**mcp.md**](api/mcp.md) - Operator MCP and Agent HTTP (not partner v1)
+## AI assistant reference
 
-## Adapters
+- [AI architecture](architecture/ai-system.md)
+- [AI maintenance and prompt/tool contract](architecture/ai-assistant.md)
+- [AI-agent quality and efficiency audit](architecture/ai-agent-audit.md) — snapshot dated 2026-10-28; remaining work is listed in the document
+- [Authentication implementation notes](architecture/authentication.md)
+- [Operator playbook](ai/operator-playbook.md) — indexed operational procedures; keep aligned with API and implementation
+- [Adapter API watch prompt](ai/adapter-api-watch.md) and [adapter catalog](ai/adapter-api-watch.json) — bot inputs; update together when adapters change
 
-- [**opencart.md**](adapters/opencart.md) - OpenCart bridge
-- [**woocommerce.md**](adapters/woocommerce.md) - WooCommerce bridge
+## Plans and implementation history
 
-## Security
+See [plans/README.md](plans/README.md) for status, supersession, and historical records. A plan marked implemented or superseded is not an instruction to re-implement it.
 
-- [**SECURITY_AUDIT.md**](security/SECURITY_AUDIT.md)
-- [**SECURITY_AUDIT_REPORT.md**](security/SECURITY_AUDIT_REPORT.md)
+## Security review snapshots
 
-## Implementation plans (instance)
+- [Backend security audit (2026-07-17)](security/SECURITY_AUDIT.md)
+- [Storage/plugin security audit (2026-07-17)](security/SECURITY_AUDIT_REPORT.md)
 
-- [**2026-09-06-agent-mcp-design.md**](plans/2026-09-06-agent-mcp-design.md) - Operator AI rewrite (MCP, RAG, SQL, sandbox)
-- [**2026-09-04-stored-orders-overview-tabs-design.md**](plans/2026-09-04-stored-orders-overview-tabs-design.md)
-- [**2026-09-04-stored-orders-overview-tabs.md**](plans/2026-09-04-stored-orders-overview-tabs.md) (implementation)
-- [**2026-09-04-orders-assembly-overview-design.md**](plans/2026-09-04-orders-assembly-overview-design.md)
-- [**2026-09-04-fulfillment-shipments-design.md**](plans/2026-09-04-fulfillment-shipments-design.md)
-- [**2026-07-18-platform-test-catalog.md**](plans/2026-07-18-platform-test-catalog.md)
-- [**2026-07-17-public-api-v1-design.md**](plans/2026-07-17-public-api-v1-design.md)
-- [**2026-03-17-product-soft-delete.md**](plans/2026-03-17-product-soft-delete.md)
-- [**2026-07-22-api-unavailable-page-design.md**](plans/2026-07-22-api-unavailable-page-design.md)
+These are dated review artifacts, **not verified current findings**. Check the current code and tests before treating any finding or mitigation as applicable.

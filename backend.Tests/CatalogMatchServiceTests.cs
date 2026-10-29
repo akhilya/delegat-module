@@ -67,15 +67,15 @@ public class CatalogMatchServiceTests
     }
 
     [Fact]
-    public void PreviewMode_LooksUpLocalProductsWhenFewEvenIfAdapterCanListCatalog()
+    public void PreviewMode_ScansCatalogOnceWhenAdapterCanListCatalog()
     {
         Assert.Equal(
-            "fromLocal",
+            "fromRemote",
             CatalogMatchService.ChoosePreviewMode(hasAll: true, hasOne: true, localCount: 10));
     }
 
     [Fact]
-    public void PreviewMode_ListsRemoteCatalogOnlyWhenLocalLookupWouldBeTooLarge()
+    public void PreviewMode_UsesRemoteCatalogWhenAvailable()
     {
         Assert.Equal(
             "fromRemote",
@@ -86,7 +86,7 @@ public class CatalogMatchServiceTests
     }
 
     [Fact]
-    public async Task Preview_FromLocal_DoesNotScanWholeRemoteCatalogWhenFewLocalProducts()
+    public async Task Preview_FromRemote_ScansCatalogOnceInsteadOfRepeatingSkuLookups()
     {
         var (svc, connection, adapter) = await SeedAsync();
         adapter.Capabilities |= MarketplaceCapabilities.ImportAllProducts;
@@ -96,13 +96,18 @@ public class CatalogMatchServiceTests
 
         var preview = await svc.PreviewAsync(connection, 1, 50, "all", CancellationToken.None);
 
-        Assert.Equal("fromLocal", preview.Mode);
-        Assert.Equal(0, adapter.ImportAllCalls);
-        Assert.True(adapter.ImportProductsBatchCalls + adapter.ImportProductCalls > 0);
-        var row = Assert.Single(preview.Items);
+        Assert.Equal("fromRemote", preview.Mode);
+        Assert.Equal(1, adapter.ImportAllCalls);
+        Assert.Equal(0, adapter.ImportProductsBatchCalls + adapter.ImportProductCalls);
+        Assert.Equal(2, preview.Total);
+        Assert.Equal(1, preview.MatchedCount);
+        Assert.Equal(1, preview.UnmatchedCount);
+        var row = Assert.Single(preview.Items, item => item.ExternalProductId == "wb-1");
         Assert.Equal("matched", row.Status);
         Assert.Equal("wb-1", row.ExternalProductId);
         Assert.Equal("10:2", row.ExternalCategoryId);
+        var unmatched = Assert.Single(preview.Items, item => item.ExternalProductId == "wb-2");
+        Assert.Equal("unmatched", unmatched.Status);
     }
 
     [Fact]

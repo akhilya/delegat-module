@@ -15,6 +15,7 @@ const catalog = {
         { text: "Инструменты", slug: "workspace/tools" },
         { text: "Связать каталоги", slug: "workspace/catalog-connect" },
         { text: "Ozon", slug: "adapters/ozon" },
+        { text: "Avito", slug: "adapters/avito" },
       ],
     },
   ],
@@ -34,7 +35,10 @@ describe("docsSlugForPath", () => {
     assert.equal(docsSlugForPath("/barcodes"), "workspace/barcodes");
     assert.equal(docsSlugForPath("/storage"), "workspace/files");
     assert.equal(docsSlugForPath("/store-attributes"), "workspace/attributes");
-    assert.equal(docsSlugForPath("/store-attributes/2/edit"), "workspace/attributes");
+    assert.equal(
+      docsSlugForPath("/store-attributes/2/edit"),
+      "workspace/attributes",
+    );
   });
 
   it("maps adapters and a known connection key", () => {
@@ -46,7 +50,13 @@ describe("docsSlugForPath", () => {
       "adapters/ozon",
     );
     assert.equal(
-      docsSlugForPath("/adapter/9/categories/import", { adapterKey: "wildberries" }),
+      docsSlugForPath("/adapter/9", { adapterKey: "avito" }),
+      "adapters/avito",
+    );
+    assert.equal(
+      docsSlugForPath("/adapter/9/categories/import", {
+        adapterKey: "wildberries",
+      }),
       "workspace/mapping",
     );
     assert.equal(
@@ -65,14 +75,35 @@ describe("docsSlugForPath", () => {
     assert.equal(docsSlugForPath("/settings/operations"), "workspace/settings");
     assert.equal(docsSlugForPath("/settings/admin/ai"), "workspace/ai");
     assert.equal(docsSlugForPath("/tools"), "workspace/tools");
-    assert.equal(docsSlugForPath("/tools/catalog-connect"), "workspace/catalog-connect");
-    assert.equal(docsSlugForPath("/tools/catalog-scrape"), "workspace/catalog-scrape");
-    assert.equal(docsSlugForPath("/tools/public-api-try"), "workspace/public-api");
+    assert.equal(
+      docsSlugForPath("/tools/catalog-connect"),
+      "workspace/catalog-connect",
+    );
+    assert.equal(
+      docsSlugForPath("/tools/catalog-scrape"),
+      "workspace/catalog-scrape",
+    );
+    assert.equal(
+      docsSlugForPath("/tools/public-api-try"),
+      "workspace/public-api",
+    );
     assert.equal(docsSlugForPath("/tools/export-all-prices"), null);
-    assert.equal(docsSlugForPath("/settings/admin/api"), "workspace/public-api");
-    assert.equal(docsSlugForPath("/settings/admin/stores"), "workspace/settings");
-    assert.equal(docsSlugForPath("/settings/admin/users"), "workspace/settings");
-    assert.equal(docsSlugForPath("/settings/adapter-logs"), "workspace/settings");
+    assert.equal(
+      docsSlugForPath("/settings/admin/api"),
+      "workspace/public-api",
+    );
+    assert.equal(
+      docsSlugForPath("/settings/admin/stores"),
+      "workspace/settings",
+    );
+    assert.equal(
+      docsSlugForPath("/settings/admin/users"),
+      "workspace/settings",
+    );
+    assert.equal(
+      docsSlugForPath("/settings/adapter-logs"),
+      "workspace/settings",
+    );
     assert.equal(docsSlugForPath("/setup"), "workspace/store");
   });
 

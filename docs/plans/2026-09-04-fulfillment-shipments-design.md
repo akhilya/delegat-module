@@ -1,5 +1,7 @@
 # Fulfillment: warehouses, supplies, boxes
 
+> **Implemented design record.** Current contracts are in the cabinet and Public API controllers and their API references; verify against code before changing behavior.
+
 Locked 2026-09-04. English. Pass-through only — no EF tables, no stored supplies.
 
 ## Problem
@@ -47,7 +49,7 @@ Pack still creates a supply when `extra.supplyId` is omitted (Public API callers
 
 ## Host HTTP
 
-JWT [`MarketplaceCommerceController`](../../backend/Controllers/MarketplaceCommerceController.cs) and Public API [`PublicMarketplaceCommerceController`](../../backend/Controllers/PublicApi/PublicMarketplaceCommerceController.cs), permission `orders.manage`:
+JWT [`MarketplaceCommerceController`](../../backend/Controllers/MarketplaceCommerceController.cs), Public API [`PublicMarketplaceFulfillmentController`](../../backend/Controllers/PublicApi/PublicMarketplaceFulfillmentController.cs), and [`PublicMarketplaceShipmentsController`](../../backend/Controllers/PublicApi/PublicMarketplaceShipmentsController.cs), permission `orders.manage`:
 
 - `GET …/fulfillment/locations?kind=`
 - `GET/POST …/shipments`

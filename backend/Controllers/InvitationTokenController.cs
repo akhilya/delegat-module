@@ -59,10 +59,10 @@ public class InvitationTokenController : ControllerBase
         var tokenRepo = _unitOfWork.Repository<InvitationToken>();
         var token = await tokenRepo.FindAsync(t => t.Id == tokenId);
         if (token == null)
-            throw ApiException.NotFound("Invitation token not found", code: "token_not_found");
+            throw ApiException.NotFound(code: "token_not_found");
 
         if (token.used)
-            throw ApiException.BadRequest("Used invitation tokens cannot be revoked", code: "token_already_used");
+            throw ApiException.BadRequest(code: "token_already_used");
 
         tokenRepo.DeleteWithoutSave(token);
         await _unitOfWork.SaveChangesAsync();

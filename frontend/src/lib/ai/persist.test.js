@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  apiHistoryFromBlocks,
+  appendAssistantApiBlock,
+} from "./chatHistory.js";
+import {
   AI_CONFIRM_PLAN,
   applyFormReplies,
   applyPlanDecisions,
@@ -14,10 +18,101 @@ import {
   finalizeTurnTools,
 } from "./persist.js";
 
+describe("AI provider chat history", () => {
+  it("keeps each assistant tool round immediately followed by its results", () => {
+    const apiBlocks = [];
+    appendAssistantApiBlock(apiBlocks, { type: "text", text: "Looking up." });
+    appendAssistantApiBlock(apiBlocks, {
+      type: "tool_use",
+      id: "call_search",
+      name: "search_catalog",
+      input: { query: "FI10" },
+    });
+    apiBlocks.push({
+      role: "tool_result",
+      tool_use_id: "call_search",
+      content: "One match.",
+    });
+    appendAssistantApiBlock(apiBlocks, {
+      type: "text",
+      text: " Reading its price.",
+    });
+    appendAssistantApiBlock(apiBlocks, {
+      type: "tool_use",
+      id: "call_price",
+      name: "sql_readonly",
+      input: { query: "SELECT price FROM products" },
+    });
+    apiBlocks.push({
+      role: "tool_result",
+      tool_use_id: "call_price",
+      content: "1500.00",
+    });
+    appendAssistantApiBlock(apiBlocks, {
+      type: "text",
+      text: "The price is 1500.00.",
+    });
+
+    assert.deepEqual(apiHistoryFromBlocks(apiBlocks), [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Looking up." },
+          {
+            type: "tool_use",
+            id: "call_search",
+            name: "search_catalog",
+            input: { query: "FI10" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "call_search",
+            content: "One match.",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: " Reading its price." },
+          {
+            type: "tool_use",
+            id: "call_price",
+            name: "sql_readonly",
+            input: { query: "SELECT price FROM products" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "call_price",
+            content: "1500.00",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "The price is 1500.00." }],
+      },
+    ]);
+  });
+});
+
 describe("serializeToolCallsJson", () => {
   it("keeps the plan card so a reload can still confirm it", () => {
     const json = serializeToolCallsJson({
-      plan: { summary: "Upload photos", steps: [{ description: "Match files" }] },
+      plan: {
+        summary: "Upload photos",
+        steps: [{ description: "Match files" }],
+      },
       toolCalls: [],
       timeline: [{ type: "text", text: "Ready when you are." }],
     });

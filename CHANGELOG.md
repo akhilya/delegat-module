@@ -11,104 +11,15 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Optional sampled Sentry traces for AI turns, with model/tool spans and aggregate usage measurements. Export is disabled without `SENTRY_DSN` and does not include prompts, tool arguments/results, or request data.
+- Cabinet assistant remembers user-stated, non-sensitive preferences and useful facts across chats. Memories are scoped to the user and store, can be searched/saved/forgotten through assistant tools, are injected as untrusted context, and are capped at 40 entries.
+
+- Add store-scoped recurring task schedules with execution history and a persistent background worker. Scheduled actions remain unavailable until explicitly registered.
+
+- Experimental Avito system adapter: OAuth client-credentials, account verification, paged listing import, dynamic Autoload category/field metadata, price import, and price update. Full listing create/edit is not exposed by these REST APIs and remains unavailable until feed hosting is implemented.
 - A watch prompt lists each marketplace adapter and the official API news and documentation pages to read for upcoming, legacy, and breaking changes. Adding or removing an adapter requires a new copy of that prompt.
 - Partners can list a connection’s category mappings and assign a product to one of them when a local category exports to several marketplace categories (`GET …/mappings`, `POST …/product-mappings/resolve`, `POST …/product-mappings`). The cabinet assistant uses the same choice (`resolve-mappings`, then `save-mapping-selections`) and does not edit the field canvas for it.
 - Public API Swagger splits marketplace commerce into Prices, Orders, Fulfillment, Shipments, and Promotions. Paths are unchanged. Sections start collapsed, each operation is one line, and the longer contract sits inside it. Errors share one `{ error: { code, message, details } }` schema.
-
-### Fixed
-
-- Packing or handing over an order updates the cabinet list immediately. The order leaves To pack (or whichever mailbox it left) when the action succeeds, instead of staying there until the next marketplace pull.
-- A new or updated marketplace order shows up on the cabinet while Orders is open. Every adapter that lists orders is pulled again about every 20 seconds there, and about every 30 seconds in the background, instead of waiting several minutes on the stored snapshot. Older open orders are reconciled about every 5 minutes.
-- A large file keeps a steady download speed for people who are not next to the server. The web proxy holds about 8 MB of the response in memory so a distant link does not stall between tiny chunks, and it still does not spool the file to a temporary disk file.
-- A file upload streams to storage again. MVC was reading the multipart body before the action ran, so the file arrived with its size declared and no bytes left to store.
-- A large Wildberries export no longer stops the queue for half an hour on every batch, and an article the marketplace already accepted is not uploaded again when it is slow to appear in the catalog.
-- Uploading a file sends the file body. A preset multipart content type left the declared size in the header and an empty body, so the upload failed as soon as it reached the API.
-- A failed file upload records the declared size, how many bytes actually arrived, and the start of the body. A cut-off upload can be told apart from a parser fault.
-- Uploading a file no longer fails when the web proxy streams the body. A normal API request was marked as a WebSocket upgrade, so the file never reached the server.
-- A batch of files is stored while it is still uploading. The browser no longer waits for each file to be copied again after the progress bar reaches the end, and several files upload at once.
-- A file download continues from the last received byte when object storage closes the connection early, instead of failing the request.
-- A slow file download is no longer cut off. The API no longer aborts a response that stays under a few hundred bytes a second, and the web proxy streams the file instead of buffering it and closing the connection.
-- Wildberries bulk export uploads the product gallery. A photo list built on the mapping (gallery plus extra files) was not a plain string list, so the upload was skipped and the cards stayed without photos. A failed photo upload is written on the operation.
-- A waiting assistant plan is outdated when the next message does not confirm or cancel it. Execute is hidden, and the assistant revises the plan instead of running the old steps.
-- Cleaning a mapped description keeps Latin, Cyrillic, digits, and ordinary punctuation. The assistant replaces the regex on that field. It does not invent a cleanup field and does not start an export unless asked.
-- An assistant plan with no summary and no steps no longer shows an empty card with only Execute. A steps list sent as text is still read.
-- Ozon price export applies the category mapping when the product link has not saved one and the category has a single mapping. A raised price was sent without the mapped old price, and Ozon rejected it because the strikethrough already on the card was lower (`Old price is less than price`).
-- Ozon list responses still report the full count when the marketplace sends `total_items` instead of `total`. Catalog import and removing every product from a promotion use that count. Product list, prices, and stocks switch on 23 November 2026.
-- Ozon promotions use the methods that stay after 13 October 2026: product list `POST /v2/actions/products`, add or remove by price `POST /v1/actions/products/update`, and promo-code removal `POST /v2/actions/products/deactivate`. A price in the reply may be a number or a Money object.
-- Wildberries card export sends a barcode or GTIN characteristic in the card field `gtin` and in the size barcodes. The same code inside characteristics was rejected (`The GTIN code must be specified in a separate "gtin" field`).
-- The cabinet assistant no longer reports a mapping edit as done when the request would not change the text. A field the action does not read, or a pattern left outside `params`, is rejected before it is saved. The prompt, the action list, and the request surface share one body sentence, and a test fails when those instructions drift from the controller.
-- A regex block on a mapping keeps its pattern and replacement. They belong inside `params`; a body that put them next to the modifier type used to save an empty block.
-- Changing a product’s category no longer keeps a connection looking synced when that category has several mappings and none is chosen. The connection status says the mapping is not selected.
-- A background job started with an API key is attributed to that key, not to the person who created it. Operation logs show JSON on its own lines, and a product named in a log opens that product.
-- Cabinet assistant strips emoji on a mapped field with one .NET regular expression and removes the old literal replacements on that field in the same step. A pattern written as `\u{…}` does not match, so the preview used to keep the original text.
-- A cabinet assistant turn is not cut off after a few tool calls. A complex task keeps going until it ends in a sentence or a plan. A nudge such as «и?» still asks for that reply instead of another search. A regex block on a mapping names the field it edits.
-- Catalog list, bulk edit, and shop export take one SQL `where`. Frequent slices are named templates (`@withGallery`, `@withoutGallery`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`, and the file pair). The assistant copies those names. There is no separate “has photos” switch.
-- Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation. A Yandex Market page that returns an internal error no longer fails the whole check: that page is retried in smaller pieces, and any saved links still missing are looked up directly.
-- The navbar Help button stays beside product search instead of covering it. The search narrows when the bar is tight.
-- Cabinet assistant answers stay in the message. Tool steps stay on their own collapsed line, and the reply is not folded into that line.
-- Markdown tables in docs and the assistant use the same flush rows, caption header, and row hover as cabinet tables.
-- Wildberries price export reads the current card with a single-article lookup and treats a matching buyer price as already exported.
-- Cabinet assistant runs a DeepSeek tool call instead of printing its markup in the reply.
-- Wildberries card description is sent as plain text. Line breaks, quotes, and emoji no longer appear as `<br>` and `&#…;` on the marketplace.
-- Wildberries export no longer fails while confirming a new card when the size id (`chrtID`) is larger than a 32-bit integer. Stock updates use the same wider id.
-- Deleting a folder in store storage or on a product with the Delete key or the toolbar button uses the same confirmation as the folder menu, and the folder is removed. An empty folder no longer says that 0 files will be deleted.
-- Wildberries export of a new card stays running until the article appears in the catalog or the draft error list names it (up to 30 minutes). It no longer fails after half a minute with “created but not found” while the marketplace has not yet said why.
-- Wildberries export sends directory values such as TN VED and VAT as text. A numeric code sent as a number was accepted by the upload call and the card never appeared. Draft errors are read from the current error list instead of an empty page.
-- Wildberries export sends packaging weight only as kilograms in the card dimensions. The characteristic «Вес товара с упаковкой» is no longer sent: the marketplace rejects it.
-- Mapping blocks the assistant adds use the characteristic name and start collapsed. Two fields for the same fact, such as Brand and the brand characteristic, share one value. TN VED and VAT are chosen from that field’s directory when the goods match an entry.
-- Mapping price block hides discounted price (`discountedPrice`, `sale_price`) while the store’s extended price settings are off. Opening the canvas no longer puts that row back. The cabinet assistant reads personal settings (`GET /api/ai/store-settings`: store description, style, brevity, emoji), converts units when a local characteristic is millimeters or grams and the shop field is centimeters or kilograms, and asks for brand, material, occasion, and TN VED instead of leaving them empty or inventing a code.
-- Cabinet assistant treats «finish the mapping» and «link these parameter groups» as wiring marketplace fields to local characteristics. Shop collection titles stay a separate step. It reads the open canvas once before that plan, and a cancelled plan is not described as done.
-- Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
-- Cabinet assistant uses the calculation helper for catalog logic: comparisons, grouping, finding products by a rule, and working out a bulk change. A single count or one named card stays a normal catalog read. A change the person already spelled out still asks for confirmation first; a change that must be calculated may run a read-only check and then ask. Applying the change still waits for confirmation.
-- Cabinet calculation sidecar runs only while AI is enabled. Turning `AI_ENABLED` off and redeploying stops the process; turning it on starts it. The API does not need a sandbox URL or a DNS alias: while AI is on it uses the container name `d-{stack}-sandbox` from `STACK_ID`, `inst_{stack}`, or `mysql-{stack}` / `minio-{stack}`. With AI off, the helper is omitted even if a URL is still set. A failed run is “temporarily unreachable”, not “this cabinet has no helper”.
-- Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If AI is on, it says yes instead of claiming there is no helper.
-- Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.
-- Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
-- Cabinet file downloads no longer fail with HTTP 500 `Error while copying content to a stream` when MinIO closes the GET early or response compression wraps the proxy stream.
-- Cabinet assistant shows a confirmable plan before mapping or catalog writes. It no longer runs GET graph / `search_actions` / POST in the same turn as `propose_plan`; writes wait until you confirm.
-- Mapping-canvas «Correspondences» (`valueMap`) can sit on string fields such as Merge into card: you type both sides (group name → collection title). It is no longer limited to select/valueId. Medusa export uses that mapped title while cabinet group names stay.
-- Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.
-- When the calculation sidecar is on, asking the assistant to check it (or run a read-only snippet) uses that helper instead of substituting a catalog COUNT and claiming there is no sandbox.
-- Cabinet assistant export of local products to a shop is `export-batch` (a SQL `where`, or `{ allMatching }` for the whole catalog, so a full catalog does not need thousands of ids). Photos for that filter are gallery images (`product_images`), not any file attachment. Read-only SQL now honors `>=` `<=`, `NOT IN`, `SELECT DISTINCT` (including `contentType`), `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` / `SHOW COLUMNS`, `product_images`, and extra store tables (notes, variants, links, operations) instead of ignoring them. Chat tools stay one collapsed line unless you expand them. `get_doc` can open indexed instance docs (including `docs/ai/operator-playbook.md`).
-
-### Security
-
-- A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
-- Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
-
-### Changed
-
-- Partner operation status returns the latest 200 log lines. The cabinet shows the latest 500, so a long run stays visible at the end. Explain with AI appears after the operation finishes.
-- A cabinet question runs one calculation script, then the assistant answers. It does not keep searching the shop or the documentation. A message that only says to answer (“ответь”) replies from what is already known.
-- Mapping canvas adds Regex replace and Regex find. A standard-value block asks for the shop field first, then a dictionary entry, and that source stays fixed. A category or store attribute that stores a dictionary key can send the key or the name. On a directory field the assistant prefers that standard-value block.
-- On a field mapping, the cabinet assistant sees how many exports of that category succeeded or failed since the canvas was last saved, and the text the adapter returned on the failures. Results from before that save are not treated as open problems.
-- Cabinet assistant can call a connected shop’s own API from the calculation helper, using that connection’s key, and correct a filled value from what the shop returns. It stays on the open screen (mapping, product, order) and does not invent a directory entry. Seller documentation is downloaded once a day by Control Plane (Wildberries items and FBS orders, Ozon Seller, Yandex Market). The assistant reads that copy through the platform link and does not fetch the seller’s documentation URL itself.
-- Cabinet assistant keeps a short system prompt on ordinary turns. Mapping rules, a catalog-wide price change, and the page-address list are added only when that page is open or the message is about them.
-- Products page search is wider, so a product name or SKU fits in the field. Other pages keep the shorter nav search.
-- `/api/ai`, `/api/agent`, and `/api/mcp` are exempt from the SPA rate-limit bucket. Authenticated catalog traffic allows 2400 requests per minute per user (was 1200).
-- Docker Compose pulls MinIO from `quay.io/minio` (`minio` and `mc`). Docker Hub no longer serves those images (`pull access denied`).
-- Sidebar Orders and Integrations list connections by connection name, not adapter display name.
-- Assembly overview loads each connection on its own: the first adapter to return paints immediately; others keep a spinner in their group. Orders experimental notice uses body type, not an h5 title.
-- Experimental badge uses the muted fill. Orders sidebar shows it only on the section, aligned right.
-- Dropped the category-attribute «In the shop» switch. Storefront specs follow the mapping graph; unwired fields are not sent.
-- Mapping canvas: add unlimited mapping-local adapter fields (click «Add field» or drop a wire on that row). Custom sinks persist in the graph and go out on export.
-- Cabinet assistant can add mapping-canvas blocks (`POST …/graph/connect`, `…/graph/modifiers`, `…/graph/group-titles`). Merge into card (`__group__`) uses a typed from/to string map (not valueId). `GET /marketplace/mapping-graph/blocks` lists node types, pins, and layout sizes. Local group names stay; Medusa export uses the mapped collection title.
-- Store-engine adapters (Medusa, WooCommerce, OpenCart) create a shop category on a dedicated page: name, parent folder, which local attributes become fields, and whether to auto-map. The mapping dialog opens that page instead of creating immediately.
-- Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
-- Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.
-- Navbar page Help is a labeled «Need help?» / «Нужна помощь?» control with a question-mark icon (same expand-from-icon pattern as the account button). It is no longer a book glyph hidden below `md`.
-- Below `lg`, the assistant, documentation, and operations sheets open one at a time (full width). Documentation contents move into a header menu when the sheet is narrower than 720px (resized panel or small viewport) so the article stays readable. The matching corner/navbar button uses an outline (or filled navbar) state while that sheet is open.
-- Inset companion sheets (documentation, assistant, operations, and the other float panels) use a slightly deeper drop shadow than the desktop sidebar.
-- The documentation FAB uses a question-mark icon. Companion FABs (and the compact navbar set) show a tooltip instead of the browser `title` tip. Below `lg`, documentation is only the navbar Help control — not a second question-mark in the compact FAB cluster.
-- Docs sheet and assistant replies share one markdown reading style (disc / nested circle / numbered lists). Tailwind no longer strips those markers.
-- Medusa mapping keeps the linked category’s attributes as adapter sinks. `GET /categories/{id}/fields` no longer drops the bridge list when `success` is omitted, and unmatched local category attributes are merged in (Ozon / Wildberries stay marketplace-only). Reopen the mapping after restarting the API.
-- Cabinet `PATCH /products/{id}/group { groupId }` moves a product into a group (or out, when `groupId` is null). The assistant was told this path existed; only GET was implemented, so plans failed with HTTP 405.
-- API JSON is compressed (Brotli/Gzip at Kestrel; nginx also gzips `application/json`). Vendor JS splits into vue / ui / http / signalr chunks. MySQL pool is capped at 50 connections. Sandbox health checks are not logged.
-- Cabinet route changes use the same `.page-region-in` fade as region loaders (opacity, `--duration-overlay`). Nested Settings pages fade on inner navigation.
-- Assistant questionnaire answers stay on the form card and survive reload. The follow-up still goes to the model but is not shown as a chat bubble.
-- Adapter credential help and Connect catalogs docs open the in-cabinet docs sheet instead of a new tab. The credentials control is a full inset row (title + adapter subtitle + chevron), same grouped list as the adapter picker. Page Help covers orders, notes, mapping, setup, settings sub-pages, catalog scrape, and Public API when those articles exist on the public docs site.
-
-### Added
 
 - Medusa 0.2.3 downloads the Ozon Delivery packing-label PDF from the shop after assemble (`GET /orders/{id}/label`).
 - Cabinet assistant `search_actions` looks up allowed cabinet HTTP (MVC routes plus operator aliases) so export/import/match do not need a prompt paragraph each, and Tools is not treated as the write catalog.
@@ -120,7 +31,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet assistant: execution timeline interleaves thinking with each tool step instead of stacking tools above a single merged paragraph
 - Cabinet AI: attach files in chat (not folders). Bytes stay downloadable for 24 hours, then they are purged (names stay on the thread). The assistant decides what to do (including putting them on products) with the usual tools after you confirm a plan
 - Settings → AI: Connect mints a Public API key and shows one `mcp.json` for this instance’s operator MCP (`POST /api/mcp`). Distinct from HTTP MCP servers the cabinet assistant calls.
-- Settings → AI: add HTTP MCP servers (URL + optional bearer key). The cabinet assistant lists their tools and can call them in chat. Not the instance operator MCP (`POST /api/mcp`).
+- Settings → AI: add HTTP MCP servers (URL + optional bearer key). The cabinet assistant lists their tools and can propose calls in a standalone plan that requires confirmation. Not the instance operator MCP (`POST /api/mcp`).
 - Knowledge corpus for the assistant (docs / MEMORY / PRODUCT / DESIGN), reindexed when the API starts. Optional Python sidecar (`SANDBOX_URL`) with pandas, Pillow, and openpyxl
 - Cabinet Orders: `/orders` has four all-marketplace tabs (To pack, Being packed, In delivery, Delivered). Connection mailboxes stay in the sidebar. Listed orders are stored snapshots; lists read that snapshot
 - Public API `GET …/orders` reads stored snapshots (`syncedAt`); status POST still hits the marketplace then upserts. Labels and shipments stay live
@@ -149,8 +60,45 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet AI generation keeps running if you reload the page: reopen the companion sheet to watch the live turn (tools, thoughts, Stop). It does not survive an API process restart
 - Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
 - Cabinet assistant `ask_form`: a form on the reply. Marketplace keys stay in the browser and POST the same create-connection as Adapters (the model never sees the key). Clarifying questions are a short Questionnaire (up to 5 steps); answers stay on the card and continue the model without a visible chat bubble.
+- Cabinet assistant requires a standalone user-confirmed plan before running Python code or any connected MCP tool; direct calls are blocked server-side, and untrusted instructions in tool output or external metadata are treated as data.
 
 ### Changed
+
+- Cabinet assistant asks one clarification when a read-only lookup lacks its product; it does not list the broad catalog or add edit/navigation links unless requested or needed.
+- Cabinet assistant reads requested price, stock, or description fields after identifying a product; omitted fields in a search result are not treated as empty values.
+- Cabinet assistant follows narrow requested answer formats (for example, a number-only reply) and no longer treats `memory_search` as a way to retrieve another chat's transcript.
+- Orders no longer show the experimental-preview notice.
+- Product image, file-management, variant-reordering, and marketplace field-selection controls use the shared UI components and expose accessible names and keyboard reorder instructions.
+- Partner operation status returns the latest 200 log lines. The cabinet shows the latest 500, so a long run stays visible at the end. Explain with AI appears after the operation finishes.
+- A cabinet calculation/helper run is proposed as a standalone plan and runs only after confirmation; the assistant then answers from that result without repeating the same completed lookup. A message that only says to answer (“ответь”) replies from what is already known.
+- Mapping canvas adds Regex replace and Regex find. A standard-value block asks for the shop field first, then a dictionary entry, and that source stays fixed. A category or store attribute that stores a dictionary key can send the key or the name. On a directory field the assistant prefers that standard-value block.
+- On a field mapping, the cabinet assistant sees how many exports of that category succeeded or failed since the canvas was last saved, and the text the adapter returned on the failures. Results from before that save are not treated as open problems.
+- Cabinet assistant can propose a confirmed calculation-helper plan to read a connected shop’s API and correct a filled value from what the shop returns. It stays on the open screen (mapping, product, order) and does not invent a directory entry. Seller documentation is downloaded once a day by Control Plane (Wildberries items and FBS orders, Ozon Seller, Yandex Market). The assistant reads that copy through the platform link and does not fetch the seller’s documentation URL itself.
+
+- Cabinet assistant keeps a short system prompt on ordinary turns. Mapping rules, a catalog-wide price change, and the page-address list are added only when that page is open or the message is about them.
+- Products page search is wider, so a product name or SKU fits in the field. Other pages keep the shorter nav search.
+- `/api/ai`, `/api/agent`, and `/api/mcp` are exempt from the SPA rate-limit bucket. Authenticated catalog traffic allows 2400 requests per minute per user (was 1200).
+- Docker Compose pulls MinIO from `quay.io/minio` (`minio` and `mc`). Docker Hub no longer serves those images (`pull access denied`).
+- Sidebar Orders and Integrations list connections by connection name, not adapter display name.
+- Assembly overview loads each connection on its own: the first adapter to return paints immediately; others keep a spinner in their group. Orders experimental notice uses body type, not an h5 title.
+- Experimental badge uses the muted fill. Orders sidebar shows it only on the section, aligned right.
+- Dropped the category-attribute «In the shop» switch. Storefront specs follow the mapping graph; unwired fields are not sent.
+- Mapping canvas: add unlimited mapping-local adapter fields (click «Add field» or drop a wire on that row). Custom sinks persist in the graph and go out on export.
+- Cabinet assistant can add mapping-canvas blocks (`POST …/graph/connect`, `…/graph/modifiers`, `…/graph/group-titles`). Merge into card (`__group__`) uses a typed from/to string map (not valueId). `GET /marketplace/mapping-graph/blocks` lists node types, pins, and layout sizes. Local group names stay; Medusa export uses the mapped collection title.
+- Store-engine adapters (Medusa, WooCommerce, OpenCart) create a shop category on a dedicated page: name, parent folder, which local attributes become fields, and whether to auto-map. The mapping dialog opens that page instead of creating immediately.
+- Adapter errors name the missing token rights (WB Content scope, Ozon permission, and so on) instead of dumping JSON. Export / import / unlink stay hidden without `marketplace.manage`; catalog writes stay hidden without `catalog.manage`.
+- Product Adapters tab is one compact row per connection (icon, name, caption, status) instead of a fact sheet. Product Sizes use labeled SKU / price / stock fields with input chrome so they read as editable.
+- Navbar page Help is a labeled «Need help?» / «Нужна помощь?» control with a question-mark icon (same expand-from-icon pattern as the account button). It is no longer a book glyph hidden below `md`.
+- Below `lg`, the assistant, documentation, and operations sheets open one at a time (full width). Documentation contents move into a header menu when the sheet is narrower than 720px (resized panel or small viewport) so the article stays readable. The matching corner/navbar button uses an outline (or filled navbar) state while that sheet is open.
+- Inset companion sheets (documentation, assistant, operations, and the other float panels) use a slightly deeper drop shadow than the desktop sidebar.
+- The documentation FAB uses a question-mark icon. Companion FABs (and the compact navbar set) show a tooltip instead of the browser `title` tip. Below `lg`, documentation is only the navbar Help control — not a second question-mark in the compact FAB cluster.
+- Docs sheet and assistant replies share one markdown reading style (disc / nested circle / numbered lists). Tailwind no longer strips those markers.
+- Medusa mapping keeps the linked category’s attributes as adapter sinks. `GET /categories/{id}/fields` no longer drops the bridge list when `success` is omitted, and unmatched local category attributes are merged in (Ozon / Wildberries stay marketplace-only). Reopen the mapping after restarting the API.
+- Cabinet `PATCH /products/{id}/group { groupId }` moves a product into a group (or out, when `groupId` is null). The assistant was told this path existed; only GET was implemented, so plans failed with HTTP 405.
+- API JSON is compressed (Brotli/Gzip at Kestrel; nginx also gzips `application/json`). Vendor JS splits into vue / ui / http / signalr chunks. MySQL pool is capped at 50 connections. Sandbox health checks are not logged.
+- Cabinet route changes use the same `.page-region-in` fade as region loaders (opacity, `--duration-overlay`). Nested Settings pages fade on inner navigation.
+- Assistant questionnaire answers stay on the form card and survive reload. The follow-up still goes to the model but is not shown as a chat bubble.
+- Adapter credential help and Connect catalogs docs open the in-cabinet docs sheet instead of a new tab. The credentials control is a full inset row (title + adapter subtitle + chevron), same grouped list as the adapter picker. Page Help covers orders, notes, mapping, setup, settings sub-pages, catalog scrape, and Public API when those articles exist on the public docs site.
 
 - Pin GitHub Dependabot patches: sandbox Pillow 12.3.0; frontend nested `js-yaml` 4.3.2, `decode-uri-component` 0.5.0, and `@humanfs/node` 0.16.8
 - Sidebar group for products, groups, trash, categories, barcodes, and notes is **Каталог** / Catalog. The products page stays **Товары** / Products.
@@ -171,7 +119,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Catalog navbar search matches the default input: `h-9` and `rounded-md` (not a taller pill). Select, searchable-select, and the sidebar store switcher use the same field corners. Focus on search still uses `border-ring`, not a 3px ring. The bar is `4rem`
 - Cabinet navbar stacks search/tabs under the title below `lg` so the bar fits a phone; the trail is the current page only
 - Cabinet page trail lives in the navbar left column. Tabs and search stay on the viewport midline (equal side columns; center track `minmax(20rem, 40rem)`). Catalog search and category sit in one `NavSearchField` with a hairline; barcode and notes search use the same field. Category picker rows stay truncated
-- Cabinet assistant uses MCP servers enabled in Settings → AI for the job those tools describe (library docs, etc.). Still refuses jokes, recipes, homework, and jailbreaks; does not redirect that work to the catalog.
+- Cabinet assistant can propose calls to MCP servers enabled in Settings → AI for the job those tools describe (library docs, etc.); each call waits for user confirmation. Still refuses jokes, recipes, homework, and jailbreaks; does not redirect that work to the catalog.
 - Catalog (and other) product thumbs load inside the cell spinner; the products table paints as soon as `/products` returns and does not wait for photos to decode
 - Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
 - Public API and cabinet product create/patch: characteristic `value` accepts JSON numbers, booleans, and arrays and stores them as text (same as the product form strings)
@@ -239,12 +187,72 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Operations list: each job is its own inset group; status is the trailing icon only; Copy / AI / Retry / Delete after expand are compact rows
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
-### Removed
-
-- Pause / Resume on background operations (jobs are running or stopped)
-- Unused `PageHeader` primitive — page titles are the navbar trail
-
 ### Fixed
+
+- Cabinet assistant preserves Anthropic tool-call/result order across multi-round chat history, avoiding provider rejections on later turns.
+- Cabinet assistant questionnaire submissions reliably include typed answers instead of sending a blank follow-up.
+- Cabinet assistant preserves questionnaire/attachment metadata when the live server has already inserted the matching user message before client history sync.
+- Conversation history sync no longer deletes server messages omitted from a stale client snapshot; it reconciles server-inserted messages with the unpersisted client tail so form metadata is retained without duplicate rows. Concurrent live/history writes rebase on the latest row and preserve server-owned plan metadata.
+- MCP discovery/resource reads require agent permission; workspace-view users cannot write memories or invoke connected MCP tools. Direct Python/connected MCP chat calls require a standalone confirmed plan, and oversized MCP responses are rejected at 256,000 bytes.
+- DeepSeek Anthropic-compatible model discovery uses its `/models` endpoint, and chat requests retain the `/anthropic` base path.
+- Single-connection marketplace actions now open their connection selector instead of offering an ambiguous Quick Run. Product imports validate the 1–200 limit, and schedule time zones are configurable and shown with run times. Radio choices now support arrow-key navigation.
+- Connected MCP tools for the cabinet assistant are disabled by default (`AI_CONNECTED_MCP_ENABLED=true` re-enables tool calls), and their settings section is hidden.
+- The marketplace credential help link now opens its documentation from the setup wizard.
+- Packing or handing over an order updates the cabinet list immediately. The order leaves To pack (or whichever mailbox it left) when the action succeeds, instead of staying there until the next marketplace pull.
+- A new or updated marketplace order shows up on the cabinet while Orders is open. Every adapter that lists orders is pulled again about every 20 seconds there, and about every 30 seconds in the background, instead of waiting several minutes on the stored snapshot. Older open orders are reconciled about every 5 minutes.
+- A large file keeps a steady download speed for people who are not next to the server. The web proxy holds about 8 MB of the response in memory so a distant link does not stall between tiny chunks, and it still does not spool the file to a temporary disk file.
+- A file upload streams to storage again. MVC was reading the multipart body before the action ran, so the file arrived with its size declared and no bytes left to store.
+- A large Wildberries export no longer stops the queue for half an hour on every batch, and an article the marketplace already accepted is not uploaded again when it is slow to appear in the catalog.
+- Uploading a file sends the file body. A preset multipart content type left the declared size in the header and an empty body, so the upload failed as soon as it reached the API.
+- A failed file upload records the declared size, how many bytes actually arrived, and the start of the body. A cut-off upload can be told apart from a parser fault.
+- Uploading a file no longer fails when the web proxy streams the body. A normal API request was marked as a WebSocket upgrade, so the file never reached the server.
+- A batch of files is stored while it is still uploading. The browser no longer waits for each file to be copied again after the progress bar reaches the end, and several files upload at once.
+- A file download continues from the last received byte when object storage closes the connection early, instead of failing the request.
+- A slow file download is no longer cut off. The API no longer aborts a response that stays under a few hundred bytes a second, and the web proxy streams the file instead of buffering it and closing the connection.
+- Wildberries bulk export uploads the product gallery. A photo list built on the mapping (gallery plus extra files) was not a plain string list, so the upload was skipped and the cards stayed without photos. A failed photo upload is written on the operation.
+- A waiting assistant plan is outdated when the next message does not confirm or cancel it. Execute is hidden, and the assistant revises the plan instead of running the old steps.
+- Cleaning a mapped description keeps Latin, Cyrillic, digits, and ordinary punctuation. The assistant replaces the regex on that field. It does not invent a cleanup field and does not start an export unless asked.
+- An assistant plan with no summary and no steps no longer shows an empty card with only Execute. A steps list sent as text is still read.
+- Ozon price export applies the category mapping when the product link has not saved one and the category has a single mapping. A raised price was sent without the mapped old price, and Ozon rejected it because the strikethrough already on the card was lower (`Old price is less than price`).
+- Ozon list responses still report the full count when the marketplace sends `total_items` instead of `total`. Catalog import and removing every product from a promotion use that count. Product list, prices, and stocks switch on 23 November 2026.
+- Ozon promotions use the methods that stay after 13 October 2026: product list `POST /v2/actions/products`, add or remove by price `POST /v1/actions/products/update`, and promo-code removal `POST /v2/actions/products/deactivate`. A price in the reply may be a number or a Money object.
+- Ozon orders use the current FBS/FBO posting-list endpoints with cursor pagination, and structured posting prices no longer break order-list deserialization.
+- Recent order refresh now fetches one unfiltered page per order-capable connection instead of repeating the recent window for each status. Ozon requests up to 200 combined FBS/FBO postings; other adapters request up to 100. UI and background pulls for a connection share the cooldown and gate.
+- Wildberries card export sends a barcode or GTIN characteristic in the card field `gtin` and in the size barcodes. The same code inside characteristics was rejected (`The GTIN code must be specified in a separate "gtin" field`).
+- The cabinet assistant no longer reports a mapping edit as done when the request would not change the text. A field the action does not read, or a pattern left outside `params`, is rejected before it is saved. The prompt, the action list, and the request surface share one body sentence, and a test fails when those instructions drift from the controller.
+- A regex block on a mapping keeps its pattern and replacement. They belong inside `params`; a body that put them next to the modifier type used to save an empty block.
+- Changing a product’s category no longer keeps a connection looking synced when that category has several mappings and none is chosen. The connection status says the mapping is not selected.
+- A background job started with an API key is attributed to that key, not to the person who created it. Operation logs show JSON on its own lines, and a product named in a log opens that product.
+- Cabinet assistant strips emoji on a mapped field with one .NET regular expression and removes the old literal replacements on that field in the same step. A pattern written as `\u{…}` does not match, so the preview used to keep the original text.
+- A cabinet assistant turn is not cut off after a few tool calls. A complex task keeps going until it ends in a sentence or a plan. A nudge such as «и?» still asks for that reply instead of another search. A regex block on a mapping names the field it edits.
+- Catalog list, bulk edit, and shop export take one SQL `where`. Frequent slices are named templates (`@withGallery`, `@withoutGallery`, `@inStock`, `@outOfStock`, `@noPrice`, `@noBarcode`, `@noCategory`, and the file pair). The assistant copies those names. There is no separate “has photos” switch.
+- Checking every product link on a connection runs in the background: it reads the shop catalog once, compares the saved external ids, and shows progress as its own operation. A Yandex Market page that returns an internal error no longer fails the whole check: that page is retried in smaller pieces, and any saved links still missing are looked up directly.
+- The navbar Help button stays beside product search instead of covering it. The search narrows when the bar is tight.
+- Cabinet assistant answers stay in the message. Tool steps stay on their own collapsed line, and the reply is not folded into that line.
+- Markdown tables in docs and the assistant use the same flush rows, caption header, and row hover as cabinet tables.
+- Wildberries price export reads the current card with a single-article lookup and treats a matching buyer price as already exported.
+- Cabinet assistant runs a DeepSeek tool call instead of printing its markup in the reply.
+- Wildberries card description is sent as plain text. Line breaks, quotes, and emoji no longer appear as `<br>` and `&#…;` on the marketplace.
+- Wildberries export no longer fails while confirming a new card when the size id (`chrtID`) is larger than a 32-bit integer. Stock updates use the same wider id.
+- Deleting a folder in store storage or on a product with the Delete key or the toolbar button uses the same confirmation as the folder menu, and the folder is removed. An empty folder no longer says that 0 files will be deleted.
+- Wildberries export of a new card stays running until the article appears in the catalog or the draft error list names it (up to 30 minutes). It no longer fails after half a minute with “created but not found” while the marketplace has not yet said why.
+- Wildberries export sends directory values such as TN VED and VAT as text. A numeric code sent as a number was accepted by the upload call and the card never appeared. Draft errors are read from the current error list instead of an empty page.
+- Wildberries export sends packaging weight only as kilograms in the card dimensions. The characteristic «Вес товара с упаковкой» is no longer sent: the marketplace rejects it.
+- Mapping blocks the assistant adds use the characteristic name and start collapsed. Two fields for the same fact, such as Brand and the brand characteristic, share one value. TN VED and VAT are chosen from that field’s directory when the goods match an entry.
+- Mapping price block hides discounted price (`discountedPrice`, `sale_price`) while the store’s extended price settings are off. Opening the canvas no longer puts that row back. The cabinet assistant reads personal settings (`GET /api/ai/store-settings`: store description, style, brevity, emoji), converts units when a local characteristic is millimeters or grams and the shop field is centimeters or kilograms, and asks for brand, material, occasion, and TN VED instead of leaving them empty or inventing a code.
+- Cabinet assistant treats «finish the mapping» and «link these parameter groups» as wiring marketplace fields to local characteristics. Shop collection titles stay a separate step. It reads the open canvas once before that plan, and a cancelled plan is not described as done.
+- Ozon price export sends at most 1000 prices per Seller API request (stock updates use 100). A catalog larger than that limit no longer fails the whole job with `ImportProductsPricesRequest.Prices` validation.
+- Cabinet assistant uses the calculation helper for catalog logic: comparisons, grouping, finding products by a rule, and working out a bulk change. A single count or one named card stays a normal catalog read. A change the person already spelled out still asks for confirmation first; a change that must be calculated may run a read-only check and then ask. Applying the change still waits for confirmation.
+- Cabinet calculation sidecar runs only while AI is enabled. Turning `AI_ENABLED` off and redeploying stops the process; turning it on starts it. The API does not need a sandbox URL or a DNS alias: while AI is on it uses the container name `d-{stack}-sandbox` from `STACK_ID`, `inst_{stack}`, or `mysql-{stack}` / `minio-{stack}`. With AI off, the helper is omitted even if a URL is still set. A failed run is “temporarily unreachable”, not “this cabinet has no helper”.
+- Asking whether the calculation helper exists is answered only; the assistant no longer resumes the previous catalog write or opens a plan. If AI is on, it says yes instead of claiming there is no helper.
+- Cabinet assistant can raise every catalog price (`PATCH /products/bulk` with `allMatching`, `wait`, and `updates.priceDelta`) and then push those prices to shops (`POST /tools/export-all-prices/run` with `connectionId`). It no longer searches indefinitely for a missing “+500” route.
+- Saving a cabinet assistant turn no longer returns HTTP 500 `Duplicate entry … IX_aiConversations_sessionId` when the live stream and history sync insert the same session at once.
+- Cabinet file downloads no longer fail with HTTP 500 `Error while copying content to a stream` when MinIO closes the GET early or response compression wraps the proxy stream.
+- Cabinet assistant shows a confirmable plan before mapping or catalog writes. It no longer runs GET graph / `search_actions` / POST in the same turn as `propose_plan`; writes wait until you confirm.
+- Mapping-canvas «Correspondences» (`valueMap`) can sit on string fields such as Merge into card: you type both sides (group name → collection title). It is no longer limited to select/valueId. Medusa export uses that mapped title while cabinet group names stay.
+- Cabinet assistant SQL steps show the SELECT (and SHOW/DESCRIBE) next to “SQL”, not only the row count. Expand the step for the full query above the result table.
+- When the calculation sidecar is on, asking the assistant to check it (or run a read-only snippet) uses that helper instead of substituting a catalog COUNT and claiming there is no sandbox.
+- Cabinet assistant export of local products to a shop is `export-batch` (a SQL `where`, or `{ allMatching }` for the whole catalog, so a full catalog does not need thousands of ids). Photos for that filter are gallery images (`product_images`), not any file attachment. Read-only SQL now honors `>=` `<=`, `NOT IN`, `SELECT DISTINCT` (including `contentType`), `MIN`/`MAX`, `OFFSET`, `IS NULL`, `SHOW TABLES` / `SHOW COLUMNS`, `product_images`, and extra store tables (notes, variants, links, operations) instead of ignoring them. Chat tools stay one collapsed line unless you expand them. `get_doc` can open indexed instance docs (including `docs/ai/operator-playbook.md`).
 
 - Yandex Market Catalog Connect now reads the Market category from Partner API `mapping.marketCategoryId` when `offer.marketCategoryId` is missing or `0`, so linking can create a category mapping
 - Catalog Connect `repair-mappings` copies marketplace characteristics after it creates the missing mapping (same as apply)
@@ -303,7 +311,15 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Apply security headers before the rest of the pipeline so empty responses still get `X-Robots-Tag`
 - Sync `package-lock.json` with passkey/QR deps so frontend Docker `npm ci` succeeds
 
+### Removed
+
+- Pause / Resume on background operations (jobs are running or stopped)
+- Unused `PageHeader` primitive — page titles are the navbar trail
+
 ### Security
+
+- A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
+- Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling

@@ -1,6 +1,7 @@
 import { toast } from "vue-sonner";
 import { getLocale, t } from "@/i18n";
 import { formatAdapterError } from "@/lib/adapterErrorText";
+import { getApiErrorText } from "@/lib/apiErrorText";
 
 /** Stable API error code from an Axios error or payload. */
 export function apiErrorCode(errorOrPayload) {
@@ -11,7 +12,8 @@ export function apiErrorCode(errorOrPayload) {
 
 /**
  * Resolve a localized API error title from response payload.
- * Prefers stable `code` → errors.* i18n key; falls back to English title/message.
+ * Prefers stable `code` → localized error catalog; never displays server-authored
+ * messages, which may be in a different language from the active UI.
  */
 export function resolveApiErrorMessage(
   payload,
@@ -30,8 +32,10 @@ export function resolveApiErrorMessage(
     if (translated !== key) return translated;
   }
 
-  return (
-    payload.title || payload.message || payload.error?.message || t(fallbackKey)
+  return getApiErrorText(
+    payload,
+    (key, values) => t(key, values ?? params),
+    fallbackKey,
   );
 }
 
@@ -54,7 +58,7 @@ export function displaySonnerError(error) {
 
   const payload = error?.response?.data;
   if (!payload) {
-    toast.error(error?.message || t("errors.generic"));
+    toast.error(t("errors.generic"));
     return;
   }
 

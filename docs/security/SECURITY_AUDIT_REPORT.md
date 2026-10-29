@@ -1,5 +1,7 @@
 # Security Audit Report — Delegat ASP.NET Core Backend
 
+> **Historical security review snapshot — 2026-07-17.** Findings and code excerpts have not been revalidated against the current implementation. Do not treat them as confirmed vulnerabilities or mitigations; reproduce each claim in current code before acting on it.
+
 **Date:** 2026-07-17  
 **Scope:** File upload/download, shared file access, plugin upload, storage, Excel import  
 **Severity scale:** CRITICAL / HIGH / MEDIUM / LOW / INFO

@@ -40,7 +40,7 @@ public sealed class MarketplaceConnectionCreateService
         await _quota.EnsureConnectionQuotaAsync(storeId);
 
         if (_encryption == null)
-            throw ApiException.InternalServerError("Encryption is not configured");
+            throw ApiException.InternalServerError(code: "encryption_not_configured");
 
         var encryptedCreds = !string.IsNullOrEmpty(input.credentialsJson)
             ? _encryption.Encrypt(input.credentialsJson)
@@ -106,7 +106,7 @@ public sealed class MarketplaceConnectionCreateService
         CancellationToken ct = default)
     {
         if (_encryption == null)
-            throw ApiException.InternalServerError("Encryption is not configured");
+            throw ApiException.InternalServerError(code: "encryption_not_configured");
 
         var incomingCreds = ConnectionCredentialsHelper.ParseCredentialsObject(
             ConnectionCredentialsHelper.DecryptCredentialsJson(credentialsJson, _encryption));

@@ -135,6 +135,8 @@ public sealed class StoreDeletionService : IStoreDeletionService
             await _db.aiOperations.Where(o => o.storeId == storeId).ToListAsync(ct));
         _db.aiStoreSettings.RemoveRange(
             await _db.aiStoreSettings.Where(s => s.StoreId == storeId).ToListAsync(ct));
+        _db.aiMemories.RemoveRange(
+            await _db.aiMemories.Where(m => m.storeId == storeId).ToListAsync(ct));
 
         // storeBrandingSettings cascades with store FK; MinIO + cache cleaned after commit.
 

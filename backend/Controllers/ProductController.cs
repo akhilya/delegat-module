@@ -91,7 +91,7 @@ public class ProductController : ControllerBase
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var hasSearch = !string.IsNullOrWhiteSpace(searchQuery);
         var hasCategoryFilter = categoryId.HasValue;
@@ -109,14 +109,14 @@ public class ProductController : ControllerBase
         if (!string.IsNullOrWhiteSpace(where))
         {
             if (_catalogFilter == null)
-                throw ApiException.BadRequest("Catalog filter is not available", code: "invalid_filter");
+                throw ApiException.BadRequest(code: "invalid_filter");
             try
             {
                 query = _catalogFilter.ApplyProductWhereClause(query, selectedStoreId.Value, where);
             }
-            catch (AgentSqlFilterException ex)
+            catch (AgentSqlFilterException)
             {
-                throw ApiException.BadRequest(ex.Message, code: "invalid_filter");
+                throw ApiException.BadRequest(code: "invalid_filter");
             }
         }
 
@@ -185,7 +185,7 @@ public class ProductController : ControllerBase
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var query = _context.products
             .AsNoTracking()
@@ -231,7 +231,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
 
@@ -253,7 +253,7 @@ public class ProductController : ControllerBase
                     .ThenInclude(sav => sav.storeAttribute));
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         return Ok(((Infrastructure.Interfaces.IMapToDTO<object>)product).MapToDTO(_serviceProvider));
     }
@@ -270,7 +270,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         await _quotaService.EnsureProductQuotaAsync(selectedStoreId.Value);
 
@@ -280,11 +280,14 @@ public class ProductController : ControllerBase
         var existingProduct = await productRepo.FindAsync(
             p => p.storeId == selectedStoreId.Value && p.sku == input.sku);
         if (existingProduct != null)
-            throw ApiException.BadRequest("A product with this SKU already exists", code: "sku_already_used");
+            throw new ApiException(
+                statusCode: StatusCodes.Status400BadRequest,
+                data: new { sku = input.sku },
+                code: "sku_already_used");
 
         // Validate barcode if provided
         if (!string.IsNullOrEmpty(input.barcode) && !IsValidEanBarcode(input.barcode))
-            throw ApiException.BadRequest("Invalid barcode. EAN-8 (8 digits) or EAN-13 (13 digits) are allowed");
+            throw ApiException.BadRequest(code: "barcode_invalid");
 
         await _attributeUniqueness.EnsureUniqueAsync(
             selectedStoreId.Value,
@@ -353,7 +356,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
 
@@ -365,11 +368,11 @@ public class ProductController : ControllerBase
                 .Include(p => p.storeAttributeValues));
 
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         // Validate barcode if provided
         if (input.barcode != null && input.barcode != "" && !IsValidEanBarcode(input.barcode))
-            throw ApiException.BadRequest("Invalid barcode. EAN-8 (8 digits) or EAN-13 (13 digits) are allowed");
+            throw ApiException.BadRequest(code: "barcode_invalid");
 
         if (input.categoryId.HasValue)
         {
@@ -377,7 +380,7 @@ public class ProductController : ControllerBase
             var category = await categoryRepo.FindAsync(
                 c => c.Id == input.categoryId.Value && c.storeId == selectedStoreId.Value);
             if (category == null)
-                throw ApiException.BadRequest("Category not found", code: "category_not_found");
+                throw ApiException.BadRequest(code: "category_not_found");
         }
 
         var effectiveCategoryId = input.categoryId ?? product.categoryId;
@@ -453,25 +456,25 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         // Validate input
         if (string.IsNullOrWhiteSpace(input.newSku))
-            throw ApiException.BadRequest("New SKU cannot be empty", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "sku_required");
 
         var newSku = input.newSku.Trim();
         if (newSku.Length > 50)
-            throw ApiException.BadRequest("SKU cannot be longer than 50 characters");
+            throw ApiException.BadRequest(code: "sku_too_long");
 
         // Load product
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.sku == newSku)
-            throw ApiException.BadRequest("New SKU matches the current one");
+            throw ApiException.BadRequest(code: "sku_unchanged");
 
         // Check uniqueness within the store
         var duplicate = await _context.products
@@ -547,7 +550,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
 
@@ -615,19 +618,19 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value, ct);
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (input.groupId is int groupId && groupId > 0)
         {
             var groupExists = await _context.productGroups
                 .AnyAsync(g => g.Id == groupId && g.storeId == selectedStoreId.Value, ct);
             if (!groupExists)
-                throw ApiException.NotFound("Group not found", code: "group_not_found");
+                throw ApiException.NotFound(code: "group_not_found");
 
             await ProductGroupMembership.AddOrMoveToGroupAsync(
                 _context, selectedStoreId.Value, groupId, new[] { productId }, ct);
@@ -666,7 +669,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var userId = _currentUserService.GetUserId();
         if (userId == null)
@@ -677,7 +680,7 @@ public class ProductController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.where))
         {
             if (_catalogFilter == null)
-                throw ApiException.BadRequest("Catalog filter is not available", code: "invalid_filter");
+                throw ApiException.BadRequest(code: "invalid_filter");
             var src = _context.products.AsNoTracking()
                 .Where(p => p.storeId == selectedStoreId.Value && p.deletedAt == null);
             if (request.allMatching != true && request.productIds is { Count: > 0 })
@@ -689,9 +692,9 @@ public class ProductController : ControllerBase
                     .Select(p => p.Id)
                     .ToListAsync(ct);
             }
-            catch (AgentSqlFilterException ex)
+            catch (AgentSqlFilterException)
             {
-                throw ApiException.BadRequest(ex.Message, code: "invalid_filter");
+                throw ApiException.BadRequest(code: "invalid_filter");
             }
         }
         else if (request.allMatching == true)
@@ -704,7 +707,7 @@ public class ProductController : ControllerBase
         }
 
         if (productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         await _bulkUpdateService.ValidateBeforeEnqueueAsync(
             selectedStoreId.Value, productIds, updates, ct);
@@ -835,13 +838,13 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var product = await _context.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         product.deletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
@@ -861,10 +864,10 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (request.productIds == null || request.productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         var now = DateTime.UtcNow;
         var deletedCount = await _context.products
@@ -872,7 +875,7 @@ public class ProductController : ControllerBase
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.deletedAt, now));
 
         if (deletedCount == 0)
-            throw ApiException.NotFound("Products not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         return Ok(new { success = true, deletedCount });
     }
@@ -890,7 +893,7 @@ public class ProductController : ControllerBase
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var query = _context.products
             .IgnoreQueryFilters()
@@ -958,14 +961,14 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var product = await _context.products
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value && p.deletedAt != null);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found in the cart", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         product.deletedAt = null;
         await _context.SaveChangesAsync();
@@ -983,10 +986,10 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (request.productIds == null || request.productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         var restoredCount = await _context.products
             .IgnoreQueryFilters()
@@ -1006,7 +1009,7 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var product = await _context.products
             .IgnoreQueryFilters()
@@ -1018,7 +1021,7 @@ public class ProductController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value && p.deletedAt != null);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found in the cart", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
@@ -1116,10 +1119,10 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (request.productIds == null || request.productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         var products = await _context.products
             .IgnoreQueryFilters()
@@ -1132,7 +1135,7 @@ public class ProductController : ControllerBase
             .ToListAsync();
 
         if (!products.Any())
-            throw ApiException.NotFound("Products not found in the cart", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         var foundIds = products.Select(p => p.Id).ToList();
 
@@ -1234,10 +1237,10 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (request.productIds == null || request.productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var products = await productRepo.FindAllAsync(
@@ -1289,10 +1292,10 @@ public class ProductController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (file == null || file.Length == 0)
-            throw ApiException.BadRequest("No file uploaded", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "file_required");
 
         using var stream = file.OpenReadStream();
         var parsed = _excelService.ParseImportFile(stream);
@@ -1329,10 +1332,10 @@ public class ProductController : ControllerBase
         var userId = _currentUserService.GetUserId() ?? 0;
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (file == null || file.Length == 0)
-            throw ApiException.BadRequest("No file uploaded", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "file_required");
 
         var operationId = Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;

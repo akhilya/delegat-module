@@ -1,5 +1,7 @@
 # Delegat.Module - SaaS Distribution Architecture
 
+> **Technical draft / historical proposal.** Per-instance implementation facts are summarized in [platform capabilities](../platform/capabilities.md). Provisioning, billing, Control Plane product decisions, and their current architecture are owned by the sibling `delegat-module-platform` repository. Do not implement from draft schemas or proposed workflows here.
+
 > This document covers the distribution infrastructure: provisioning, scaling, quota management, and the central portal (technical draft).
 >
 > **Product decisions for the Control Plane** (self-serve billing, Ops vs Customer surfaces, support, backups policy):  

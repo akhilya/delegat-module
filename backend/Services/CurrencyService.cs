@@ -22,7 +22,7 @@ public class CurrencyService
             .FirstOrDefaultAsync(ct);
 
         if (string.IsNullOrWhiteSpace(code))
-            throw ApiException.BadRequest("Store base currency is not configured");
+            throw ApiException.BadRequest(code: "base_currency_unconfigured");
 
         return NormalizeCode(code);
     }
@@ -39,10 +39,10 @@ public class CurrencyService
             .FirstOrDefaultAsync(c => c.storeId == storeId && c.code == code && c.isEnabled, ct);
 
         if (row == null)
-            throw ApiException.BadRequest($"Currency {code} is not configured or disabled for the store");
+            throw ApiException.BadRequest(code: "currency_unavailable");
 
         if (row.rateToBase <= 0)
-            throw ApiException.BadRequest($"Invalid exchange rate for currency {code}");
+            throw ApiException.BadRequest(code: "currency_rate_invalid");
 
         return row.rateToBase;
     }
@@ -83,7 +83,7 @@ public class CurrencyService
             .FirstOrDefaultAsync(s => s.Id == storeId, ct);
 
         if (store == null)
-            throw ApiException.NotFound("Store not found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         return BuildCurrencyList(store);
     }
@@ -109,7 +109,7 @@ public class CurrencyService
     public static string NormalizeCode(string code)
     {
         if (string.IsNullOrWhiteSpace(code))
-            throw ApiException.BadRequest("Currency code is not specified");
+            throw ApiException.BadRequest(code: "currency_code_required");
         return code.Trim().ToUpperInvariant();
     }
 

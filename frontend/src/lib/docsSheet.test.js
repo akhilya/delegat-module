@@ -7,10 +7,21 @@ const sheet = readFileSync(
   new URL("../components/docs/DocsSheet.vue", import.meta.url),
   "utf8",
 );
+const app = readFileSync(new URL("../app.vue", import.meta.url), "utf8");
 const prose = readFileSync(
   new URL("../styles/markdown-prose.css", import.meta.url),
   "utf8",
 );
+
+describe("documentation sheet availability", () => {
+  it("keeps documentation available on the bare setup route", () => {
+    assert.match(app, /<DocsSheet v-if="!isPublicPage" \/>/);
+    assert.doesNotMatch(
+      app,
+      /<template v-if="!isBareLayout">[\s\S]*?<DocsSheet/,
+    );
+  });
+});
 
 describe("docs sheet reading chrome", () => {
   it("uses a spacious TOC list instead of inset grouped rows", () => {
@@ -61,8 +72,14 @@ describe("shared markdown prose", () => {
   });
 
   it("restores list markers against Tailwind preflight", () => {
-    assert.match(prose, /\.markdown-prose ul \{[\s\S]*list-style: disc outside/);
-    assert.match(prose, /\.markdown-prose ol \{[\s\S]*list-style: decimal outside/);
+    assert.match(
+      prose,
+      /\.markdown-prose ul \{[\s\S]*list-style: disc outside/,
+    );
+    assert.match(
+      prose,
+      /\.markdown-prose ol \{[\s\S]*list-style: decimal outside/,
+    );
     assert.match(prose, /list-style-type: circle/);
     assert.match(prose, /list-style-type: square/);
   });

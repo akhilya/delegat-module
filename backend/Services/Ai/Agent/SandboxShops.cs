@@ -1,14 +1,15 @@
 using System.Text;
 using System.Text.Json;
 using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.SDK;
 using Delegat.Services.Marketplace;
 using Microsoft.EntityFrameworkCore;
 
 namespace Delegat.Services.Ai.Agent;
 
 /// <summary>
-/// Live shop credentials for a sandbox job. The script calls the seller HTTP
-/// itself; this only hands it the connection's keys and hosts.
+/// Marketplace descriptors for a sandbox job. Legacy entries retain credentials and
+/// hosts for direct reads; broker entries expose metadata/capabilities without credentials.
 /// </summary>
 public static class SandboxShops
 {
@@ -19,7 +20,9 @@ public static class SandboxShops
     };
 
     public static async Task<string> ForStoreAsync(
-        DataContext db, EncryptionService? encryption, int storeId, CancellationToken ct)
+        DataContext db, EncryptionService? encryption, int storeId, CancellationToken ct,
+        bool brokerRollout = false,
+        IMarketplaceAdapterRegistry? adapters = null)
     {
         var rows = await db.marketplaceConnections.AsNoTracking()
             .Where(c => c.storeId == storeId)
@@ -27,13 +30,19 @@ public static class SandboxShops
             .Select(c => new { c.Id, c.name, c.adapterKey, c.isActive, c.credentialsJson })
             .ToListAsync(ct);
 
-        var shops = rows.Select(c => Describe(
-            c.Id,
-            c.name,
-            c.adapterKey,
-            c.isActive,
-            ConnectionCredentialsHelper.ParseCredentialsObject(
-                ConnectionCredentialsHelper.DecryptCredentialsJson(c.credentialsJson, encryption))));
+        var shops = rows.Select(c =>
+        {
+            var credentials = ConnectionCredentialsHelper.ParseCredentialsObject(
+                ConnectionCredentialsHelper.DecryptCredentialsJson(c.credentialsJson, encryption));
+            var adapter = adapters?.GetByKey(c.adapterKey);
+            var broker = adapter as IMarketplaceSandboxReadBrokerAdapter;
+            var brokerAvailable = broker is { SupportsReadBroker: true }
+                && IsPublicConfiguredOrigin(credentials);
+
+            return Describe(c.Id, c.name, c.adapterKey, c.isActive, credentials,
+                brokerRollout, brokerAvailable, broker?.SupportsGetReads == true,
+                broker?.GetReadOperations().Count > 0);
+        });
         return JsonSerializer.Serialize(shops, Json);
     }
 
@@ -42,20 +51,47 @@ public static class SandboxShops
         string name,
         string adapterKey,
         bool active,
-        IReadOnlyDictionary<string, string> credentials)
+        IReadOnlyDictionary<string, string> credentials,
+        bool brokerRollout = false,
+        bool brokerProviderAvailable = false,
+        bool brokerGetAvailable = false,
+        bool brokerOperationsAvailable = false)
     {
         var adapter = (adapterKey ?? "").Trim().ToLowerInvariant();
+        var hosts = Hosts(adapter, credentials);
+        if (brokerRollout && brokerProviderAvailable)
+        {
+            return new
+            {
+                id,
+                name,
+                adapter,
+                active,
+                access = "broker",
+                broker = new { get = brokerGetAvailable, operations = brokerOperationsAvailable },
+                hosts,
+                docs = Docs(adapter),
+            };
+        }
+
         return new
         {
             id,
             name,
             adapter,
             active,
+            access = "legacy",
             credentials,
-            hosts = Hosts(adapter, credentials),
+            hosts,
             auth = Auth(adapter),
             docs = Docs(adapter),
         };
+    }
+
+    private static bool IsPublicConfiguredOrigin(IReadOnlyDictionary<string, string> credentials)
+    {
+        return !credentials.TryGetValue("apiBaseUrl", out var apiBaseUrl)
+            || MarketplaceSandboxReadBrokerHttp.TryCreatePublicApiBaseUri(apiBaseUrl, out _);
     }
 
     /// <summary>
@@ -97,6 +133,11 @@ public static class SandboxShops
                 {
                     ["partner"] = "https://api.partner.market.yandex.ru",
                 };
+            case "avito":
+                return new Dictionary<string, string>
+                {
+                    ["api"] = "https://api.avito.ru",
+                };
             default:
                 var hosts = new Dictionary<string, string>();
                 if (credentials.TryGetValue("apiBaseUrl", out var api) && !string.IsNullOrWhiteSpace(api))
@@ -110,7 +151,9 @@ public static class SandboxShops
         "wildberries" => "Header Authorization is credentials.apiKey, with no Bearer prefix.",
         "ozon" => "Headers Client-Id=credentials.clientId and Api-Key=credentials.apiKey.",
         "yandex" or "yandexmarket" => "Header Api-Key is credentials.apiKey.",
-        "opencart" => "Header Authorization is Bearer plus credentials.apiKey. The URL is hosts.api.",
+        "avito" => "Exchange credentials with POST /token (grant_type=client_credentials, client_id=credentials.clientId, client_secret=credentials.clientSecret), then use Bearer auth for GET /core/v1/accounts/self, GET /core/v1/items?page=...&per_page=...&status=..., GET /autoload/v1/user-docs/tree, or GET /autoload/v1/user-docs/node/{category_slug}/fields. Use hosts.api as the origin; do not follow URLs to other hosts or make write requests.",
+        "woocommerce" => "Headers Authorization=Bearer credentials.apiKey and X-Delegat-Api-Key=credentials.apiKey. The URL is hosts.api.",
+        "opencart" => "Headers Authorization=Bearer credentials.apiKey and X-Delegat-Api-Key=credentials.apiKey. The URL is hosts.api.",
         "medusa" => "Header Authorization is Basic of base64(credentials.apiKey + ':'). The URL is hosts.api.",
         _ => "Send credentials the way that shop's API expects. hosts.api is the base URL when the connection stores one.",
     };

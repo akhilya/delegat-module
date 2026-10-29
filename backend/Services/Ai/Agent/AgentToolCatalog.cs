@@ -9,13 +9,13 @@ public static class AgentToolCatalog
         List<AiTool> tools =
         [
         Prop("propose_plan",
-            "ALWAYS the first and only tool when the user asked to change catalog or mapping. Do not GET, search_actions, or platform_request first. Shows the user a plan and waits for confirmation. Writes run only after they confirm.",
+            "Use for every cabinet change and before every run_python or connected MCP call. Python and connected MCP calls must be proposed by themselves and wait for confirmation because external capabilities are not guaranteed to be read-only. For a cabinet change, if the request and CURRENT PAGE provide all required facts, call this as the first and only tool; if an exact current state or required value is missing, do only the minimum required built-in read-only lookup(s) first, then call propose_plan by itself. The user-visible plan must state the exact intended effect. Operations run only after confirmation.",
             Req(["summary", "steps"]),
             ("summary", Str("User-visible summary in store language (UI locale). No tool names, SQL, or HTTP.")),
             ("steps", new AiToolProperty
             {
                 type = "array",
-                description = "Steps with tool + args. Use platform_request for API mutations, including POST /products/{id}/files with attachmentIds for staged chat files. Each description is shown to the user in store language.",
+                description = "Steps with tool + args. Use platform_request for cabinet API mutations, including POST /products/{id}/files with attachmentIds for staged chat files. Connected MCP tools and run_python may only appear inside a plan. Each description is shown to the user in store language and must state the exact intended effect.",
                 items = new AiToolProperty
                 {
                     type = "object",
@@ -31,9 +31,16 @@ public static class AgentToolCatalog
             ("isDestructive", Bool("True for delete/overwrite"))),
         Prop("search_knowledge", "Search fetched product docs, MEMORY/DESIGN, and instance operator playbooks. Follow hits with get_doc (slug or sourcePath).",
             Req(["query"]), ("query", Str()), ("limit", Int("Max hits, default 12"))),
+        Prop("memory_search", "Search only durable facts and preferences explicitly saved for the current user in this store. This does not search conversation transcripts. Use only when an answer needs a saved fact that is not already present in the current conversation or supplied memory context, and the user has not asked you not to search.",
+            Req([]), ("query", Str("Words to find in saved memories; omit to list recent memories"))),
+        Prop("memory_save", "Save or update one durable, non-sensitive user fact/preference for future conversations. Never save credentials, secrets, or inferred facts. Use only facts the user stated; save stable preferences automatically when useful, or anything they explicitly ask you to remember.",
+            Req(["category", "key", "value"]), ("category", Str("Short group, e.g. preference, workflow, business")),
+            ("key", Str("Stable fact name, e.g. preferred_language")), ("value", Str("Concise user-stated fact"))),
+        Prop("memory_delete", "Delete one saved memory by the id returned by memory_search. Use when the user asks to forget or correct a stored fact.",
+            Req(["id"]), ("id", Int("Memory id from memory_search"))),
         Prop("get_doc", "Load a product docs article by slug, or an indexed instance doc by sourcePath (MEMORY.md, docs/ai/operator-playbook.md, docs/…). Do not invent UI missing from the article.",
             Req(["slug"]), ("slug", Str("e.g. workspace/products or docs/ai/operator-playbook.md")), ("locale", Str("ru or en"))),
-        Prop("search_catalog", "Search this store's products by name, SKU, barcode; also file display names.",
+        Prop("search_catalog", "Search this store's products by name, SKU, barcode; also file display names. Product hits contain identity metadata only (id, SKU, barcode, name, category), not price, storageQuantity, or description; missing fields are not evidence of null. For those facts, read the requested field from the exact product separately. For a specific lookup, provide a non-empty query. An empty/missing query lists a broad set; use it only when the user explicitly asks to browse or list products, never to clarify which product they mean.",
             Req([]), ("query", Str()), ("limit", Int())),
         Prop("search_actions", "Find cabinet HTTP the assistant can run (same JSON API as the SPA). Use before inventing a path or GET /tools. Query in store language (export, выгрузка, import, match). Hits include method, path, and body notes.",
             Req(["query"]), ("query", Str("e.g. export products to Medusa without photos")), ("limit", Int("Max hits, default 8"))),
@@ -43,7 +50,7 @@ public static class AgentToolCatalog
         if (PythonSandboxClient.IsConfigured())
         {
             tools.Add(Prop("run_python",
-                "Run curated Python in the instance sandbox (pandas/pillow/openpyxl). `client` and `shops` are already loaded. `shops` holds this store’s connection keys, seller hosts, and `docs.platform` when Control Plane keeps that seller’s daily snapshot — call those hosts with urllib (direct HTTP). Read `client.marketplace_doc(docs.platform, query)` before inventing a seller path. Do not fetch a documentation URL yourself. Do not print credentials. Uses Agent HTTP for the cabinet, never the database URL. If the user asks to check this helper or run a snippet, call this tool this turn. A shop lookup or other read-only script does not need propose_plan; do not change the seller account from the script.",
+                "Run Python in the instance sandbox. Every run_python call must be a step in a standalone propose_plan and waits for user confirmation; never call it directly in the chat loop because code can make side-effecting requests. The visible plan description must state what the code will do. For broker-enabled Marketplace connections, use only declared `broker` capabilities: `client.shop_request` when `get=true`, or discover named read-only POST operations with `client.shop_operations` and call `client.shop_read` when `operations=true`; do not make direct seller HTTP calls for those connections. Only connections marked `access=legacy` retain the old host/auth descriptor. Read `client.marketplace_doc` before choosing seller-specific paths. Do not print credentials, fetch documentation URLs yourself, or write to seller APIs from Python. Cabinet requests use Agent HTTP, never a database URL.",
                 Req(["code"]), ("code", Str("Python source"))));
         }
 

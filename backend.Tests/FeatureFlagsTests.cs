@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.ApplicationModels;
 
 namespace Delegat.Tests;
 
+[Collection("sandbox-env")]
 public class FeatureFlagsTests
 {
     private static IDisposable SetEnv(string name, string? value)
@@ -143,6 +144,37 @@ public class FeatureFlagsTests
     {
         using var _ = SetEnv("PUBLIC_API_ENABLED", raw);
         Assert.Equal(expected, FeatureFlags.IsPublicApiEnabled());
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("false", false)]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    public void IsConnectedMcpEnabled_DefaultsFalse(string? raw, bool expected)
+    {
+        using var _ = SetEnv("AI_CONNECTED_MCP_ENABLED", raw);
+        Assert.Equal(expected, FeatureFlags.IsConnectedMcpEnabled());
+    }
+
+    [Fact]
+    public void MarketplaceBrokerSandbox_RequiresExplicitStoreSelection()
+    {
+        using var _ = SetEnv("MARKETPLACE_BROKER_SANDBOX_STORES", null);
+        Assert.False(FeatureFlags.IsMarketplaceBrokerSandboxEnabled(42));
+    }
+
+    [Theory]
+    [InlineData("42, 43", 42, true)]
+    [InlineData("42;43", 43, true)]
+    [InlineData("42,43", 44, false)]
+    [InlineData("*", 987, true)]
+    [InlineData("*", 0, false)]
+    public void MarketplaceBrokerSandbox_ParsesAllowlistedStores(string raw, int storeId, bool expected)
+    {
+        using var _ = SetEnv("MARKETPLACE_BROKER_SANDBOX_STORES", raw);
+        Assert.Equal(expected, FeatureFlags.IsMarketplaceBrokerSandboxEnabled(storeId));
     }
 
     [Fact]

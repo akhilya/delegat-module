@@ -1,6 +1,15 @@
 using System.Text;
 using System.Text.Json;
+using Delegat.Infrastructure.Security;
+using Delegat.Marketplace.Medusa;
+using Delegat.Marketplace.Ozon;
+using Delegat.Marketplace.SDK;
+using Delegat.Models.Marketplace;
 using Delegat.Services.Ai.Agent;
+using Delegat.Services.Marketplace;
+using Delegat.Services.Plugins;
+using Delegat.Tests.Infrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests.Ai;
 
@@ -50,6 +59,154 @@ public class SandboxShopsTests
     }
 
     [Fact]
+    public void Avito_UsesFixedApiHostAndDocumentsOAuthCredentials()
+    {
+        var credentials = new Dictionary<string, string>
+        {
+            ["clientId"] = "avito-client-id",
+            ["clientSecret"] = "avito-client-secret",
+        };
+
+        var shop = JsonSerializer.Serialize(SandboxShops.Describe(
+            9, "Avito", "avito", true, credentials));
+
+        Assert.Contains("https://api.avito.ru", shop, StringComparison.Ordinal);
+        Assert.Contains("client_credentials", shop, StringComparison.Ordinal);
+        Assert.Contains("/core/v1/items", shop, StringComparison.Ordinal);
+        Assert.Contains("do not follow URLs to other hosts", shop, StringComparison.Ordinal);
+        Assert.Contains("avito-client-secret", shop, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrokerMode_OmitsCredentialsAndAuthForSupportedAdapters()
+    {
+        const string secret = "seller-secret-long-enough";
+        var shop = JsonSerializer.Serialize(SandboxShops.Describe(
+            21,
+            "Ozon",
+            "ozon",
+            true,
+            new Dictionary<string, string> { ["clientId"] = "seller-id", ["apiKey"] = secret },
+            brokerRollout: true,
+            brokerProviderAvailable: true,
+            brokerGetAvailable: true,
+            brokerOperationsAvailable: true));
+
+        Assert.Contains("\"access\":\"broker\"", shop, StringComparison.Ordinal);
+        Assert.Contains("\"broker\":{\"get\":true,\"operations\":true}", shop, StringComparison.Ordinal);
+        Assert.Contains("\"id\":21", shop, StringComparison.Ordinal);
+        Assert.Contains("https://api-seller.ozon.ru", shop, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, shop, StringComparison.Ordinal);
+        Assert.DoesNotContain("credentials", shop, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("auth", shop, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BrokerMode_KeepsLegacyCredentialsForIneligibleLocalBridge()
+    {
+        const string secret = "medusa-secret-long-enough";
+        var shop = JsonSerializer.Serialize(SandboxShops.Describe(
+            22,
+            "Local Medusa",
+            "medusa",
+            true,
+            new Dictionary<string, string>
+            {
+                ["apiBaseUrl"] = "http://localhost:9000/admin/delegat",
+                ["apiKey"] = secret,
+            },
+            brokerRollout: true));
+
+        Assert.Contains("\"access\":\"legacy\"", shop, StringComparison.Ordinal);
+        Assert.Contains(secret, shop, StringComparison.Ordinal);
+        Assert.Contains("http://localhost:9000/admin/delegat", shop, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ForStoreAsync_RemovesCredentialsOnlyWhenPluginAndOriginSupportBroker()
+    {
+        using var db = TestDbFactory.CreateDb();
+        var encryption = new EncryptionService(
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray()));
+        const string ozonSecret = "ozon-secret-long-enough";
+        const string medusaSecret = "medusa-secret-long-enough";
+        db.marketplaceConnections.AddRange(
+            new MarketplaceConnection
+            {
+                Id = 41,
+                storeId = 4,
+                name = "Ozon",
+                adapterKey = "ozon",
+                isActive = true,
+                credentialsJson = encryption.Encrypt(JsonSerializer.Serialize(new Dictionary<string, string>
+                {
+                    ["clientId"] = "seller-id",
+                    ["apiKey"] = ozonSecret,
+                })),
+            },
+            new MarketplaceConnection
+            {
+                Id = 42,
+                storeId = 4,
+                name = "Local Medusa",
+                adapterKey = "medusa",
+                isActive = true,
+                credentialsJson = encryption.Encrypt(JsonSerializer.Serialize(new Dictionary<string, string>
+                {
+                    ["apiBaseUrl"] = "http://localhost:9000/admin/delegat",
+                    ["apiKey"] = medusaSecret,
+                })),
+            });
+        await db.SaveChangesAsync();
+
+        var adapters = new TestAdapterRegistry(new Dictionary<string, IMarketplaceAdapter>
+        {
+            ["ozon"] = new PluginAdapterWrapper(new OzonPlugin(), NullLoggerFactory.Instance, encryption),
+            ["medusa"] = new PluginAdapterWrapper(new MedusaPlugin(), NullLoggerFactory.Instance, encryption),
+        });
+
+        var json = await SandboxShops.ForStoreAsync(
+            db, encryption, 4, CancellationToken.None, brokerRollout: true, adapters);
+        using var document = JsonDocument.Parse(json);
+        var shops = document.RootElement.EnumerateArray().ToArray();
+
+        Assert.Equal("broker", shops[0].GetProperty("access").GetString());
+        Assert.False(shops[0].TryGetProperty("credentials", out _));
+        Assert.True(shops[0].GetProperty("broker").GetProperty("operations").GetBoolean());
+        Assert.DoesNotContain(ozonSecret, json, StringComparison.Ordinal);
+
+        Assert.Equal("legacy", shops[1].GetProperty("access").GetString());
+        Assert.Equal(medusaSecret,
+            shops[1].GetProperty("credentials").GetProperty("apiKey").GetString());
+    }
+
+    [Theory]
+    [InlineData("woocommerce", "https://store.example/wp-json/delegat/v1")]
+    [InlineData("opencart", "https://store.example/index.php?route=extension/delegat")]
+    [InlineData("medusa", "http://localhost:9000/admin/delegat")]
+    public void CustomHostAdapters_KeepTheirConfiguredLegacyHost(string adapter, string apiBaseUrl)
+    {
+        var hosts = SandboxShops.Hosts(adapter, new Dictionary<string, string>
+        {
+            ["apiBaseUrl"] = apiBaseUrl,
+        });
+
+        Assert.Equal(apiBaseUrl, hosts["api"]);
+    }
+
+    [Theory]
+    [InlineData("woocommerce")]
+    [InlineData("opencart")]
+    public void StorefrontBridgeAdapters_DescribeBothAuthenticationHeaders(string adapter)
+    {
+        var auth = SandboxShops.Auth(adapter);
+
+        Assert.Contains("Authorization=Bearer credentials.apiKey", auth, StringComparison.Ordinal);
+        Assert.Contains("X-Delegat-Api-Key=credentials.apiKey", auth, StringComparison.Ordinal);
+        Assert.Contains("hosts.api", auth, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Redact_StripsApiKeysFromOutput()
     {
         const string key = "wb-secret-key-value";
@@ -91,5 +248,14 @@ public class SandboxShopsTests
                 .Replace('/', '_');
 
         return B64("{\"alg\":\"none\"}") + "." + B64(payloadJson) + ".sig";
+    }
+
+    private sealed class TestAdapterRegistry(IReadOnlyDictionary<string, IMarketplaceAdapter> adapters)
+        : IMarketplaceAdapterRegistry
+    {
+        public IReadOnlyList<IMarketplaceAdapter> GetAll() => adapters.Values.ToList();
+        public IMarketplaceAdapter? GetByKey(string key) => adapters.GetValueOrDefault(key);
+        public bool Exists(string key) => adapters.ContainsKey(key);
+        public IReadOnlyList<MarketplaceInfo> GetAvailableMarketplaces() => [];
     }
 }

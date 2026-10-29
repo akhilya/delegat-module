@@ -80,7 +80,7 @@ public class PublicApiTagOrderFilter : IDocumentFilter
                         ["message"] = new OpenApiSchema
                         {
                             Type = "string",
-                            Description = "English explanation.",
+                            Description = "Informational English text; may be generic. Clients should use the stable error code.",
                         },
                         ["details"] = new OpenApiSchema
                         {

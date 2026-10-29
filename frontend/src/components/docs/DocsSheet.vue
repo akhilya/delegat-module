@@ -23,7 +23,11 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE, clampSheetWidth } from "@/composables/useSheetResize";
+import {
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+  clampSheetWidth,
+} from "@/composables/useSheetResize";
 import { useCompanionSheets } from "@/composables/useCompanionSheets";
 import { docsSheetUsesRail } from "@/lib/docsSheet";
 import { getDocsPageUrl, getDocsSiteOrigin } from "@/utils/docsUrl";
@@ -186,26 +190,34 @@ function onArticleClick(event) {
             :key="gi"
             class="mt-8 first:mt-0"
           >
-            <p class="mb-2.5 px-2.5 text-xs font-medium tracking-wide text-muted-foreground">
+            <p
+              class="mb-2.5 px-2.5 text-xs font-medium tracking-wide text-muted-foreground"
+            >
               {{ group.text }}
             </p>
             <ul class="flex flex-col gap-0.5">
-              <li v-for="(item, ii) in group.items || []" :key="`${gi}-${ii}-${item.slug}`">
-                <button
+              <li
+                v-for="(item, ii) in group.items || []"
+                :key="`${gi}-${ii}-${item.slug}`"
+              >
+                <Button
                   type="button"
-                  :data-selected="(item.slug || '') === slug ? 'true' : undefined"
+                  variant="ghost"
+                  :data-selected="
+                    (item.slug || '') === slug ? 'true' : undefined
+                  "
                   :class="
                     cn(
-                      'w-full rounded-md px-2.5 py-2 text-left text-sm leading-snug transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]',
+                      'h-auto min-h-0 w-full justify-start whitespace-normal rounded-md px-2.5 py-2 text-left text-sm leading-snug',
                       (item.slug || '') === slug
-                        ? 'bg-muted font-medium text-foreground'
+                        ? 'bg-muted font-medium text-foreground hover:bg-muted'
                         : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                     )
                   "
                   @click="selectSlug(item.slug)"
                 >
                   {{ item.text }}
-                </button>
+                </Button>
               </li>
             </ul>
           </section>

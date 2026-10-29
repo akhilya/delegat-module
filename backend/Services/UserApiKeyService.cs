@@ -30,9 +30,9 @@ public class UserApiKeyService
     {
         name = name?.Trim() ?? "";
         if (string.IsNullOrEmpty(name))
-            throw ApiException.BadRequest("Key name is required");
+            throw ApiException.BadRequest(code: "api_key_name_required");
         if (name.Length > 100)
-            throw ApiException.BadRequest("Key name is too long");
+            throw ApiException.BadRequest(code: "api_key_name_too_long");
 
         var plaintext = GenerateKey();
         var entity = new UserApiKey
@@ -57,7 +57,7 @@ public class UserApiKeyService
             .FirstOrDefaultAsync(k => k.Id == keyId && k.userId == userId, ct);
 
         if (key == null)
-            throw ApiException.NotFound("API key not found");
+            throw ApiException.NotFound(code: "api_key_not_found");
 
         if (key.revokedAt == null)
         {
@@ -70,14 +70,14 @@ public class UserApiKeyService
     {
         name = name?.Trim() ?? "";
         if (string.IsNullOrEmpty(name))
-            throw ApiException.BadRequest("Key name is required");
+            throw ApiException.BadRequest(code: "api_key_name_required");
         if (name.Length > 100)
-            throw ApiException.BadRequest("Key name is too long");
+            throw ApiException.BadRequest(code: "api_key_name_too_long");
 
         var key = await _db.userApiKeys
             .FirstOrDefaultAsync(k => k.Id == keyId && k.userId == userId, ct);
         if (key == null)
-            throw ApiException.NotFound("API key not found");
+            throw ApiException.NotFound(code: "api_key_not_found");
 
         key.name = name;
         await _db.SaveChangesAsync(ct);

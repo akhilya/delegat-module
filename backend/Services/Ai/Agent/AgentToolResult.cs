@@ -31,7 +31,87 @@ public static class AgentToolResult
     {
         if (string.IsNullOrEmpty(json) || json.Length <= MaxModelResultChars)
             return json;
-        return json[..MaxModelResultChars] + "…(truncated)";
+
+        var important = ExtractImportantFields(json);
+        var previewLength = Math.Min(json.Length, MaxModelResultChars);
+        while (true)
+        {
+            var preview = json[..SafePrefixLength(json, previewLength)];
+            var result = JsonSerializer.Serialize(new
+            {
+                truncated = true,
+                originalLength = json.Length,
+                important,
+                preview,
+            }, JsonOpts);
+            if (result.Length <= MaxModelResultChars)
+                return result;
+
+            var excess = result.Length - MaxModelResultChars;
+            var nextLength = previewLength - Math.Max(256, excess);
+            previewLength = nextLength >= previewLength ? previewLength / 2 : Math.Max(0, nextLength);
+            if (previewLength == 0)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    truncated = true,
+                    originalLength = json.Length,
+                    important,
+                    preview = "",
+                }, JsonOpts);
+            }
+        }
+    }
+
+    private static Dictionary<string, object?> ExtractImportantFields(string json)
+    {
+        var fields = new Dictionary<string, object?>(StringComparer.Ordinal);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return fields;
+
+            string[] names = ["error", "status", "code", "title", "message", "id", "operationId", "totalCount", "hasMore", "isError"];
+            foreach (var name in names)
+            {
+                var pascalName = char.ToUpperInvariant(name[0]) + name[1..];
+                if (!doc.RootElement.TryGetProperty(name, out var value)
+                    && !doc.RootElement.TryGetProperty(pascalName, out value))
+                    continue;
+
+                fields[name] = value.ValueKind switch
+                {
+                    JsonValueKind.String => ClipDiagnostic(value.GetString() ?? ""),
+                    JsonValueKind.Object or JsonValueKind.Array => ClipDiagnostic(value.GetRawText()),
+                    JsonValueKind.Undefined => null,
+                    _ => value.Clone(),
+                };
+            }
+        }
+        catch (JsonException)
+        {
+            // The envelope still returns a valid JSON result with a text preview.
+        }
+
+        return fields;
+    }
+
+    private static string ClipDiagnostic(string value)
+    {
+        const int maxLength = 512;
+        if (value.Length <= maxLength)
+            return value;
+        return value[..SafePrefixLength(value, maxLength)] + "…(truncated)";
+    }
+
+    private static int SafePrefixLength(string value, int length)
+    {
+        if (length > 0 && length < value.Length
+            && char.IsHighSurrogate(value[length - 1])
+            && char.IsLowSurrogate(value[length]))
+            return length - 1;
+        return length;
     }
 
     public static bool IsFailure(object? result, string? summary)
@@ -73,30 +153,73 @@ public static class AgentToolResult
         return false;
     }
 
+    public static bool IsQueuedJob(object? result)
+    {
+        if (result == null) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result, JsonOpts));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("status", out var status)
+                || status.ValueKind != JsonValueKind.String)
+                return false;
+
+            var value = status.GetString();
+            return value is not null
+                && (value.Equals("pending", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("running", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("queued", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("in_progress", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     public static string FormatPlanOutcome(
         int succeeded,
         int total,
         IReadOnlyList<string> errors,
-        string? locale)
+        string? locale,
+        int queued = 0)
     {
         var ru = AiPrompts.NormalizeLocale(locale) != "en";
         if (errors.Count == 0)
         {
+            if (queued > 0)
+                return ru
+                    ? $"Шаги плана запущены: {succeeded} из {total}; фоновых операций поставлено в очередь: {queued}. Фактическое завершение отслеживается отдельно."
+                    : $"Plan steps started: {succeeded} of {total}; background operations queued: {queued}. Their completion is tracked separately.";
             return ru
                 ? $"Готово: выполнены все шаги ({succeeded} из {total})."
                 : $"All steps finished ({succeeded} of {total}).";
         }
 
         var list = string.Join("\n", errors.Select(e => "• " + e));
-        if (succeeded == 0)
+        var queuedNote = queued > 0
+            ? (ru ? $" Фоновых операций поставлено в очередь: {queued}." : $" Background operations queued: {queued}.")
+            : "";
+        var applied = Math.Max(0, succeeded - queued);
+        if (succeeded == 0 && queued == 0)
         {
             return ru
-                ? $"Не получилось ({succeeded} из {total}). В каталоге ничего не изменилось.\n{list}"
-                : $"Nothing was changed ({succeeded} of {total} steps succeeded).\n{list}";
+                ? $"Не получилось ({succeeded} из {total}). В каталоге ничего не изменилось.{queuedNote}\n{list}"
+                : $"Nothing was changed ({succeeded} of {total} steps succeeded).{queuedNote}\n{list}";
+        }
+
+        if (queued > 0)
+        {
+            var appliedNote = applied > 0
+                ? (ru ? " Часть синхронных шагов уже применена." : " Some synchronous steps were applied.")
+                : "";
+            return ru
+                ? $"Не все шаги выполнены ({succeeded} из {total} выполнено или поставлено в очередь).{appliedNote}{queuedNote}\n{list}"
+                : $"Not all steps completed ({succeeded} of {total} completed or queued).{appliedNote}{queuedNote}\n{list}";
         }
 
         return ru
-            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.\n{list}"
-            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.\n{list}";
+            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.{queuedNote}\n{list}"
+            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.{queuedNote}\n{list}";
     }
 }

@@ -17,6 +17,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { sqlResultParts, stripDisplayEmoji } from "@/lib/ai/display";
 import { useI18n } from "vue-i18n";
 
@@ -103,30 +111,37 @@ const expandable = computed(
           v-if="sql?.rows?.length"
           class="max-h-32 overflow-auto rounded-md bg-muted/60"
         >
-          <table class="w-max min-w-full border-collapse text-[11px]">
-            <thead>
-              <tr>
-                <th
+          <Table
+            :contain="false"
+            class="w-max min-w-full border-collapse text-[11px]"
+          >
+            <TableHeader>
+              <TableRow class="border-0 transition-none hover:bg-transparent">
+                <TableHead
                   v-for="col in sql.columns"
                   :key="col"
-                  class="px-2 py-1 text-left font-medium text-muted-foreground"
+                  class="h-auto px-2 py-1 text-left text-[11px] font-medium text-muted-foreground"
                 >
                   {{ col }}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, ri) in sql.rows" :key="ri">
-                <td
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="(row, ri) in sql.rows"
+                :key="ri"
+                class="border-0 transition-none hover:bg-transparent"
+              >
+                <TableCell
                   v-for="col in sql.columns"
                   :key="col"
-                  class="whitespace-nowrap px-2 py-0.5 text-foreground/90"
+                  class="whitespace-nowrap px-2 py-0.5 text-[11px] text-foreground/90"
                 >
                   {{ row[col] }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
         <pre
           v-else-if="inputPreview"

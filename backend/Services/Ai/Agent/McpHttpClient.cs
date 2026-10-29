@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -9,26 +10,17 @@ namespace Delegat.Services.Ai.Agent;
 public sealed class McpHttpClient
 {
     public const string ProtocolVersion = "2025-03-26";
+    public const int MaxResponseBytes = 256_000;
 
     private readonly HttpClient _http;
+    private readonly ConcurrentDictionary<(int ServerId, string Url), ToolSessionSnapshot> _turnSessions = new();
 
     public McpHttpClient(HttpClient http) => _http = http;
 
     public async Task<List<AiTool>> ListToolsAsync(int serverId, string url, string? bearerToken, CancellationToken ct)
     {
-        var session = await HandshakeAsync(url, bearerToken, ct);
-        var listed = await RpcAsync(session, "tools/list", new JsonObject(), ct);
-        var tools = new List<AiTool>();
-        if (listed.TryGetProperty("tools", out var arr) && arr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in arr.EnumerateArray())
-            {
-                if (tools.Count >= McpToolMapper.MaxToolsPerServer) break;
-                var mapped = McpToolMapper.ToAiTool(serverId, item);
-                if (mapped != null) tools.Add(mapped);
-            }
-        }
-        return tools;
+        var snapshot = await GetToolSessionAsync(serverId, url, bearerToken, ct);
+        return snapshot.Tools;
     }
 
     public async Task<(object result, string summary)> CallToolAsync(
@@ -41,25 +33,40 @@ public sealed class McpHttpClient
     public async Task<(object result, string summary)> CallMappedToolAsync(
         int serverId, string url, string? bearerToken, string llmName, string inputJson, CancellationToken ct)
     {
-        var session = await HandshakeAsync(url, bearerToken, ct);
+        var snapshot = await GetToolSessionAsync(serverId, url, bearerToken, ct);
+        if (!snapshot.RemoteNamesByLlmName.TryGetValue(llmName, out var remote))
+            return (new { error = $"Unknown tool: {llmName}" }, $"Unknown tool: {llmName}");
+        return await CallOnSessionAsync(snapshot.Session, remote, inputJson, ct);
+    }
+
+    private async Task<ToolSessionSnapshot> GetToolSessionAsync(
+        int serverId, string url, string? bearerToken, CancellationToken ct)
+    {
+        var normalizedUrl = url.Trim();
+        var key = (serverId, normalizedUrl);
+        if (_turnSessions.TryGetValue(key, out var cached)
+            && string.Equals(cached.Session.BearerToken, bearerToken, StringComparison.Ordinal))
+            return cached;
+
+        var session = await HandshakeAsync(normalizedUrl, bearerToken, ct);
         var listed = await RpcAsync(session, "tools/list", new JsonObject(), ct);
-        string? remote = null;
+        var tools = new List<AiTool>();
+        var remoteNamesByLlmName = new Dictionary<string, string>(StringComparer.Ordinal);
         if (listed.TryGetProperty("tools", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in arr.EnumerateArray())
             {
-                var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-                if (McpToolNames.ForLlm(serverId, name) == llmName)
-                {
-                    remote = name;
-                    break;
-                }
+                if (tools.Count >= McpToolMapper.MaxToolsPerServer) break;
+                var mapped = McpToolMapper.ToAiTool(serverId, item);
+                if (mapped == null || !remoteNamesByLlmName.TryAdd(mapped.name, mapped.McpRemoteName!))
+                    continue;
+                tools.Add(mapped);
             }
         }
-        if (remote == null)
-            return (new { error = $"Unknown tool: {llmName}" }, $"Unknown tool: {llmName}");
-        return await CallOnSessionAsync(session, remote, inputJson, ct);
+
+        var snapshot = new ToolSessionSnapshot(session, tools, remoteNamesByLlmName);
+        _turnSessions[key] = snapshot;
+        return snapshot;
     }
 
     private async Task<(object result, string summary)> CallOnSessionAsync(
@@ -109,7 +116,7 @@ public sealed class McpHttpClient
             ["method"] = method,
             ["params"] = new JsonObject(),
         });
-        using var res = await _http.SendAsync(req, ct);
+        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         CaptureSession(res, session);
         if ((int)res.StatusCode >= 400)
             throw new InvalidOperationException($"MCP {method} failed ({(int)res.StatusCode})");
@@ -129,7 +136,7 @@ public sealed class McpHttpClient
         CaptureSession(res, session);
         if ((int)res.StatusCode >= 400)
         {
-            var errBody = await res.Content.ReadAsStringAsync(ct);
+            var errBody = await ReadContentLimitedAsync(res.Content, ct);
             throw new InvalidOperationException(RpcErrorMessage(errBody) ?? $"MCP {method} failed ({(int)res.StatusCode})");
         }
         var payload = await ReadRpcPayloadAsync(res, ct);
@@ -173,10 +180,26 @@ public sealed class McpHttpClient
     private static async Task<string> ReadRpcPayloadAsync(HttpResponseMessage res, CancellationToken ct)
     {
         var media = res.Content.Headers.ContentType?.MediaType ?? "";
-        var raw = await res.Content.ReadAsStringAsync(ct);
+        var raw = await ReadContentLimitedAsync(res.Content, ct);
         if (media.Contains("event-stream", StringComparison.OrdinalIgnoreCase) || raw.Contains("data:"))
             return ParseSseJson(raw);
         return raw;
+    }
+
+    private static async Task<string> ReadContentLimitedAsync(HttpContent content, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        using var buffer = new MemoryStream(capacity: Math.Min(MaxResponseBytes, 16_384));
+        var chunk = new byte[8_192];
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, ct);
+            if (read == 0) break;
+            if (buffer.Length + read > MaxResponseBytes)
+                throw new InvalidOperationException($"MCP response exceeds the {MaxResponseBytes}-byte limit");
+            buffer.Write(chunk, 0, read);
+        }
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     internal static string ParseSseJson(string raw)
@@ -232,4 +255,9 @@ public sealed class McpHttpClient
         public string? SessionId { get; set; } = sessionId;
         public int NextId() => Interlocked.Increment(ref _id);
     }
+
+    private sealed record ToolSessionSnapshot(
+        McpSession Session,
+        List<AiTool> Tools,
+        Dictionary<string, string> RemoteNamesByLlmName);
 }

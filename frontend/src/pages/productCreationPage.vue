@@ -904,577 +904,557 @@ export default {
                     $t('pages.productCreationPage.sections.mainData.title')
                   "
                   :description="
-                    $t('pages.productCreationPage.sections.mainData.description')
+                    $t(
+                      'pages.productCreationPage.sections.mainData.description',
+                    )
                   "
                 >
+                  <SettingsFormField
+                    :label="
+                      $t('pages.productCreationPage.fields.category.label')
+                    "
+                    :error="categoryError"
+                    required
+                  >
+                    <SearchableSelect
+                      :model-value="currentCategorySelectValue"
+                      :options="categorySelectOptions"
+                      :placeholder="
+                        $t(
+                          'pages.productCreationPage.fields.category.placeholder',
+                        )
+                      "
+                      :disabled="isLoadingCategories || isSubmitting"
+                      :invalid="!!categoryError"
+                      @update:model-value="onCategorySelectChange"
+                    />
+                    <p
+                      v-if="categories.length === 0 && !isLoadingCategories"
+                      class="text-xs text-muted-foreground mt-1.5"
+                    >
+                      {{
+                        $t(
+                          "pages.productCreationPage.fields.category.emptyHint",
+                        )
+                      }}
+                    </p>
+                  </SettingsFormField>
+
+                  <SettingsFormField
+                    :label="$t('pages.productCreationPage.fields.group.label')"
+                  >
+                    <div class="space-y-1.5">
+                      <SearchableSelect
+                        :model-value="currentGroupSelectValue"
+                        :options="groupSelectOptions"
+                        :placeholder="
+                          $t(
+                            'pages.productCreationPage.fields.group.placeholder',
+                          )
+                        "
+                        :disabled="isLoadingGroups || isSubmitting"
+                        @update:model-value="onGroupSelectChange"
+                      >
+                        <template #footer="{ close }">
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            class="h-auto min-h-0 w-full justify-start rounded-md p-0 text-left hover:bg-transparent"
+                            :class="MENU_ITEM"
+                            @click="openCreateGroupDialogFromSelect(close)"
+                          >
+                            <Plus class="size-4 shrink-0" />
+                            <span class="flex-1 truncate text-sm">
+                              {{
+                                $t(
+                                  "pages.productCreationPage.fields.group.createLink",
+                                )
+                              }}
+                            </span>
+                          </Button>
+                        </template>
+                      </SearchableSelect>
+                      <router-link
+                        v-if="groupDetail"
+                        :to="`/product-groups/${groupDetail.id}/edit`"
+                        class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
+                      >
+                        {{
+                          $t("pages.productCreationPage.fields.group.editLink")
+                        }}
+                      </router-link>
+                    </div>
+                  </SettingsFormField>
+
+                  <FormField
+                    v-slot="{ componentField, errorMessage }"
+                    name="product.sku"
+                  >
+                    <FormItem class="gap-0">
                       <SettingsFormField
                         :label="
-                          $t('pages.productCreationPage.fields.category.label')
+                          $t('pages.productCreationPage.fields.sku.label')
                         "
-                        :error="categoryError"
+                        label-for="product-sku"
+                        :error="errorMessage"
+                      >
+                        <FormControl>
+                          <Input
+                            id="product-sku"
+                            type="text"
+                            class="font-mono"
+                            :maxlength="FIELD_LIMITS.productSku"
+                            v-bind="componentField"
+                          />
+                        </FormControl>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField
+                    v-slot="{ value, setValue, errorMessage }"
+                    name="product.barcode"
+                  >
+                    <FormItem class="gap-0">
+                      <SettingsFormField
+                        :label="
+                          $t('pages.productCreationPage.fields.barcode.label')
+                        "
+                        label-for="product-barcode"
+                        :error="errorMessage"
+                      >
+                        <FormControl>
+                          <BarcodeInput
+                            id="product-barcode"
+                            :model-value="value || ''"
+                            @update:model-value="setValue($event)"
+                          />
+                        </FormControl>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField
+                    v-slot="{ componentField, errorMessage }"
+                    name="product.name"
+                  >
+                    <FormItem class="gap-0">
+                      <SettingsFormField
+                        :label="
+                          $t('pages.productCreationPage.fields.name.label')
+                        "
+                        label-for="product-name"
+                        :error="errorMessage"
                         required
                       >
-                        <SearchableSelect
-                          :model-value="currentCategorySelectValue"
-                          :options="categorySelectOptions"
-                          :placeholder="
-                            $t(
-                              'pages.productCreationPage.fields.category.placeholder',
-                            )
+                        <FormControl>
+                          <Input
+                            id="product-name"
+                            type="text"
+                            :maxlength="FIELD_LIMITS.productName"
+                            v-bind="componentField"
+                          />
+                        </FormControl>
+                      </SettingsFormField>
+                    </FormItem>
+                  </FormField>
+
+                  <FormField
+                    v-slot="{ componentField, errorMessage }"
+                    name="product.description"
+                  >
+                    <FormItem class="gap-1.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <FieldLabel for="product-description">{{
+                          $t(
+                            "pages.productCreationPage.fields.description.label",
+                          )
+                        }}</FieldLabel>
+                        <AiDescriptionGenerator
+                          v-if="aiEnabled"
+                          :product-name="form.values.product?.name"
+                          :product-sku="form.values.product?.sku"
+                          :category-name="selectedCategory?.name"
+                          :existing-description="
+                            form.values.product?.description
                           "
-                          :disabled="isLoadingCategories || isSubmitting"
-                          :invalid="!!categoryError"
-                          @update:model-value="onCategorySelectChange"
+                          :attributes-summary="aiAttributesSummary"
+                          @update:generating="isDescriptionGenerating = $event"
+                          @generated="
+                            (text) => {
+                              form.setFieldValue('product.description', text);
+                              nextTick(() => autoResizeDescription());
+                            }
+                          "
                         />
-                        <p
-                          v-if="categories.length === 0 && !isLoadingCategories"
-                          class="text-xs text-muted-foreground mt-1.5"
+                      </div>
+                      <div class="relative">
+                        <FormControl>
+                          <Textarea
+                            id="product-description"
+                            ref="descriptionRef"
+                            v-bind="componentField"
+                            :disabled="isDescriptionGenerating"
+                            :aria-busy="isDescriptionGenerating"
+                            :maxlength="FIELD_LIMITS.productDescription"
+                            @input="autoResizeDescription"
+                            class="min-h-24 overflow-hidden resize-none transition-opacity"
+                            :class="isDescriptionGenerating ? 'opacity-60' : ''"
+                          />
+                        </FormControl>
+                        <div
+                          v-if="isDescriptionGenerating"
+                          class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
                         >
+                          <p
+                            class="flex items-center gap-2 text-xs text-muted-foreground"
+                          >
+                            <Spinner size="sm" />
+                            {{ descriptionGeneratingHint }}
+                          </p>
+                        </div>
+                      </div>
+                      <FieldError v-if="errorMessage">{{
+                        errorMessage
+                      }}</FieldError>
+                    </FormItem>
+                  </FormField>
+
+                  <template v-if="!selectedCategory?.hasSizes">
+                    <div class="space-y-4 border-t pt-5">
+                      <div>
+                        <InsetGroupLabel>
+                          {{
+                            $t("pages.productCreationPage.sections.stock.title")
+                          }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
                           {{
                             $t(
-                              "pages.productCreationPage.fields.category.emptyHint",
+                              "pages.productCreationPage.sections.stock.description",
                             )
                           }}
                         </p>
-                      </SettingsFormField>
-
-                      <SettingsFormField
-                        :label="
-                          $t('pages.productCreationPage.fields.group.label')
-                        "
-                      >
-                        <div class="space-y-1.5">
-                          <SearchableSelect
-                            :model-value="currentGroupSelectValue"
-                            :options="groupSelectOptions"
-                            :placeholder="
-                              $t(
-                                'pages.productCreationPage.fields.group.placeholder',
-                              )
-                            "
-                            :disabled="isLoadingGroups || isSubmitting"
-                            @update:model-value="onGroupSelectChange"
-                          >
-                            <template #footer="{ close }">
-                              <button
-                                type="button"
-                                class="w-full text-left"
-                                :class="MENU_ITEM"
-                                @click="openCreateGroupDialogFromSelect(close)"
-                              >
-                                <Plus class="size-4 shrink-0" />
-                                <span class="flex-1 truncate text-sm">
-                                  {{
-                                    $t(
-                                      "pages.productCreationPage.fields.group.createLink",
-                                    )
-                                  }}
-                                </span>
-                              </button>
-                            </template>
-                          </SearchableSelect>
-                          <router-link
-                            v-if="groupDetail"
-                            :to="`/product-groups/${groupDetail.id}/edit`"
-                            class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
-                          >
-                            {{
-                              $t(
-                                "pages.productCreationPage.fields.group.editLink",
-                              )
-                            }}
-                          </router-link>
-                        </div>
-                      </SettingsFormField>
-
-                      <FormField
-                        v-slot="{ componentField, errorMessage }"
-                        name="product.sku"
-                      >
-                        <FormItem class="gap-0">
-                          <SettingsFormField
-                            :label="
-                              $t('pages.productCreationPage.fields.sku.label')
-                            "
-                            label-for="product-sku"
-                            :error="errorMessage"
-                          >
-                            <FormControl>
-                              <Input
-                                id="product-sku"
-                                type="text"
-                                class="font-mono"
-                                :maxlength="FIELD_LIMITS.productSku"
-                                v-bind="componentField"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
-                        </FormItem>
-                      </FormField>
-
-                      <FormField
-                        v-slot="{ value, setValue, errorMessage }"
-                        name="product.barcode"
-                      >
-                        <FormItem class="gap-0">
-                          <SettingsFormField
-                            :label="
-                              $t(
-                                'pages.productCreationPage.fields.barcode.label',
-                              )
-                            "
-                            label-for="product-barcode"
-                            :error="errorMessage"
-                          >
-                            <FormControl>
-                              <BarcodeInput
-                                id="product-barcode"
-                                :model-value="value || ''"
-                                @update:model-value="setValue($event)"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
-                        </FormItem>
-                      </FormField>
-
-                      <FormField
-                        v-slot="{ componentField, errorMessage }"
-                        name="product.name"
-                      >
-                        <FormItem class="gap-0">
-                          <SettingsFormField
-                            :label="
-                              $t('pages.productCreationPage.fields.name.label')
-                            "
-                            label-for="product-name"
-                            :error="errorMessage"
-                            required
-                          >
-                            <FormControl>
-                              <Input
-                                id="product-name"
-                                type="text"
-                                :maxlength="FIELD_LIMITS.productName"
-                                v-bind="componentField"
-                              />
-                            </FormControl>
-                          </SettingsFormField>
-                        </FormItem>
-                      </FormField>
-
-                      <FormField
-                        v-slot="{ componentField, errorMessage }"
-                        name="product.description"
-                      >
-                        <FormItem class="gap-1.5">
-                          <div class="flex items-center justify-between gap-2">
-                            <FieldLabel for="product-description">{{
-                              $t(
-                                "pages.productCreationPage.fields.description.label",
-                              )
-                            }}</FieldLabel>
-                            <AiDescriptionGenerator
-                              v-if="aiEnabled"
-                              :product-name="form.values.product?.name"
-                              :product-sku="form.values.product?.sku"
-                              :category-name="selectedCategory?.name"
-                              :existing-description="
-                                form.values.product?.description
-                              "
-                              :attributes-summary="aiAttributesSummary"
-                              @update:generating="
-                                isDescriptionGenerating = $event
-                              "
-                              @generated="
-                                (text) => {
-                                  form.setFieldValue(
-                                    'product.description',
-                                    text,
-                                  );
-                                  nextTick(() => autoResizeDescription());
-                                }
-                              "
-                            />
-                          </div>
-                          <div class="relative">
-                            <FormControl>
-                              <Textarea
-                                id="product-description"
-                                ref="descriptionRef"
-                                v-bind="componentField"
-                                :disabled="isDescriptionGenerating"
-                                :aria-busy="isDescriptionGenerating"
-                                :maxlength="FIELD_LIMITS.productDescription"
-                                @input="autoResizeDescription"
-                                class="min-h-24 overflow-hidden resize-none transition-opacity"
-                                :class="
-                                  isDescriptionGenerating ? 'opacity-60' : ''
-                                "
-                              />
-                            </FormControl>
-                            <div
-                              v-if="isDescriptionGenerating"
-                              class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/55"
-                            >
-                              <p
-                                class="flex items-center gap-2 text-xs text-muted-foreground"
-                              >
-                                <Spinner size="sm" />
-                                {{ descriptionGeneratingHint }}
-                              </p>
-                            </div>
-                          </div>
-                          <FieldError v-if="errorMessage">{{
-                            errorMessage
-                          }}</FieldError>
-                        </FormItem>
-                      </FormField>
-
-                      <template v-if="!selectedCategory?.hasSizes">
-                        <div class="space-y-4 border-t pt-5">
-                          <div>
-                            <InsetGroupLabel>
-                              {{
+                      </div>
+                      <div class="grid grid-cols-1 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.storageQuantity"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
                                 $t(
-                                  "pages.productCreationPage.sections.stock.title",
+                                  'pages.productCreationPage.fields.quantity.label',
                                 )
-                              }}
-                            </InsetGroupLabel>
-                            <p class="px-1 text-xs text-muted-foreground">
-                              {{
-                                $t(
-                                  "pages.productCreationPage.sections.stock.description",
-                                )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.storageQuantity"
+                              "
+                              label-for="product-quantity"
+                              :error="errorMessage"
                             >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.quantity.label',
+                              <NumberField
+                                id="product-quantity"
+                                class="w-full"
+                                :min="0"
+                                :step="1"
+                                :model-value="value ?? undefined"
+                                @update:model-value="(v) => setValue(v ?? null)"
+                              >
+                                <NumberFieldContent class="w-full">
+                                  <NumberFieldDecrement />
+                                  <FormControl>
+                                    <NumberFieldInput />
+                                  </FormControl>
+                                  <NumberFieldIncrement />
+                                </NumberFieldContent>
+                              </NumberField>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
+
+                    <div class="space-y-4 border-t pt-5">
+                      <div>
+                        <InsetGroupLabel>
+                          {{
+                            $t("pages.productCreationPage.sections.price.title")
+                          }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
+                          {{
+                            $t(
+                              "pages.productCreationPage.sections.price.description",
+                              {
+                                currency:
+                                  storeBaseCurrency ||
+                                  $t(
+                                    "pages.productCreationPage.fields.price.defaultCurrencyFallback",
+                                  ),
+                              },
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <div class="grid grid-cols-1 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.price"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productCreationPage.fields.price.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              label-for="product-price"
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  id="product-price"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
                                     )
                                   "
-                                  label-for="product-quantity"
-                                  :error="errorMessage"
-                                >
-                                  <NumberField
-                                    id="product-quantity"
-                                    class="w-full"
-                                    :min="0"
-                                    :step="1"
-                                    :model-value="value ?? undefined"
-                                    @update:model-value="
-                                      (v) => setValue(v ?? null)
-                                    "
-                                  >
-                                    <NumberFieldContent class="w-full">
-                                      <NumberFieldDecrement />
-                                      <FormControl>
-                                        <NumberFieldInput />
-                                      </FormControl>
-                                      <NumberFieldIncrement />
-                                    </NumberFieldContent>
-                                  </NumberField>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
+                                />
+                              </FormControl>
+                              <p
+                                v-if="pricePreview(value).length"
+                                class="text-xs text-muted-foreground mt-1"
+                              >
+                                {{ pricePreview(value).join(" · ") }}
+                              </p>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
 
-                        <div class="space-y-4 border-t pt-5">
-                          <div>
-                            <InsetGroupLabel>
-                              {{
+                    <div
+                      v-if="extendedPriceParameters"
+                      class="space-y-4 border-t pt-5"
+                    >
+                      <div>
+                        <InsetGroupLabel>
+                          {{
+                            $t(
+                              "pages.productCreationPage.sections.extendedPrice.title",
+                            )
+                          }}
+                        </InsetGroupLabel>
+                        <p class="px-1 text-xs text-muted-foreground">
+                          {{
+                            $t(
+                              "pages.productCreationPage.sections.extendedPrice.description",
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.oldPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
                                 $t(
-                                  "pages.productCreationPage.sections.price.title",
+                                  'pages.productCreationPage.fields.oldPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
                                 )
-                              }}
-                            </InsetGroupLabel>
-                            <p class="px-1 text-xs text-muted-foreground">
-                              {{
+                              "
+                              :error="errorMessage"
+                              :description="
                                 $t(
-                                  "pages.productCreationPage.sections.price.description",
+                                  'pages.productCreationPage.fields.oldPrice.description',
+                                )
+                              "
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, errorMessage }"
+                          name="product.discount"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productCreationPage.fields.discount.label',
+                                )
+                              "
+                              :error="errorMessage"
+                              :description="
+                                $t(
+                                  'pages.productCreationPage.fields.discount.description',
+                                )
+                              "
+                            >
+                              <FormControl>
+                                <Input
+                                  type="text"
+                                  readonly
+                                  class="bg-muted"
+                                  :model-value="
+                                    value != null ? String(value) : '-'
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.minPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productCreationPage.fields.minPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.netPrice"
+                        >
+                          <FormItem class="gap-0">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productCreationPage.fields.netPrice.label',
+                                  {
+                                    currency:
+                                      storeBaseCurrency || $t('common.emDash'),
+                                  },
+                                )
+                              "
+                              :error="errorMessage"
+                            >
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :model-value="value"
+                                  @update:model-value="
+                                    setValue(
+                                      $event !== '' && $event != null
+                                        ? Number($event)
+                                        : null,
+                                    )
+                                  "
+                                />
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                        <FormField
+                          v-slot="{ value, setValue, errorMessage }"
+                          name="product.currency"
+                        >
+                          <FormItem class="gap-0 sm:col-span-2">
+                            <SettingsFormField
+                              :label="
+                                $t(
+                                  'pages.productCreationPage.fields.currency.label',
+                                )
+                              "
+                              :error="errorMessage"
+                              :description="
+                                $t(
+                                  'pages.productCreationPage.fields.currency.description',
                                   {
                                     currency:
                                       storeBaseCurrency ||
                                       $t(
-                                        "pages.productCreationPage.fields.price.defaultCurrencyFallback",
+                                        'pages.productCreationPage.fields.currency.defaultCurrencyFallback',
                                       ),
                                   },
                                 )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.price"
+                              "
                             >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.price.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  label-for="product-price"
-                                  :error="errorMessage"
+                              <FormControl>
+                                <Select
+                                  :model-value="value || storeBaseCurrency"
+                                  @update:model-value="setValue($event)"
+                                  class="w-full"
                                 >
-                                  <FormControl>
-                                    <Input
-                                      id="product-price"
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      placeholder="0.00"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                  <p
-                                    v-if="pricePreview(value).length"
-                                    class="text-xs text-muted-foreground mt-1"
-                                  >
-                                    {{ pricePreview(value).join(" · ") }}
-                                  </p>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
-
-                        <div
-                          v-if="extendedPriceParameters"
-                          class="space-y-4 border-t pt-5"
-                        >
-                          <div>
-                            <InsetGroupLabel>
-                              {{
-                                $t(
-                                  "pages.productCreationPage.sections.extendedPrice.title",
-                                )
-                              }}
-                            </InsetGroupLabel>
-                            <p class="px-1 text-xs text-muted-foreground">
-                              {{
-                                $t(
-                                  "pages.productCreationPage.sections.extendedPrice.description",
-                                )
-                              }}
-                            </p>
-                          </div>
-                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.oldPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.oldPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productCreationPage.fields.oldPrice.description',
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, errorMessage }"
-                              name="product.discount"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.discount.label',
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productCreationPage.fields.discount.description',
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="text"
-                                      readonly
-                                      class="bg-muted"
-                                      :model-value="
-                                        value != null ? String(value) : '-'
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.minPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.minPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.netPrice"
-                            >
-                              <FormItem class="gap-0">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.netPrice.label',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t('common.emDash'),
-                                      },
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                >
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      :model-value="value"
-                                      @update:model-value="
-                                        setValue(
-                                          $event !== '' && $event != null
-                                            ? Number($event)
-                                            : null,
-                                        )
-                                      "
-                                    />
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                            <FormField
-                              v-slot="{ value, setValue, errorMessage }"
-                              name="product.currency"
-                            >
-                              <FormItem class="gap-0 sm:col-span-2">
-                                <SettingsFormField
-                                  :label="
-                                    $t(
-                                      'pages.productCreationPage.fields.currency.label',
-                                    )
-                                  "
-                                  :error="errorMessage"
-                                  :description="
-                                    $t(
-                                      'pages.productCreationPage.fields.currency.description',
-                                      {
-                                        currency:
-                                          storeBaseCurrency ||
-                                          $t(
-                                            'pages.productCreationPage.fields.currency.defaultCurrencyFallback',
-                                          ),
-                                      },
-                                    )
-                                  "
-                                >
-                                  <FormControl>
-                                    <Select
-                                      :model-value="value || storeBaseCurrency"
-                                      @update:model-value="setValue($event)"
-                                      class="w-full"
+                                  <SelectTrigger class="w-full"
+                                    ><SelectValue
+                                  /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem
+                                      v-for="c in storeCurrencies"
+                                      :key="c.code"
+                                      :value="c.code"
+                                      >{{ c.code }}</SelectItem
                                     >
-                                      <SelectTrigger class="w-full"
-                                        ><SelectValue
-                                      /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem
-                                          v-for="c in storeCurrencies"
-                                          :key="c.code"
-                                          :value="c.code"
-                                          >{{ c.code }}</SelectItem
-                                        >
-                                      </SelectContent>
-                                    </Select>
-                                  </FormControl>
-                                </SettingsFormField>
-                              </FormItem>
-                            </FormField>
-                          </div>
-                        </div>
-                      </template>
+                                  </SelectContent>
+                                </Select>
+                              </FormControl>
+                            </SettingsFormField>
+                          </FormItem>
+                        </FormField>
+                      </div>
+                    </div>
+                  </template>
                 </SettingsFormSection>
 
                 <ProductAttributeForm
@@ -1538,10 +1518,7 @@ export default {
                           class="inline-flex"
                           :tabindex="isSaveDisabled ? 0 : undefined"
                         >
-                          <Button
-                            type="submit"
-                            :disabled="isSaveDisabled"
-                          >
+                          <Button type="submit" :disabled="isSaveDisabled">
                             <Spinner v-if="isSubmitting" class="mr-2" />
                             <Plus v-else class="size-4 mr-2" />
                             {{

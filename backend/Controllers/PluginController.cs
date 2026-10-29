@@ -32,7 +32,7 @@ public class PluginController : ControllerBase
     private static void EnsurePluginsManagementEnabled()
     {
         if (!FeatureFlags.IsPluginsEnabled())
-            throw ApiException.NotFound("Plugin management is disabled", code: "plugins_disabled");
+            throw ApiException.NotFound(code: "plugins_disabled");
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public class PluginController : ControllerBase
         EnsurePluginsManagementEnabled();
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
-            throw ApiException.NotFound($"Plugin '{key}' not found");
+            throw ApiException.NotFound(code: "plugin_not_found");
 
         var plugin = loaded.Plugin;
 
@@ -98,21 +98,21 @@ public class PluginController : ControllerBase
     {
         EnsurePluginsManagementEnabled();
         if (file == null || file.Length == 0)
-            throw ApiException.BadRequest("No file provided", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "plugin_file_required");
 
         var safeFileName = FileNameSafety.Sanitize(file.FileName, "plugin.dll");
         if (!safeFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            throw ApiException.BadRequest("Only .dll files are allowed");
+            throw ApiException.BadRequest(code: "plugin_file_type_invalid");
 
         // Validate file size (max 50MB)
         if (file.Length > 50 * 1024 * 1024)
-            throw ApiException.BadRequest("File is too large. Maximum size is 50 MB");
+            throw ApiException.BadRequest(code: "plugin_file_too_large");
 
         var pluginsDir = _pluginManager.PluginsDirectory;
         var destPath = Path.GetFullPath(Path.Combine(pluginsDir, safeFileName));
         if (!destPath.StartsWith(Path.GetFullPath(pluginsDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !destPath.Equals(Path.GetFullPath(pluginsDir), StringComparison.OrdinalIgnoreCase))
-            throw ApiException.BadRequest("Invalid plugin file name");
+            throw ApiException.BadRequest(code: "plugin_file_name_invalid");
 
         // If file exists, check if plugin is loaded and unload it first
         if (System.IO.File.Exists(destPath))
@@ -165,7 +165,7 @@ public class PluginController : ControllerBase
             }
 
             _logger.LogError(ex, "Failed to install plugin from {File}", safeFileName);
-            throw ApiException.BadRequest($"Failed to load plugin: {ex.Message}");
+            throw ApiException.BadRequest(code: "plugin_load_failed");
         }
     }
 
@@ -179,16 +179,16 @@ public class PluginController : ControllerBase
         EnsurePluginsManagementEnabled();
         var loaded = _pluginManager.GetLoadedPlugin(key);
         if (loaded == null)
-            throw ApiException.NotFound($"Plugin '{key}' not found");
+            throw ApiException.NotFound(code: "plugin_not_found");
 
         if (loaded.Plugin.IsSystem)
-            throw ApiException.BadRequest("A system plugin cannot be deleted");
+            throw ApiException.BadRequest(code: "system_plugin_protected");
 
         var filePath = loaded.FilePath;
 
         // Unload plugin
         if (!_pluginManager.UnloadPlugin(key))
-            throw ApiException.BadRequest($"Failed to unload plugin '{key}'");
+            throw ApiException.BadRequest(code: "plugin_unload_failed");
 
         // Invalidate registry cache
         _registry.InvalidateCache(key);
@@ -227,7 +227,7 @@ public class PluginController : ControllerBase
         {
             var reloaded = _pluginManager.ReloadPlugin(key);
             if (reloaded == null)
-                throw ApiException.NotFound($"Plugin '{key}' not found");
+                throw ApiException.NotFound(code: "plugin_not_found");
 
             // Invalidate registry cache
             _registry.InvalidateCache(key);
@@ -262,7 +262,7 @@ public class PluginController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reload plugin {Key}", key);
-            throw ApiException.BadRequest($"Failed to reload plugin: {ex.Message}");
+            throw ApiException.BadRequest(code: "plugin_reload_failed");
         }
     }
 }

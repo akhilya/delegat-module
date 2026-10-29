@@ -60,7 +60,7 @@ public class ErrorLogController : ControllerBase
     {
         var log = await _context.errorLogs.FindAsync(id);
         if (log == null)
-            throw ApiException.NotFound("Error log entry not found");
+            throw ApiException.NotFound(code: "error_log_not_found");
 
         _context.errorLogs.Remove(log);
         await _context.SaveChangesAsync();

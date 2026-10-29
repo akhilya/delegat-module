@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { radioGroupNextIndex } from "./radioGroup.js";
 import {
   adapterGroupLabel,
   groupToolsCatalog,
   isJobTool,
   isPageTool,
   isQuickRunTool,
+  isValidImportProductLimit,
+  requiresSingleConnectionSelection,
   toolConfirmTitleKey,
   toolDescription,
   toolGroupId,
@@ -97,13 +100,48 @@ describe("toolsCatalog", () => {
       toolQuickTooltipKey(entry),
       "pages.toolsPage.exportAllPricesQuickTooltip",
     );
-    assert.equal(isQuickRunTool({ id: "catalog-connect", mode: "page" }), false);
+    assert.equal(
+      isQuickRunTool({ id: "catalog-connect", mode: "page" }),
+      false,
+    );
+  });
+
+  it("requires an explicit connection for the single-connection actions", () => {
+    const ids = [
+      "export-prices",
+      "export-stocks",
+      "import-prices",
+      "import-products",
+      "verify-product-links",
+      "check-export-readiness",
+      "compare-prices",
+    ];
+    for (const id of ids) {
+      assert.equal(requiresSingleConnectionSelection({ id }), true);
+    }
+    assert.equal(
+      requiresSingleConnectionSelection({ id: "export-all-prices" }),
+      false,
+    );
+  });
+
+  it("accepts only whole-number product import limits from 1 through 200", () => {
+    for (const value of [1, "1", 50, "200", 200]) {
+      assert.equal(isValidImportProductLimit(value), true);
+    }
+    for (const value of [null, "", 0, -1, 201, 1.5, "many", Infinity]) {
+      assert.equal(isValidImportProductLimit(value), false);
+    }
   });
 
   it("groups catalog entries into separate lists", () => {
     const sections = groupToolsCatalog([
       { id: "public-api-try", group: "api" },
-      { id: "wildberries.ok-tool", source: "adapter", adapterKey: "wildberries" },
+      {
+        id: "wildberries.ok-tool",
+        source: "adapter",
+        adapterKey: "wildberries",
+      },
       { id: "catalog-scrape", group: "catalog" },
       { id: "export-all-prices", group: "prices", mode: "job", quickRun: true },
       { id: "ozon.scraper", source: "adapter", adapterKey: "ozon" },
@@ -112,7 +150,14 @@ describe("toolsCatalog", () => {
     ]);
     assert.deepEqual(
       sections.map((s) => s.id),
-      ["catalog", "prices", "promotions", "api", "adapter:ozon", "adapter:wildberries"],
+      [
+        "catalog",
+        "prices",
+        "promotions",
+        "api",
+        "adapter:ozon",
+        "adapter:wildberries",
+      ],
     );
     assert.deepEqual(
       sections[0].tools.map((e) => e.id),
@@ -138,6 +183,29 @@ describe("toolsCatalog", () => {
     assert.equal(blocks[2].tools[0].id, "catalog-scrape");
   });
 
+  it("keeps single-connection quick-run actions on their configured tool page", () => {
+    const blocks = toolSectionBlocks([
+      {
+        id: "import-products",
+        mode: "job",
+        quickRun: true,
+        requiresConnection: true,
+      },
+      {
+        id: "export-all-prices",
+        mode: "job",
+        quickRun: true,
+        requiresConnection: true,
+      },
+    ]);
+    assert.deepEqual(
+      blocks.map((block) => block.type),
+      ["list", "job"],
+    );
+    assert.equal(blocks[0].tools[0].id, "import-products");
+    assert.equal(blocks[1].entry.id, "export-all-prices");
+  });
+
   it("labels experimental tools and treats missing stage as stable", () => {
     assert.equal(toolStage({ stage: "experimental" }), "experimental");
     assert.equal(toolStage({ stage: "Experimental" }), "experimental");
@@ -150,5 +218,21 @@ describe("toolsCatalog", () => {
     assert.equal(toolStageClass({ stage: "experimental" }), "text-warning");
     assert.equal(toolStageLabelKey({ stage: "stable" }), "");
     assert.equal(toolStageClass({ stage: "deprecated" }), "text-destructive");
+  });
+});
+
+describe("radio group keyboard navigation", () => {
+  it("moves in either direction and wraps between options", () => {
+    assert.equal(radioGroupNextIndex(4, 1, "ArrowRight"), 2);
+    assert.equal(radioGroupNextIndex(4, 1, "ArrowDown"), 2);
+    assert.equal(radioGroupNextIndex(4, 0, "ArrowLeft"), 3);
+    assert.equal(radioGroupNextIndex(4, 3, "ArrowUp"), 2);
+  });
+
+  it("supports Home and End and ignores unrelated keys", () => {
+    assert.equal(radioGroupNextIndex(4, 2, "Home"), 0);
+    assert.equal(radioGroupNextIndex(4, 1, "End"), 3);
+    assert.equal(radioGroupNextIndex(4, 1, "Tab"), null);
+    assert.equal(radioGroupNextIndex(0, 0, "ArrowRight"), null);
   });
 });

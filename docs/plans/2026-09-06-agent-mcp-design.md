@@ -1,5 +1,7 @@
 # Agent, MCP, and platform context
 
+> **Implemented design record.** Use [`docs/architecture/ai-system.md`](../architecture/ai-system.md), [`docs/architecture/ai-assistant.md`](../architecture/ai-assistant.md), and [`docs/api/mcp.md`](../api/mcp.md) for current behavior.
+
 Locked 2026-09-06. English. This is the canon for the instance AI rewrite. It supersedes the 84 named LLM tools in [`docs/architecture/ai-system.md`](../architecture/ai-system.md) and [`docs/architecture/ai-assistant.md`](../architecture/ai-assistant.md).
 
 ## Problem
@@ -47,7 +49,7 @@ Host parses a small `SELECT` grammar. Allowlisted tables/columns only. `storeId`
 
 ## Python sandbox
 
-Sidecar (`sandbox/python`). Curated packages: pandas, pillow, openpyxl. No `pip install`. Network to the instance Agent HTTP only. Short-lived token. `/tmp` workspace. Audit `aiSandboxRuns`. Compose cgroup 0.50 CPU / 512 MiB / no extra swap; one job at a time; BLAS single-thread. If `SANDBOX_URL` is unset, `run_python` is omitted from the tool catalog (a direct call still returns `sandbox_not_configured`).
+Sidecar (`sandbox/python`). Curated packages: pandas, pillow, openpyxl. No `pip install`. The SDK is intended to call instance Agent HTTP; the original design's “network to Agent HTTP only” restriction was **not enforced** by the implementation. Arbitrary Python can use outbound networking, and the job receives the caller's authorization plus legacy Marketplace credentials unless broker mode applies. This remains a security risk; see the current [AI system architecture](../architecture/ai-system.md) and [AI-agent audit](../architecture/ai-agent-audit.md). `/tmp` workspace. Audit `aiSandboxRuns`. Compose cgroup 0.50 CPU / 512 MiB / no extra swap; one job at a time; BLAS single-thread. If `SANDBOX_URL` is unset, `run_python` is omitted from the tool catalog (a direct call still returns `sandbox_not_configured`).
 
 ## Local files (north-star)
 

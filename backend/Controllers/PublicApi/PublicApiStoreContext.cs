@@ -23,7 +23,7 @@ public class PublicApiStoreContext
     {
         var userId = _currentUser.GetUserId();
         if (userId == null)
-            throw ApiException.Unauthorized("Invalid or missing API key");
+            throw ApiException.Unauthorized(code: "unauthorized");
         return userId.Value;
     }
 
@@ -36,7 +36,7 @@ public class PublicApiStoreContext
             .AnyAsync(s => s.Id == storeId && s.members.Any(m => m.Id == userId && m.isActive), ct);
 
         if (!isMember)
-            throw ApiException.Forbidden("No access to this store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
     }
 
     public async Task<(int userId, int storeId)> RequireStoreAsync(int storeId, CancellationToken ct = default)

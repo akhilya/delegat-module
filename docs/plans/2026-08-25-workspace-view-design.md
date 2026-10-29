@@ -1,5 +1,7 @@
 # Workspace view (read-only cabinet)
 
+> **Implemented design record.** Verify against current permission tests and implementation before changing behavior.
+
 Demo-cabinet users need to browse the whole workspace without changing data. Plugins stay closed.
 
 ## Permission

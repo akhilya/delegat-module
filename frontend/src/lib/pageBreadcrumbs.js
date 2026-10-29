@@ -26,6 +26,7 @@ const PAGE_CATALOG_CONNECT = "/tools/catalog-connect";
 const PAGE_CATALOG_SCRAPE = "/tools/catalog-scrape";
 const PAGE_PUBLIC_API_TRY = "/tools/public-api-try";
 const PAGE_TOOL_JOB = "/tools/:toolId";
+const PAGE_SCHEDULED_TASKS = "/tools/scheduled-tasks";
 const PAGE_SETTINGS = "/settings";
 const PAGE_SETTINGS_USER = "/settings/user";
 const PAGE_ADMIN_STORES = "/settings/admin/stores";
@@ -231,6 +232,11 @@ export function resolvePageBreadcrumbs({
       ];
     case PAGE_TOOLS:
       return [crumb(t("routes.tools"))];
+    case PAGE_SCHEDULED_TASKS:
+      return [
+        crumb(t("routes.tools"), PAGE_TOOLS),
+        crumb(t("routes.scheduledTasks")),
+      ];
     case PAGE_CATALOG_CONNECT:
       return [
         crumb(t("routes.tools"), PAGE_TOOLS),

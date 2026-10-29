@@ -74,7 +74,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             () => adapter.CreateShipmentAsync(connection, body ?? new CreateShipmentRequest(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Shipment create failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -97,7 +97,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             () => adapter.GetShipmentAsync(connection, shipmentId, ct),
             "shipment_failed");
         if (shipment == null)
-            throw ApiException.NotFound("Shipment not found", code: "shipment_not_found");
+            throw ApiException.NotFound(code: "shipment_not_found");
         return Ok(shipment);
     }
 
@@ -120,7 +120,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, body ?? new ShipmentOrdersUpdate(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not add orders to the shipment", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -164,7 +164,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
                 connection, shipmentId, body ?? new CreateShipmentBoxesRequest(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not create shipment boxes", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -189,7 +189,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
                 connection, shipmentId, boxId, body ?? new ShipmentOrdersUpdate(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not assign orders to the box", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -212,7 +212,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             () => adapter.GetShipmentBoxLabelAsync(connection, shipmentId, boxId, ct),
             "shipment_failed");
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Box label download failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result.Label);
     }
 
@@ -234,7 +234,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             () => adapter.GetShipmentLabelAsync(connection, shipmentId, ct),
             "shipment_failed");
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Shipment label download failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result.Label);
     }
 }

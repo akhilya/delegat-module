@@ -16,10 +16,17 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string>());
 
-        Assert.Equal(4, entries.Count);
+        Assert.Equal(11, entries.Count);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId && e.Stage == ToolStages.Stable);
         Assert.Contains(entries, e => e.Id == PlatformTools.ExportAllPricesId);
         Assert.Contains(entries, e => e.Id == PlatformTools.ClearPromotionProductsId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ExportPricesId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ExportStocksId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ImportPricesId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ImportProductsId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.VerifyProductLinksId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.CheckExportReadinessId);
+        Assert.Contains(entries, e => e.Id == PlatformTools.ComparePricesId);
         var scrape = Assert.Single(entries, e => e.Id == PlatformTools.CatalogScrapeId);
         Assert.Equal(ToolSources.Platform, scrape.Source);
         Assert.Equal(ToolModes.Page, scrape.Mode);
@@ -28,6 +35,29 @@ public class ToolCatalogComposerTests
         Assert.Equal(ToolStages.Experimental, scrape.Stage);
         Assert.True(scrape.Available);
         Assert.DoesNotContain(entries, e => e.Id == PlatformTools.PublicApiTryId);
+    }
+
+    [Fact]
+    public void MarketplaceActions_AreConnectionBoundAndRegisteredAsPlatformJobs()
+    {
+        var entries = ToolCatalogComposer.Compose(
+            PlatformTools.All,
+            [],
+            new HashSet<string> { Permissions.MarketplaceManage },
+            new HashSet<string>());
+
+        foreach (var id in PlatformTools.MarketplaceActionIds)
+        {
+            var entry = Assert.Single(entries, e => e.Id == id);
+            Assert.Equal(ToolModes.Job, entry.Mode);
+            Assert.True(entry.RequiresConnection);
+            Assert.True(entry.QuickRun);
+            Assert.True(PlatformTools.IsPlatformJob(id));
+        }
+
+        var import = Assert.Single(entries, e => e.Id == PlatformTools.ImportProductsId);
+        Assert.Contains(import.Params, p => p.Key == "maxProducts" && p.IsRequired);
+        Assert.Contains(import.Params, p => p.Key == "targetCategoryId" && !p.IsRequired);
     }
 
     [Fact]
@@ -118,7 +148,7 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string>());
 
-        Assert.Equal(5, entries.Count);
+        Assert.Equal(12, entries.Count);
         var job = entries.Single(e => e.Source == ToolSources.Adapter);
         Assert.Equal("wildberries.duplicate-cards", job.Id);
         Assert.Equal("/tools/wildberries.duplicate-cards", job.Path);
@@ -167,7 +197,7 @@ public class ToolCatalogComposerTests
             new HashSet<string> { Permissions.MarketplaceManage },
             new HashSet<string> { "wildberries" });
 
-        Assert.Equal(6, entries.Count);
+        Assert.Equal(13, entries.Count);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogConnectId && e.Source == ToolSources.Platform);
         Assert.Contains(entries, e => e.Id == PlatformTools.CatalogScrapeId && e.Source == ToolSources.Platform);
         Assert.Contains(entries, e => e.Id == "wildberries.catalog-connect");

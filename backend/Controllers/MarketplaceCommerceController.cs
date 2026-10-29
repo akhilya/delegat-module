@@ -154,16 +154,22 @@ public class MarketplaceCommerceController : ControllerBase
     public async Task<IActionResult> SyncConnectionOrders(
         int connectionId,
         [FromQuery] string? status = null,
+        [FromQuery] string? statuses = null,
         CancellationToken ct = default)
     {
         var storeId = await RequireStoreAsync();
         var (connection, _) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.GetOrders, ct);
-        IReadOnlyList<string> statuses = string.IsNullOrWhiteSpace(status)
-            ? MarketplaceOrderBuckets.ListStatusesForAdapter(connection.adapterKey)
-            : [status];
+        IReadOnlyList<string> statusesToSync = !string.IsNullOrWhiteSpace(statuses)
+            ? statuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(32)
+                .ToArray()
+            : string.IsNullOrWhiteSpace(status)
+                ? MarketplaceOrderBuckets.ListStatusesForAdapter(connection.adapterKey)
+                : [status];
         var result = await _orderSync.SyncConnectionStatusesAsync(
-            connection, statuses, "page", ct);
+            connection, statusesToSync, "page", ct);
         return Ok(new
         {
             pulled = result.Pulled,
@@ -183,7 +189,7 @@ public class MarketplaceCommerceController : ControllerBase
         var order = await MarketplaceCommerceService.InvokeAsync(
             () => _commerce.GetStoredOrderAsync(connection, adapter, orderId, liveFallback: true, ct));
         if (order == null)
-            throw ApiException.NotFound("Order not found", code: "order_not_found");
+            throw ApiException.NotFound(code: "order_not_found");
         await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, [order], ct);
         return Ok(order);
     }
@@ -198,14 +204,14 @@ public class MarketplaceCommerceController : ControllerBase
     {
         var storeId = await RequireStoreAsync();
         if (body == null || string.IsNullOrWhiteSpace(body.Action))
-            throw ApiException.BadRequest("action is required", code: "validation_error");
+            throw ApiException.BadRequest(code: "order_action_required");
 
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdateOrderStatus, ct);
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdateOrderStatusAsync(connection, orderId, body, ct));
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Order status update failed", code: "order_status_failed");
+            throw ApiException.BadRequest(code: "order_status_failed");
         await _commerce.FinishSellerStatusAsync(
             connection, adapter, orderId, body.Action, result, ct);
         return Ok(result);
@@ -221,7 +227,7 @@ public class MarketplaceCommerceController : ControllerBase
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.GetOrderLabelAsync(connection, orderId, ct));
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Order label download failed", code: "order_label_failed");
+            throw ApiException.BadRequest(code: "order_label_failed");
         return Ok(result.Label);
     }
 
@@ -284,7 +290,7 @@ public class MarketplaceCommerceController : ControllerBase
             () => adapter.CreateShipmentAsync(connection, body ?? new CreateShipmentRequest(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Shipment create failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -299,7 +305,7 @@ public class MarketplaceCommerceController : ControllerBase
             () => adapter.GetShipmentAsync(connection, shipmentId, ct),
             "shipment_failed");
         if (shipment == null)
-            throw ApiException.NotFound("Shipment not found", code: "shipment_not_found");
+            throw ApiException.NotFound(code: "shipment_not_found");
         return Ok(shipment);
     }
 
@@ -318,7 +324,7 @@ public class MarketplaceCommerceController : ControllerBase
             () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, body ?? new ShipmentOrdersUpdate(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not add orders to the shipment", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -351,7 +357,7 @@ public class MarketplaceCommerceController : ControllerBase
                 connection, shipmentId, body ?? new CreateShipmentBoxesRequest(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not create shipment boxes", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -372,7 +378,7 @@ public class MarketplaceCommerceController : ControllerBase
                 connection, shipmentId, boxId, body ?? new ShipmentOrdersUpdate(), ct),
             "shipment_failed");
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Could not assign orders to the box", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result);
     }
 
@@ -391,7 +397,7 @@ public class MarketplaceCommerceController : ControllerBase
             () => adapter.GetShipmentBoxLabelAsync(connection, shipmentId, boxId, ct),
             "shipment_failed");
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Box label download failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result.Label);
     }
 
@@ -406,7 +412,7 @@ public class MarketplaceCommerceController : ControllerBase
             () => adapter.GetShipmentLabelAsync(connection, shipmentId, ct),
             "shipment_failed");
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Shipment label download failed", code: "shipment_failed");
+            throw ApiException.BadRequest(code: "shipment_failed");
         return Ok(result.Label);
     }
 
@@ -454,7 +460,7 @@ public class MarketplaceCommerceController : ControllerBase
         var promo = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.GetPromotionAsync(connection, promotionId, ct));
         if (promo == null)
-            throw ApiException.NotFound("Promotion not found", code: "promotion_not_found");
+            throw ApiException.NotFound(code: "promotion_not_found");
         return Ok(promo);
     }
 
@@ -472,7 +478,7 @@ public class MarketplaceCommerceController : ControllerBase
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdatePromotionProductsAsync(connection, promotionId, body ?? new PromotionProductsUpdate(), ct));
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Promotion update failed", code: "promotion_update_failed");
+            throw ApiException.BadRequest(code: "promotion_update_failed");
         return Ok(result);
     }
 
@@ -480,7 +486,7 @@ public class MarketplaceCommerceController : ControllerBase
     {
         var selectedStoreId = await _currentUser.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
         return selectedStoreId.Value;
     }
 }

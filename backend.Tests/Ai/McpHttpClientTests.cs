@@ -23,7 +23,7 @@ public class McpHttpClientTests
         Assert.Equal("notifications/initialized", MethodOf(handler.Bodies[1]));
         Assert.Equal("tools/list", MethodOf(handler.Bodies[2]));
         Assert.Contains("Bearer secret-token", handler.Requests[0].Headers.Authorization?.ToString());
-        Assert.Equal("mcp12_get_weather", tools[0].name);
+        Assert.Equal(McpToolNames.ForLlm(12, "get_weather"), tools[0].name);
         Assert.Equal("get_weather", tools[0].McpRemoteName);
         Assert.Equal("Weather", tools[0].description);
         Assert.Contains("location", tools[0].input_schema.required!);
@@ -60,13 +60,45 @@ public class McpHttpClientTests
         var client = new McpHttpClient(new HttpClient(handler));
 
         var (_, summary) = await client.CallMappedToolAsync(
-            12, "https://mcp.example.test/mcp", null, "mcp12_get_weather", "{}", default);
+            12, "https://mcp.example.test/mcp", null,
+            McpToolNames.ForLlm(12, "get weather!"), "{}", default);
 
         Assert.Equal("tools/list", MethodOf(handler.Bodies[2]));
         Assert.Equal("tools/call", MethodOf(handler.Bodies[3]));
         Assert.Contains("\"name\":\"get weather!\"", handler.Bodies[3]);
         Assert.DoesNotContain("mcp12_", handler.Bodies[3]);
         Assert.Contains("get weather!", summary);
+    }
+
+    [Fact]
+    public async Task CallMappedToolAsync_ReusesListedToolsAndInitializedSession()
+    {
+        var initialize = InitializeOk();
+        initialize.Headers.Add("Mcp-Session-Id", "session-1");
+        var handler = new ScriptedHandler(
+            initialize,
+            Accepted(),
+            JsonRpc(2, """
+                {"tools":[
+                  {"name":"get weather!","inputSchema":{"type":"object"}},
+                  {"name":"get_weather","inputSchema":{"type":"object"}}
+                ]}
+                """),
+            JsonRpc(3, """{"content":[{"type":"text","text":"second tool"}]}"""));
+        var client = new McpHttpClient(new HttpClient(handler));
+
+        var tools = await client.ListToolsAsync(12, "https://mcp.example.test/mcp", null, default);
+        Assert.Equal(2, tools.Count);
+        Assert.NotEqual(tools[0].name, tools[1].name);
+
+        var (_, summary) = await client.CallMappedToolAsync(
+            12, "https://mcp.example.test/mcp", null, tools[1].name, "{}", default);
+
+        Assert.Equal(4, handler.Requests.Count);
+        Assert.Equal("tools/call", MethodOf(handler.Bodies[3]));
+        Assert.Contains("\"name\":\"get_weather\"", handler.Bodies[3].Replace(" ", ""));
+        Assert.Equal("session-1", handler.Requests[3].Headers.GetValues("Mcp-Session-Id").Single());
+        Assert.Contains("get_weather", summary);
     }
 
     [Fact]
@@ -81,7 +113,25 @@ public class McpHttpClientTests
 
         var tools = await client.ListToolsAsync(1, "https://mcp.example.test/mcp", null, default);
 
-        Assert.Equal("mcp1_ping", tools[0].name);
+        Assert.Equal(McpToolNames.ForLlm(1, "ping"), tools[0].name);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_RejectsOversizedMcpResponse()
+    {
+        var oversized = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(new byte[McpHttpClient.MaxResponseBytes + 1]),
+        };
+        oversized.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        var handler = new ScriptedHandler(InitializeOk(), Accepted(), oversized);
+        var client = new McpHttpClient(new HttpClient(handler));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.ListToolsAsync(1, "https://mcp.example.test/mcp", null, default));
+
+        Assert.Contains("response exceeds", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("tools/list", MethodOf(handler.Bodies[2]));
     }
 
     private static string MethodOf(string json)

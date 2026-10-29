@@ -122,13 +122,13 @@ public class CatalogMatchService
     }
 
     /// <summary>
-    /// fromLocal = look up each unlinked local SKU/barcode (used when that set is small).
-    /// fromRemote = page the marketplace catalog (only when local lookup would be too large).
+    /// fromLocal = look up each unlinked local SKU/barcode when catalog listing is unavailable.
+    /// fromRemote = page the marketplace catalog when the adapter supports listing it.
     /// </summary>
     internal static string ChoosePreviewMode(bool hasAll, bool hasOne, int localCount)
     {
-        if (hasOne && localCount <= LocalLookupThreshold)
-            return "fromLocal";
+        // A single catalog walk is preferable to one lookup walk per SKU/chunk
+        // (notably on rate-limited adapters such as Wildberries).
         if (hasAll)
             return "fromRemote";
         return "fromLocal";

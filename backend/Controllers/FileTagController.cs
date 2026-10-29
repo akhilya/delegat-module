@@ -38,7 +38,7 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var tags = await _context.tagDefinitions
             .Where(td => td.storeId == storeId.Value)
@@ -64,10 +64,10 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (string.IsNullOrWhiteSpace(input.name))
-            throw ApiException.BadRequest("Tag name is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "tag_name_required");
 
         var trimmedName = input.name.Trim();
         if (trimmedName.Length > TagDefinition.TAG_NAME_MAX_LENGTH)
@@ -100,18 +100,18 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var tag = await _context.tagDefinitions
             .FirstOrDefaultAsync(td => td.Id == id && td.storeId == storeId.Value, ct);
         if (tag == null)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         if (input.name != null)
         {
             var trimmed = input.name.Trim();
             if (trimmed.Length == 0)
-                throw ApiException.BadRequest("Tag name is required", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "tag_name_required");
             if (trimmed.Length > TagDefinition.TAG_NAME_MAX_LENGTH)
                 throw ApiException.BadRequest($"Tag name cannot be longer than {TagDefinition.TAG_NAME_MAX_LENGTH} characters");
 
@@ -139,12 +139,12 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var tag = await _context.tagDefinitions
             .FirstOrDefaultAsync(td => td.Id == id && td.storeId == storeId.Value, ct);
         if (tag == null)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         // Remove all assignments first
         await _context.tags
@@ -170,19 +170,19 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         // Verify file belongs to this store
         var fileExists = await _context.files
             .AnyAsync(f => f.Id == fileId && f.product.storeId == storeId.Value, ct);
         if (!fileExists)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         // Verify tag belongs to this store
         var tagExists = await _context.tagDefinitions
             .AnyAsync(td => td.Id == tagId && td.storeId == storeId.Value, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         // Check if already assigned
         var alreadyAssigned = await _context.tags
@@ -204,7 +204,7 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         await _context.tags
             .Where(ft => ft.fileId == fileId && ft.tagDefinitionId == tagId)
@@ -221,16 +221,16 @@ public class FileTagController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (input.fileIds == null || input.fileIds.Length == 0)
-            throw ApiException.BadRequest("No files specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "files_required");
 
         // Verify tag
         var tagExists = await _context.tagDefinitions
             .AnyAsync(td => td.Id == input.tagId && td.storeId == storeId.Value, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         // Get already-assigned file IDs to avoid duplicates
         var alreadyAssigned = await _context.tags

@@ -75,6 +75,28 @@ public static class FeatureFlags
     public static bool IsPublicApiEnabled()
         => ParseBoolEnv("PUBLIC_API_ENABLED", defaultValue: true);
 
+    /// <summary>Allow the cabinet assistant to use tools from connected external MCP servers (default: disabled).</summary>
+    public static bool IsConnectedMcpEnabled()
+        => ParseBoolEnv("AI_CONNECTED_MCP_ENABLED", defaultValue: false);
+
+    /// <summary>
+    /// Enables Marketplace broker mode only for explicitly selected store IDs.
+    /// Unset/empty is off; use a comma/semicolon-separated list or <c>*</c> for all stores.
+    /// </summary>
+    public static bool IsMarketplaceBrokerSandboxEnabled(int storeId)
+    {
+        if (storeId <= 0)
+            return false;
+
+        var raw = Environment.GetEnvironmentVariable("MARKETPLACE_BROKER_SANDBOX_STORES");
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        return raw.Split([',', ';', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Any(value => value == "*"
+                || int.TryParse(value, out var configuredStoreId) && configuredStoreId == storeId);
+    }
+
     public static int GetQueueRetentionDays()
     {
         var raw = Environment.GetEnvironmentVariable("QUEUE_RETENTION_DAYS");

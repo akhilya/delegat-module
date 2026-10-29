@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Delegat.Services.Marketplace;
 
 public enum CatalogMatchStatus
@@ -7,9 +9,7 @@ public enum CatalogMatchStatus
     Unmatched,
 }
 
-/// <summary>
-/// Pure barcode-then-SKU matcher. No name matching.
-/// </summary>
+/// <summary>Matches by barcode, normalized SKU, then conservative normalized names.</summary>
 public static class CatalogMatchEngine
 {
     public sealed record LocalProduct(int ProductId, string? Sku, string? Barcode, string? Name);
@@ -36,6 +36,7 @@ public static class CatalogMatchEngine
     {
         var byBarcode = new Dictionary<string, List<LocalProduct>>(StringComparer.Ordinal);
         var bySku = new Dictionary<string, List<LocalProduct>>(StringComparer.Ordinal);
+        var byNamePrefix = new Dictionary<string, List<(LocalProduct Product, string Name)>>(StringComparer.Ordinal);
 
         foreach (var local in locals)
         {
@@ -46,6 +47,15 @@ public static class CatalogMatchEngine
             var sku = NormalizeSku(local.Sku);
             if (sku != null)
                 Add(bySku, sku, local);
+
+            var name = NormalizeName(local.Name);
+            if (name is { Length: >= 12 })
+            {
+                var prefix = name[..12];
+                if (!byNamePrefix.TryGetValue(prefix, out var nameHits))
+                    byNamePrefix[prefix] = nameHits = [];
+                nameHits.Add((local, name));
+            }
         }
 
         var rows = new List<MatchRow>(remotes.Count);
@@ -63,6 +73,23 @@ public static class CatalogMatchEngine
             {
                 rows.Add(BuildRow(remote, skuHits, "sku"));
                 continue;
+            }
+
+            var name = NormalizeName(remote.Name);
+            if (name is { Length: >= 12 }
+                && byNamePrefix.TryGetValue(name[..12], out var possibleNames))
+            {
+                var nameHits = possibleNames
+                    .Where(x => x.Name == name || x.Name.StartsWith(name, StringComparison.Ordinal)
+                        || name.StartsWith(x.Name, StringComparison.Ordinal))
+                    .Select(x => x.Product)
+                    .DistinctBy(x => x.ProductId)
+                    .ToList();
+                if (nameHits.Count > 0)
+                {
+                    rows.Add(BuildRow(remote, nameHits, "name"));
+                    continue;
+                }
             }
 
             rows.Add(new MatchRow(
@@ -120,7 +147,16 @@ public static class CatalogMatchEngine
     {
         if (string.IsNullOrWhiteSpace(raw))
             return null;
-        return raw.Trim().ToUpperInvariant();
+        var normalized = new string(raw.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static string? NormalizeName(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var normalized = new string(raw.Normalize(NormalizationForm.FormKC)
+            .Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        return normalized.Length == 0 ? null : normalized;
     }
 
     private static void Add(Dictionary<string, List<LocalProduct>> map, string key, LocalProduct local)

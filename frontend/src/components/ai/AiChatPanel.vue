@@ -25,10 +25,7 @@ import AiChatForm from "./AiChatForm.vue";
 import OperationContextBubble from "./OperationContextBubble.vue";
 import AiChatAttachmentList from "./AiChatAttachmentList.vue";
 import AiChatEmpty from "./AiChatEmpty.vue";
-import {
-  emptyPromptScope,
-  pickEmptyPromptKeys,
-} from "@/lib/ai/emptyPrompts";
+import { emptyPromptScope, pickEmptyPromptKeys } from "@/lib/ai/emptyPrompts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -187,7 +184,9 @@ const emptyPromptKeys = computed(() =>
     seed: `${sessionId.value}:${emptyPromptScope(store.state.aiChat.pageContext)}`,
   }),
 );
-const examplePrompts = computed(() => emptyPromptKeys.value.map((key) => t(key)));
+const examplePrompts = computed(() =>
+  emptyPromptKeys.value.map((key) => t(key)),
+);
 
 const groupedConversations = computed(() => {
   const tz = storeTimezone.value;
@@ -527,7 +526,10 @@ function replyText(msg) {
 
 function chatForms(msg) {
   const layout = turnLayout(msg);
-  const forms = [...(layout.proposal.forms || []), ...(layout.execution.forms || [])];
+  const forms = [
+    ...(layout.proposal.forms || []),
+    ...(layout.execution.forms || []),
+  ];
   const seen = new Set();
   return forms.filter((form) => {
     const key = `${form.kind}|${form.adapterKey || ""}|${form.id || ""}`;
@@ -547,15 +549,6 @@ function chatActions(msg) {
     seen.add(key);
     return true;
   });
-}
-
-function messageExecution(msg) {
-  const layout = turnLayout(msg);
-  return {
-    process: [...layout.proposal.process, ...layout.execution.process],
-    reply: replyText(msg),
-    actions: chatActions(msg),
-  };
 }
 
 function isLatestTurn(msg) {
@@ -836,6 +829,8 @@ function isLatestTurn(msg) {
                       :superseded="msg.planSuperseded"
                       :executed="msg.planExecuted"
                       :failed="msg.planFailed"
+                      :tool-calls="msg.toolCalls"
+                      :ready="msg.done"
                       @confirm="confirmPlan"
                       @cancel="cancelPlan"
                     />

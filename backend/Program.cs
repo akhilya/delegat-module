@@ -44,6 +44,10 @@ using Delegat.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Optional Sentry sink for manually instrumented, content-free AI turn traces only.
+// Without SENTRY_DSN the SDK stays disabled and no telemetry leaves the process.
+using var aiTelemetrySink = AiTelemetrySink.TryInitialize(builder.Configuration);
+
 // Suppress EF Core SQL command logging (noisy in console)
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
@@ -211,6 +215,7 @@ builder.Services.AddSingleton<ApiRequestLogService>();
 builder.Services.AddSingleton<IApiRequestLogger>(sp => sp.GetRequiredService<ApiRequestLogService>());
 builder.Services.AddSingleton<IApiRequestLogQueryService>(sp => sp.GetRequiredService<ApiRequestLogService>());
 builder.Services.AddHostedService<ApiRequestLogCleanupService>();
+builder.Services.AddHostedService<ErrorLogCleanupService>();
 builder.Services.AddHttpClient("MinIOStorage", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(30);
@@ -331,8 +336,23 @@ builder.Services.AddScoped<CatalogConnectJobService>();
 builder.Services.AddScoped<CatalogScrapeService>();
 builder.Services.AddScoped<ToolCatalogService>();
 builder.Services.AddScoped<PlatformToolJobService>();
+builder.Services.AddScoped<Delegat.Services.Marketplace.MarketplaceActionExecutor>();
 builder.Services.AddScoped<GroupSyncService>();
 builder.Services.AddScoped<PriceSyncService>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.ExportPricesScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.ExportStocksScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.ImportPricesScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.ImportProductsScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.VerifyProductLinksScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.CheckExportReadinessScheduledTaskAction>();
+builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
+    Delegat.Services.ScheduledTasks.ComparePricesScheduledTaskAction>();
 builder.Services.AddScoped<MarketplaceCommerceService>();
 builder.Services.AddScoped<ProductMappingSelectionService>();
 builder.Services.AddScoped<MarketplaceOrderSnapshotService>();
@@ -356,6 +376,7 @@ builder.Services.AddScoped<Delegat.Services.FolderJobs.FolderJobService>();
 builder.Services.AddHostedService<FolderJobBackgroundService>();
 builder.Services.AddHostedService<CatalogConnectBackgroundService>();
 builder.Services.AddHostedService<QueueCleanupBackgroundService>();
+builder.Services.AddHostedService<Delegat.Services.ScheduledTasks.ScheduledTaskBackgroundService>();
 builder.Services.AddHostedService<OrderSyncBackgroundService>();
 
 if (builder.Environment.IsDevelopment())
@@ -555,6 +576,25 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    options.AddPolicy("marketplace-broker", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("userId")?.Value
+            ?? httpContext.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        var storeId = httpContext.Request.RouteValues.TryGetValue("storeId", out var rawStoreId)
+            ? Convert.ToString(rawStoreId, System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"
+            : "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"marketplace-broker:{userId}:{storeId}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
+    });
 });
 
 // Form options for large file uploads

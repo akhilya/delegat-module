@@ -8,14 +8,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
-import {
-  Cable,
-  DollarSign,
-  Play,
-  Search,
-  Tag,
-  Wand2,
-} from "lucide-vue-next";
+import { Cable, DollarSign, Play, Search, Tag, Wand2 } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import { http } from "@/main";
 import {
@@ -33,6 +26,7 @@ import {
   toolDescription,
   toolHref,
   toolQuickTooltipKey,
+  requiresSingleConnectionSelection,
   toolSectionBlocks,
   toolStageClass,
   toolStageLabelKey,
@@ -146,6 +140,7 @@ export default {
       return (
         this.canManageMarketplace &&
         entry?.available !== false &&
+        !requiresSingleConnectionSelection(entry) &&
         !this.needsConnection(entry)
       );
     },
@@ -158,7 +153,9 @@ export default {
     },
     sectionLabel(section) {
       if (section?.adapterKey) {
-        const adapter = this.adapters.find((item) => item.key === section.adapterKey);
+        const adapter = this.adapters.find(
+          (item) => item.key === section.adapterKey,
+        );
         return adapter?.displayName || adapterGroupLabel(section.adapterKey);
       }
       const key = SECTION_LABEL_KEYS[section?.id];
@@ -180,9 +177,14 @@ export default {
           { cache: false, timeout: 5 * 60 * 1000 },
         );
         const result = extractResponseData({ data: response.data }, {});
-        const body = result?.value && typeof result.value === "object" ? result.value : result;
+        const body =
+          result?.value && typeof result.value === "object"
+            ? result.value
+            : result;
         this.$store.dispatch("operations/openPanel");
-        displaySonnerSuccess(body.message || this.$t("pages.toolJob.runStarted"));
+        displaySonnerSuccess(
+          body.message || this.$t("pages.toolJob.runStarted"),
+        );
       } catch (error) {
         displaySonnerError(error);
       } finally {
@@ -233,107 +235,102 @@ export default {
       </p>
       <div class="flex flex-col gap-8">
         <section v-for="section in catalogSections" :key="section.id">
-            <InsetGroupLabel>{{ sectionLabel(section) }}</InsetGroupLabel>
-            <div class="flex flex-col gap-2">
-              <template
-                v-for="block in sectionBlocks(section)"
-                :key="block.key"
-              >
-                <InsetGroup v-if="block.type === 'list'">
-                  <InsetGroupItem
-                    v-for="entry in block.tools"
-                    :key="entry.id"
-                    :as="RouterLink"
-                    :to="toolHref(entry)"
-                    show-chevron
+          <InsetGroupLabel>{{ sectionLabel(section) }}</InsetGroupLabel>
+          <div class="flex flex-col gap-2">
+            <template v-for="block in sectionBlocks(section)" :key="block.key">
+              <InsetGroup v-if="block.type === 'list'">
+                <InsetGroupItem
+                  v-for="entry in block.tools"
+                  :key="entry.id"
+                  :as="RouterLink"
+                  :to="toolHref(entry)"
+                  show-chevron
+                >
+                  <template #leading>
+                    <AdapterIcon
+                      v-if="entry.adapterKey"
+                      :adapter-key="entry.adapterKey"
+                      class="size-4"
+                    />
+                    <component :is="iconFor(entry)" v-else class="size-4" />
+                  </template>
+                  <p class="truncate">{{ toolTitle(entry, $t) }}</p>
+                  <p
+                    class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
                   >
-                    <template #leading>
-                      <AdapterIcon
-                        v-if="entry.adapterKey"
-                        :adapter-key="entry.adapterKey"
-                        class="size-4"
-                      />
-                      <component :is="iconFor(entry)" v-else class="size-4" />
-                    </template>
-                    <p class="truncate">{{ toolTitle(entry, $t) }}</p>
-                    <p
-                      class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
-                    >
-                      {{ toolDescription(entry, $t) }}
-                    </p>
-                    <template v-if="rowCaptions(entry).length" #trailing>
-                      <span class="flex max-w-36 flex-col items-end gap-0.5">
-                        <span
-                          v-for="caption in rowCaptions(entry)"
-                          :key="caption.key"
-                          class="truncate text-xs font-normal"
-                          :class="caption.className"
-                        >
-                          {{ caption.text }}
-                        </span>
+                    {{ toolDescription(entry, $t) }}
+                  </p>
+                  <template v-if="rowCaptions(entry).length" #trailing>
+                    <span class="flex max-w-36 flex-col items-end gap-0.5">
+                      <span
+                        v-for="caption in rowCaptions(entry)"
+                        :key="caption.key"
+                        class="truncate text-xs font-normal"
+                        :class="caption.className"
+                      >
+                        {{ caption.text }}
                       </span>
-                    </template>
-                  </InsetGroupItem>
-                </InsetGroup>
-                <InsetGroup v-else>
-                  <InsetGroupItem
-                    :as="RouterLink"
-                    :to="toolHref(block.entry)"
-                    show-chevron
+                    </span>
+                  </template>
+                </InsetGroupItem>
+              </InsetGroup>
+              <InsetGroup v-else>
+                <InsetGroupItem
+                  :as="RouterLink"
+                  :to="toolHref(block.entry)"
+                  show-chevron
+                >
+                  <template #leading>
+                    <AdapterIcon
+                      v-if="block.entry.adapterKey"
+                      :adapter-key="block.entry.adapterKey"
+                      class="size-4"
+                    />
+                    <component
+                      :is="iconFor(block.entry)"
+                      v-else
+                      class="size-4"
+                    />
+                  </template>
+                  <p class="truncate">{{ toolTitle(block.entry, $t) }}</p>
+                  <p
+                    class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
                   >
-                    <template #leading>
-                      <AdapterIcon
-                        v-if="block.entry.adapterKey"
-                        :adapter-key="block.entry.adapterKey"
-                        class="size-4"
-                      />
-                      <component
-                        :is="iconFor(block.entry)"
-                        v-else
-                        class="size-4"
-                      />
-                    </template>
-                    <p class="truncate">{{ toolTitle(block.entry, $t) }}</p>
-                    <p
-                      class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
-                    >
-                      {{ toolDescription(block.entry, $t) }}
-                    </p>
-                    <template v-if="rowCaptions(block.entry).length" #trailing>
-                      <span class="flex max-w-36 flex-col items-end gap-0.5">
-                        <span
-                          v-for="caption in rowCaptions(block.entry)"
-                          :key="caption.key"
-                          class="truncate text-xs font-normal"
-                          :class="caption.className"
-                        >
-                          {{ caption.text }}
-                        </span>
+                    {{ toolDescription(block.entry, $t) }}
+                  </p>
+                  <template v-if="rowCaptions(block.entry).length" #trailing>
+                    <span class="flex max-w-36 flex-col items-end gap-0.5">
+                      <span
+                        v-for="caption in rowCaptions(block.entry)"
+                        :key="caption.key"
+                        class="truncate text-xs font-normal"
+                        :class="caption.className"
+                      >
+                        {{ caption.text }}
                       </span>
-                    </template>
-                  </InsetGroupItem>
-                  <InsetGroupItem
-                    :disabled="
-                      !canQuickRun(block.entry) || runningId != null
-                    "
-                    :aria-label="runAria(block.entry)"
-                    :class="
-                      block.entry.destructive ? 'text-destructive' : undefined
-                    "
-                    @click="openQuickRun(block.entry)"
-                  >
-                    <template #leading>
-                      <Spinner v-if="runningId === block.entry.id" />
-                      <Play v-else class="size-4" />
-                    </template>
-                    {{ $t("pages.toolsPage.quickRun") }}
-                  </InsetGroupItem>
-                </InsetGroup>
-              </template>
-            </div>
-          </section>
-        </div>
+                    </span>
+                  </template>
+                </InsetGroupItem>
+                <InsetGroupItem
+                  :disabled="!canQuickRun(block.entry) || runningId != null"
+                  :aria-label="runAria(block.entry)"
+                  :class="
+                    block.entry.destructive ? 'text-destructive' : undefined
+                  "
+                  @click="openQuickRun(block.entry)"
+                >
+                  <template #leading>
+                    <Spinner v-if="runningId === block.entry.id" />
+                    <Play v-else class="size-4" />
+                  </template>
+                  {{ $t("pages.toolsPage.quickRun") }}
+                </InsetGroupItem>
+              </InsetGroup>
+            </template>
+          </div>
+        </section>
       </div>
+    </div>
 
     <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>

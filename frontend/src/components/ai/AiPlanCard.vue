@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useStore } from "vuex";
 import { Check, ChevronDown, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +17,11 @@ import {
   planStepsNeedCollapse,
 } from "@/lib/ai/planSteps";
 import { useI18n } from "vue-i18n";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import {
+  operationIdsFromToolCalls,
+  summarizePlanOperations,
+} from "@/lib/ai/planOperations";
 
 const props = defineProps({
   plan: { type: Object, required: true },
@@ -24,11 +30,17 @@ const props = defineProps({
   superseded: { type: Boolean, default: false },
   executed: { type: Boolean, default: false },
   failed: { type: Boolean, default: false },
+  toolCalls: { type: Array, default: () => [] },
+  ready: { type: Boolean, default: true },
 });
 defineEmits(["confirm", "cancel"]);
 
 const { t } = useI18n();
+const store = useStore();
 const expanded = ref(false);
+const operationStatuses = ref({});
+let pollTimer = null;
+let pollStopped = false;
 
 const steps = computed(() => planStepList(props.plan));
 const needsCollapse = computed(() => planStepsNeedCollapse(steps.value.length));
@@ -39,12 +51,62 @@ const head = computed(() =>
 const rest = computed(() =>
   needsCollapse.value ? steps.value.slice(PLAN_STEP_PREVIEW) : [],
 );
+const operationIds = computed(() => operationIdsFromToolCalls(props.toolCalls));
+const operationSummary = computed(() =>
+  summarizePlanOperations(operationIds.value, operationStatuses.value),
+);
+
+async function pollOperations() {
+  if (pollStopped || !operationIds.value.length) return;
+  await Promise.all(
+    operationIds.value.map(async (id) => {
+      try {
+        const response = await fetchWithAuth(
+          `/api/operations/${encodeURIComponent(id)}/status`,
+        );
+        if (response.status === 404) {
+          operationStatuses.value[id] = { status: "missing" };
+        } else if (response.ok) {
+          operationStatuses.value[id] = await response.json();
+        }
+      } catch {
+        // Retry transient failures while this card remains mounted.
+      }
+    }),
+  );
+  if (!pollStopped && operationSummary.value.tracking) {
+    pollTimer = setTimeout(pollOperations, 2500);
+  }
+}
+
+watch(
+  () => operationIds.value.join("|"),
+  () => {
+    clearTimeout(pollTimer);
+    pollStopped = false;
+    operationStatuses.value = {};
+    if (operationIds.value.length) pollOperations();
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  pollStopped = true;
+  clearTimeout(pollTimer);
+});
+
+function openOperations() {
+  store.dispatch("operations/openPanel");
+}
 
 const pending = computed(
   () => !props.confirmed && !props.cancelled && !props.superseded,
 );
 
 const statusLabel = computed(() => {
+  if (operationSummary.value.active && operationIds.value.length)
+    return t("ai.planBackgroundRunning");
+  if (operationSummary.value.failed) return t("ai.planFailed");
   if (props.superseded) return t("ai.planSuperseded");
   if (props.cancelled) return t("ai.planCancelled");
   if (props.failed) return t("ai.planFailed");
@@ -121,8 +183,8 @@ const statusLabel = computed(() => {
     </Collapsible>
 
     <div v-if="pending" class="flex flex-col gap-1 px-2 pt-1 pb-2">
-      <Button class="h-9 w-full" @click="$emit('confirm')">
-        {{ t("ai.planExecute") }}
+      <Button class="h-9 w-full" :disabled="!ready" @click="$emit('confirm')">
+        {{ ready ? t("ai.planExecute") : t("ai.planPreparing") }}
       </Button>
       <Button
         variant="ghost"
@@ -136,9 +198,38 @@ const statusLabel = computed(() => {
       v-else
       class="flex items-center gap-2 border-t border-border/70 px-3 py-2.5 text-xs text-muted-foreground"
     >
-      <Check v-if="confirmed && !cancelled && !failed" class="size-3.5" />
-      <X v-else class="size-3.5" :class="failed && 'text-destructive'" />
-      <span :class="failed && 'text-destructive'">{{ statusLabel }}</span>
+      <Check
+        v-if="confirmed && !cancelled && !failed && !operationSummary.failed"
+        class="size-3.5"
+      />
+      <X
+        v-else
+        class="size-3.5"
+        :class="(failed || operationSummary.failed) && 'text-destructive'"
+      />
+      <span
+        :class="(failed || operationSummary.failed) && 'text-destructive'"
+        >{{ statusLabel }}</span
+      >
+    </div>
+    <div
+      v-if="operationIds.length"
+      class="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground"
+    >
+      <span v-if="operationSummary.progress" class="tabular-nums">
+        {{ t("ai.planBackgroundProgress", operationSummary.progress) }}
+      </span>
+      <span v-else>{{
+        t("ai.planBackgroundCount", { count: operationIds.length })
+      }}</span>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-7 px-2"
+        @click="openOperations"
+      >
+        {{ t("ai.planOpenOperations") }}
+      </Button>
     </div>
   </InsetGroup>
 </template>

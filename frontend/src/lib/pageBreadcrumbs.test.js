@@ -148,6 +148,19 @@ describe("resolvePageBreadcrumbs", () => {
     );
   });
 
+  it("nests scheduled tasks under the tools hub", () => {
+    assert.deepEqual(
+      trail({
+        name: "/tools/scheduled-tasks",
+        path: "/tools/scheduled-tasks",
+      }),
+      [
+        { label: "routes.tools", to: "/tools" },
+        { label: "routes.scheduledTasks" },
+      ],
+    );
+  });
+
   it("uses the connection label on order mailboxes", () => {
     assert.deepEqual(
       trail({

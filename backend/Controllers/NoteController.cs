@@ -56,7 +56,7 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 25;
@@ -207,13 +207,13 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = new Note();
@@ -234,19 +234,19 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = await noteRepo.FindAsync(n => n.productId == productId && n.Id == id);
 
         if (note == null)
-            throw ApiException.NotFound("Note not found");
+            throw ApiException.NotFound(code: "note_not_found");
 
         note.UpdateFill(input);
         await noteRepo.UpdateAsync(note);
@@ -265,19 +265,19 @@ public class NoteController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.FindAsync(p => p.storeId == selectedStoreId.Value && p.Id == productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         var noteRepo = _unitOfWork.Repository<Note>();
         var note = await noteRepo.FindAsync(n => n.productId == productId && n.Id == id);
 
         if (note == null)
-            throw ApiException.NotFound("Note not found");
+            throw ApiException.NotFound(code: "note_not_found");
 
         await noteRepo.DeleteAsync(note);
         await _unitOfWork.SaveChangesAsync();

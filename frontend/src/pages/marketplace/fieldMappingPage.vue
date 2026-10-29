@@ -11,22 +11,20 @@ import {
   displaySonnerError,
   displaySonnerSuccess,
   extractResponseData,
+  resolveApiErrorMessage,
 } from "@/store/sonnerHelper";
 import { setPageTitle, setBreadcrumbParentLabel } from "@/router";
-import {
-  Plus,
-} from "lucide-vue-next";
+import { Plus } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import AppImage from "@/components/AppImage.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
-import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
-import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+} from "@/composables/useSheetResize";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import { localizeExternalFieldOptions } from "@/components/marketplace/graph/fieldLabels.js";
 import {
@@ -171,7 +169,9 @@ export default {
       return this.unmappedRequiredFields.length > 0;
     },
     loadStatusText() {
-      return this.$t(`marketplace.fieldMappingPage.loadStatus.${this.loadStatus}`);
+      return this.$t(
+        `marketplace.fieldMappingPage.loadStatus.${this.loadStatus}`,
+      );
     },
     previewSummary() {
       return this.fieldMappings
@@ -308,9 +308,7 @@ export default {
             externalCategoryName: data.externalCategoryName,
           };
 
-          setPageTitle(
-            mappingDisplayName(data) || data.localCategoryName,
-          );
+          setPageTitle(mappingDisplayName(data) || data.localCategoryName);
           setBreadcrumbParentLabel(data.connectionName);
         },
         onError: (error) => {
@@ -595,11 +593,17 @@ export default {
     getSourceTypeLabel(sourceType) {
       switch (sourceType) {
         case "ProductField":
-          return this.$t("marketplace.fieldMappingPage.sourceType.productField");
+          return this.$t(
+            "marketplace.fieldMappingPage.sourceType.productField",
+          );
         case "CategoryAttribute":
-          return this.$t("marketplace.fieldMappingPage.sourceType.categoryAttribute");
+          return this.$t(
+            "marketplace.fieldMappingPage.sourceType.categoryAttribute",
+          );
         case "StoreAttribute":
-          return this.$t("marketplace.fieldMappingPage.sourceType.storeAttribute");
+          return this.$t(
+            "marketplace.fieldMappingPage.sourceType.storeAttribute",
+          );
         case "Static":
           return this.$t("marketplace.fieldMappingPage.sourceType.staticValue");
         case "GroupName":
@@ -615,22 +619,33 @@ export default {
           const pf = mergeProductFieldSources(this.availableSources).find(
             (f) => f.key === fieldMapping.sourceField,
           );
-          return pf?.displayName || fieldMapping.sourceField || this.$t("marketplace.fieldMappingPage.notSelected");
+          return (
+            pf?.displayName ||
+            fieldMapping.sourceField ||
+            this.$t("marketplace.fieldMappingPage.notSelected")
+          );
         }
         case "CategoryAttribute": {
           const ca = this.availableSources.categoryAttributes?.find(
             (a) => a.id === fieldMapping.sourceAttributeId,
           );
-          return ca?.name || this.$t("marketplace.fieldMappingPage.notSelected");
+          return (
+            ca?.name || this.$t("marketplace.fieldMappingPage.notSelected")
+          );
         }
         case "StoreAttribute": {
           const sa = this.availableSources.storeAttributes?.find(
             (a) => a.id === fieldMapping.sourceAttributeId,
           );
-          return sa?.name || this.$t("marketplace.fieldMappingPage.notSelected");
+          return (
+            sa?.name || this.$t("marketplace.fieldMappingPage.notSelected")
+          );
         }
         case "Static":
-          return fieldMapping.staticValue || this.$t("marketplace.fieldMappingPage.notSet");
+          return (
+            fieldMapping.staticValue ||
+            this.$t("marketplace.fieldMappingPage.notSet")
+          );
         case "GroupName":
           return this.$t("marketplace.fieldMappingPage.productGroupName");
         default:
@@ -658,7 +673,9 @@ export default {
         mappingId: this.mappingId,
         fieldMappings: mappingsToSave,
         onSuccess: () => {
-          displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.mappingsSaved"));
+          displaySonnerSuccess(
+            this.$t("marketplace.fieldMappingPage.mappingsSaved"),
+          );
           this.hasChanges = false;
         },
         onError: (error) => {
@@ -761,10 +778,7 @@ export default {
             this.mapPreviewProductOption(p),
           );
           const selected = this.previewSelectedOption;
-          if (
-            selected &&
-            !items.some((o) => o.value === selected.value)
-          ) {
+          if (selected && !items.some((o) => o.value === selected.value)) {
             this.previewProducts = [selected, ...items];
           } else {
             this.previewProducts = items;
@@ -815,7 +829,11 @@ export default {
       this.$store.commit("aiChat/setPageContext", {
         page: "fieldMapping",
         mappingId: parseInt(this.mappingId),
-        mappingName: this.mappingInfo?.name || this.$t("marketplace.fieldMappingPage.mappingHash", { id: this.mappingId }),
+        mappingName:
+          this.mappingInfo?.name ||
+          this.$t("marketplace.fieldMappingPage.mappingHash", {
+            id: this.mappingId,
+          }),
         connectionId: parseInt(this.connectionId),
         connectionName: this.mappingInfo?.connectionName || "",
         previewProductId: this.previewProductId || null,
@@ -940,11 +958,16 @@ export default {
           data: { name: this.settingsName || null },
         });
         this.mappingInfo.name = this.settingsName || null;
-        displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.settingsSaved"));
+        displaySonnerSuccess(
+          this.$t("marketplace.fieldMappingPage.settingsSaved"),
+        );
         this.showMappingSettings = false;
       } catch (error) {
         displaySonnerError(
-          error.response?.data?.message || this.$t("marketplace.fieldMappingPage.saveError"),
+          resolveApiErrorMessage(
+            error,
+            "marketplace.fieldMappingPage.saveError",
+          ),
         );
       } finally {
         this.isSavingSettings = false;
@@ -968,7 +991,9 @@ export default {
 
     addNewField() {
       if (!this.newField.externalFieldKey.trim()) {
-        displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.enterFieldKey") });
+        displaySonnerError({
+          message: this.$t("marketplace.fieldMappingPage.enterFieldKey"),
+        });
         return;
       }
 
@@ -977,7 +1002,9 @@ export default {
         (fm) => fm.externalFieldKey === this.newField.externalFieldKey,
       );
       if (exists) {
-        displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.fieldKeyExists") });
+        displaySonnerError({
+          message: this.$t("marketplace.fieldMappingPage.fieldKeyExists"),
+        });
         return;
       }
 
@@ -1005,7 +1032,9 @@ export default {
     removeField(fieldMapping) {
       if (!fieldMapping.isCustom && fieldMapping.id) {
         displaySonnerError({
-          message: this.$t("marketplace.fieldMappingPage.cannotDeleteAdapterField"),
+          message: this.$t(
+            "marketplace.fieldMappingPage.cannotDeleteAdapterField",
+          ),
         });
         return;
       }
@@ -1051,7 +1080,11 @@ export default {
         try {
           const imported = JSON.parse(e.target.result);
           if (!Array.isArray(imported)) {
-            displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.invalidFileFormat") });
+            displaySonnerError({
+              message: this.$t(
+                "marketplace.fieldMappingPage.invalidFileFormat",
+              ),
+            });
             return;
           }
           let updated = 0;
@@ -1078,15 +1111,20 @@ export default {
             updated++;
           }
           this.hasChanges = true;
-          displaySonnerSuccess(this.$t("marketplace.fieldMappingPage.importedFieldsCount", { count: updated }));
+          displaySonnerSuccess(
+            this.$t("marketplace.fieldMappingPage.importedFieldsCount", {
+              count: updated,
+            }),
+          );
         } catch {
-          displaySonnerError({ message: this.$t("marketplace.fieldMappingPage.fileReadError") });
+          displaySonnerError({
+            message: this.$t("marketplace.fieldMappingPage.fileReadError"),
+          });
         }
       };
       reader.readAsText(file);
       event.target.value = "";
     },
-
   },
   mounted() {
     this.connectionId = this.$route.params.connId;
@@ -1141,8 +1179,6 @@ export default {
             @fields-synced="onFieldsSynced"
           />
         </div>
-
-
       </template>
     </PageSection>
 
@@ -1177,7 +1213,10 @@ export default {
               as="div"
             >
               <p class="truncate">{{ item.fieldName }}</p>
-              <div v-if="item.error" class="mt-1 text-xs text-destructive break-all whitespace-pre-wrap">
+              <div
+                v-if="item.error"
+                class="mt-1 text-xs text-destructive break-all whitespace-pre-wrap"
+              >
                 {{ item.error }}
               </div>
               <div v-else-if="isImageValue(item.resultValue)" class="mt-2">
@@ -1214,19 +1253,27 @@ export default {
                       </div>
                     </div>
                     <p class="text-muted-foreground mt-2 text-xs font-normal">
-                      {{ $t("marketplace.fieldMappingPage.imagesCountHint", { count: parseImageUrls(item.resultValue).length }) }}
+                      {{
+                        $t("marketplace.fieldMappingPage.imagesCountHint", {
+                          count: parseImageUrls(item.resultValue).length,
+                        })
+                      }}
                     </p>
                   </TabsContent>
                   <TabsContent value="raw" class="mt-2 space-y-1 text-xs">
                     <div class="flex gap-2 min-w-0">
-                      <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
+                      <span class="text-muted-foreground shrink-0">{{
+                        $t("marketplace.fieldMappingPage.sourceAbbr")
+                      }}</span>
                       <span
                         class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
                         >{{ item.sourceValue ?? "-" }}</span
                       >
                     </div>
                     <div class="flex gap-2 min-w-0">
-                      <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
+                      <span class="text-muted-foreground shrink-0">{{
+                        $t("marketplace.fieldMappingPage.resultAbbr")
+                      }}</span>
                       <span
                         class="font-medium font-mono break-all whitespace-pre-wrap"
                         >{{ item.resultValue ?? "-" }}</span
@@ -1237,14 +1284,18 @@ export default {
               </div>
               <div v-else class="mt-1 space-y-1 text-xs">
                 <div class="flex gap-2 min-w-0">
-                  <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.sourceAbbr") }}</span>
+                  <span class="text-muted-foreground shrink-0">{{
+                    $t("marketplace.fieldMappingPage.sourceAbbr")
+                  }}</span>
                   <span
                     class="text-muted-foreground font-mono break-all whitespace-pre-wrap"
                     >{{ item.sourceValue ?? "-" }}</span
                   >
                 </div>
                 <div class="flex gap-2 min-w-0">
-                  <span class="text-muted-foreground shrink-0">{{ $t("marketplace.fieldMappingPage.resultAbbr") }}</span>
+                  <span class="text-muted-foreground shrink-0">{{
+                    $t("marketplace.fieldMappingPage.resultAbbr")
+                  }}</span>
                   <span
                     class="font-medium font-mono break-all whitespace-pre-wrap"
                     >{{ item.resultValue ?? "-" }}</span
@@ -1258,7 +1309,9 @@ export default {
             size="sm"
             :framed="false"
             :title="$t('marketplace.fieldMappingPage.noActiveFieldsTitle')"
-            :description="$t('marketplace.fieldMappingPage.noActiveFieldsDescription')"
+            :description="
+              $t('marketplace.fieldMappingPage.noActiveFieldsDescription')
+            "
           />
         </div>
       </SheetContent>
@@ -1269,15 +1322,24 @@ export default {
     <Dialog v-model:open="showMappingSettings">
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.fieldMappingPage.mappingSettingsTitle") }}</DialogTitle>
-          <DialogDescription>{{ $t("marketplace.fieldMappingPage.mappingSettingsDescription") }}</DialogDescription>
+          <DialogTitle>{{
+            $t("marketplace.fieldMappingPage.mappingSettingsTitle")
+          }}</DialogTitle>
+          <DialogDescription>{{
+            $t("marketplace.fieldMappingPage.mappingSettingsDescription")
+          }}</DialogDescription>
         </DialogHeader>
         <FieldGroup class="gap-5 py-2">
-          <SettingsFormField :label="$t('common.name')" label-for="mapping-settings-name">
+          <SettingsFormField
+            :label="$t('common.name')"
+            label-for="mapping-settings-name"
+          >
             <Input
               id="mapping-settings-name"
               v-model="settingsName"
-              :placeholder="$t('marketplace.fieldMappingPage.mappingNamePlaceholder')"
+              :placeholder="
+                $t('marketplace.fieldMappingPage.mappingNamePlaceholder')
+              "
             />
           </SettingsFormField>
         </FieldGroup>
@@ -1296,40 +1358,65 @@ export default {
     <Dialog v-model:open="showAddField">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{{ $t("marketplace.fieldMappingPage.addFieldTitle") }}</DialogTitle>
+          <DialogTitle>{{
+            $t("marketplace.fieldMappingPage.addFieldTitle")
+          }}</DialogTitle>
           <DialogDescription>
             {{ $t("marketplace.fieldMappingPage.addFieldDescription") }}
           </DialogDescription>
         </DialogHeader>
 
         <FieldGroup class="gap-5 py-2">
-          <SettingsFormField :label="$t('marketplace.fieldMappingPage.fieldKeyLabel')" label-for="new-field-key">
+          <SettingsFormField
+            :label="$t('marketplace.fieldMappingPage.fieldKeyLabel')"
+            label-for="new-field-key"
+          >
             <Input
               id="new-field-key"
               v-model="newField.externalFieldKey"
-              :placeholder="$t('marketplace.fieldMappingPage.fieldKeyPlaceholder')"
+              :placeholder="
+                $t('marketplace.fieldMappingPage.fieldKeyPlaceholder')
+              "
             />
           </SettingsFormField>
-          <SettingsFormField :label="$t('marketplace.fieldMappingPage.nameOptionalLabel')" label-for="new-field-name">
+          <SettingsFormField
+            :label="$t('marketplace.fieldMappingPage.nameOptionalLabel')"
+            label-for="new-field-name"
+          >
             <Input
               id="new-field-name"
               v-model="newField.externalFieldName"
-              :placeholder="$t('marketplace.fieldMappingPage.displayNamePlaceholder')"
+              :placeholder="
+                $t('marketplace.fieldMappingPage.displayNamePlaceholder')
+              "
             />
           </SettingsFormField>
-          <SettingsFormField :label="$t('marketplace.fieldMappingPage.sourceTypeLabel')" label-for="new-field-source">
+          <SettingsFormField
+            :label="$t('marketplace.fieldMappingPage.sourceTypeLabel')"
+            label-for="new-field-source"
+          >
             <Select v-model="newField.sourceType">
               <SelectTrigger id="new-field-source">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Static">{{ $t("marketplace.fieldMappingPage.sourceType.staticValue") }}</SelectItem>
-                <SelectItem value="ProductField">{{ $t("marketplace.fieldMappingPage.sourceType.productField") }}</SelectItem>
-                <SelectItem value="CategoryAttribute"
-                  >{{ $t("marketplace.fieldMappingPage.sourceType.categoryAttribute") }}</SelectItem
-                >
-                <SelectItem value="StoreAttribute">{{ $t("marketplace.fieldMappingPage.sourceType.storeAttribute") }}</SelectItem>
-                <SelectItem value="GroupName">{{ $t("marketplace.fieldMappingPage.sourceType.groupName") }}</SelectItem>
+                <SelectItem value="Static">{{
+                  $t("marketplace.fieldMappingPage.sourceType.staticValue")
+                }}</SelectItem>
+                <SelectItem value="ProductField">{{
+                  $t("marketplace.fieldMappingPage.sourceType.productField")
+                }}</SelectItem>
+                <SelectItem value="CategoryAttribute">{{
+                  $t(
+                    "marketplace.fieldMappingPage.sourceType.categoryAttribute",
+                  )
+                }}</SelectItem>
+                <SelectItem value="StoreAttribute">{{
+                  $t("marketplace.fieldMappingPage.sourceType.storeAttribute")
+                }}</SelectItem>
+                <SelectItem value="GroupName">{{
+                  $t("marketplace.fieldMappingPage.sourceType.groupName")
+                }}</SelectItem>
               </SelectContent>
             </Select>
           </SettingsFormField>
@@ -1341,7 +1428,9 @@ export default {
             <Input
               id="new-field-value"
               v-model="newField.staticValue"
-              :placeholder="$t('marketplace.fieldMappingPage.fieldValuePlaceholder')"
+              :placeholder="
+                $t('marketplace.fieldMappingPage.fieldValuePlaceholder')
+              "
             />
           </SettingsFormField>
         </FieldGroup>

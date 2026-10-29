@@ -1,7 +1,5 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
-import { Alert } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-vue-next";
 import NavSearchField from "@/components/NavSearchField.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
@@ -19,19 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { http } from "@/main";
 import { getCachedMe } from "@/lib/meCache";
 import { getLocale, toBcp47 } from "@/i18n";
@@ -83,11 +75,7 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import { mapActions } from "vuex";
-import {
-  ChevronDown,
-  Package,
-  Plug,
-} from "lucide-vue-next";
+import { ChevronDown, Package, Plug } from "lucide-vue-next";
 
 const CHANNEL_ALL = "__all__";
 const DEFAULT_PAGE_SIZE = 50;
@@ -95,8 +83,6 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
-    Alert,
-    AlertTriangle,
     NavSearchField,
     AdapterIcon,
     OrderDetailSheet,
@@ -250,7 +236,8 @@ export default {
     selectedConnection() {
       return (
         this.orderConnections.find(
-          (connection) => connectionIdOf(connection) === this.selectedConnectionId,
+          (connection) =>
+            connectionIdOf(connection) === this.selectedConnectionId,
         ) || null
       );
     },
@@ -571,25 +558,22 @@ export default {
       );
     },
 
-    async syncOneConnection(connection, gen, { quiet = false, forceRefresh = false } = {}) {
+    async syncOneConnection(
+      connection,
+      gen,
+      { quiet = false, forceRefresh = false } = {},
+    ) {
       const id = connectionIdOf(connection);
       const statuses = statusesForOverviewTab(this.overviewTab);
       try {
-        const syncSettled = await Promise.allSettled(
-          statuses.map((status) =>
-            http.post(
-              `/marketplace/connections/${id}/orders/sync`,
-              null,
-              { params: { status }, cache: false },
-            ),
-          ),
+        const syncResponse = await http.post(
+          `/marketplace/connections/${id}/orders/sync`,
+          null,
+          { params: { statuses: statuses.join(",") }, cache: false },
         );
         if (gen !== this.fetchGen) return;
-        const pulled = syncSettled.some((result) => {
-          if (result.status !== "fulfilled") return false;
-          const payload = extractResponseData(result.value, {});
-          return Boolean(payload?.pulled);
-        });
+        const payload = extractResponseData(syncResponse, {});
+        const pulled = Boolean(payload?.pulled);
         if (
           forceRefresh ||
           pulled ||
@@ -820,16 +804,11 @@ export default {
 
     orderById(id) {
       const key = String(id || "");
-      if (
-        this.contextMenuRow &&
-        orderExternalId(this.contextMenuRow) === key
-      ) {
+      if (this.contextMenuRow && orderExternalId(this.contextMenuRow) === key) {
         return this.contextMenuRow;
       }
       for (const group of this.groups) {
-        const found = group.orders.find(
-          (row) => orderExternalId(row) === key,
-        );
+        const found = group.orders.find((row) => orderExternalId(row) === key);
         if (found) return found;
       }
       return null;
@@ -918,10 +897,14 @@ export default {
         marketplaceOrderLabelUrl(connectionId, orderId),
         { cache: false },
       );
-      saveOrderLabelFile(extractResponseData(response, null), `label-${orderId}`, {
-        t: (key) => this.$t(key),
-        triggerDownload: triggerBrowserDownload,
-      });
+      saveOrderLabelFile(
+        extractResponseData(response, null),
+        `label-${orderId}`,
+        {
+          t: (key) => this.$t(key),
+          triggerDownload: triggerBrowserDownload,
+        },
+      );
     },
 
     openMailbox(group) {
@@ -951,9 +934,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome
-    :has-nav-center="orderConnections.length > 0"
-  >
+  <AppPageChrome :has-nav-center="orderConnections.length > 0">
     <template v-if="orderConnections.length > 0" #nav-center>
       <Tabs :model-value="overviewTab" @update:model-value="onOverviewTab">
         <TabsList>
@@ -966,22 +947,12 @@ export default {
             <span
               v-if="tabCount(tab.id) > 0"
               class="text-muted-foreground text-xs font-normal tabular-nums"
-            >{{ tabCount(tab.id) }}</span>
+              >{{ tabCount(tab.id) }}</span
+            >
           </TabsTrigger>
         </TabsList>
       </Tabs>
     </template>
-    <Alert class="mb-4 px-3.5 py-3">
-      <AlertTriangle class="size-4 text-muted-foreground" />
-      <div class="space-y-1">
-        <p class="text-sm font-medium leading-snug">
-          {{ $t("common.stageExperimental") }}
-        </p>
-        <p class="text-xs leading-relaxed text-muted-foreground">
-          {{ $t("pages.ordersPage.experimentalDescription") }}
-        </p>
-      </div>
-    </Alert>
     <div
       v-if="orderConnections.length > 0"
       class="mb-3 flex shrink-0 flex-wrap items-center gap-2"
@@ -1057,7 +1028,9 @@ export default {
                 <AdapterIcon :adapter-key="group.adapterKey" />
               </template>
               <p class="truncate">{{ group.label }}</p>
-              <p class="mt-0.5 truncate text-xs font-normal text-muted-foreground">
+              <p
+                class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+              >
                 {{ groupCaption(group) }}
               </p>
               <template #trailing>

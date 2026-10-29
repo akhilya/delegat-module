@@ -148,50 +148,71 @@ public class AiConversationController : ControllerBase
             .ToListAsync(ct);
 
         var saved = new List<object>();
+        var historyUpdates = new Dictionary<int, SaveMessageItem>();
         var hasIds = req.Messages.Any(m => m.DbId is > 0);
 
         if (hasIds)
         {
-            var incomingIds = req.Messages
-                .Where(m => m.DbId is > 0)
-                .Select(m => m.DbId!.Value)
-                .ToHashSet();
-            var extras = existing.Where(m => !incomingIds.Contains(m.Id)).ToList();
-            if (extras.Count > 0)
-                _context.aiConversationMessages.RemoveRange(extras);
-
+            // A client snapshot can race the live-turn persistence path. Treat it as an
+            // upsert, not an authoritative replacement: omitted rows may have been added
+            // by the server after the client built this request.
             var byId = existing.ToDictionary(m => m.Id);
+            var indexById = existing
+                .Select((message, index) => (message.Id, index))
+                .ToDictionary(item => item.Id, item => item.index);
+            var lastKnownIndex = req.Messages
+                .Where(message => message.DbId is > 0)
+                .Select(message => indexById.GetValueOrDefault(message.DbId!.Value, -1))
+                .DefaultIfEmpty(-1)
+                .Max();
+            var nextUnpersistedIndex = lastKnownIndex + 1;
             foreach (var m in req.Messages)
             {
-                if (m.DbId is > 0 && byId.TryGetValue(m.DbId.Value, out var row)
-                    && extras.All(e => e.Id != row.Id))
+                if (m.DbId is > 0 && byId.TryGetValue(m.DbId.Value, out var row))
                 {
                     row.role = m.Role;
                     row.content = m.Content;
-                    row.toolCallsJson = m.ToolCallsJson;
+                    row.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(row.toolCallsJson, m.ToolCallsJson);
+                    historyUpdates[row.Id] = m;
                     continue;
                 }
 
                 if (m.DbId is > 0) continue;
+
+                var matchingIndex = existing.FindIndex(
+                    Math.Max(0, nextUnpersistedIndex),
+                    candidate => string.Equals(candidate.role, m.Role, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(candidate.content, m.Content, StringComparison.Ordinal));
+                if (matchingIndex >= 0)
+                {
+                    var matched = existing[matchingIndex];
+                    nextUnpersistedIndex = matchingIndex + 1;
+                    matched.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
+                        matched.toolCallsJson, m.ToolCallsJson);
+                    historyUpdates[matched.Id] = m;
+                    saved.Add(new { role = m.Role, dbId = matched.Id });
+                    continue;
+                }
 
                 var msg = new AiConversationMessage
                 {
                     conversationId = conv.Id,
                     role = m.Role,
                     content = m.Content,
-                    toolCallsJson = m.ToolCallsJson,
+                    toolCallsJson = AiConversationTurnStore.PreserveServerPlan(null, m.ToolCallsJson),
                     createdAt = m.CreatedAt ?? DateTime.UtcNow,
                 };
                 _context.aiConversationMessages.Add(msg);
-                await _context.SaveChangesAsync(ct);
+                await SaveHistoryChangesAsync(historyUpdates, ct);
                 saved.Add(new { role = m.Role, dbId = msg.Id });
             }
 
             conv.lastMessageAt = DateTime.UtcNow;
-            conv.messageCount = req.Messages.Count;
+            conv.messageCount = await _context.aiConversationMessages
+                .CountAsync(message => message.conversationId == conv.Id, ct);
             if (conv.modelName == null && req.ModelName != null)
                 conv.modelName = req.ModelName;
-            await _context.SaveChangesAsync(ct);
+            await SaveHistoryChangesAsync(historyUpdates, ct);
             return Ok(new { saved });
         }
 
@@ -204,13 +225,23 @@ public class AiConversationController : ControllerBase
                 && last.role == "assistant")
             {
                 last.content = lastReq.Content;
-                last.toolCallsJson = lastReq.ToolCallsJson;
+                last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(last.toolCallsJson, lastReq.ToolCallsJson);
+                historyUpdates[last.Id] = lastReq;
+            }
+            else if (string.Equals(lastReq.Role, "user", StringComparison.OrdinalIgnoreCase)
+                && last.role == "user"
+                && string.Equals(lastReq.Content, last.content, StringComparison.Ordinal))
+            {
+                // The live chat endpoint may append this user turn before the client sync arrives.
+                // Preserve its form/attachment metadata when both sides already have the same row.
+                last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(last.toolCallsJson, lastReq.ToolCallsJson);
+                historyUpdates[last.Id] = lastReq;
             }
 
             conv.lastMessageAt = DateTime.UtcNow;
             if (conv.modelName == null && req.ModelName != null)
                 conv.modelName = req.ModelName;
-            await _context.SaveChangesAsync(ct);
+            await SaveHistoryChangesAsync(historyUpdates, ct);
             return Ok(new { saved });
         }
 
@@ -222,21 +253,56 @@ public class AiConversationController : ControllerBase
                 conversationId = conv.Id,
                 role = m.Role,
                 content = m.Content,
-                toolCallsJson = m.ToolCallsJson,
+                toolCallsJson = AiConversationTurnStore.PreserveServerPlan(null, m.ToolCallsJson),
                 createdAt = m.CreatedAt ?? DateTime.UtcNow,
             };
             _context.aiConversationMessages.Add(msg);
-            await _context.SaveChangesAsync(ct);
+            await SaveHistoryChangesAsync(historyUpdates, ct);
             saved.Add(new { role = m.Role, dbId = msg.Id });
         }
 
         conv.lastMessageAt = DateTime.UtcNow;
-        conv.messageCount = savedCount + newMessages.Count;
+        conv.messageCount = await _context.aiConversationMessages
+            .CountAsync(message => message.conversationId == conv.Id, ct);
         if (conv.modelName == null && req.ModelName != null)
             conv.modelName = req.ModelName;
-        await _context.SaveChangesAsync(ct);
+        await SaveHistoryChangesAsync(historyUpdates, ct);
 
         return Ok(new { saved });
+    }
+
+    private async Task SaveHistoryChangesAsync(
+        IReadOnlyDictionary<int, SaveMessageItem> requestedUpdates,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+                return;
+            }
+            catch (DbUpdateConcurrencyException exception) when (attempt < 2)
+            {
+                foreach (var entry in exception.Entries)
+                {
+                    if (entry.Entity is not AiConversationMessage message)
+                        throw;
+
+                    await entry.ReloadAsync(ct);
+                    if (entry.State == EntityState.Detached
+                        || !requestedUpdates.TryGetValue(message.Id, out var incoming))
+                        continue;
+
+                    // Rebase client display/form metadata on the latest row. PreserveServerPlan
+                    // makes the server's current plan and execution flags authoritative.
+                    message.role = incoming.Role;
+                    message.content = incoming.Content;
+                    message.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
+                        message.toolCallsJson, incoming.ToolCallsJson);
+                }
+            }
+        }
     }
 
     // DELETE /api/ai/conversations/{sessionId} - delete a conversation and its messages

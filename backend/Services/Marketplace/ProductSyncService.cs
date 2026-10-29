@@ -28,6 +28,155 @@ public class ProductSyncService
     private readonly QuotaService _quotaService;
 
     /// <summary>
+    /// Checks whether selected products have the category mapping and required mapped
+    /// values needed for marketplace export. Does not send anything to the marketplace.
+    /// </summary>
+    public async Task<IReadOnlyList<ProductExportReadinessItem>> CheckExportReadinessAsync(
+        List<int> productIds,
+        int connectionId,
+        CancellationToken ct = default)
+    {
+        var connection = await _context.marketplaceConnections
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
+        if (connection == null)
+            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+
+        var ids = productIds.Where(id => id > 0).Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        var products = await _context.products
+            .AsSplitQuery()
+            .Include(p => p.category)
+                .ThenInclude(c => c!.attributes)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.attribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.files)
+            .Include(p => p.images)
+                .ThenInclude(i => i.file)
+            .Include(p => p.groupMemberships)
+                .ThenInclude(gm => gm.group)
+            .Where(p => p.storeId == connection.storeId && ids.Contains(p.Id))
+            .ToListAsync(ct);
+
+        var productById = products.ToDictionary(p => p.Id);
+        var trashedIds = await _context.products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id) && p.deletedAt != null)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        var trashedIdSet = trashedIds.ToHashSet();
+        var links = await _context.productMarketplaceLinks
+            .AsNoTracking()
+            .Where(l => ids.Contains(l.productId) && l.connectionId == connectionId)
+            .ToListAsync(ct);
+        var linkByProductId = links.ToDictionary(l => l.productId);
+
+        var categoryIds = products
+            .Where(p => p.categoryId.HasValue)
+            .Select(p => p.categoryId!.Value)
+            .Distinct()
+            .ToList();
+        var mappings = categoryIds.Count == 0
+            ? []
+            : await _context.categoryMappings
+                .AsNoTracking()
+                .Where(m => m.connectionId == connectionId && categoryIds.Contains(m.localCategoryId))
+                .ToListAsync(ct);
+        var mappingsByCategory = mappings.GroupBy(m => m.localCategoryId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var mappingsById = mappings.ToDictionary(m => m.Id);
+
+        var result = new List<ProductExportReadinessItem>(ids.Count);
+        var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
+        var adapterName = adapter?.DisplayName ?? connection.adapterKey;
+        var connectionIssue = !connection.isActive
+            ? "Подключение отключено. Включите его перед публикацией товаров."
+            : adapter == null
+                ? "Не удалось загрузить подключение к площадке. Проверьте настройки подключения."
+                : !adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct)
+                    ? "Это подключение не поддерживает публикацию товаров."
+                : null;
+        foreach (var productId in ids)
+        {
+            if (!productById.TryGetValue(productId, out var product))
+            {
+                var issue = trashedIdSet.Contains(productId)
+                    ? "Товар находится в корзине. Восстановите его перед выкладкой."
+                    : "Товар не найден в этом магазине.";
+                result.Add(new(productId, $"Product #{productId}", false, [issue]));
+                continue;
+            }
+
+            var issues = new List<string>();
+            if (connectionIssue != null)
+            {
+                result.Add(new(product.Id, product.name, false, [connectionIssue]));
+                continue;
+            }
+
+            if (!product.categoryId.HasValue)
+            {
+                issues.Add("Сначала назначьте товару категорию в каталоге.");
+                result.Add(new(product.Id, product.name, false, issues));
+                continue;
+            }
+
+            CategoryMapping? mapping = null;
+            if (linkByProductId.TryGetValue(productId, out var existingLink)
+                && existingLink.categoryMappingId.HasValue
+                && mappingsById.TryGetValue(existingLink.categoryMappingId.Value, out var selectedMapping)
+                && selectedMapping.localCategoryId == product.categoryId.Value)
+            {
+                mapping = selectedMapping;
+            }
+            else if (mappingsByCategory.TryGetValue(product.categoryId.Value, out var categoryMappings))
+            {
+                if (categoryMappings.Count == 1)
+                    mapping = categoryMappings[0];
+                else if (categoryMappings.Count > 1)
+                    issues.Add($"Для этой категории есть несколько разделов {adapterName}. Выберите, в какой раздел опубликовать товар.");
+            }
+
+            if (mapping == null && !issues.Any(i => i.StartsWith("Для этой категории есть несколько разделов", StringComparison.Ordinal)))
+            {
+                issues.Add($"Для категории «{product.category?.name ?? "Без названия"}» не выбран раздел {adapterName}.");
+            }
+            else if (mapping != null)
+            {
+                try
+                {
+                    var exportData = await _mappingService.BuildExportDataAsync(product, mapping, ct);
+                    var missingFields = MappingService.SchemaFields(mapping.graphJson)
+                        .Where(f => f.isRequired && !string.IsNullOrWhiteSpace(f.fieldKey))
+                        .Where(f => !exportData.TryGetValue(f.fieldKey!, out var value)
+                            || value == null
+                            || (value is string text && string.IsNullOrWhiteSpace(text)))
+                        .Select(f => f.label ?? f.fieldKey!)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (missingFields.Count > 0)
+                        issues.Add($"Заполните обязательные поля: {string.Join(", ", missingFields)}.");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Could not check export readiness for product {ProductId}", productId);
+                    issues.Add("Не удалось проверить заполнение полей. Проверьте сопоставление категории.");
+                }
+            }
+
+            result.Add(new(product.Id, product.name, issues.Count == 0, issues));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Initializes a new instance of <see cref="ProductSyncService"/>.
     /// </summary>
     public ProductSyncService(
@@ -3182,6 +3331,13 @@ public class BulkProductExportResult
         Items = items;
     }
 }
+
+/// <summary>Readiness of one catalog product for export to a marketplace.</summary>
+public record ProductExportReadinessItem(
+    int ProductId,
+    string? ProductName,
+    bool IsReady,
+    IReadOnlyList<string> Issues);
 
 /// <summary>
 /// Per-product result in a bulk export.

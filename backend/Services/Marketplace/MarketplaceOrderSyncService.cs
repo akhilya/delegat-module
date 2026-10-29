@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Models.Marketplace;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,13 @@ public sealed class OrderSyncResult
 
 public sealed class MarketplaceOrderSyncService
 {
+    private const string SharedHotState = "all";
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> ConnectionPullGates = new();
+
     public const string InFlightIdsStatus = "__inflight_ids";
     public const string PageCapReason = "page_cap";
     public const string HotStatePrefix = "hot:";
     public const int MaxPagesPerStatusPerRun = 20;
-    public const int MaxHotPagesPerRun = 1;
     public const int MaxInFlightIdRefreshesPerRun = 200;
 
     /// <summary>
@@ -34,10 +37,9 @@ public sealed class MarketplaceOrderSyncService
     public static readonly TimeSpan DeepCooldown = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Recent pull window. Adapters that honor <see cref="OrderQuery.From"/>
-    /// (Ozon, Wildberries, Yandex Market, WooCommerce) do not scan full history
-    /// on every tick. New orders and status changes inside the window are on
-    /// the first page when the adapter returns newest first.
+    /// Recent pull window. Adapters that support date filtering use it to keep
+    /// each hot pull bounded; adapters without date filters still read one
+    /// unfiltered page. Deep sync retains per-status pagination for reconciliation.
     /// </summary>
     public static readonly TimeSpan HotWindow = TimeSpan.FromDays(2);
 
@@ -45,12 +47,6 @@ public sealed class MarketplaceOrderSyncService
     {
         var key = HotStatePrefix + (status ?? "");
         return key.Length <= 32 ? key : key[..32];
-    }
-
-    private enum PullKind
-    {
-        Hot,
-        Deep
     }
 
     private readonly DataContext _db;
@@ -89,42 +85,102 @@ public sealed class MarketplaceOrderSyncService
             };
         }
 
-        var kind = IsHot(reason) ? PullKind.Hot : PullKind.Deep;
-        var upserted = 0;
-        var pulledCount = 0;
-        var skippedCount = 0;
-        string? resultReason = null;
-        var upsertedIds = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var status in statuses)
+        var gate = ConnectionPullGates.GetOrAdd(connection.Id, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
         {
-            var one = await PullStatusAsync(connection, adapter, status, kind, upsertedIds, ct);
-            upserted += one.Upserted;
-            if (one.Pulled)
-                pulledCount++;
-            if (one.Skipped)
-                skippedCount++;
-            resultReason = CombineReason(resultReason, one);
-        }
+            if (IsHot(reason))
+                return await PullRecentOrdersAsync(connection, adapter, statuses, ct);
 
-        if (kind == PullKind.Deep)
-        {
+            var upserted = 0;
+            var pulledCount = 0;
+            var skippedCount = 0;
+            string? resultReason = null;
+            var upsertedIds = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var status in statuses)
+            {
+                var one = await PullStatusAsync(connection, adapter, status, upsertedIds, ct);
+                upserted += one.Upserted;
+                if (one.Pulled)
+                    pulledCount++;
+                if (one.Skipped)
+                    skippedCount++;
+                resultReason = CombineReason(resultReason, one);
+            }
+
             var inflight = await RefreshInFlightByIdAsync(connection, adapter, upsertedIds, ct);
             upserted += inflight.Upserted;
             resultReason = CombineReason(resultReason, inflight);
-        }
 
-        var pulled = pulledCount > 0;
-        var allSkipped = pulledCount == 0 && resultReason != PageCapReason
-            && (skippedCount > 0 || statuses.Count == 0)
-            && (resultReason == null || resultReason == "cooldown");
-        return new OrderSyncResult
+            var pulled = pulledCount > 0;
+            var allSkipped = pulledCount == 0 && resultReason != PageCapReason
+                && (skippedCount > 0 || statuses.Count == 0)
+                && (resultReason == null || resultReason == "cooldown");
+            return new OrderSyncResult
+            {
+                Pulled = pulled,
+                Skipped = !pulled && allSkipped,
+                Upserted = upserted,
+                Reason = resultReason
+            };
+        }
+        finally
         {
-            Pulled = pulled,
-            Skipped = !pulled && allSkipped,
-            Upserted = upserted,
-            Reason = resultReason
-        };
+            gate.Release();
+        }
+    }
+
+    private async Task<OrderSyncResult> PullRecentOrdersAsync(
+        MarketplaceConnection connection,
+        IMarketplaceAdapter adapter,
+        IReadOnlyList<string> statuses,
+        CancellationToken ct)
+    {
+        if (statuses.Count == 0)
+            return new OrderSyncResult { Skipped = true };
+
+        var state = await GetOrCreateStateAsync(connection.Id, HotStateKey(SharedHotState), ct);
+        if (IsCoolingDown(state, LiveCooldown))
+            return new OrderSyncResult { Skipped = true, Reason = "cooldown" };
+
+        try
+        {
+            var now = _time.GetUtcNow();
+            var batch = await adapter.GetOrdersAsync(connection, new OrderQuery
+            {
+                Page = 1,
+                PageSize = string.Equals(
+                    connection.adapterKey, "ozon", StringComparison.OrdinalIgnoreCase) ? 200 : 100,
+                MaxSourcePages = 1,
+                From = now - HotWindow,
+                To = now.AddDays(1)
+            }, ct);
+            var items = batch.Items ?? [];
+            var upserted = await _snapshots.UpsertManyAsync(
+                connection.storeId, connection.Id, items, ct);
+
+            state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
+            state.lastError = null;
+            await _db.SaveChangesAsync(ct);
+            return new OrderSyncResult { Pulled = true, Upserted = upserted };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Recent marketplace order pull failed for connection {ConnectionId} ({AdapterKey})",
+                connection.Id,
+                connection.adapterKey);
+            state.lastError = Truncate(ex.Message);
+            state.lastPulledAt = _time.GetUtcNow().UtcDateTime;
+            await _db.SaveChangesAsync(CancellationToken.None);
+            return new OrderSyncResult { Pulled = false, Reason = state.lastError };
+        }
     }
 
     public async Task<OrderSyncResult> SyncStoreTabAsync(
@@ -176,14 +232,11 @@ public sealed class MarketplaceOrderSyncService
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
         string status,
-        PullKind kind,
         HashSet<string> upsertedIds,
         CancellationToken ct)
     {
-        var stateKey = kind == PullKind.Hot ? HotStateKey(status) : status;
-        var state = await GetOrCreateStateAsync(connection.Id, stateKey, ct);
-        var cooldown = kind == PullKind.Hot ? LiveCooldown : DeepCooldown;
-        if (IsCoolingDown(state, cooldown))
+        var state = await GetOrCreateStateAsync(connection.Id, status, ct);
+        if (IsCoolingDown(state, DeepCooldown))
         {
             return new OrderSyncResult { Skipped = true, Reason = "cooldown" };
         }
@@ -196,15 +249,7 @@ public sealed class MarketplaceOrderSyncService
             var pagesFetched = 0;
             var terminal = MarketplaceOrderBuckets.IsTerminal(status);
             var hitPageCap = false;
-            var maxPages = kind == PullKind.Hot ? MaxHotPagesPerRun : MaxPagesPerStatusPerRun;
-            DateTimeOffset? from = null;
-            DateTimeOffset? to = null;
-            if (kind == PullKind.Hot)
-            {
-                var now = _time.GetUtcNow();
-                from = now - HotWindow;
-                to = now.AddDays(1);
-            }
+            const int maxPages = MaxPagesPerStatusPerRun;
 
             while (true)
             {
@@ -213,9 +258,7 @@ public sealed class MarketplaceOrderSyncService
                     Status = status,
                     PageSize = 50,
                     Page = page,
-                    Cursor = cursor,
-                    From = from,
-                    To = to
+                    Cursor = cursor
                 };
                 var batch = await adapter.GetOrdersAsync(connection, query, ct);
                 pagesFetched++;
@@ -234,10 +277,7 @@ public sealed class MarketplaceOrderSyncService
 
                 if (pagesFetched >= maxPages)
                 {
-                    // A hot pull is the newest page on purpose. Only the deep scan
-                    // reports a cap when it could not finish the status.
-                    if (kind == PullKind.Deep)
-                        hitPageCap = true;
+                    hitPageCap = true;
                     break;
                 }
 

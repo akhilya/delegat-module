@@ -102,7 +102,7 @@ public class PublicSyncController : ControllerBase
         }
 
         if (productIds.Count == 0)
-            throw ApiException.BadRequest("No products to export", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "required_fields_missing");
 
         var batchId = Guid.NewGuid().ToString("N");
         var names = await _db.products
@@ -153,7 +153,7 @@ public class PublicSyncController : ControllerBase
         var connection = await RequireConnectionAsync(storeId, connectionId, ct);
 
         if (body.products == null || body.products.Count == 0)
-            throw ApiException.BadRequest("Provide products[] with externalId", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "required_fields_missing");
 
         await _quotaService.EnsureProductQuotaAsync(storeId);
         var remainingSlots = await _quotaService.GetRemainingProductSlotsAsync(storeId);
@@ -200,7 +200,7 @@ public class PublicSyncController : ControllerBase
         }
 
         if (queued == 0)
-            throw ApiException.BadRequest("No product was queued (check category mappings)", code: "import_nothing_queued");
+            throw ApiException.BadRequest(code: "import_nothing_queued");
 
         await _db.SaveChangesAsync(ct);
 
@@ -398,7 +398,7 @@ public class PublicSyncController : ControllerBase
             .FirstOrDefaultAsync(c => c.Id == connectionId && c.storeId == storeId, ct);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         CatalogMatchService.EnsureConnectionActive(connection);
         return connection;

@@ -60,7 +60,7 @@ public class ToolCatalogService
         var list = await ListAsync(userPermissions, storeId, ct);
         var entry = list.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase));
         if (entry == null)
-            throw ApiException.NotFound("Tool not found", code: "tool_not_found");
+            throw ApiException.NotFound(code: "tool_not_found");
         return entry;
     }
 
@@ -75,14 +75,14 @@ public class ToolCatalogService
     {
         var entry = await GetAsync(id, userPermissions, storeId, ct);
         if (entry.Mode != ToolModes.Job)
-            throw ApiException.BadRequest("This tool is a guided page, not a job", code: "tool_not_a_job");
+            throw ApiException.BadRequest(code: "tool_not_a_job");
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
         if (!entry.Available)
-            throw ApiException.BadRequest("Tool is not available", code: "tool_unavailable");
+            throw ApiException.BadRequest(code: "tool_unavailable");
 
         if (entry.Source == ToolSources.Platform && PlatformTools.IsPlatformJob(id))
-            return await StartPlatformJobAsync(entry, connectionId, userId, storeId.Value, ct);
+            return await StartPlatformJobAsync(entry, connectionId, parameters, userId, storeId.Value, ct);
 
         MarketplaceConnection? connection = null;
         IMarketplaceAdapter? adapter = null;
@@ -91,7 +91,7 @@ public class ToolCatalogService
         if (entry.Source == ToolSources.Adapter)
         {
             if (!ToolCatalogComposer.TryParseAdapterToolId(id, out var adapterKey, out localToolId))
-                throw ApiException.NotFound("Tool not found", code: "tool_not_found");
+                throw ApiException.NotFound(code: "tool_not_found");
 
             adapter = _adapters.GetByKey(adapterKey)
                 ?? throw ApiException.BadRequest($"Unknown adapter: {adapterKey}");
@@ -99,19 +99,19 @@ public class ToolCatalogService
             if (entry.RequiresConnection)
             {
                 if (connectionId == null)
-                    throw ApiException.BadRequest("Connection is required", code: "connection_required");
+                    throw ApiException.BadRequest(code: "connection_required");
                 connection = await _db.marketplaceConnections
                     .FirstOrDefaultAsync(
                         c => c.Id == connectionId.Value
                             && c.storeId == storeId.Value
                             && c.adapterKey == adapterKey,
                         ct)
-                    ?? throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+                    ?? throw ApiException.NotFound(code: "connection_not_found");
             }
         }
         else
         {
-            throw ApiException.BadRequest("Platform job tools are not registered yet", code: "tool_not_a_job");
+            throw ApiException.BadRequest(code: "tool_not_a_job");
         }
 
         var operationId = Guid.NewGuid().ToString("N");
@@ -159,7 +159,7 @@ public class ToolCatalogService
         {
             await _operations.LogAsync(operationId, storeId.Value, "error", ex.Message);
             await _operations.FinishAsync(operationId, storeId.Value, "failed", ex.Message);
-            throw ApiException.BadRequest(ex.Message, code: "tool_not_supported");
+            throw ApiException.BadRequest(code: "tool_not_supported");
         }
         catch (Exception ex)
         {
@@ -172,10 +172,13 @@ public class ToolCatalogService
     private async Task<ToolRunResult> StartPlatformJobAsync(
         ToolCatalogEntry entry,
         int? connectionId,
+        IReadOnlyDictionary<string, string?> parameters,
         int userId,
         int storeId,
         CancellationToken ct)
     {
+        if (PlatformTools.IsMarketplaceAction(entry.Id) && connectionId == null)
+            throw ApiException.BadRequest(code: "connection_required");
         MarketplaceConnection? connection = null;
         if (connectionId != null)
         {
@@ -184,7 +187,7 @@ public class ToolCatalogService
                 .FirstOrDefaultAsync(
                     c => c.Id == connectionId.Value && c.storeId == storeId,
                     ct)
-                ?? throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+                ?? throw ApiException.NotFound(code: "connection_not_found");
             CatalogMatchService.EnsureConnectionActive(connection);
         }
 
@@ -203,8 +206,10 @@ public class ToolCatalogService
 
         var capturedOpId = operationId;
         var capturedStoreId = storeId;
+        var capturedUserId = userId;
         var capturedEntry = entry;
         var capturedConnectionId = connection?.Id;
+        var capturedParameters = parameters.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
 
         _ = Task.Run(async () =>
         {
@@ -220,10 +225,11 @@ public class ToolCatalogService
                         .AsNoTracking()
                         .FirstOrDefaultAsync(c => c.Id == cid && c.storeId == capturedStoreId);
                     if (scopedConnection == null)
-                        throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+                        throw ApiException.NotFound(code: "connection_not_found");
                 }
 
-                await jobs.RunAsync(capturedEntry, scopedConnection, capturedStoreId, capturedOpId, CancellationToken.None);
+                await jobs.RunAsync(capturedEntry, scopedConnection, capturedStoreId, capturedOpId,
+                    capturedUserId, capturedParameters, CancellationToken.None);
             }
             catch (Exception ex)
             {

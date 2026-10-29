@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import Input from "@/components/ui/input/Input.vue";
+import { Button } from "@/components/ui/button";
 import {
   localizeExternalFieldName,
   localizeStandardSourceName,
@@ -113,7 +114,11 @@ function isActive(value) {
     >
       <DialogHeader variant="bar">
         <DialogTitle>
-          {{ t("marketplace.graph.inspector.bindingDialogTitle", { field: fieldTitle }) }}
+          {{
+            t("marketplace.graph.inspector.bindingDialogTitle", {
+              field: fieldTitle,
+            })
+          }}
         </DialogTitle>
         <DialogDescription>
           {{ t("marketplace.graph.inspector.bindingDialogHint") }}
@@ -124,123 +129,152 @@ function isActive(value) {
         <Input
           v-model="search"
           type="search"
-          :placeholder="t('marketplace.graph.inspector.bindingSearchPlaceholder')"
+          :placeholder="
+            t('marketplace.graph.inspector.bindingSearchPlaceholder')
+          "
           class="h-9"
         />
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <section v-if="productFields.length" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.productGroup") }}
           </h4>
-          <button
+          <Button
             v-for="pf in productFields"
             :key="'p-' + pf.key"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`p:${pf.key}`) && 'bg-accent font-medium'"
             @click="pick(`p:${pf.key}`)"
           >
             {{ pf.displayName || pf.key }}
-          </button>
+          </Button>
         </section>
 
         <section v-if="stockFields.length" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.stockGroup") }}
           </h4>
-          <button
+          <Button
             v-for="pf in stockFields"
             :key="'stock-' + pf.key"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`p:${pf.key}`) && 'bg-accent font-medium'"
             @click="pick(`p:${pf.key}`)"
           >
             {{ pf.displayName || pf.key }}
-          </button>
+          </Button>
         </section>
 
         <section v-if="priceFields.length" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.priceGroup") }}
           </h4>
-          <button
+          <Button
             v-for="pf in priceFields"
             :key="'price-' + pf.key"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`p:${pf.key}`) && 'bg-accent font-medium'"
             @click="pick(`p:${pf.key}`)"
           >
             {{ pf.displayName || pf.key }}
-          </button>
+          </Button>
         </section>
 
         <section v-if="categoryAttributes.length" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.categoryAttributeGroup") }}
           </h4>
-          <button
+          <Button
             v-for="a in categoryAttributes"
             :key="'a-' + a.id"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`a:${a.id}`) && 'bg-accent font-medium'"
             @click="pick(`a:${a.id}`)"
           >
             {{ a.name }}
-          </button>
+          </Button>
         </section>
 
         <section v-if="storeAttributes.length" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.storeAttributeGroup") }}
           </h4>
-          <button
+          <Button
             v-for="a in storeAttributes"
             :key="'s-' + a.id"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`s:${a.id}`) && 'bg-accent font-medium'"
             @click="pick(`s:${a.id}`)"
           >
             {{ a.name }}
-          </button>
+          </Button>
         </section>
 
         <section v-if="showGroupName" class="mb-3">
-          <h4 class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4
+            class="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.otherSourcesGroup") }}
           </h4>
-          <button
+          <Button
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive('g') && 'bg-accent font-medium'"
             @click="pick('g')"
           >
             {{ t("marketplace.graph.inspector.groupNameOption") }}
-          </button>
+          </Button>
         </section>
 
-        <section v-if="mergeCandidates.length" class="mb-2 rounded-md border border-dashed bg-muted/30 p-2">
-          <h4 class="px-1 pb-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <section
+          v-if="mergeCandidates.length"
+          class="mb-2 rounded-md border border-dashed bg-muted/30 p-2"
+        >
+          <h4
+            class="px-1 pb-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
             {{ t("marketplace.graph.inspector.aliasSectionTitle") }}
           </h4>
           <p class="mb-2 px-1 text-[11px] leading-snug text-muted-foreground">
             {{ t("marketplace.graph.inspector.aliasSectionHint") }}
           </p>
-          <button
+          <Button
             v-for="mf in mergeCandidates"
             :key="'m-' + mf.fieldKey"
+            variant="ghost"
             type="button"
-            class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            class="h-auto min-h-0 w-full justify-start rounded-md px-2 py-1.5 text-left text-sm font-normal whitespace-normal hover:bg-accent"
             :class="isActive(`m:${mf.fieldKey}`) && 'bg-accent font-medium'"
             @click="pick(`m:${mf.fieldKey}`)"
           >
-            = {{ localizeExternalFieldName(mf.fieldKey, mf.label || mf.fieldKey) }}
-          </button>
+            =
+            {{
+              localizeExternalFieldName(mf.fieldKey, mf.label || mf.fieldKey)
+            }}
+          </Button>
         </section>
 
         <p

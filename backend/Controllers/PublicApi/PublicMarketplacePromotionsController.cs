@@ -75,7 +75,7 @@ public class PublicMarketplacePromotionsController : ControllerBase
         var promo = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.GetPromotionAsync(connection, promotionId, ct));
         if (promo == null)
-            throw ApiException.NotFound("Promotion not found", code: "promotion_not_found");
+            throw ApiException.NotFound(code: "promotion_not_found");
 
         return Ok(promo);
     }
@@ -99,7 +99,7 @@ public class PublicMarketplacePromotionsController : ControllerBase
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdatePromotionProductsAsync(connection, promotionId, update, ct));
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Promotion update failed", code: "promotion_update_failed");
+            throw ApiException.BadRequest(code: "promotion_update_failed");
 
         return Ok(result);
     }

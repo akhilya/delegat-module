@@ -12,6 +12,7 @@ public static class UserAccessMutation
 {
     public const string CannotChangeOwnAccessCode = "cannot_change_own_access";
     public const string OwnerRoleRequiredCode = "owner_role_required";
+    public const string OwnerRoleAssignmentForbiddenCode = "owner_role_assignment_forbidden";
 
     public static bool OwnerRoleOutOfSync(bool isAdmin, IEnumerable<string> roleNames) =>
         isAdmin && !roleNames.Contains(AppRoles.Owner, StringComparer.OrdinalIgnoreCase);
@@ -35,16 +36,12 @@ public static class UserAccessMutation
         var wantsOwner = roles.Contains(AppRoles.Owner, StringComparer.OrdinalIgnoreCase);
 
         if (!actor.isAdmin && wantsOwner)
-            throw ApiException.Forbidden("Only the instance owner can assign the Owner role");
+            throw ApiException.Forbidden(code: OwnerRoleAssignmentForbiddenCode);
 
         if (actor.Id == target.Id)
-            throw ApiException.BadRequest(
-                "Cannot change your own roles or extra permissions",
-                code: CannotChangeOwnAccessCode);
+            throw ApiException.BadRequest(code: CannotChangeOwnAccessCode);
 
         if (target.isAdmin && !wantsOwner)
-            throw ApiException.BadRequest(
-                "Cannot remove the Owner role from an instance owner",
-                code: OwnerRoleRequiredCode);
+            throw ApiException.BadRequest(code: OwnerRoleRequiredCode);
     }
 }

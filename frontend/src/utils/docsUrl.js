@@ -7,6 +7,7 @@ const ADAPTER_CREDENTIALS_DOC_KEYS = new Set([
   "opencart",
   "woocommerce",
   "medusa",
+  "avito",
 ]);
 
 const DEFAULT_DOCS_PUBLIC_URL = "https://module.delegat.pro/docs";
@@ -32,7 +33,9 @@ function normalizeDocsBase(url) {
 }
 
 function viteEnv() {
-  return typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
+  return typeof import.meta !== "undefined" && import.meta.env
+    ? import.meta.env
+    : {};
 }
 
 function docsBaseUrl() {
@@ -85,7 +88,9 @@ export function getDocsPageUrl(path, locale = "ru") {
 
 /** Credentials article slug for a known adapter key, or null if unsupported. */
 export function getAdapterCredentialsDocsSlug(adapterKey) {
-  const key = String(adapterKey || "").trim().toLowerCase();
+  const key = String(adapterKey || "")
+    .trim()
+    .toLowerCase();
   if (!ADAPTER_CREDENTIALS_DOC_KEYS.has(key)) return null;
   return `adapters/${key}`;
 }

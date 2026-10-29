@@ -11,6 +11,11 @@ namespace Delegat.Services.Plugins;
 /// </summary>
 public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
 {
+    private static readonly IReadOnlyDictionary<string, string> PluginKeyAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["yandexmarket"] = "yandex",
+        };
     private readonly PluginManager _pluginManager;
     private readonly ILoggerFactory _loggerFactory;
     private readonly EncryptionService? _encryptionService;
@@ -54,15 +59,17 @@ public class PluginAdapterRegistry : IMarketplaceAdapterRegistry
 
     public IMarketplaceAdapter? GetByKey(string key)
     {
-        var plugin = _pluginManager.GetPlugin(key);
+        var lookupKey = PluginKeyAliases.GetValueOrDefault(key, key);
+        var plugin = _pluginManager.GetPlugin(lookupKey);
         if (plugin == null) return null;
 
-        return GetOrCreateWrapper(key);
+        return GetOrCreateWrapper(plugin.Key);
     }
 
     public bool Exists(string key)
     {
-        return _pluginManager.IsPluginLoaded(key);
+        var lookupKey = PluginKeyAliases.GetValueOrDefault(key, key);
+        return _pluginManager.IsPluginLoaded(lookupKey);
     }
 
     public IReadOnlyList<MarketplaceInfo> GetAvailableMarketplaces()

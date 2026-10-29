@@ -1,6 +1,6 @@
 # Product Soft Delete Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Historical implementation plan — shipped.** Soft delete, trash, restore, and permanent delete already exist. See `backend/Models/Products/Product.cs` and `backend/Controllers/ProductController.cs`; do not reapply this plan. Its old migration instructions are superseded by [`MEMORY.md`](../../MEMORY.md) and [`docs/platform/releasing.md`](../platform/releasing.md).
 
 **Goal:** Replace hard delete of products with soft delete (`deletedAt` field), add trash UI with restore and permanent delete.
 

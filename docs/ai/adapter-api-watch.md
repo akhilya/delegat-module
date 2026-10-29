@@ -72,4 +72,12 @@ Documentation:
 - https://docs.medusajs.com/
 Medusa 2. The plugin calls the shop bridge /admin/delegat, not the stock Admin API. A release matters when its breaking changes, or the admin product, price, inventory, and order docs, would change that bridge.
 
+### Avito (`avito`)
+Repository: https://github.com/akhilya/delegat-adapter-avito
+News:
+- https://developers.avito.ru/api-catalog
+Documentation:
+- https://developers.avito.ru/api-catalog
+Avito API. OAuth client_credentials uses POST /token; account identity uses GET /core/v1/accounts/self. Listings and prices use /core/v1/items and /core/v1/items/{item_id}/update_price. Categories and listing fields use /autoload/v1/user-docs/tree and /autoload/v1/user-docs/node/{node_slug}/fields. Listing publication is an XML feed flow, not a direct item create/update endpoint.
+
 <!-- /prompt -->

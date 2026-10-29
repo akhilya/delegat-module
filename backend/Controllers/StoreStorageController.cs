@@ -49,7 +49,7 @@ public class StoreStorageController : ControllerBase
     {
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (storeId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         return storeId.Value;
     }
@@ -133,7 +133,7 @@ public class StoreStorageController : ControllerBase
             var folderExists = await _context.storeFolders
                 .AnyAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct);
             if (!folderExists)
-                throw ApiException.NotFound("Folder not found");
+                throw ApiException.NotFound(code: "folder_not_found");
         }
 
         var saved = await MultipartObjectUpload.SaveAsync(
@@ -143,7 +143,7 @@ public class StoreStorageController : ControllerBase
             ct);
 
         if (saved.Count == 0)
-            throw ApiException.BadRequest("No file was received");
+            throw ApiException.BadRequest(code: "file_required");
 
         try
         {
@@ -183,10 +183,10 @@ public class StoreStorageController : ControllerBase
             .FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (!await _storageService.ExistsAsync(file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = file.displayName ?? Path.GetFileName(file.filePath);
         StorageDownloadHttp.Prepare(
@@ -201,7 +201,7 @@ public class StoreStorageController : ControllerBase
     public async Task<IActionResult> GetThumbnail(int id, [FromQuery] int w = 256, CancellationToken ct = default)
     {
         if (!ThumbnailService.IsAllowedWidth(w))
-            throw ApiException.BadRequest("Invalid size. Allowed values: 64, 128, 256, 512");
+                throw ApiException.BadRequest(code: "thumbnail_size_invalid");
 
         var storeId = await GetSelectedStoreId(ct);
         var file = await _context.storeFiles
@@ -209,14 +209,14 @@ public class StoreStorageController : ControllerBase
             .FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (!file.contentType.StartsWith("image/"))
-            throw ApiException.BadRequest("File is not an image");
+            throw ApiException.BadRequest(code: "thumbnail_source_not_image");
 
         var stream = await _thumbnailService.GetOrGenerateAsync(file.filePath, w, ct);
         if (stream == null)
-            throw ApiException.InternalServerError("Failed to create thumbnail");
+            throw ApiException.InternalServerError(code: "thumbnail_failed");
 
         Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
         return File(stream, "image/webp");
@@ -230,12 +230,12 @@ public class StoreStorageController : ControllerBase
     public async Task<IActionResult> RenameFile(int id, [FromBody] RenameFileRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("File name is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "file_name_required");
 
         var storeId = await GetSelectedStoreId(ct);
         var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         file.displayName = request.name.Trim();
         await _context.SaveChangesAsync(ct);
@@ -253,7 +253,7 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         file.isPublic = request.isPublic;
         if (request.isPublic)
@@ -275,14 +275,14 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (request.folderId.HasValue)
         {
             var folderExists = await _context.storeFolders
                 .AnyAsync(f => f.Id == request.folderId.Value && f.storeId == storeId, ct);
             if (!folderExists)
-                throw ApiException.NotFound("Folder not found");
+                throw ApiException.NotFound(code: "folder_not_found");
         }
 
         file.folderId = request.folderId;
@@ -299,7 +299,7 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var file = await _context.storeFiles.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         await _context.storeFileTags.Where(t => t.fileId == id).ExecuteDeleteAsync(ct);
         await _context.storeFileShareTokens.Where(t => t.fileId == id).ExecuteDeleteAsync(ct);
@@ -321,7 +321,7 @@ public class StoreStorageController : ControllerBase
     {
         var storeId = await GetSelectedStoreId(ct);
         if (request.fileIds == null || request.fileIds.Length == 0)
-            throw ApiException.BadRequest("No files specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "files_required");
 
         var files = await _context.storeFiles
             .Where(f => request.fileIds.Contains(f.Id) && f.storeId == storeId)
@@ -397,14 +397,14 @@ public class StoreStorageController : ControllerBase
     {
         var storeId = await GetSelectedStoreId(ct);
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("Folder name is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "folder_name_required");
 
         if (request.parentFolderId.HasValue)
         {
             var parentExists = await _context.storeFolders
                 .AnyAsync(f => f.Id == request.parentFolderId.Value && f.storeId == storeId, ct);
             if (!parentExists)
-                throw ApiException.NotFound("Parent folder not found");
+                throw ApiException.NotFound(code: "folder_not_found");
         }
 
         var folder = new StoreFolder
@@ -440,12 +440,12 @@ public class StoreStorageController : ControllerBase
     public async Task<IActionResult> RenameFolder(int id, [FromBody] RenameFolderRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("Folder name is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "folder_name_required");
 
         var storeId = await GetSelectedStoreId(ct);
         var folder = await _context.storeFolders.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (folder == null)
-            throw ApiException.NotFound("Folder not found");
+            throw ApiException.NotFound(code: "folder_not_found");
 
         folder.name = request.name.Trim();
         await _context.SaveChangesAsync(ct);
@@ -466,12 +466,12 @@ public class StoreStorageController : ControllerBase
             .FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
 
         if (folder == null)
-            throw ApiException.NotFound("Folder not found");
+            throw ApiException.NotFound(code: "folder_not_found");
 
         if (!recursive)
         {
             if (folder.files.Count > 0 || folder.childFolders.Count > 0)
-                throw ApiException.BadRequest("Folder is not empty. Use recursive=true to delete with its contents", code: "folder_not_empty");
+                throw ApiException.BadRequest(code: "folder_not_empty");
 
             await _context.storeFolderShareTokens.Where(t => t.folderId == id).ExecuteDeleteAsync(ct);
             await _context.storeFolders.Where(f => f.Id == id).ExecuteDeleteAsync(ct);
@@ -502,10 +502,10 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var folder = await _context.storeFolders.FirstOrDefaultAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (folder == null)
-            throw ApiException.NotFound("Folder not found");
+            throw ApiException.NotFound(code: "folder_not_found");
 
         if (request.newParentFolderId == id)
-            throw ApiException.BadRequest("Cannot move a folder into itself");
+            throw ApiException.BadRequest(code: "folder_move_into_self");
 
         if (request.newParentFolderId.HasValue)
         {
@@ -513,13 +513,13 @@ public class StoreStorageController : ControllerBase
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == request.newParentFolderId.Value && f.storeId == storeId, ct);
             if (target == null)
-                throw ApiException.NotFound("Target folder not found");
+                throw ApiException.NotFound(code: "target_folder_not_found");
 
             var currentId = request.newParentFolderId;
             while (currentId.HasValue)
             {
                 if (currentId.Value == id)
-                    throw ApiException.BadRequest("Cannot move a folder into its own descendant");
+                    throw ApiException.BadRequest(code: "folder_move_into_descendant");
 
                 currentId = await _context.storeFolders
                     .AsNoTracking()
@@ -549,7 +549,7 @@ public class StoreStorageController : ControllerBase
             var targetExists = await _context.storeFolders
                 .AnyAsync(f => f.Id == request.targetFolderId.Value && f.storeId == storeId, ct);
             if (!targetExists)
-                throw ApiException.NotFound("Target folder not found");
+                throw ApiException.NotFound(code: "target_folder_not_found");
         }
 
         if (request.fileIds is { Length: > 0 })
@@ -559,7 +559,7 @@ public class StoreStorageController : ControllerBase
                 .ToListAsync(ct);
 
             if (files.Count != request.fileIds.Length)
-                throw ApiException.NotFound("One or more files not found", code: "file_not_found");
+                throw ApiException.NotFound(code: "file_not_found");
 
             foreach (var file in files)
                 file.folderId = request.targetFolderId;
@@ -572,20 +572,20 @@ public class StoreStorageController : ControllerBase
                 .ToListAsync(ct);
 
             if (folders.Count != request.folderIds.Length)
-                throw ApiException.NotFound("One or more folders not found");
+                throw ApiException.NotFound(code: "folder_not_found");
 
             var movingIds = new HashSet<int>(request.folderIds);
 
             foreach (var folder in folders)
             {
                 if (request.targetFolderId == folder.Id)
-                    throw ApiException.BadRequest("Cannot move a folder into itself");
+                    throw ApiException.BadRequest(code: "folder_move_into_self");
 
                 var currentId = request.targetFolderId;
                 while (currentId.HasValue)
                 {
                     if (movingIds.Contains(currentId.Value))
-                        throw ApiException.BadRequest("Cannot move a folder into its own descendant");
+                        throw ApiException.BadRequest(code: "folder_move_into_descendant");
 
                     currentId = await _context.storeFolders
                         .AsNoTracking()
@@ -645,7 +645,7 @@ public class StoreStorageController : ControllerBase
 
         var fileExists = await _context.storeFiles.AnyAsync(f => f.Id == id && f.storeId == storeId, ct);
         if (!fileExists)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var shareToken = new StoreFileShareToken
@@ -676,12 +676,12 @@ public class StoreStorageController : ControllerBase
 
         var folderId = id == "root" ? (int?)null : int.Parse(id);
         if (!folderId.HasValue)
-            throw ApiException.BadRequest("Cannot create a public link for the storage root folder");
+            throw ApiException.BadRequest(code: "public_link_root_forbidden");
 
         var folderExists = await _context.storeFolders
             .AnyAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct);
         if (!folderExists)
-            throw ApiException.NotFound("Folder not found");
+            throw ApiException.NotFound(code: "folder_not_found");
 
         var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var shareToken = new StoreFolderShareToken
@@ -710,7 +710,7 @@ public class StoreStorageController : ControllerBase
             .Include(t => t.file)
             .FirstOrDefaultAsync(t => t.token == token, ct);
         if (share == null || share.file.storeId != storeId)
-            throw ApiException.NotFound("Link not found");
+            throw ApiException.NotFound(code: "link_not_found");
 
         _context.storeFileShareTokens.Remove(share);
         await _context.SaveChangesAsync(ct);
@@ -726,7 +726,7 @@ public class StoreStorageController : ControllerBase
         var share = await _context.storeFolderShareTokens
             .FirstOrDefaultAsync(t => t.token == token && t.storeId == storeId, ct);
         if (share == null)
-            throw ApiException.NotFound("Link not found");
+            throw ApiException.NotFound(code: "link_not_found");
 
         _context.storeFolderShareTokens.Remove(share);
         await _context.SaveChangesAsync(ct);
@@ -741,11 +741,11 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var fileExists = await _context.storeFiles.AnyAsync(f => f.Id == fileId && f.storeId == storeId, ct);
         if (!fileExists)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var tagExists = await _context.tagDefinitions.AnyAsync(t => t.Id == tagId && t.storeId == storeId, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         var alreadyAssigned = await _context.storeFileTags
             .AnyAsync(t => t.fileId == fileId && t.tagDefinitionId == tagId, ct);
@@ -766,7 +766,7 @@ public class StoreStorageController : ControllerBase
         var storeId = await GetSelectedStoreId(ct);
         var fileExists = await _context.storeFiles.AnyAsync(f => f.Id == fileId && f.storeId == storeId, ct);
         if (!fileExists)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         await _context.storeFileTags
             .Where(t => t.fileId == fileId && t.tagDefinitionId == tagId)
@@ -784,11 +784,11 @@ public class StoreStorageController : ControllerBase
     {
         var storeId = await GetSelectedStoreId(ct);
         if (input.fileIds == null || input.fileIds.Length == 0)
-            throw ApiException.BadRequest("No files specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "files_required");
 
         var tagExists = await _context.tagDefinitions.AnyAsync(t => t.Id == input.tagId && t.storeId == storeId, ct);
         if (!tagExists)
-            throw ApiException.NotFound("Tag not found");
+            throw ApiException.NotFound(code: "tag_not_found");
 
         var validFileIds = await _context.storeFiles
             .Where(f => input.fileIds.Contains(f.Id) && f.storeId == storeId)
@@ -796,7 +796,7 @@ public class StoreStorageController : ControllerBase
             .ToListAsync(ct);
 
         if (validFileIds.Count != input.fileIds.Length)
-            throw ApiException.NotFound("One or more files not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var alreadyAssigned = await _context.storeFileTags
             .Where(t => t.tagDefinitionId == input.tagId && validFileIds.Contains(t.fileId))
@@ -933,7 +933,7 @@ public class StoreStorageController : ControllerBase
     {
         var allowedTtl = new[] { 1, 24, 168, 720 };
         if (!allowedTtl.Contains(ttlHours))
-            throw ApiException.BadRequest("Invalid TTL");
+            throw ApiException.BadRequest(code: "invalid_ttl");
     }
 }
 
@@ -958,10 +958,10 @@ public class SharedStoreStorageController : ControllerBase
             .FirstOrDefaultAsync(t => t.token == token, ct);
 
         if (shareToken == null || shareToken.IsExpired)
-            throw ApiException.NotFound("Link not found or expired");
+            throw ApiException.NotFound(code: "link_not_found");
 
         if (!await _storageService.ExistsAsync(shareToken.file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
         StorageDownloadHttp.Prepare(
@@ -982,10 +982,10 @@ public class SharedStoreStorageController : ControllerBase
             .FirstOrDefaultAsync(t => t.token == token, ct);
 
         if (shareToken == null || shareToken.IsExpired)
-            throw ApiException.NotFound("Link not found or expired");
+            throw ApiException.NotFound(code: "link_not_found");
 
         if (!shareToken.folderId.HasValue)
-            throw ApiException.NotFound("Links to the root folder are no longer supported");
+            throw ApiException.BadRequest(code: "public_link_root_forbidden");
 
         var folderController = HttpContext.RequestServices.GetRequiredService<StoreStorageController>();
         folderController.ControllerContext = ControllerContext;

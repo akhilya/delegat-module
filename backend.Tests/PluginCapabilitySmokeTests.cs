@@ -1,4 +1,5 @@
 using Delegat.Marketplace.Ozon;
+using Delegat.Marketplace.Avito;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.Wildberries;
 using Delegat.Marketplace.YandexMarket;
@@ -7,6 +8,25 @@ namespace Delegat.Tests;
 
 public class PluginCapabilitySmokeTests
 {
+    [Fact]
+    public async Task AvitoPlugin_AdvertisesOnlyImplementedCatalogAndPriceOperations()
+    {
+        var plugin = new AvitoPlugin();
+
+        Assert.Equal("avito", plugin.Key);
+        Assert.True(plugin.IsSystem);
+        Assert.Equal(PluginStability.Experimental, plugin.Stability);
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetCategories));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ImportAllProducts));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ImportPrices));
+        Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices));
+        Assert.False(plugin.Capabilities.HasFlag(MarketplaceCapabilities.ExportProduct));
+        Assert.Equal("price", Assert.Single(await plugin.GetPriceFieldsAsync(new ConnectionContext(), "goods")).Key);
+        Assert.Equal(new[] { "clientId", "clientSecret" }, plugin.GetCredentialsSchema().Fields.Select(x => x.Key));
+        Assert.True(plugin.GetCredentialsSchema().Fields[1].IsSecret);
+    }
+
     [Fact]
     public void YandexPlugin_ExposesIdentityCapabilitiesAndRateLimitConfiguration()
     {

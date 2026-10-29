@@ -1,6 +1,7 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
+import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 
 import { Button } from "@/components/ui/button";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -13,7 +14,6 @@ import {
   extractResponseData,
 } from "@/store/sonnerHelper";
 import {
-  Plus,
   Puzzle,
   Trash2,
   RefreshCw,
@@ -80,8 +80,6 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    Plus,
-    Puzzle,
     Trash2,
     RefreshCw,
     Upload,
@@ -116,6 +114,7 @@ export default {
       showUploadDialog: false,
       selectedFile: null,
       isDraggingUpload: false,
+      Puzzle,
     };
   },
   computed: {
@@ -312,10 +311,11 @@ export default {
             />
 
             <!-- Empty: drop target -->
-            <button
+            <Button
               v-if="!selectedFile"
+              variant="ghost"
               type="button"
-              class="group flex w-full flex-col items-center justify-center rounded-lg border border-dashed px-5 py-10 text-center outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              class="group h-auto min-h-0 w-full flex-col rounded-lg border border-dashed bg-transparent px-5 py-10 text-center whitespace-normal hover:bg-muted/25 active:scale-100"
               :class="
                 isDraggingUpload
                   ? 'border-foreground/40 bg-muted/40'
@@ -344,7 +344,7 @@ export default {
               >
                 {{ $t("marketplace.pluginsPage.chooseFile") }}
               </span>
-            </button>
+            </Button>
 
             <!-- Selected: payload card -->
             <InsetGroup v-else>
@@ -364,6 +364,7 @@ export default {
                     variant="ghost"
                     size="icon"
                     class="size-8 text-muted-foreground"
+                    :aria-label="$t('marketplace.pluginsPage.chooseAnother')"
                     :title="$t('marketplace.pluginsPage.chooseAnother')"
                     :disabled="isUploading"
                     @click="resetUploadForm"
@@ -376,14 +377,16 @@ export default {
             <p class="mt-2 px-1 text-xs text-muted-foreground">
               {{ $t("marketplace.pluginsPage.readyToInstall") }}
               ·
-              <button
+              <Button
+                variant="link"
+                size="xs"
                 type="button"
-                class="font-medium text-foreground underline-offset-2 hover:underline"
+                class="h-auto p-0 font-medium text-foreground underline-offset-2"
                 :disabled="isUploading"
                 @click="openFilePicker"
               >
                 {{ $t("marketplace.pluginsPage.chooseAnother") }}
-              </button>
+              </Button>
             </p>
 
             <p class="text-xs leading-relaxed text-muted-foreground">

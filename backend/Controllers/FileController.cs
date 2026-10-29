@@ -56,16 +56,16 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
 
@@ -74,7 +74,7 @@ public class FileController : ControllerBase
         {
             var targetFolder = await folderRepo.GetByIdAsync(request.targetFolderId.Value);
             if (targetFolder == null || targetFolder.productId != productId)
-                throw ApiException.NotFound("Target folder not found");
+                throw ApiException.NotFound(code: "target_folder_not_found");
         }
 
         // Move files
@@ -85,7 +85,7 @@ public class FileController : ControllerBase
                 f => request.fileIds.Contains(f.Id) && f.productId == productId);
 
             if (files.Count != request.fileIds.Length)
-                throw ApiException.NotFound("One or more files not found", code: "file_not_found");
+                throw ApiException.NotFound(code: "file_not_found");
 
             foreach (var file in files)
             {
@@ -101,14 +101,14 @@ public class FileController : ControllerBase
                 f => request.folderIds.Contains(f.Id) && f.productId == productId);
 
             if (folders.Count != request.folderIds.Length)
-                throw ApiException.NotFound("One or more folders not found");
+                throw ApiException.NotFound(code: "folder_not_found");
 
             var movingIds = new HashSet<int>(request.folderIds);
 
             foreach (var folder in folders)
             {
                 if (request.targetFolderId == folder.Id)
-                    throw ApiException.BadRequest("Cannot move a folder into itself");
+                    throw ApiException.BadRequest(code: "folder_move_into_self");
 
                 // Cycle detection: walk up from target, if we hit any folder being moved - cycle
                 if (request.targetFolderId.HasValue)
@@ -117,7 +117,7 @@ public class FileController : ControllerBase
                     while (currentId.HasValue)
                     {
                         if (movingIds.Contains(currentId.Value))
-                            throw ApiException.BadRequest("Cannot move a folder into its own descendant");
+                            throw ApiException.BadRequest(code: "folder_move_into_descendant");
 
                         var parentFolder = await folderRepo.GetByIdAsync(currentId.Value);
                         currentId = parentFolder?.parentFolderId;
@@ -142,24 +142,24 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var product = await _context.products
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == file.productId);
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("File does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         // Verify the file exists in storage before committing response headers
         if (!await _storageService.ExistsAsync(file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = file.displayName ?? Path.GetFileName(file.filePath);
         StorageDownloadHttp.Prepare(
@@ -182,15 +182,15 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var product = await _context.products
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == productId, ct);
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 50;
@@ -255,16 +255,16 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         await _quotaService.EnsureFileQuotaAsync(selectedStoreId.Value);
         await _quotaService.EnsureStorageQuotaAsync(selectedStoreId.Value);
@@ -274,7 +274,7 @@ public class FileController : ControllerBase
             var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
             var folder = await folderRepo.GetByIdAsync(folderId.Value);
             if (folder == null || folder.productId != productId)
-                throw ApiException.NotFound("Folder not found");
+                throw ApiException.NotFound(code: "folder_not_found");
         }
 
         var user = await _currentUserService.GetUserAsync();
@@ -330,29 +330,29 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdTrackingAsync(id);
 
         if (file == null || file.productId != productId)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (request.folderId.HasValue)
         {
             var folderRepo = _unitOfWork.Repository<Models.ProductFolder>();
             var folder = await folderRepo.GetByIdAsync(request.folderId.Value);
             if (folder == null || folder.productId != productId)
-                throw ApiException.NotFound("Folder not found");
+                throw ApiException.NotFound(code: "folder_not_found");
         }
 
         file.folderId = request.folderId;
@@ -369,26 +369,26 @@ public class FileController : ControllerBase
     public async Task<IActionResult> RenameFile(int productId, int id, [FromBody] RenameFileRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.name))
-            throw ApiException.BadRequest("File name is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "file_name_required");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdTrackingAsync(id);
 
         if (file == null || file.productId != productId)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var sanitizedName = request.name.Trim();
         file.displayName = sanitizedName;
@@ -410,22 +410,22 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         // Delete tags before file (FK constraint)
         await _context.tags.Where(t => t.fileId == id).ExecuteDeleteAsync();
@@ -450,19 +450,19 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         if (request.fileIds == null || request.fileIds.Length == 0)
-            throw ApiException.BadRequest("No files specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "files_required");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var files = await fileRepo.FindAllAsync(f => request.fileIds.Contains(f.Id) && f.productId == productId);
@@ -497,24 +497,24 @@ public class FileController : ControllerBase
     {
         var allowedTtl = new[] { 1, 24, 168, 720 };
         if (!allowedTtl.Contains(request.ttlHours))
-            throw ApiException.BadRequest("Invalid TTL");
+            throw ApiException.BadRequest(code: "invalid_ttl");
 
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdAsync(id);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var product = await _context.products
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == file.productId);
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("File does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var user = await _currentUserService.GetUserAsync();
         if (user == null)
@@ -551,20 +551,20 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var share = await _context.fileShareTokens
             .Include(t => t.file)
             .FirstOrDefaultAsync(t => t.token == token);
         if (share == null)
-            throw ApiException.NotFound("Link not found");
+            throw ApiException.NotFound(code: "link_not_found");
 
         var product = await _context.products
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == share.file.productId);
         if (product == null || product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Link does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         _context.fileShareTokens.Remove(share);
         await _context.SaveChangesAsync();
@@ -580,22 +580,22 @@ public class FileController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var productRepo = _unitOfWork.Repository<Product>();
         var product = await productRepo.GetByIdAsync(productId);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (product.storeId != selectedStoreId.Value)
-            throw ApiException.Forbidden("Product does not belong to your store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var file = await fileRepo.GetByIdTrackingAsync(id);
 
         if (file == null || file.productId != productId)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         file.isPublic = request.isPublic;
         if (request.isPublic)
@@ -633,11 +633,11 @@ public class SharedFileController : ControllerBase
             .FirstOrDefaultAsync(t => t.token == token);
 
         if (shareToken == null || shareToken.IsExpired)
-            throw ApiException.NotFound("Link not found or expired");
+            throw ApiException.NotFound(code: "link_not_found");
 
         // Verify the file exists in storage before committing response headers
         if (!await _storageService.ExistsAsync(shareToken.file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
         StorageDownloadHttp.Prepare(
@@ -673,15 +673,15 @@ public class PublicFileController : ControllerBase
     public async Task GetPublicFile(string token, string filename, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var file = await _db.files.FirstOrDefaultAsync(f => f.publicToken == token && f.isPublic);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (!await _storageService.ExistsAsync(file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
         StorageDownloadHttp.Prepare(
@@ -695,15 +695,15 @@ public class PublicFileController : ControllerBase
     public async Task GetPublicStoreFile(string token, string filename, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length < 16)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var file = await _db.storeFiles.FirstOrDefaultAsync(f => f.publicToken == token && f.isPublic);
 
         if (file == null)
-            throw ApiException.NotFound("File not found", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         if (!await _storageService.ExistsAsync(file.filePath))
-            throw ApiException.NotFound("File not found in storage", code: "file_not_found");
+            throw ApiException.NotFound(code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
         StorageDownloadHttp.Prepare(

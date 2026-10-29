@@ -91,13 +91,13 @@ public class ProductBulkUpdateService
         CancellationToken ct = default)
     {
         if (productIds.Count == 0)
-            throw ApiException.BadRequest("No products specified", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "products_required");
 
         if (!HasAnyUpdate(updates))
-            throw ApiException.BadRequest("No fields to update", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "product_fields_required");
 
         if (updates.price.HasValue && updates.priceDelta.HasValue)
-            throw ApiException.BadRequest("Use price or priceDelta, not both", code: "price_delta_conflict");
+            throw ApiException.BadRequest(code: "price_delta_conflict");
 
         var foundIds = await _db.products.AsNoTracking()
             .Where(p => productIds.Contains(p.Id) && p.storeId == storeId)

@@ -84,7 +84,7 @@ public class PublicMarketplaceOrdersController : ControllerBase
         var order = await _commerce.GetStoredOrderAsync(
             connection, adapter, orderId, liveFallback: false, ct);
         if (order == null)
-            throw ApiException.NotFound("Order not found", code: "order_not_found");
+            throw ApiException.NotFound(code: "order_not_found");
 
         await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, [order], ct);
         return Ok(order);
@@ -107,7 +107,7 @@ public class PublicMarketplaceOrdersController : ControllerBase
     {
         await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
         if (body == null || string.IsNullOrWhiteSpace(body.Action))
-            throw ApiException.BadRequest("action is required", code: "validation_error");
+            throw ApiException.BadRequest(code: "order_action_required");
 
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdateOrderStatus, ct);
@@ -115,7 +115,7 @@ public class PublicMarketplaceOrdersController : ControllerBase
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdateOrderStatusAsync(connection, orderId, body, ct));
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Order status update failed", code: "order_status_failed");
+            throw ApiException.BadRequest(code: "order_status_failed");
 
         await _commerce.FinishSellerStatusAsync(
             connection, adapter, orderId, body.Action, result, ct);
@@ -143,7 +143,7 @@ public class PublicMarketplaceOrdersController : ControllerBase
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.GetOrderLabelAsync(connection, orderId, ct));
         if (!result.Success || result.Label == null)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Order label download failed", code: "order_label_failed");
+            throw ApiException.BadRequest(code: "order_label_failed");
 
         return Ok(result.Label);
     }

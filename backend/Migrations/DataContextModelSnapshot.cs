@@ -181,6 +181,7 @@ namespace Delegat.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<string>("toolCallsJson")
+                        .IsConcurrencyToken()
                         .HasColumnType("longtext");
 
                     b.HasKey("Id");
@@ -257,6 +258,50 @@ namespace Delegat.Migrations
                     b.HasIndex("isEnabled");
 
                     b.ToTable("aiMcpServers");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiMemory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("category")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "userId");
+
+                    b.HasIndex("storeId", "userId", "category", "key")
+                        .IsUnique();
+
+                    b.ToTable("aiMemories");
                 });
 
             modelBuilder.Entity("Delegat.Models.Ai.AiModelConfig", b =>
@@ -493,6 +538,8 @@ namespace Delegat.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("createdAt");
 
                     b.HasIndex("apiKeyId", "createdAt");
 
@@ -1043,6 +1090,8 @@ namespace Delegat.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("createdAt");
+
                     b.HasIndex("adapterKey", "createdAt");
 
                     b.HasIndex("connectionId", "createdAt");
@@ -1050,6 +1099,8 @@ namespace Delegat.Migrations
                     b.HasIndex("statusCode", "createdAt");
 
                     b.HasIndex("storeId", "createdAt");
+
+                    b.HasIndex("storeId", "statusCode");
 
                     b.ToTable("adapterHttpLogs");
                 });
@@ -2558,6 +2609,111 @@ namespace Delegat.Migrations
                     b.ToTable("refreshTokens");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ScheduledTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("actionId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("executionLeaseExpiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("intervalMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("isEnabled")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<DateTime>("nextRunAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("parametersJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("timeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("isEnabled", "nextRunAt");
+
+                    b.HasIndex("storeId", "createdAt");
+
+                    b.ToTable("scheduledTasks");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ScheduledTaskRun", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("actionId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("error")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("scheduledFor")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("scheduledTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("startedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("varchar(24)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("scheduledTaskId", "startedAt");
+
+                    b.HasIndex("storeId", "startedAt");
+
+                    b.ToTable("scheduledTaskRuns");
+                });
+
             modelBuilder.Entity("Delegat.Models.Store", b =>
                 {
                     b.Property<int>("Id")
@@ -3764,6 +3920,15 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("user");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ScheduledTaskRun", b =>
+                {
+                    b.HasOne("Delegat.Models.ScheduledTask", null)
+                        .WithMany()
+                        .HasForeignKey("scheduledTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Delegat.Models.StoreAdministrator", b =>

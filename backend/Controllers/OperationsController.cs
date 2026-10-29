@@ -265,7 +265,15 @@ public class OperationsController : ControllerBase
     {
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
-        return Ok(new { status = op.status });
+        return Ok(new
+        {
+            status = op.status,
+            totalItems = op.totalItems,
+            completedItems = op.completedItems,
+            failedItems = op.failedItems,
+            summary = op.summary,
+            finishedAt = op.finishedAt,
+        });
     }
 
     [HttpPost]

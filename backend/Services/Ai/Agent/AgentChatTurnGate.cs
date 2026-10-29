@@ -3,8 +3,9 @@ using System.Text.Json;
 namespace Delegat.Services.Ai.Agent;
 
 /// <summary>
-/// Cabinet chat must not scout or write before the user confirms a plan.
-/// Confirmed steps run in <c>execute-plan</c>, not in the model loop.
+/// Built-in read-only lookups may precede a plan. Writes and external capabilities are
+/// deferred until the user confirms; confirmed steps run in <c>execute-plan</c>, not in
+/// the model loop.
 /// </summary>
 public static class AgentChatTurnGate
 {
@@ -12,10 +13,16 @@ public static class AgentChatTurnGate
     public const string PlatformRequestTool = "platform_request";
 
     public const string DeferredForPlan =
-        "Not run. This turn includes propose_plan. Wait for the user to confirm. Do not GET, search_actions, or write first.";
+        "Not run. This tool batch includes propose_plan. Present the plan and wait for confirmation; do not run other tools from this batch. Required read-only lookups belong in an earlier model step.";
+
+    public const string AdditionalPlanDeferred =
+        "Not run. This batch already proposed a plan. Present only the first valid plan and wait for confirmation before proposing another.";
 
     public const string WriteNeedsPlan =
-        "Not run. Cabinet writes only run after the user confirms propose_plan. Call propose_plan as the only tool this turn; use CURRENT PAGE ids.";
+        "Not run. Cabinet writes only run after the user confirms propose_plan. If required facts are missing, do only the minimum required read-only lookup(s), then call propose_plan by itself; otherwise call propose_plan now. Use CURRENT PAGE ids and do not retry this write.";
+
+    public const string ExternalCapabilityNeedsPlan =
+        "Not run. Python code and connected external tools may cause side effects, so they only run as steps in a standalone propose_plan after user confirmation. If facts are missing, use only the minimum required built-in read-only lookup(s) first, then propose_plan by itself. Do not retry this call.";
 
     /// <summary>
     /// Stuck-loop fuse. A normal task is not cut here. Past this, the turn must close
@@ -42,10 +49,8 @@ public static class AgentChatTurnGate
         return s is "ответь" or "отвечай" or "ответьте" or "ну ответь" or "дай ответ"
             or "скажи уже" or "хватит" or "хватит искать" or "достаточно"
             or "стоп" or "ответь пожалуйста"
-            or "и" or "ну" or "ну и" or "дальше" or "так" or "так что" or "и что"
             or "answer" or "answer now" or "just answer" or "please answer"
-            or "stop" or "enough" or "that's enough" or "that is enough"
-            or "and" or "so" or "well";
+            or "stop" or "enough" or "that's enough" or "that is enough";
     }
 
     public static bool SpeakOnly(bool answerNow, int toolRounds) =>
@@ -63,11 +68,14 @@ public static class AgentChatTurnGate
     public static bool BatchHasProposePlan(IEnumerable<(string Id, string Name, string Json)> tools) =>
         tools.Any(t => IsProposePlan(t.Name));
 
-    public static bool IsMutatingChatTool(string? toolName, string? inputJson)
+    public static bool RequiresPlanConfirmation(string? toolName, string? inputJson)
     {
-        if (!string.Equals(toolName, PlatformRequestTool, StringComparison.OrdinalIgnoreCase))
-            return false;
-        return PlatformRequestPolicy.IsMutating(ReadMethod(inputJson));
+        if (string.Equals(toolName, "run_python", StringComparison.OrdinalIgnoreCase)
+            || McpToolNames.TryParse(toolName, out _, out _))
+            return true;
+
+        return string.Equals(toolName, PlatformRequestTool, StringComparison.OrdinalIgnoreCase)
+            && PlatformRequestPolicy.IsMutating(ReadMethod(inputJson));
     }
 
     internal static string ReadMethod(string? inputJson)

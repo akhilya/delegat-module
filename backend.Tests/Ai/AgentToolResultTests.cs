@@ -41,6 +41,17 @@ public class AgentToolResultTests
         var (result, summary) = CabinetRequestInvoker.InterpretResponse(200, Encoding.UTF8.GetBytes(json));
         Assert.Equal("HTTP 200 queued", summary);
         Assert.False(AgentToolResult.IsFailure(result, summary));
+        Assert.True(AgentToolResult.IsQueuedJob(result));
+    }
+
+    [Fact]
+    public void IsQueuedJob_OnlyTreatsActiveJobStatusesAsQueued()
+    {
+        Assert.True(AgentToolResult.IsQueuedJob(new { status = "running" }));
+        Assert.True(AgentToolResult.IsQueuedJob(new { status = "queued" }));
+        Assert.False(AgentToolResult.IsQueuedJob(new { status = "completed" }));
+        Assert.False(AgentToolResult.IsQueuedJob(new { status = "failed" }));
+        Assert.False(AgentToolResult.IsQueuedJob(new { message = "ok" }));
     }
 
     [Fact]
@@ -101,7 +112,29 @@ public class AgentToolResultTests
         var huge = new string('x', AgentToolResult.MaxModelResultChars + 4000);
         var clipped = AgentToolResult.TruncateForModel(huge);
         Assert.True(clipped.Length < huge.Length);
+        using var doc = JsonDocument.Parse(clipped);
+        Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
         Assert.Contains("truncated", clipped, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TruncateForModel_OversizedJsonStaysValidAndPreservesFailureFieldsAtTheEnd()
+    {
+        var huge = JsonSerializer.Serialize(new
+        {
+            items = new string('x', AgentToolResult.MaxModelResultChars + 1000),
+            status = 409,
+            error = "product_limit_reached",
+        });
+
+        var clipped = AgentToolResult.TruncateForModel(huge);
+        using var doc = JsonDocument.Parse(clipped);
+
+        Assert.True(clipped.Length <= AgentToolResult.MaxModelResultChars);
+        Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Equal(409, doc.RootElement.GetProperty("important").GetProperty("status").GetInt32());
+        Assert.Equal("product_limit_reached", doc.RootElement.GetProperty("important").GetProperty("error").GetString());
+        Assert.True(doc.RootElement.GetProperty("preview").GetString()!.Length > 0);
     }
 
     [Fact]
@@ -204,5 +237,31 @@ public class AgentToolResultTests
         Assert.Contains("Partly done", en, StringComparison.Ordinal);
         Assert.Contains("trash", en, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Nothing was changed", en, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatPlanOutcome_QueuedWork_DoesNotClaimBackgroundCompletion()
+    {
+        var ru = AgentToolResult.FormatPlanOutcome(1, 1, [], "ru", queued: 1);
+        Assert.Contains("поставлено в очередь", ru, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("отслеживается отдельно", ru, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("выполнены все шаги", ru, StringComparison.OrdinalIgnoreCase);
+
+        var en = AgentToolResult.FormatPlanOutcome(1, 1, [], "en", queued: 1);
+        Assert.Contains("background operations queued", en, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tracked separately", en, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("All steps finished", en, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatPlanOutcome_QueuedThenFailure_DoesNotClaimQueuedWriteWasApplied()
+    {
+        var ru = AgentToolResult.FormatPlanOutcome(1, 2, ["HTTP 400"], "ru", queued: 1);
+        Assert.Contains("поставлено в очередь", ru, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("уже применена", ru, StringComparison.OrdinalIgnoreCase);
+
+        var en = AgentToolResult.FormatPlanOutcome(1, 2, ["HTTP 400"], "en", queued: 1);
+        Assert.Contains("background operations queued", en, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Some steps were applied", en, StringComparison.Ordinal);
     }
 }

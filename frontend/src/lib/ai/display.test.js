@@ -166,3 +166,19 @@ describe("AiChatPanel chrome", () => {
     assert.doesNotMatch(panel, /border-l/);
   });
 });
+
+describe("questionnaire text answer submission", () => {
+  it("keeps the form field name stable while the answer selection updates", () => {
+    const input = readFileSync(
+      new URL(
+        "../../components/ui/questionnaire/QuestionnaireInput.vue",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    assert.match(input, /:name="item\.name\.value"/);
+    assert.doesNotMatch(input, /:name="selected \?/);
+    assert.doesNotMatch(input, /:form="selected \?/);
+  });
+});

@@ -13,7 +13,7 @@ namespace Delegat.Services.Plugins;
 /// Wraps an IMarketplacePlugin to implement IMarketplaceAdapter.
 /// Handles conversion between MarketplaceConnection and ConnectionContext.
 /// </summary>
-public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdapter
+public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdapter, IMarketplaceSandboxReadBrokerAdapter
 {
     private readonly IMarketplacePlugin _plugin;
     private readonly ILogger _logger;
@@ -123,6 +123,56 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
     }
 
     public IReadOnlyList<AdapterToolDescriptor> GetTools() => _plugin.GetTools();
+
+    public bool SupportsGetReads => _plugin is IMarketplaceSandboxReadBroker
+        || _plugin is IMarketplaceSandboxReadOperationBroker { SupportsPathReads: true };
+
+    public bool SupportsReadBroker => SupportsGetReads || GetReadOperations().Count > 0;
+
+    public Task<MarketplaceSandboxReadResponse?> ReadAsync(
+        MarketplaceConnection connection,
+        string hostKey,
+        string path,
+        CancellationToken ct)
+    {
+        if (_plugin is not IMarketplaceSandboxReadBroker broker)
+            return Task.FromResult<MarketplaceSandboxReadResponse?>(null);
+
+        return ReadWithPluginAsync(broker, connection, hostKey, path, ct);
+    }
+
+    public Task<MarketplaceSandboxReadResponse?> ReadOperationAsync(
+        MarketplaceConnection connection,
+        string operation,
+        JsonElement arguments,
+        CancellationToken ct)
+    {
+        if (_plugin is not IMarketplaceSandboxReadOperationBroker broker)
+            return Task.FromResult<MarketplaceSandboxReadResponse?>(null);
+
+        return ReadOperationWithPluginAsync(broker, connection, operation, arguments, ct);
+    }
+
+    public IReadOnlyList<MarketplaceSandboxReadOperationDescriptor> GetReadOperations() =>
+        _plugin is IMarketplaceSandboxReadOperationBroker broker
+            ? broker.GetReadOperations()
+            : [];
+
+    private async Task<MarketplaceSandboxReadResponse?> ReadWithPluginAsync(
+        IMarketplaceSandboxReadBroker broker,
+        MarketplaceConnection connection,
+        string hostKey,
+        string path,
+        CancellationToken ct) =>
+        await broker.ReadAsync(CreateContext(connection), hostKey, path, ct);
+
+    private async Task<MarketplaceSandboxReadResponse?> ReadOperationWithPluginAsync(
+        IMarketplaceSandboxReadOperationBroker broker,
+        MarketplaceConnection connection,
+        string operation,
+        JsonElement arguments,
+        CancellationToken ct) =>
+        await broker.ReadOperationAsync(CreateContext(connection), operation, arguments, ct);
 
     public IReadOnlyDictionary<string, IReadOnlyList<OrderActionField>> GetOrderActionFields()
         => _plugin.GetOrderActionFields();

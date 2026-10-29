@@ -1,5 +1,7 @@
 # Stored orders and overview tabs
 
+> **Implemented design record.** Current partner-facing behavior is in [`docs/api/public-v1.md`](../api/public-v1.md); implementation details here are historical context.
+
 Locked 2026-09-04. Revised 2026-10-11 for order freshness. English. Supersedes the pass-through / “assembly-only, no tabs” parts of [`2026-09-04-orders-assembly-overview-design.md`](2026-09-04-orders-assembly-overview-design.md). Mail-style groups and connection sidebar rows stay.
 
 ## Problem

@@ -48,7 +48,7 @@ public class ProductTransferController : ControllerBase
     {
         var sourceStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (sourceStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var userId = _currentUserService.GetUserId();
         if (userId == null)
@@ -60,9 +60,9 @@ public class ProductTransferController : ControllerBase
                 productId, sourceStoreId.Value, targetStoreId, userId.Value, ct);
             return Ok(preview);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            throw ApiException.BadRequest(ex.Message);
+            throw ApiException.BadRequest(code: "product_transfer_invalid");
         }
     }
 
@@ -78,7 +78,7 @@ public class ProductTransferController : ControllerBase
     {
         var sourceStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (sourceStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var userId = _currentUserService.GetUserId();
         if (userId == null)
@@ -92,32 +92,29 @@ public class ProductTransferController : ControllerBase
         request.sourceProductId = productId;
 
         if (request.mode != "clone" && request.mode != "move")
-            throw ApiException.BadRequest($"Unknown mode: {request.mode}");
+            throw ApiException.BadRequest(code: "transfer_mode_invalid");
         if (request.targetStoreId == sourceStoreId.Value && request.mode == "move")
-            throw ApiException.BadRequest("Cannot move to the same store. Use clone mode instead.");
+            throw ApiException.BadRequest(code: "same_store_transfer");
         if (request.mode == "move" && await _context.stores.CountAsync(ct) <= 1)
-            throw ApiException.BadRequest(
-                "Cannot move a product when only one store exists on this instance",
-                code: "single_store_move_forbidden");
+            throw ApiException.BadRequest(code: "single_store_move_forbidden");
 
         var targetStore = await _context.stores
             .Include(s => s.members)
             .FirstOrDefaultAsync(s => s.Id == request.targetStoreId, ct);
         if (targetStore == null)
-            throw ApiException.BadRequest($"Target store #{request.targetStoreId} not found");
+            throw ApiException.BadRequest(code: "target_store_not_found");
         if (!targetStore.members.Any(m => m.Id == userId.Value))
-            throw ApiException.Forbidden("No access to the target store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         var source = await _context.products
             .Include(p => p.marketplaceLinks)
             .Include(p => p.files)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == sourceStoreId.Value, ct);
         if (source == null)
-            throw ApiException.NotFound("Source product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         if (source.marketplaceLinks.Any() && !request.confirmBreakLinks)
-            throw ApiException.BadRequest(
-                "The product has marketplace links. Confirm breaking them (confirmBreakLinks=true)");
+            throw ApiException.BadRequest(code: "transfer_links_confirmation_required");
 
         var newSku = !string.IsNullOrWhiteSpace(request.newSku)
             ? request.newSku!.Trim()
@@ -125,7 +122,10 @@ public class ProductTransferController : ControllerBase
         var skuTaken = await _context.products
             .AnyAsync(p => p.storeId == request.targetStoreId && p.sku == newSku, ct);
         if (skuTaken)
-            throw ApiException.BadRequest($"SKU '{newSku}' is already used in the target store", code: "sku_already_used");
+            throw new ApiException(
+                statusCode: StatusCodes.Status400BadRequest,
+                data: new { sku = newSku },
+                code: "sku_already_used");
 
         // Target store quotas (clone and move both create a new product; files only when copying).
         var shouldCopyFiles = request.mode == "move" || request.copyFiles;

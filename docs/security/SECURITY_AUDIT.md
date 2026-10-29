@@ -1,5 +1,7 @@
 # Security Audit Report — Delegat Backend
 
+> **Historical security review snapshot — 2026-07-17.** Findings and code excerpts have not been revalidated against the current implementation. Do not treat them as confirmed vulnerabilities or mitigations; reproduce each claim in current code before acting on it.
+
 **Date:** 2026-07-17  
 **Scope:** `/workspace/backend` — encryption, secrets handling, AI integration, injection vectors  
 **Severity scale:** Critical > High > Medium > Low > Informational

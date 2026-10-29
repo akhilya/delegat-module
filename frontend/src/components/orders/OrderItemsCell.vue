@@ -6,6 +6,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ChevronDown } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import ProductIdentityCell from "@/components/products/ProductIdentityCell.vue";
 import { useProductImageSize } from "@/composables/useProductImageSize";
 import {
@@ -82,10 +83,11 @@ function toggleExpanded(event) {
         </span>
       </template>
     </ProductIdentityCell>
-    <button
+    <Button
       v-if="needsCollapse"
       type="button"
-      class="flex w-fit items-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors duration-[var(--duration-press)] ease-[var(--ease-out-quart)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+      variant="ghost"
+      class="h-auto min-h-0 w-fit justify-start gap-1 p-0 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground"
       :aria-expanded="expanded"
       @click="toggleExpanded"
     >
@@ -99,6 +101,6 @@ function toggleExpanded(event) {
           ? t("pages.ordersPage.itemsShowLess")
           : t("pages.ordersPage.itemsShowMore", { n: hiddenCount })
       }}
-    </button>
+    </Button>
   </div>
 </template>

@@ -11,7 +11,7 @@ export default defineConfig([
     plugins: { js, prettier: pluginPrettier },
     extends: ["js/recommended", prettier],
     rules: {
-      "prettier/prettier": "error",
+      "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
   {

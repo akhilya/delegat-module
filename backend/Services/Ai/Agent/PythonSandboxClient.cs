@@ -8,6 +8,7 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
+using Delegat.Services.Marketplace;
 using Microsoft.EntityFrameworkCore;
 
 namespace Delegat.Services.Ai.Agent;
@@ -20,6 +21,7 @@ public sealed class PythonSandboxClient
     private readonly IJwtService _jwt;
     private readonly ILogger<PythonSandboxClient> _logger;
     private readonly EncryptionService? _encryption;
+    private readonly IMarketplaceAdapterRegistry? _adapters;
 
     public PythonSandboxClient(
         DataContext db,
@@ -27,7 +29,8 @@ public sealed class PythonSandboxClient
         ILogger<PythonSandboxClient> logger,
         IHttpContextAccessor httpContext,
         IJwtService jwt,
-        EncryptionService? encryption = null)
+        EncryptionService? encryption = null,
+        IMarketplaceAdapterRegistry? adapters = null)
     {
         _db = db;
         _http = http;
@@ -35,6 +38,7 @@ public sealed class PythonSandboxClient
         _httpContext = httpContext;
         _jwt = jwt;
         _encryption = encryption;
+        _adapters = adapters;
     }
 
     /// <summary>
@@ -146,7 +150,9 @@ public sealed class PythonSandboxClient
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script))).ToLowerInvariant();
         var started = DateTime.UtcNow;
         var token = await ResolveSandboxTokenAsync(userId, ct);
-        var shopsJson = await SandboxShops.ForStoreAsync(_db, _encryption, storeId, ct);
+        var brokerRollout = FeatureFlags.IsMarketplaceBrokerSandboxEnabled(storeId);
+        var shopsJson = await SandboxShops.ForStoreAsync(
+            _db, _encryption, storeId, ct, brokerRollout, _adapters);
         var shopSecrets = SandboxShops.SecretValues(shopsJson);
 
         Exception? lastConnect = null;

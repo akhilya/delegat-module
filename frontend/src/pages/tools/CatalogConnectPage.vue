@@ -29,11 +29,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { mapActions } from "vuex";
-import { displaySonnerError, displaySonnerSuccess, extractResponseData } from "@/store/sonnerHelper";
 import {
-  adapterCanImportAll,
-  adapterCanLink,
-} from "@/lib/adapterCapabilities";
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
+import { adapterCanImportAll, adapterCanLink } from "@/lib/adapterCapabilities";
 import {
   catalogConnectMatchQueue,
   isCatalogConnectConnectionActive,
@@ -50,6 +51,7 @@ import { http } from "@/main";
 import { Cable } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import { randomUuidCompact } from "@/utils/uuid";
+import { handleRadioGroupKeydown } from "@/lib/radioGroup";
 
 const STEP_HOME = "home";
 const STEP_SOURCE = "source";
@@ -57,6 +59,7 @@ const STEP_IMPORT = "import";
 const STEP_MATCH = "match";
 const STEP_REVIEW = "review";
 const STEP_SUMMARY = "summary";
+const SETUP_PIPELINE_STORAGE_KEY = "delegat.catalogConnect.setupPipeline.v1";
 
 // Platform Tools catalog: id `catalog-connect`, mode `page`.
 
@@ -129,6 +132,8 @@ export default {
       searchForExternalId: null,
       lastApply: null,
       changingSource: false,
+      setupPipeline: false,
+      setupPipelineState: null,
       STEP_HOME,
       STEP_SOURCE,
       STEP_IMPORT,
@@ -143,12 +148,20 @@ export default {
       return this.localProductCount > 0;
     },
     sourceHint() {
+      if (this.setupPipeline) {
+        return this.$t("pages.catalogConnect.setupSourceHint");
+      }
       if (this.changingSource || this.hasLocalProducts) {
         return this.$t("pages.catalogConnect.changeSourceHint");
       }
       return this.$t("pages.catalogConnect.sourceHint");
     },
     importHint() {
+      if (this.setupPipeline) {
+        return this.$t("pages.catalogConnect.setupImportHint", {
+          name: this.sourceConnection?.name || "",
+        });
+      }
       if (this.changingSource || this.hasLocalProducts) {
         return this.$t("pages.catalogConnect.changeSourceImportHint");
       }
@@ -192,7 +205,9 @@ export default {
       return this.connections.find((c) => c.id === this.sourceId) || null;
     },
     matchConnection() {
-      return this.connections.find((c) => c.id === this.matchConnectionId) || null;
+      return (
+        this.connections.find((c) => c.id === this.matchConnectionId) || null
+      );
     },
     matchedRows() {
       return this.previewRows.filter((r) => r.status === "matched");
@@ -212,8 +227,10 @@ export default {
       return this.$t("pages.catalogConnect.columnLocal");
     },
     reviewHeaderRemote() {
-      return this.matchConnection?.name
-        || this.$t("pages.catalogConnect.columnRemoteFallback");
+      return (
+        this.matchConnection?.name ||
+        this.$t("pages.catalogConnect.columnRemoteFallback")
+      );
     },
     reviewHeaderLeft() {
       return this.fromLocal ? this.reviewHeaderLocal : this.reviewHeaderRemote;
@@ -223,7 +240,12 @@ export default {
     },
     reviewSelectableRows() {
       if (this.reviewTab === "matched") return this.matchedRows;
-      if (this.reviewTab === "unmatched" && !this.fromLocal) return this.unmatchedRows;
+      if (
+        this.reviewTab === "unmatched" &&
+        !this.fromLocal &&
+        !this.setupPipeline
+      )
+        return this.unmatchedRows;
       return [];
     },
     reviewHasSelectAll() {
@@ -236,7 +258,9 @@ export default {
     },
     someReviewSelected() {
       if (this.allReviewSelected) return false;
-      return this.reviewSelectableRows.some((row) => this.isReviewRowSelected(row));
+      return this.reviewSelectableRows.some((row) =>
+        this.isReviewRowSelected(row),
+      );
     },
     summaryRows() {
       const result = this.lastApply;
@@ -279,34 +303,54 @@ export default {
         const completed = op.progress.completed ?? 0;
         const total = op.progress.total ?? 0;
         if (total > 0) {
-          return this.$t("pages.catalogConnect.scanProgress", { completed, total });
+          return this.$t("pages.catalogConnect.scanProgress", {
+            completed,
+            total,
+          });
         }
-        return this.$t("pages.catalogConnect.applyProgress", { completed, total });
+        return this.$t("pages.catalogConnect.applyProgress", {
+          completed,
+          total,
+        });
       }
       return this.$t("pages.catalogConnect.applyWorking");
     },
     scanLiveOp() {
       if (!this.scanOperationId) return null;
-      return this.$store.state.operations.operations.find(
-        (o) => o.id === this.scanOperationId,
-      ) || null;
+      return (
+        this.$store.state.operations.operations.find(
+          (o) => o.id === this.scanOperationId,
+        ) || null
+      );
     },
     applyLiveOp() {
       if (!this.applyOperationId) return null;
-      return this.$store.state.operations.operations.find(
-        (o) => o.id === this.applyOperationId,
-      ) || null;
+      return (
+        this.$store.state.operations.operations.find(
+          (o) => o.id === this.applyOperationId,
+        ) || null
+      );
     },
     scanProgressText() {
-      const completed = this.scanLiveOp?.progress?.completed ?? this.scanProcessed;
+      const completed =
+        this.scanLiveOp?.progress?.completed ?? this.scanProcessed;
       const total = this.scanLiveOp?.progress?.total ?? this.scanTotal;
       if (total > 0) {
-        return this.$t("pages.catalogConnect.scanProgress", { completed, total });
+        return this.$t("pages.catalogConnect.scanProgress", {
+          completed,
+          total,
+        });
       }
       if (completed > 0) {
-        return this.$t("pages.catalogConnect.scanProgressUnknown", { completed });
+        return this.$t("pages.catalogConnect.scanProgressUnknown", {
+          completed,
+        });
       }
-      if (this.step === STEP_IMPORT && this.importBatchId && !this.scanOperationId) {
+      if (
+        this.step === STEP_IMPORT &&
+        this.importBatchId &&
+        !this.scanOperationId
+      ) {
         return this.$t("pages.catalogConnect.importWaitingProducts");
       }
       if (this.step === STEP_IMPORT) {
@@ -334,6 +378,7 @@ export default {
     this.stopJobPoll();
   },
   methods: {
+    handleRadioGroupKeydown,
     ...mapActions([
       "getConnections",
       "getAvailableAdapters",
@@ -386,9 +431,15 @@ export default {
       const items = preview?.items || [];
       this.previewRows = items;
       this.previewMeta = {
-        matchedCount: preview?.matchedCount ?? items.filter((r) => r.status === "matched").length,
-        ambiguousCount: preview?.ambiguousCount ?? items.filter((r) => r.status === "ambiguous").length,
-        unmatchedCount: preview?.unmatchedCount ?? items.filter((r) => r.status === "unmatched").length,
+        matchedCount:
+          preview?.matchedCount ??
+          items.filter((r) => r.status === "matched").length,
+        ambiguousCount:
+          preview?.ambiguousCount ??
+          items.filter((r) => r.status === "ambiguous").length,
+        unmatchedCount:
+          preview?.unmatchedCount ??
+          items.filter((r) => r.status === "unmatched").length,
         alreadyLinkedCount: preview?.alreadyLinkedCount ?? 0,
         mode: preview?.mode || "fromRemote",
       };
@@ -437,22 +488,32 @@ export default {
           this.applyOperationId = active.operationId;
           this.applyBusy = true;
           if (state.latestPreview?.preview) {
-            this.hydratePreview(state.latestPreview.preview, state.latestPreview.operationId);
+            this.hydratePreview(
+              state.latestPreview.preview,
+              state.latestPreview.operationId,
+            );
           }
           this.step = STEP_REVIEW;
           return true;
         }
       }
-      if (shouldRestorePreview(state.latestPreview, readDismissedPreviewOpId())) {
+      if (
+        shouldRestorePreview(state.latestPreview, readDismissedPreviewOpId())
+      ) {
         this.matchConnectionId = state.latestPreview.connectionId;
-        this.hydratePreview(state.latestPreview.preview, state.latestPreview.operationId);
+        this.hydratePreview(
+          state.latestPreview.preview,
+          state.latestPreview.operationId,
+        );
         this.step = STEP_REVIEW;
         return true;
       }
       const latestImport = state.latestCompleted;
       if (latestImport?.kind === "import" && latestImport.importBatchId) {
         try {
-          const { data } = await http.get(`/operations/${latestImport.importBatchId}/status`);
+          const { data } = await http.get(
+            `/operations/${latestImport.importBatchId}/status`,
+          );
           const status = data?.status || data?.value?.status;
           if (status === "running" || status === "paused") {
             this.sourceId = latestImport.connectionId;
@@ -485,7 +546,11 @@ export default {
       this.stopJobPoll();
       const done = state.latestCompleted;
       if (this.importBusy) {
-        await this.finishImportJob(done?.kind === "import" ? done : { status: "completed", queuedCount: 0 });
+        await this.finishImportJob(
+          done?.kind === "import"
+            ? done
+            : { status: "completed", queuedCount: 0 },
+        );
         return;
       }
       if (this.previewBusy) {
@@ -529,6 +594,10 @@ export default {
       await this.loadConnections();
       await this.loadProductCount();
       this.changingSource = false;
+      if (this.setupPipeline && this.hasLocalProducts) {
+        await this.continueSetupPipeline();
+        return;
+      }
       if (this.hasLocalProducts) {
         this.step = STEP_HOME;
       } else {
@@ -548,6 +617,11 @@ export default {
       const items = job.preview?.items || [];
       if (items.length === 0) {
         await this.repairCurrentConnectionMappings();
+        if (this.setupPipeline) {
+          this.markSetupConnectionProcessed(this.matchConnectionId);
+          await this.continueSetupPipeline();
+          return;
+        }
         await this.goHome();
         return;
       }
@@ -569,6 +643,11 @@ export default {
             fields: result.attributesImported ?? 0,
           }),
         );
+      }
+      if (this.setupPipeline) {
+        this.markSetupConnectionProcessed(this.matchConnectionId);
+        await this.continueSetupPipeline();
+        return;
       }
       await this.goHome();
     },
@@ -618,10 +697,120 @@ export default {
     },
     async bootstrap() {
       this.loading = true;
+      this.initializeSetupPipeline();
       await Promise.all([this.loadConnections(), this.loadProductCount()]);
       const restored = await this.restoreFromJobs();
       this.loading = false;
-      if (!restored) this.startFlow();
+      if (!restored) {
+        const requestedConnectionId = Number(
+          this.$route.query.matchConnectionId,
+        );
+        const requestedConnection = this.linkCapable.find(
+          (connection) => Number(connection.id) === requestedConnectionId,
+        );
+        if (requestedConnection && this.hasLocalProducts) {
+          const query = { ...this.$route.query };
+          delete query.matchConnectionId;
+          this.$router.replace({ query });
+          this.startMatch(requestedConnection.id);
+          return;
+        }
+        if (
+          this.setupPipeline &&
+          this.setupPipelineState?.sourceId &&
+          this.hasLocalProducts
+        ) {
+          await this.continueSetupPipeline();
+        } else {
+          this.startFlow();
+        }
+      }
+    },
+
+    initializeSetupPipeline() {
+      const requested = ["1", "true"].includes(
+        String(this.$route.query.setupPipeline || ""),
+      );
+      let saved = null;
+      try {
+        saved = JSON.parse(
+          sessionStorage.getItem(SETUP_PIPELINE_STORAGE_KEY) || "null",
+        );
+      } catch {
+        saved = null;
+      }
+      this.setupPipeline = requested || saved?.active === true;
+      if (!this.setupPipeline) return;
+      this.setupPipelineState = saved?.active
+        ? saved
+        : { active: true, sourceId: null, processedConnectionIds: [] };
+      this.sourceId = this.setupPipelineState.sourceId || null;
+      this.persistSetupPipeline();
+    },
+
+    persistSetupPipeline() {
+      if (!this.setupPipeline || !this.setupPipelineState) return;
+      try {
+        sessionStorage.setItem(
+          SETUP_PIPELINE_STORAGE_KEY,
+          JSON.stringify(this.setupPipelineState),
+        );
+      } catch {
+        // The flow remains usable if session storage is unavailable.
+      }
+    },
+
+    markSetupConnectionProcessed(connectionId) {
+      if (!this.setupPipelineState || connectionId == null) return;
+      const processed = new Set(
+        this.setupPipelineState.processedConnectionIds || [],
+      );
+      processed.add(Number(connectionId));
+      this.setupPipelineState = {
+        ...this.setupPipelineState,
+        processedConnectionIds: [...processed],
+      };
+      this.persistSetupPipeline();
+    },
+
+    async continueSetupPipeline() {
+      if (!this.setupPipeline) return false;
+      await Promise.all([this.loadConnections(), this.loadProductCount()]);
+      if (!this.hasLocalProducts) {
+        this.completeSetupPipeline();
+        return true;
+      }
+      const sourceId = Number(
+        this.setupPipelineState?.sourceId || this.sourceId,
+      );
+      const processed = new Set(
+        (this.setupPipelineState?.processedConnectionIds || []).map(Number),
+      );
+      const next = this.linkCapable.find(
+        (connection) =>
+          Number(connection.id) !== sourceId &&
+          !processed.has(Number(connection.id)),
+      );
+      if (next) {
+        this.startMatch(next.id);
+        return true;
+      }
+      this.completeSetupPipeline();
+      return true;
+    },
+
+    completeSetupPipeline() {
+      this.setupPipeline = false;
+      this.setupPipelineState = null;
+      try {
+        sessionStorage.removeItem(SETUP_PIPELINE_STORAGE_KEY);
+      } catch {
+        // Ignore storage cleanup failures.
+      }
+      const query = { ...this.$route.query };
+      delete query.setupPipeline;
+      this.$router.replace({ query });
+      this.step = STEP_SUMMARY;
     },
     async loadProductCount() {
       await new Promise((resolve) => {
@@ -631,7 +820,10 @@ export default {
           pageSize: 1,
           onSuccess: (response) => {
             const data = this.unwrapResult(response);
-            this.localProductCount = Number(data?.totalCount ?? data?.total ?? data?.items?.length ?? 0) || 0;
+            this.localProductCount =
+              Number(
+                data?.totalCount ?? data?.total ?? data?.items?.length ?? 0,
+              ) || 0;
             resolve();
           },
           onError: () => {
@@ -685,6 +877,13 @@ export default {
     },
     continueFromSource() {
       if (!this.sourceId) return;
+      if (this.setupPipeline && this.setupPipelineState) {
+        this.setupPipelineState = {
+          ...this.setupPipelineState,
+          sourceId: Number(this.sourceId),
+        };
+        this.persistSetupPipeline();
+      }
       this.step = STEP_IMPORT;
     },
     openChangeSource() {
@@ -699,6 +898,11 @@ export default {
       this.loadPreview();
     },
     async goHome() {
+      if (this.setupPipeline && this.matchConnectionId != null) {
+        this.markSetupConnectionProcessed(this.matchConnectionId);
+        await this.continueSetupPipeline();
+        return;
+      }
       this.dismissPreview(this.previewOperationId || this.scanOperationId);
       this.matchConnectionId = null;
       this.changingSource = false;
@@ -728,7 +932,9 @@ export default {
           id: operationId,
           type: "catalog-connect-import",
           title: this.$t("pages.catalogConnect.importScanTitle", {
-            name: this.sourceConnection?.name || this.adapterName(this.sourceConnection),
+            name:
+              this.sourceConnection?.name ||
+              this.adapterName(this.sourceConnection),
           }),
           connectionId: this.sourceId,
           connectionName: this.sourceConnection?.name,
@@ -755,6 +961,11 @@ export default {
     async skipCurrentMatch() {
       this.dismissPreview(this.scanOperationId);
       await this.repairCurrentConnectionMappings();
+      if (this.setupPipeline) {
+        this.markSetupConnectionProcessed(this.matchConnectionId);
+        await this.continueSetupPipeline();
+        return;
+      }
       await this.goHome();
     },
     async loadPreview() {
@@ -770,7 +981,9 @@ export default {
           id: operationId,
           type: "catalog-connect-match",
           title: this.$t("pages.catalogConnect.matchScanTitle", {
-            name: this.matchConnection?.name || this.adapterName(this.matchConnection),
+            name:
+              this.matchConnection?.name ||
+              this.adapterName(this.matchConnection),
           }),
           connectionId: this.matchConnectionId,
           connectionName: this.matchConnection?.name,
@@ -798,7 +1011,11 @@ export default {
       if (!this.matchConnectionId || this.applyBusy) return;
       const items = [];
       for (const row of this.matchedRows) {
-        if (this.selectedMatched[this.rowKey(row)] && row.productId && row.externalProductId) {
+        if (
+          this.selectedMatched[this.rowKey(row)] &&
+          row.productId &&
+          row.externalProductId
+        ) {
           items.push({
             productId: row.productId,
             externalProductId: row.externalProductId,
@@ -831,7 +1048,9 @@ export default {
       }
       const unmatchedToImport = this.fromLocal
         ? []
-        : this.unmatchedRows.filter((row) => this.importUnmatchedIds[this.rowKey(row)]);
+        : this.unmatchedRows.filter(
+            (row) => this.importUnmatchedIds[this.rowKey(row)],
+          );
       for (const row of unmatchedToImport) {
         items.push({
           externalProductId: row.externalProductId,
@@ -853,7 +1072,9 @@ export default {
           id: operationId,
           type: "catalog-match",
           title: this.$t("pages.catalogConnect.applyOperationTitle", {
-            name: this.matchConnection?.name || this.adapterName(this.matchConnection),
+            name:
+              this.matchConnection?.name ||
+              this.adapterName(this.matchConnection),
           }),
           connectionId: this.matchConnectionId,
           connectionName: this.matchConnection?.name,
@@ -930,7 +1151,9 @@ export default {
     },
     pickSearchResult(product) {
       if (!this.searchForExternalId) return;
-      const row = this.previewRows.find((r) => this.rowKey(r) === this.searchForExternalId);
+      const row = this.previewRows.find(
+        (r) => this.rowKey(r) === this.searchForExternalId,
+      );
       if (!row) return;
       row.status = "matched";
       row.productId = product.id;
@@ -955,7 +1178,8 @@ export default {
         try {
           const { data } = await http.get(`/operations/${operationId}/status`);
           const status = data?.status || data?.value?.status;
-          if (["completed", "failed", "partial", "cancelled"].includes(status)) return;
+          if (["completed", "failed", "partial", "cancelled"].includes(status))
+            return;
         } catch {
           /* keep polling */
         }
@@ -971,11 +1195,7 @@ export default {
 
 <template>
   <AppPageChrome>
-    <EmptyState
-      v-if="loading"
-      loading
-      class="min-h-0 flex-1"
-    />
+    <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
 
     <template v-else-if="step === STEP_HOME || step === STEP_SUMMARY">
       <div class="flex w-full max-w-xl flex-col">
@@ -984,11 +1204,7 @@ export default {
         </p>
 
         <InsetGroup v-if="summaryRows.length" class="mb-8">
-          <InsetGroupItem
-            v-for="row in summaryRows"
-            :key="row.key"
-            as="div"
-          >
+          <InsetGroupItem v-for="row in summaryRows" :key="row.key" as="div">
             {{ row.label }}
             <template #trailing>
               <span class="tabular-nums text-sm">{{ row.count }}</span>
@@ -1012,7 +1228,9 @@ export default {
         </EmptyState>
 
         <EmptyState
-          v-else-if="remainingConnections.length === 0 && inactiveLinkCapable.length > 0"
+          v-else-if="
+            remainingConnections.length === 0 && inactiveLinkCapable.length > 0
+          "
           framed
           :title="$t('pages.catalogConnect.inactiveTitle')"
           :description="$t('pages.catalogConnect.inactiveDescription')"
@@ -1052,9 +1270,16 @@ export default {
                 <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
               </template>
               <p class="truncate">{{ conn.name }}</p>
-              <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+              <p
+                class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+              >
                 {{ adapterName(conn) }}
-                · {{ $t("pages.catalogConnect.linkedCount", { count: conn.productLinksCount || 0 }) }}
+                ·
+                {{
+                  $t("pages.catalogConnect.linkedCount", {
+                    count: conn.productLinksCount || 0,
+                  })
+                }}
               </p>
             </InsetGroupItem>
           </InsetGroup>
@@ -1110,7 +1335,9 @@ export default {
           </Button>
         </EmptyState>
         <EmptyState
-          v-else-if="importCapable.length === 0 && inactiveImportCapable.length > 0"
+          v-else-if="
+            importCapable.length === 0 && inactiveImportCapable.length > 0
+          "
           framed
           :title="$t('pages.catalogConnect.inactiveTitle')"
           :description="$t('pages.catalogConnect.inactiveDescription')"
@@ -1139,20 +1366,30 @@ export default {
             :aria-label="$t('pages.catalogConnect.sourceListLabel')"
           >
             <InsetGroupItem
-              v-for="conn in importCapable"
+              v-for="(conn, index) in importCapable"
               :key="conn.id"
+              as="div"
               role="radio"
               :aria-checked="sourceId === conn.id"
+              :tabindex="sourceId === conn.id || index === 0 ? 0 : -1"
               :selected="sourceId === conn.id"
+              @keydown="handleRadioGroupKeydown"
               @click="sourceId = conn.id"
             >
               <template #leading>
                 <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
               </template>
               <p class="truncate">{{ conn.name }}</p>
-              <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+              <p
+                class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+              >
                 {{ adapterName(conn) }}
-                · {{ $t("pages.catalogConnect.linkedCount", { count: conn.productLinksCount || 0 }) }}
+                ·
+                {{
+                  $t("pages.catalogConnect.linkedCount", {
+                    count: conn.productLinksCount || 0,
+                  })
+                }}
               </p>
             </InsetGroupItem>
           </InsetGroup>
@@ -1163,11 +1400,7 @@ export default {
             <Button :disabled="!sourceId" @click="continueFromSource">
               {{ $t("common.continue") }}
             </Button>
-            <Button
-              v-if="hasLocalProducts"
-              variant="ghost"
-              @click="goHome"
-            >
+            <Button v-if="hasLocalProducts" variant="ghost" @click="goHome">
               {{ $t("common.back") }}
             </Button>
           </div>
@@ -1204,15 +1437,24 @@ export default {
         <InsetGroup v-if="sourceConnection">
           <InsetGroupItem as="div">
             <template #leading>
-              <AdapterIcon :adapter-key="sourceConnection.adapterKey" class="size-4" />
+              <AdapterIcon
+                :adapter-key="sourceConnection.adapterKey"
+                class="size-4"
+              />
             </template>
             <p class="truncate">{{ sourceConnection.name }}</p>
-            <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+            <p
+              class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+            >
               {{ adapterName(sourceConnection) }}
             </p>
           </InsetGroupItem>
         </InsetGroup>
-        <Button class="mt-6 self-start" :disabled="importBusy" @click="runSourceImport">
+        <Button
+          class="mt-6 self-start"
+          :disabled="importBusy"
+          @click="runSourceImport"
+        >
           <Spinner v-if="importBusy" />
           {{ $t("pages.catalogConnect.importAction") }}
         </Button>
@@ -1234,7 +1476,11 @@ export default {
           framed
           class="tabular-nums"
           :title="scanProgressText"
-          :description="$t('pages.catalogConnect.matchHint', { name: matchConnection?.name || '' })"
+          :description="
+            $t('pages.catalogConnect.matchHint', {
+              name: matchConnection?.name || '',
+            })
+          "
         />
         <Button
           class="mt-4 self-start"
@@ -1264,20 +1510,40 @@ export default {
             })
           }}
         </p>
+        <p
+          v-if="setupPipeline"
+          class="mb-4 rounded-lg border border-warning/40 bg-warning-muted/40 px-3 py-2 text-sm text-warning-foreground"
+        >
+          {{ $t("pages.catalogConnect.setupNoUnmatchedImport") }}
+        </p>
         <Tabs
           class="mb-4"
           :model-value="reviewTab"
           @update:model-value="reviewTab = $event"
         >
-          <TabsList class="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-fit">
+          <TabsList
+            class="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-fit"
+          >
             <TabsTrigger value="matched">
-              {{ $t("pages.catalogConnect.tabMatched", { count: matchedRows.length }) }}
+              {{
+                $t("pages.catalogConnect.tabMatched", {
+                  count: matchedRows.length,
+                })
+              }}
             </TabsTrigger>
             <TabsTrigger value="ambiguous">
-              {{ $t("pages.catalogConnect.tabAmbiguous", { count: ambiguousRows.length }) }}
+              {{
+                $t("pages.catalogConnect.tabAmbiguous", {
+                  count: ambiguousRows.length,
+                })
+              }}
             </TabsTrigger>
             <TabsTrigger value="unmatched">
-              {{ $t("pages.catalogConnect.tabUnmatched", { count: unmatchedRows.length }) }}
+              {{
+                $t("pages.catalogConnect.tabUnmatched", {
+                  count: unmatchedRows.length,
+                })
+              }}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -1310,27 +1576,34 @@ export default {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow
-                v-for="row in visibleRows"
-                :key="rowKey(row)"
-              >
+              <TableRow v-for="row in visibleRows" :key="rowKey(row)">
                 <TableCell class="w-10">
                   <Checkbox
                     v-if="row.status === 'matched'"
                     :model-value="Boolean(selectedMatched[rowKey(row)])"
                     :aria-label="$t('pages.catalogConnect.selectRow')"
-                    @update:model-value="selectedMatched[rowKey(row)] = $event === true"
+                    @update:model-value="
+                      selectedMatched[rowKey(row)] = $event === true
+                    "
                   />
                   <Checkbox
-                    v-else-if="row.status === 'unmatched' && !fromLocal"
+                    v-else-if="
+                      row.status === 'unmatched' && !fromLocal && !setupPipeline
+                    "
                     :model-value="Boolean(importUnmatchedIds[rowKey(row)])"
                     :aria-label="$t('pages.catalogConnect.selectRow')"
-                    @update:model-value="importUnmatchedIds[rowKey(row)] = $event === true"
+                    @update:model-value="
+                      importUnmatchedIds[rowKey(row)] = $event === true
+                    "
                   />
                 </TableCell>
                 <TableCell class="max-w-0 whitespace-normal">
                   <p class="truncate text-sm font-medium">
-                    {{ fromLocal ? (row.productName || row.name) : (row.name || row.externalProductId) }}
+                    {{
+                      fromLocal
+                        ? row.productName || row.name
+                        : row.name || row.externalProductId
+                    }}
                   </p>
                   <p class="text-muted-foreground truncate text-xs">
                     {{ row.sku || row.productSku || $t("common.emDash") }}
@@ -1340,20 +1613,34 @@ export default {
                 <TableCell class="max-w-0 whitespace-normal">
                   <template v-if="row.status === 'matched'">
                     <p class="truncate text-sm">
-                      {{ fromLocal ? (row.name || row.externalProductId) : (row.productName || row.name) }}
+                      {{
+                        fromLocal
+                          ? row.name || row.externalProductId
+                          : row.productName || row.name
+                      }}
                     </p>
                     <p class="text-muted-foreground truncate text-xs">
-                      {{ fromLocal ? (row.externalProductId || $t("common.emDash")) : (row.productSku || $t("common.emDash")) }}
+                      {{
+                        fromLocal
+                          ? row.externalProductId || $t("common.emDash")
+                          : row.productSku || $t("common.emDash")
+                      }}
                     </p>
                   </template>
                   <template v-else-if="row.status === 'ambiguous'">
-                    <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                    <div
+                      class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center"
+                    >
                       <Select
                         :model-value="ambiguousPicks[rowKey(row)]"
-                        @update:model-value="ambiguousPicks[rowKey(row)] = $event"
+                        @update:model-value="
+                          ambiguousPicks[rowKey(row)] = $event
+                        "
                       >
                         <SelectTrigger class="w-full">
-                          <SelectValue :placeholder="$t('pages.catalogConnect.pickLocal')" />
+                          <SelectValue
+                            :placeholder="$t('pages.catalogConnect.pickLocal')"
+                          />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem
@@ -1378,14 +1665,22 @@ export default {
                   <template v-else-if="fromLocal">
                     <Input
                       :model-value="pastedRemoteIds[rowKey(row)] || ''"
-                      :placeholder="$t('pages.catalogConnect.pasteRemotePlaceholder')"
-                      @update:model-value="pastedRemoteIds[rowKey(row)] = $event"
+                      :placeholder="
+                        $t('pages.catalogConnect.pasteRemotePlaceholder')
+                      "
+                      @update:model-value="
+                        pastedRemoteIds[rowKey(row)] = $event
+                      "
                     />
                   </template>
                   <template v-else>
                     <div class="flex min-w-0 items-center gap-2">
                       <span class="truncate text-sm">
-                        {{ $t("pages.catalogConnect.importAsNew") }}
+                        {{
+                          setupPipeline
+                            ? $t("pages.catalogConnect.setupSkipUnmatched")
+                            : $t("pages.catalogConnect.importAsNew")
+                        }}
                       </span>
                       <Button
                         variant="ghost"
@@ -1412,14 +1707,20 @@ export default {
         </div>
 
         <div v-if="searchForExternalId" class="mb-4 max-w-xl space-y-3">
-          <p class="text-sm font-medium">{{ $t("pages.catalogConnect.searchLocal") }}</p>
+          <p class="text-sm font-medium">
+            {{ $t("pages.catalogConnect.searchLocal") }}
+          </p>
           <div class="flex gap-2">
             <NavSearchField
               v-model="searchQuery"
               :placeholder="$t('pages.productsPage.searchPlaceholder')"
               @submit="searchProducts"
             />
-            <Button variant="outline" :disabled="searchBusy" @click="searchProducts">
+            <Button
+              variant="outline"
+              :disabled="searchBusy"
+              @click="searchProducts"
+            >
               <Spinner v-if="searchBusy" />
               {{ $t("common.search") }}
             </Button>
@@ -1443,14 +1744,21 @@ export default {
             <Spinner v-if="applyBusy" />
             {{ $t("pages.catalogConnect.confirm") }}
           </Button>
-          <Button variant="ghost" :disabled="applyBusy" @click="skipCurrentMatch">
+          <Button
+            variant="ghost"
+            :disabled="applyBusy"
+            @click="skipCurrentMatch"
+          >
             {{ $t("pages.catalogConnect.skipConnection") }}
           </Button>
           <Button variant="ghost" :disabled="applyBusy" @click="goHome">
             {{ $t("common.back") }}
           </Button>
         </div>
-        <p v-if="applyBusy" class="mt-3 text-sm text-muted-foreground tabular-nums">
+        <p
+          v-if="applyBusy"
+          class="mt-3 text-sm text-muted-foreground tabular-nums"
+        >
           {{ applyLiveLog }}
         </p>
       </div>

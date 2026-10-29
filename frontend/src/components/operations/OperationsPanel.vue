@@ -22,14 +22,19 @@ import {
   SheetHeaderClose,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  InsetGroupLabel,
-} from "@/components/ui/inset-group";
+import { InsetGroupLabel } from "@/components/ui/inset-group";
 import { EmptyState } from "@/components/ui/empty-state";
 import OperationItem from "./OperationItem.vue";
-import { displaySonnerSuccess, displaySonnerError } from "@/store/sonnerHelper";
+import {
+  displaySonnerSuccess,
+  displaySonnerError,
+  resolveApiErrorMessage,
+} from "@/store/sonnerHelper";
 import { t } from "@/i18n";
-import { SHEET_WIDTH_DEFAULTS, SHEET_WIDTH_STORAGE } from "@/composables/useSheetResize";
+import {
+  SHEET_WIDTH_DEFAULTS,
+  SHEET_WIDTH_STORAGE,
+} from "@/composables/useSheetResize";
 import { useCompanionSheets } from "@/composables/useCompanionSheets";
 import { OPERATION_TERMINAL_STATUSES } from "@/lib/operationsControl";
 
@@ -38,10 +43,16 @@ const { edgeOffset } = useCompanionSheets();
 const opsEdgeOffset = edgeOffset("operations");
 
 const panelOpen = computed(() => store.state.operations.panelOpen);
-const activeOperations = computed(() => store.getters["operations/activeOperations"]);
-const historyOperations = computed(() => store.getters["operations/historyOperations"]);
+const activeOperations = computed(
+  () => store.getters["operations/activeOperations"],
+);
+const historyOperations = computed(
+  () => store.getters["operations/historyOperations"],
+);
 const hasCompleted = computed(() =>
-  store.state.operations.operations.some((o) => OPERATION_TERMINAL_STATUSES.has(o.status)),
+  store.state.operations.operations.some((o) =>
+    OPERATION_TERMINAL_STATUSES.has(o.status),
+  ),
 );
 const historyHasMore = computed(() => store.state.operations.historyHasMore);
 const historyLoaded = computed(() => store.state.operations.historyLoaded);
@@ -74,9 +85,7 @@ async function handleRetry(id) {
     const result = await store.dispatch("operations/retryFailed", id);
     displaySonnerSuccess(result.message || t("operations.retryStarted"));
   } catch (error) {
-    displaySonnerError(
-      error.response?.data?.message || t("operations.retryError"),
-    );
+    displaySonnerError(resolveApiErrorMessage(error, "operations.retryError"));
   }
 }
 
@@ -133,7 +142,10 @@ function handleRemove(id) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-                <AlertDialogAction variant="destructive" @click="clearCompleted">
+                <AlertDialogAction
+                  variant="destructive"
+                  @click="clearCompleted"
+                >
                   {{ t("operations.clearCompletedConfirm") }}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -146,10 +158,7 @@ function handleRemove(id) {
         </SheetDescription>
       </SheetHeader>
 
-      <div
-        v-if="hasAny"
-        class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
-      >
+      <div v-if="hasAny" class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <section v-if="activeOperations.length > 0">
           <InsetGroupLabel>
             {{ t("operations.active") }}

@@ -2,7 +2,6 @@
 import { Spinner } from "@/components/ui/spinner";
 import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
-import AiMcpServersPanel from "@/components/settings/AiMcpServersPanel.vue";
 import OperatorMcpConnectPanel from "@/components/settings/OperatorMcpConnectPanel.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -47,7 +46,6 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Switch } from "@/components/ui/switch";
 import {
   Bot,
-  CheckCircle2,
   Pencil,
   Plus,
   RefreshCw,
@@ -67,7 +65,6 @@ export default {
     Spinner,
     PageSection,
     SettingsFormField,
-    AiMcpServersPanel,
     OperatorMcpConnectPanel,
     FieldGroup,
     Button,
@@ -101,8 +98,6 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
-    Bot,
-    CheckCircle2,
     Pencil,
     Plus,
     RefreshCw,
@@ -429,6 +424,7 @@ export default {
     });
 
     return {
+      Bot,
       models,
       isLoading,
       isDialogOpen,
@@ -589,8 +585,6 @@ export default {
     </PageSection>
 
     <OperatorMcpConnectPanel class="mt-8" />
-
-    <AiMcpServersPanel class="mt-8" />
 
     <AlertDialog
       :open="confirmDialog.open"

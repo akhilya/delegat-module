@@ -47,7 +47,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -76,7 +76,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -94,7 +94,7 @@ public class ProductGroupController : ControllerBase
                     .ThenInclude(l => l.connection));
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         return Ok(((Infrastructure.Interfaces.IMapToDTO<ProductGroup.GroupDetailDTO>)group).MapToDTO(_serviceProvider));
     }
@@ -109,7 +109,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -117,7 +117,7 @@ public class ProductGroupController : ControllerBase
         var existingGroup = await groupRepo.FindAsync(
             g => g.storeId == selectedStoreId.Value && g.name == input.name);
         if (existingGroup != null)
-            throw ApiException.BadRequest("A group with this name already exists");
+            throw ApiException.BadRequest(code: "group_name_taken");
 
         var group = new ProductGroup();
         group.AddFill(new ProductGroup.AddForm
@@ -148,7 +148,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -156,7 +156,7 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         // Check name uniqueness if changing
         if (input.name != null && input.name != group.name)
@@ -164,7 +164,7 @@ public class ProductGroupController : ControllerBase
             var existingGroup = await groupRepo.FindAsync(
                 g => g.storeId == selectedStoreId.Value && g.name == input.name && g.Id != groupId);
             if (existingGroup != null)
-                throw ApiException.BadRequest("A group with this name already exists");
+                throw ApiException.BadRequest(code: "group_name_taken");
         }
 
         group.UpdateFill(input);
@@ -183,7 +183,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -194,7 +194,7 @@ public class ProductGroupController : ControllerBase
                 .Include(g => g.marketplaceLinks));
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         // Delete related records
         var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
@@ -226,7 +226,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -234,7 +234,7 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var addedCount = await ProductGroupMembership.AddOrMoveToGroupAsync(
             _db, selectedStoreId.Value, groupId, request.productIds);
@@ -252,7 +252,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -260,14 +260,14 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
         var member = await memberRepo.FindAsync(
             m => m.groupId == groupId && m.productId == productId);
 
         if (member == null)
-            throw ApiException.NotFound("Product is not in the group");
+            throw ApiException.NotFound(code: "product_not_in_group");
 
         await memberRepo.DeleteAsync(member);
 
@@ -285,7 +285,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -293,14 +293,14 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var memberRepo = _unitOfWork.Repository<ProductGroupMember>();
         var member = await memberRepo.FindAsync(
             m => m.groupId == groupId && m.productId == productId);
 
         if (member == null)
-            throw ApiException.NotFound("Product is not in the group");
+            throw ApiException.NotFound(code: "product_not_in_group");
 
         member.UpdateFill(input);
         await memberRepo.UpdateAsync(member);
@@ -322,7 +322,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -330,12 +330,12 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var result = await _groupSyncService.ExportGroupAsync(groupId, connectionId);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
+            throw ApiException.BadRequest(code: "export_failed");
 
         return Ok(new
         {
@@ -357,12 +357,12 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var result = await _groupSyncService.ImportGroupsAsync(connectionId, selectedStoreId.Value);
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Import failed", code: "import_failed");
+            throw ApiException.BadRequest(code: "import_failed");
 
         return Ok(new
         {
@@ -383,7 +383,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -394,7 +394,7 @@ public class ProductGroupController : ControllerBase
                     .ThenInclude(l => l.connection));
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var syncStatuses = group.marketplaceLinks.Select(l => new
         {
@@ -421,7 +421,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -429,12 +429,12 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var result = await _groupSyncService.DeleteMarketplaceGroupAsync(groupId, connectionId);
 
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Delete failed");
+            throw ApiException.BadRequest(code: "group_marketplace_sync_failed");
 
         return Ok(new { success = true });
     }
@@ -450,7 +450,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -458,13 +458,13 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var result = await _groupSyncService.AddProductsToMarketplaceGroupAsync(
             groupId, connectionId, request.productIds);
 
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to add products");
+            throw ApiException.BadRequest(code: "group_marketplace_sync_failed");
 
         return Ok(new
         {
@@ -486,7 +486,7 @@ public class ProductGroupController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var groupRepo = _unitOfWork.Repository<ProductGroup>();
 
@@ -494,13 +494,13 @@ public class ProductGroupController : ControllerBase
             g => g.Id == groupId && g.storeId == selectedStoreId.Value);
 
         if (group == null)
-            throw ApiException.NotFound("Group not found", code: "group_not_found");
+            throw ApiException.NotFound(code: "group_not_found");
 
         var result = await _groupSyncService.RemoveProductsFromMarketplaceGroupAsync(
             groupId, connectionId, request.productIds);
 
         if (!result.Success)
-            throw ApiException.BadRequest(result.ErrorMessage ?? "Failed to remove products");
+            throw ApiException.BadRequest(code: "group_marketplace_sync_failed");
 
         return Ok(new
         {

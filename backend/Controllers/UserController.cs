@@ -64,20 +64,20 @@ public class UserController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+            throw ApiException.NotFound(code: "user_not_found");
 
         if (input.userName != null)
         {
             var normalizedName = input.userName.Trim();
             if (string.IsNullOrWhiteSpace(normalizedName))
-                throw ApiException.BadRequest("Username cannot be empty", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "username_required");
 
             if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Username cannot be longer than {Delegat.Models.User.USER_NAME_MAX_LENGTH} characters");
+                throw ApiException.BadRequest(code: "username_too_long");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)
-                throw ApiException.BadRequest("A user with this name already exists");
+                throw ApiException.BadRequest(code: "username_taken");
 
             user.UserName = normalizedName;
             user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
@@ -86,16 +86,16 @@ public class UserController : ControllerBase
         if (input.isAdmin.HasValue)
         {
             if (!currentUser.isAdmin)
-                throw ApiException.Forbidden("Only the instance owner can change the owner flag");
+                throw ApiException.Forbidden(code: "owner_flag_change_forbidden");
 
             if (user.Id == currentUser.Id && !input.isAdmin.Value)
-                throw ApiException.BadRequest("Cannot remove owner rights from yourself");
+                throw ApiException.BadRequest(code: "owner_self_demote_forbidden");
 
             if (!input.isAdmin.Value)
             {
                 var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin, ct);
                 if (user.isAdmin && activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Cannot remove rights from the last active owner");
+                    throw ApiException.BadRequest(code: "last_owner_required");
             }
 
             user.isAdmin = input.isAdmin.Value;
@@ -106,13 +106,13 @@ public class UserController : ControllerBase
         if (input.isActive.HasValue)
         {
             if (user.Id == currentUser.Id && !input.isActive.Value)
-                throw ApiException.BadRequest("Cannot deactivate yourself");
+                throw ApiException.BadRequest(code: "self_deactivation_forbidden");
 
             if (!input.isActive.Value && user.isAdmin)
             {
                 var activeAdminCount = await _userManager.Users.CountAsync(u => u.isActive && u.isAdmin, ct);
                 if (activeAdminCount <= 1)
-                    throw ApiException.BadRequest("Cannot deactivate the last active owner");
+                    throw ApiException.BadRequest(code: "last_active_owner_required");
             }
 
             user.isActive = input.isActive.Value;
@@ -128,7 +128,7 @@ public class UserController : ControllerBase
         if (input.password != null)
         {
             if (string.IsNullOrWhiteSpace(input.password))
-                throw ApiException.BadRequest("Password cannot be empty", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "password_required");
 
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, input.password);
@@ -145,7 +145,7 @@ public class UserController : ControllerBase
     {
         var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+            throw ApiException.NotFound(code: "user_not_found");
 
         var access = await _permissionService.GetUserAccessAsync(id, ct);
         return Ok(access);
@@ -162,7 +162,7 @@ public class UserController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+            throw ApiException.NotFound(code: "user_not_found");
 
         // Admin-only claims are never assignable - only User.isAdmin receives them at hydrate time.
         var roles = input.roles ?? [];
@@ -218,27 +218,27 @@ public class UserController : ControllerBase
         if (input.password != null)
         {
             if (string.IsNullOrWhiteSpace(input.currentPassword))
-                throw ApiException.BadRequest("Enter your current password", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "current_password_required");
 
             if (!await _userManager.CheckPasswordAsync(user, input.currentPassword))
-                throw ApiException.BadRequest("Current password is incorrect", code: "invalid_credentials");
+                throw ApiException.BadRequest(code: "password_mismatch");
 
             if (string.IsNullOrWhiteSpace(input.password))
-                throw ApiException.BadRequest("New password cannot be empty", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "password_required");
         }
 
         if (input.userName != null)
         {
             var normalizedName = input.userName.Trim();
             if (string.IsNullOrWhiteSpace(normalizedName))
-                throw ApiException.BadRequest("Username cannot be empty", code: "required_fields_missing");
+                throw ApiException.BadRequest(code: "username_required");
 
             if (normalizedName.Length > Delegat.Models.User.USER_NAME_MAX_LENGTH)
-                throw ApiException.BadRequest($"Username cannot be longer than {Delegat.Models.User.USER_NAME_MAX_LENGTH} characters");
+                throw ApiException.BadRequest(code: "username_too_long");
 
             var duplicate = await _userManager.FindByNameAsync(normalizedName);
             if (duplicate != null && duplicate.Id != user.Id)
-                throw ApiException.BadRequest("A user with this name already exists");
+                throw ApiException.BadRequest(code: "username_taken");
 
             user.UserName = normalizedName;
             user.NormalizedUserName = _userManager.NormalizeName(normalizedName);
@@ -271,7 +271,7 @@ public class UserController : ControllerBase
             .AnyAsync(m => m.Id == userId && m.isActive, ct);
 
         if (!isMember)
-            throw ApiException.Forbidden("You are not a member of this store", code: "access_denied_store");
+            throw ApiException.Forbidden(code: "access_denied_store");
 
         // Update via UserManager so we mutate the already-tracked Identity user, if any.
         var user = await _userManager.FindByIdAsync(userId.ToString());

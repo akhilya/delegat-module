@@ -23,8 +23,12 @@ describe("docsUrl", () => {
         "https://module.delegat.pro/docs/en/workspace/products",
       );
       assert.equal(getDocsPublicUrl("ru"), "https://module.delegat.pro/docs/");
-      assert.equal(getDocsPageUrl("", "ru"), "https://module.delegat.pro/docs/");
+      assert.equal(
+        getDocsPageUrl("", "ru"),
+        "https://module.delegat.pro/docs/",
+      );
       assert.equal(getAdapterCredentialsDocsSlug("ozon"), "adapters/ozon");
+      assert.equal(getAdapterCredentialsDocsSlug("avito"), "adapters/avito");
       assert.equal(getAdapterCredentialsDocsSlug("unknown"), null);
     } finally {
       delete globalThis.window;

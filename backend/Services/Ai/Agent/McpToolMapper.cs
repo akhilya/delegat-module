@@ -14,7 +14,10 @@ public static class McpToolMapper
         var description = tool.TryGetProperty("description", out var d) ? d.GetString() : null;
         var schema = new AiToolInputSchema { type = "object", properties = new(), required = new() };
         if (tool.TryGetProperty("inputSchema", out var input) && input.ValueKind == JsonValueKind.Object)
+        {
             schema = ReadSchema(input);
+            schema.RawSchema = input.Clone();
+        }
 
         return new AiTool
         {
@@ -42,7 +45,7 @@ public static class McpToolMapper
         {
             foreach (var item in req.EnumerateArray())
             {
-                var name = item.GetString();
+                var name = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
                 if (!string.IsNullOrWhiteSpace(name)) schema.required.Add(name);
             }
         }
@@ -74,6 +77,7 @@ public static class McpToolMapper
         if (el.TryGetProperty("required", out var req) && req.ValueKind == JsonValueKind.Array)
         {
             prop.required = req.EnumerateArray()
+                .Where(x => x.ValueKind == JsonValueKind.String)
                 .Select(x => x.GetString())
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x!)

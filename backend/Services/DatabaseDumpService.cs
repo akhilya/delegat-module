@@ -35,7 +35,7 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
     public async Task<DatabaseDumpHandle> CreateDumpAsync(CancellationToken cancellationToken = default)
     {
         if (!await _gate.WaitAsync(0, cancellationToken))
-            throw ApiException.Conflict("A database dump is already in progress", code: "dump_in_progress");
+            throw ApiException.Conflict(code: "dump_in_progress");
 
         var released = false;
         void ReleaseOnce()
@@ -53,7 +53,7 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
             EnsureExecutableAvailable();
 
             if (string.IsNullOrWhiteSpace(_settings.Database))
-                throw ApiException.InternalServerError("MySQL database name is not configured", code: "dump_failed");
+                throw ApiException.InternalServerError(code: "dump_failed");
 
             var fileName = $"delegat-{DateTime.UtcNow:yyyyMMdd-HHmmss}.sql";
             cnfPath = Path.Combine(Path.GetTempPath(), $"delegat-mysqldump-{Guid.NewGuid():N}.cnf");
@@ -83,7 +83,7 @@ public sealed class DatabaseDumpService : IDatabaseDumpService
             startInfo.ArgumentList.Add(_settings.Database);
 
             using var process = Process.Start(startInfo)
-                ?? throw ApiException.InternalServerError("Failed to start mysqldump", code: "dump_failed");
+                ?? throw ApiException.InternalServerError(code: "dump_failed");
 
             await using (var dumpStream = new FileStream(dumpPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {

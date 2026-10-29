@@ -2,11 +2,11 @@ import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { randomUuid } from "@/utils/uuid";
 import { t } from "@/i18n";
 import {
-  appendTextDelta,
-  appendTool,
-} from "@/lib/ai/timeline";
+  apiHistoryFromBlocks,
+  appendAssistantApiBlock,
+} from "@/lib/ai/chatHistory.js";
+import { appendTextDelta, appendTool } from "@/lib/ai/timeline";
 import {
-  AI_CONFIRM_PLAN,
   emptyAssistantMessage,
   hydrateConversation,
   isAiControlMessage,
@@ -91,23 +91,7 @@ function buildHistory(messages) {
     }
 
     if (m.apiBlocks?.length) {
-      const assistantContent = [];
-      const toolResults = [];
-
-      for (const block of m.apiBlocks) {
-        if (block.role === "assistant") {
-          assistantContent.push(...(block.content || []));
-        } else if (block.role === "tool_result") {
-          toolResults.push(block);
-        }
-      }
-
-      if (assistantContent.length) {
-        result.push({ role: "assistant", content: assistantContent });
-      }
-      if (toolResults.length) {
-        result.push({ role: "user", content: toolResults });
-      }
+      result.push(...apiHistoryFromBlocks(m.apiBlocks));
 
       if (m.plan) {
         const steps = (m.plan.steps || [])
@@ -205,11 +189,16 @@ async function consumeSse(response, commit, dispatch) {
                   parsedResult = null;
                 }
               }
-              const failed = toolResultFailed(parsedResult, event.data?.summary);
+              const failed = toolResultFailed(
+                parsedResult,
+                event.data?.summary,
+              );
               const effects = event.data?.effects || [];
               if (!failed) {
-                if (effects.includes("mapping")) commit("triggerMappingRefresh");
-                if (effects.includes("product")) commit("triggerProductRefresh");
+                if (effects.includes("mapping"))
+                  commit("triggerMappingRefresh");
+                if (effects.includes("product"))
+                  commit("triggerProductRefresh");
               }
             }
             break;
@@ -311,7 +300,17 @@ export default {
     },
     updateLastAssistantMessage(
       state,
-      { delta, textBlock, toolCall, plan, done, modelName, dbId, resume, planFailed },
+      {
+        delta,
+        textBlock,
+        toolCall,
+        plan,
+        done,
+        modelName,
+        dbId,
+        resume,
+        planFailed,
+      },
     ) {
       const last = state.messages[state.messages.length - 1];
       if (!last || last.role !== "assistant") return;
@@ -329,39 +328,23 @@ export default {
       if (!last.timeline) last.timeline = [];
 
       if (textBlock && textBlock.length > 0) {
-        const assistantBlock = last.apiBlocks.find(
-          (b) => b.role === "assistant",
-        );
-        if (assistantBlock) {
-          const textEntry = assistantBlock.content.find(
-            (c) => c.type === "text",
-          );
-          if (textEntry) textEntry.text += textBlock;
-          else assistantBlock.content.push({ type: "text", text: textBlock });
-        } else {
-          last.apiBlocks.push({
-            role: "assistant",
-            content: [{ type: "text", text: textBlock }],
-          });
-        }
+        appendAssistantApiBlock(last.apiBlocks, {
+          type: "text",
+          text: textBlock,
+        });
       }
 
       if (toolCall) {
         last.toolCalls.push(toolCall);
         last.timeline = appendTool(last.timeline, toolCall);
 
-        let assistantBlock = last.apiBlocks.find((b) => b.role === "assistant");
-        if (!assistantBlock) {
-          assistantBlock = { role: "assistant", content: [] };
-          last.apiBlocks.push(assistantBlock);
-        }
         let inputObj = {};
         try {
           inputObj = JSON.parse(toolCall.input || "{}");
         } catch {
           inputObj = {};
         }
-        assistantBlock.content.push({
+        appendAssistantApiBlock(last.apiBlocks, {
           type: "tool_use",
           id: toolCall.id || toolCall.name,
           name: toolCall.name,
@@ -451,9 +434,7 @@ export default {
       state.productRefreshToken++;
     },
     setLastPlanConfirmed(state) {
-      const planMsg = [...state.messages]
-        .reverse()
-        .find((m) => isOpenPlan(m));
+      const planMsg = [...state.messages].reverse().find((m) => isOpenPlan(m));
       if (!planMsg) return;
       planMsg.planConfirmed = true;
       planMsg.planFailed = false;
@@ -471,7 +452,9 @@ export default {
       if (!msg || msg.role !== "assistant") return;
       msg.formReplies = {
         ...(msg.formReplies || {}),
-        [id]: { answers: answers && typeof answers === "object" ? answers : {} },
+        [id]: {
+          answers: answers && typeof answers === "object" ? answers : {},
+        },
       };
     },
     setLastPlanCancelled(state) {
@@ -531,10 +514,7 @@ export default {
         const data = res.data;
         if (!data) return;
         if (data.title) commit("setConversationTitle", data.title);
-        commit(
-          "setMessages",
-          hydrateConversation(data.messages || []),
-        );
+        commit("setMessages", hydrateConversation(data.messages || []));
       } catch {
         /* silent */
       }
@@ -565,11 +545,7 @@ export default {
         const current = state.messages.at(-1);
         if (current?.role === "assistant") {
           if (current.done && !current.plan) return;
-          if (
-            current.plan &&
-            current.planConfirmed &&
-            !current.planExecuted
-          ) {
+          if (current.plan && current.planConfirmed && !current.planExecuted) {
             commit("updateLastAssistantMessage", { resume: true });
           } else if (!current.plan) {
             commit("replaceLastAssistant", emptyAssistantMessage());
@@ -612,8 +588,7 @@ export default {
       const attached = [...(state.attachedFiles || [])];
       const attachments = attachmentMetaList(attached);
       const text =
-        content ||
-        (attachments.length ? t("ai.attachedFilesMessage") : "");
+        content || (attachments.length ? t("ai.attachedFilesMessage") : "");
       if (!text) return;
 
       if (!formReply && !isAiControlMessage(text))
@@ -697,13 +672,14 @@ export default {
         }
       } finally {
         abortController = null;
-        if (state.sessionId !== activeSessionId) return;
-        const last = state.messages.at(-1);
-        if (!userStopped && last?.role === "assistant" && !last.done) {
-          await dispatch("attachLiveStream");
-          return;
+        if (state.sessionId === activeSessionId) {
+          const last = state.messages.at(-1);
+          if (!userStopped && last?.role === "assistant" && !last.done) {
+            await dispatch("attachLiveStream");
+          } else {
+            commit("setLoading", false);
+          }
         }
-        commit("setLoading", false);
       }
     },
 
@@ -720,20 +696,20 @@ export default {
     },
 
     async confirmPlan({ state, commit, dispatch }) {
-      const planMsg = [...state.messages]
-        .reverse()
-        .find((m) => isOpenPlan(m));
+      const planMsg = [...state.messages].reverse().find((m) => isOpenPlan(m));
       const steps = planMsg?.plan?.steps || [];
+      const proposalId = planMsg?.plan?.proposalId;
       const executable =
-        steps.length > 0 && steps.every((s) => s.tool && s.args);
-
-      commit("setLastPlanConfirmed");
-      dispatch("syncHistory");
+        proposalId && steps.length > 0 && steps.every((s) => s.tool && s.args);
 
       if (!executable) {
-        dispatch("sendMessage", AI_CONFIRM_PLAN);
+        commit("updateLastAssistantMessage", {
+          delta: `\n\n${t("store.aiChatModule.planUnavailable")}`,
+        });
         return;
       }
+
+      commit("setLastPlanConfirmed");
 
       userStopped = false;
       const activeSessionId = state.sessionId;
@@ -745,7 +721,7 @@ export default {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF": "1" },
           body: JSON.stringify({
-            steps,
+            proposalId,
             sessionId: activeSessionId,
           }),
           signal: abortController.signal,
@@ -767,13 +743,14 @@ export default {
         }
       } finally {
         abortController = null;
-        if (state.sessionId !== activeSessionId) return;
-        const last = state.messages.at(-1);
-        if (!userStopped && last?.role === "assistant" && !last.done) {
-          await dispatch("attachLiveStream");
-          return;
+        if (state.sessionId === activeSessionId) {
+          const last = state.messages.at(-1);
+          if (!userStopped && last?.role === "assistant" && !last.done) {
+            await dispatch("attachLiveStream");
+          } else {
+            commit("setLoading", false);
+          }
         }
-        commit("setLoading", false);
       }
     },
 

@@ -1,5 +1,7 @@
 # Order sheet facts
 
+> **Implemented UI design record.** Verify the current order sheet and adapter DTOs before changing behavior.
+
 Cabinet order sheet is one scroll (no tabs). Empty groups are omitted.
 
 1. Header: display id only.

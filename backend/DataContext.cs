@@ -26,6 +26,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<PendingFolderJob> pendingFolderJobs { get; set; }
     public DbSet<PendingCatalogConnectJob> pendingCatalogConnectJobs { get; set; }
     public DbSet<PendingCategoryImport> pendingCategoryImports { get; set; }
+    public DbSet<ScheduledTask> scheduledTasks { get; set; }
+    public DbSet<ScheduledTaskRun> scheduledTaskRuns { get; set; }
     public DbSet<InvitationToken> invitationTokens { get; set; }
     public DbSet<Note> notes { get; set; }
     public DbSet<FileTag> tags { get; set; }
@@ -111,6 +113,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<AiAgentAudit> aiAgentAudits { get; set; }
     public DbSet<AiChatAttachment> aiChatAttachments { get; set; }
     public DbSet<AiMcpServer> aiMcpServers { get; set; }
+    public DbSet<AiMemory> aiMemories { get; set; }
 
     public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
@@ -487,6 +490,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AdapterHttpLog>()
             .HasIndex(l => new { l.storeId, l.createdAt });
         builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => new { l.storeId, l.statusCode });
+        builder.Entity<AdapterHttpLog>()
+            .HasIndex(l => l.createdAt);
+        builder.Entity<ApiRequestLog>()
+            .HasIndex(l => l.createdAt);
+        builder.Entity<AdapterHttpLog>()
             .HasIndex(l => new { l.connectionId, l.createdAt });
         builder.Entity<AdapterHttpLog>()
             .HasIndex(l => new { l.statusCode, l.createdAt });
@@ -516,6 +525,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(c => new { c.storeId, c.userId });
         builder.Entity<AiConversationMessage>()
             .HasIndex(m => new { m.conversationId, m.createdAt });
+        builder.Entity<AiConversationMessage>()
+            .Property(m => m.toolCallsJson)
+            .IsConcurrencyToken();
 
         // AiStoreSettings - one row per store
         builder.Entity<AiStoreSettings>()
@@ -532,6 +544,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(a => new { a.storeId, a.userId, a.sessionId });
         builder.Entity<AiMcpServer>()
             .HasIndex(s => s.isEnabled);
+        builder.Entity<AiMemory>()
+            .HasIndex(m => new { m.storeId, m.userId, m.category, m.key })
+            .IsUnique();
+        builder.Entity<AiMemory>()
+            .HasIndex(m => new { m.storeId, m.userId });
 
         // StoreBrandingSettings - one row per store
         builder.Entity<StoreBrandingSettings>()
@@ -594,6 +611,26 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(j => j.operationId);
         builder.Entity<PendingCategoryImport>()
             .HasIndex(j => new { j.connectionId, j.externalCategoryId, j.status });
+
+        builder.Entity<ScheduledTask>(e =>
+        {
+            e.Property(x => x.name).HasMaxLength(120);
+            e.Property(x => x.actionId).HasMaxLength(160);
+            e.Property(x => x.timeZoneId).HasMaxLength(100);
+            e.HasIndex(x => new { x.isEnabled, x.nextRunAt });
+            e.HasIndex(x => new { x.storeId, x.createdAt });
+        });
+        builder.Entity<ScheduledTaskRun>(e =>
+        {
+            e.Property(x => x.actionId).HasMaxLength(160);
+            e.Property(x => x.status).HasMaxLength(24);
+            e.HasIndex(x => new { x.scheduledTaskId, x.startedAt });
+            e.HasIndex(x => new { x.storeId, x.startedAt });
+            e.HasOne<ScheduledTask>()
+                .WithMany()
+                .HasForeignKey(x => x.scheduledTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         builder.Entity<PendingProductImport>()
             .HasIndex(p => new { p.connectionId, p.externalCategoryId });
 

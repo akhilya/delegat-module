@@ -36,7 +36,7 @@ public sealed class FolderJobService
         {
             var folder = await _context.productFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId, ct)
-                ?? throw ApiException.NotFound("Folder not found");
+                ?? throw ApiException.NotFound(code: "folder_not_found");
 
             var folderIds = new List<int> { folderId.Value };
             await CollectProductDescendantsAsync(folderId.Value, productId, folderIds, ct);
@@ -66,7 +66,7 @@ public sealed class FolderJobService
         {
             var folder = await _context.storeFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct)
-                ?? throw ApiException.NotFound("Folder not found");
+                ?? throw ApiException.NotFound(code: "folder_not_found");
 
             var folderIds = new List<int> { folderId.Value };
             await CollectStoreDescendantsAsync(folderId.Value, storeId, folderIds, ct);
@@ -308,7 +308,7 @@ public sealed class FolderJobService
         {
             var folder = await _context.productFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.productId == productId, ct)
-                ?? throw ApiException.NotFound("Folder not found");
+                ?? throw ApiException.NotFound(code: "folder_not_found");
             folderName = folder.name;
             allFolderIds.Add(folderId.Value);
             await CollectProductDescendantsAsync(folderId.Value, productId, allFolderIds, ct);
@@ -351,7 +351,7 @@ public sealed class FolderJobService
         {
             var folder = await _context.storeFolders.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == folderId.Value && f.storeId == storeId, ct)
-                ?? throw ApiException.NotFound("Folder not found");
+                ?? throw ApiException.NotFound(code: "folder_not_found");
             folderName = folder.name;
             allFolderIds.Add(folderId.Value);
             await CollectStoreDescendantsAsync(folderId.Value, storeId, allFolderIds, ct);

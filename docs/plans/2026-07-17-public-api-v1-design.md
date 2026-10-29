@@ -1,5 +1,7 @@
 # Public API v1 - Design
 
+> **Historical design — implemented and extended.** The current partner contract is [`docs/api/public-v1.md`](../api/public-v1.md); verify changes against its contract tests rather than implementing from this initial proposal.
+
 **Goal:** Partner REST API for ERP/1C/n8n with API keys: catalog CRUD + marketplace sync.
 
 **Architecture:** Separate façade `/api/v1` over existing services and background queues. SPA `/api/*` (JWT cookie + CSRF) unchanged. Operator MCP (`POST /api/mcp`) is a **different** surface (2026-09-06); it is not partner v1 and is not this design. AI tools are not the Public API.

@@ -13,6 +13,10 @@ public class AiRequest
     public List<AiTool>? tools { get; set; }
     public bool stream { get; set; }
     public string? user { get; set; } // session/conversation id - breaks KV-cache between sessions
+
+    // Internal hint: eligible chat turns may opt into provider-side prompt caching.
+    [JsonIgnore]
+    public bool enable_prompt_cache { get; set; }
 }
 
 public class AiMessage
@@ -36,6 +40,11 @@ public class AiToolInputSchema
     public string type { get; set; } = "object";
     public Dictionary<string, AiToolProperty>? properties { get; set; }
     public List<string>? required { get; set; }
+
+    // MCP schemas can contain JSON Schema keywords not represented by the legacy DTO.
+    // Keep the source schema for provider serialization so constraints are not silently lost.
+    [JsonIgnore]
+    public System.Text.Json.JsonElement? RawSchema { get; set; }
 }
 
 public class AiToolProperty
@@ -83,8 +92,30 @@ public class AiStreamEvent
     public string type { get; set; } = null!;
     public AiStreamDelta? delta { get; set; }
     public AiContentBlock? content_block { get; set; }
+    public AiStreamUsage? usage { get; set; }
     public int? index { get; set; }
     public string? error { get; set; }
+}
+
+/// <summary>Provider-reported token usage, when available in the response stream.</summary>
+public class AiStreamUsage
+{
+    public long? inputTokens { get; set; }
+    public long? outputTokens { get; set; }
+    public long? cacheReadInputTokens { get; set; }
+    public long? cacheCreationInputTokens { get; set; }
+
+    public void MergeLatest(AiStreamUsage? update)
+    {
+        if (update == null) return;
+        inputTokens = Max(inputTokens, update.inputTokens);
+        outputTokens = Max(outputTokens, update.outputTokens);
+        cacheReadInputTokens = Max(cacheReadInputTokens, update.cacheReadInputTokens);
+        cacheCreationInputTokens = Max(cacheCreationInputTokens, update.cacheCreationInputTokens);
+    }
+
+    private static long? Max(long? current, long? update) =>
+        update.HasValue ? Math.Max(current ?? 0, update.Value) : current;
 }
 
 public class AiStreamDelta

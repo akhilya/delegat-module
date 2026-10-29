@@ -1,5 +1,7 @@
 # Delegat.Module - Platform Capabilities
 
+> **Feature reference, not a guaranteed live inventory.** The roadmap and detailed implementation notes need verification against the current code and tests before they are used for planning. Product / architecture canon is linked from [docs/README.md](../README.md).
+
 ## Distribution Model
 
 **Per-instance self-hosting:** each customer receives an isolated Docker stack on their own subdomain.
@@ -30,7 +32,7 @@
 
 ### Marketplace Integration
 - Plugin architecture (DLL, isolated AssemblyLoadContext, hot reload)
-- Plugins: Wildberries, Ozon, OpenCart (via bridge)
+- Adapter plugins in the current tree: Ozon, Wildberries, Yandex Market, OpenCart, WooCommerce, and Medusa. Avito is experimental and currently supports listing import and price operations, not listing publication.
 - Marketplace connections (MarketplaceConnection) with AES-256 encrypted credentials; create tests the adapter first and refuses to save on failure. Wildberries developer test tokens use `*-sandbox.wildberries.ru` (Auto from the JWT test claim, or Environment = Sandbox)
 - Several connections of the same adapter per store are allowed; create/update is rejected if the remote shop is already connected (same Client ID, store URL, campaign, or API key)
 - Visual field mapping editor (node graph, MappingCanvas)
@@ -177,8 +179,8 @@
 ### High Priority
 
 #### Monitoring
-- **Current:** ILogger only; logs go to container stdout only.
-- **Needed:** Sentry for errors (or structured logging via Serilog → Loki).
+- **Current:** `ILogger` logs go to container stdout. When `SENTRY_DSN` is set, the API can emit sampled, manually instrumented AI-turn/model/tool performance traces; this uses the Sentry core SDK only and does not capture HTTP request transactions or application error events.
+- **Needed:** Configure the Sentry DSN and trace sample rate in deployment to use AI traces. General application error monitoring remains unconfigured; evaluate it separately with a privacy-reviewed event policy.
 
 #### Task History UI
 - **Current:** Sync progress is only visible while the page is open.

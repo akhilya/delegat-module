@@ -377,11 +377,11 @@ public class MedusaPluginTests
     }
 
     [Fact]
-    public async Task GetPriceFields_ReturnsPriceAndSalePrice()
+    public async Task GetPriceFields_ReturnsPriceAndOldPrice()
     {
         var fields = await new MedusaPlugin().GetPriceFieldsAsync(Context(), "pcat_15");
         Assert.Contains(fields, f => f.Key == "price" && f.IsRequired);
-        Assert.Contains(fields, f => f.Key == "sale_price" && !f.IsRequired);
+        Assert.Contains(fields, f => f.Key == "old_price" && !f.IsRequired);
     }
 
     [Fact]

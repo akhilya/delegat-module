@@ -129,7 +129,7 @@ public sealed class CatalogScrapeService
             .Distinct(StringComparer.Ordinal)
             .ToList();
         if (ids.Count == 0)
-            throw ApiException.BadRequest("No public product ids to import", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "public_product_ids_required");
 
         var clientStarted = !string.IsNullOrWhiteSpace(operationId);
         operationId = clientStarted ? operationId!.Trim() : Guid.NewGuid().ToString("N");
@@ -383,12 +383,12 @@ public sealed class CatalogScrapeService
     {
         var key = (raw ?? "").Trim().ToLowerInvariant();
         if (key.Length is < 1 or > MarketplaceConnection.ADAPTER_KEY_MAX_LENGTH)
-            throw ApiException.BadRequest("Adapter is required", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "adapter_required");
         foreach (var ch in key)
         {
             if (ch is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-')
                 continue;
-            throw ApiException.BadRequest("Unknown adapter", code: "unknown_adapter");
+            throw ApiException.BadRequest(code: "adapter_not_found");
         }
 
         return key;

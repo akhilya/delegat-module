@@ -78,10 +78,10 @@ public class CategoryMappingController : ControllerBase
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+            throw ApiException.BadRequest(code: "adapter_not_found");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategories))
-            throw ApiException.BadRequest("Adapter does not support fetching categories");
+            throw ApiException.BadRequest(code: "adapter_capability_missing");
 
         try
         {
@@ -98,7 +98,7 @@ public class CategoryMappingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting categories from marketplace for connection {ConnectionId}", connectionId);
-            throw ApiException.BadRequest($"Failed to get categories: {ex.Message}");
+            throw ApiException.BadRequest(code: "external_categories_unavailable");
         }
     }
 
@@ -189,16 +189,16 @@ public class CategoryMappingController : ControllerBase
             c => c.Id == input.localCategoryId && c.storeId == connection.storeId);
 
         if (category == null)
-            throw ApiException.NotFound("Local category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
-            throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
+            throw ApiException.BadRequest(code: "adapter_not_found");
 
         var eligibility = await ExternalCategoryEligibility.EnsureMappableAsync(
             adapter, connection, input.externalCategoryId, ct);
         if (!eligibility.IsSuccess)
-            throw ApiException.BadRequest(eligibility.ErrorMessage!, code: "category_not_mappable");
+            throw ApiException.BadRequest(code: "category_not_mappable");
 
         var mappingRepo = _unitOfWork.Repository<CategoryMapping>();
 
@@ -243,14 +243,14 @@ public class CategoryMappingController : ControllerBase
             throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.CreateCategory))
-            throw ApiException.BadRequest("Adapter does not support creating categories");
+            throw ApiException.BadRequest(code: "adapter_capability_missing");
 
         var category = await _unitOfWork.Repository<Category>().FindAsync(
             c => c.Id == input.localCategoryId && c.storeId == connection.storeId,
             query => query.Include(c => c.attributes));
 
         if (category == null)
-            throw ApiException.NotFound("Local category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
 
         var attributes = category.attributes.AsEnumerable();
         if (input.selectedAttributeKeys != null)
@@ -347,7 +347,7 @@ public class CategoryMappingController : ControllerBase
             m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         mapping.UpdateFill(new CategoryMapping.UpdateForm
         {
@@ -376,7 +376,7 @@ public class CategoryMappingController : ControllerBase
         var exists = await _context.categoryMappings.AnyAsync(
             m => m.Id == mappingId && m.connectionId == connectionId, ct);
         if (!exists)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         try
         {
@@ -403,7 +403,8 @@ public class CategoryMappingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            throw ApiException.BadRequest(ex.Message);
+            _logger.LogDebug(ex, "Rejected invalid mapping operation for {MappingId}", mappingId);
+            throw ApiException.BadRequest(code: "mapping_graph_invalid");
         }
     }
 
@@ -421,7 +422,7 @@ public class CategoryMappingController : ControllerBase
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         object? graph = null;
         var graphJson = mapping.graphJson;
@@ -520,7 +521,7 @@ public class CategoryMappingController : ControllerBase
         var mapping = await repo.FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         mapping.graphJson = input.graph.HasValue
             && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
@@ -547,7 +548,7 @@ public class CategoryMappingController : ControllerBase
     {
         await EnsureMappingOnConnectionAsync(connectionId, mappingId);
         if (string.IsNullOrWhiteSpace(input.adapterFieldKey) || string.IsNullOrWhiteSpace(input.sourceType))
-            throw ApiException.BadRequest("adapterFieldKey and sourceType are required");
+            throw ApiException.BadRequest(code: "mapping_source_required");
 
         try
         {
@@ -577,7 +578,8 @@ public class CategoryMappingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            throw ApiException.BadRequest(ex.Message);
+            _logger.LogDebug(ex, "Rejected invalid graph connection for {MappingId}", mappingId);
+            throw ApiException.BadRequest(code: "mapping_graph_invalid");
         }
 
         return Ok(new { success = true });
@@ -597,7 +599,7 @@ public class CategoryMappingController : ControllerBase
     {
         await EnsureMappingOnConnectionAsync(connectionId, mappingId);
         if (string.IsNullOrWhiteSpace(input.adapterFieldKey) || string.IsNullOrWhiteSpace(input.modifierType))
-            throw ApiException.BadRequest("adapterFieldKey and modifierType are required");
+            throw ApiException.BadRequest(code: "mapping_modifier_required");
 
         try
         {
@@ -628,7 +630,8 @@ public class CategoryMappingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            throw ApiException.BadRequest(ex.Message);
+            _logger.LogDebug(ex, "Rejected invalid graph modifier for {MappingId}", mappingId);
+            throw ApiException.BadRequest(code: "mapping_graph_invalid");
         }
 
         return Ok(new { success = true });
@@ -653,7 +656,7 @@ public class CategoryMappingController : ControllerBase
             .Select(m => new GroupTitlePair { From = m.from.Trim(), To = m.to.Trim() })
             .ToList();
         if (maps.Count == 0)
-            throw ApiException.BadRequest("mappings must contain from/to pairs");
+            throw ApiException.BadRequest(code: "mapping_pairs_required");
 
         try
         {
@@ -661,7 +664,8 @@ public class CategoryMappingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            throw ApiException.BadRequest(ex.Message);
+            _logger.LogDebug(ex, "Rejected invalid group title mapping for {MappingId}", mappingId);
+            throw ApiException.BadRequest(code: "mapping_graph_invalid");
         }
 
         return Ok(new
@@ -679,7 +683,7 @@ public class CategoryMappingController : ControllerBase
         var mapping = await _unitOfWork.Repository<CategoryMapping>()
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
     }
 
     private static ExternalField StubField(string key)
@@ -717,7 +721,7 @@ public class CategoryMappingController : ControllerBase
             .FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         var graphJson = input.graph.HasValue
             && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
@@ -747,7 +751,7 @@ public class CategoryMappingController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == input.productId, ct);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         var mappingService = _serviceProvider.GetRequiredService<MappingService>();
         var eval = await mappingService.EvaluateGraphAsync(product, graphJson, mappingId, ct: ct);
@@ -786,7 +790,7 @@ public class CategoryMappingController : ControllerBase
             query => query);
 
         if (original == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         // Create the duplicate mapping
         var duplicate = new CategoryMapping();
@@ -833,7 +837,7 @@ public class CategoryMappingController : ControllerBase
             query => query);
 
         if (mapping == null)
-            throw ApiException.NotFound("Mapping not found");
+            throw ApiException.NotFound(code: "mapping_not_found");
 
         var linkedProducts = await _context.productMarketplaceLinks
             .Where(l => l.connectionId == connectionId && l.categoryMappingId == mappingId)
@@ -894,7 +898,7 @@ public class CategoryMappingController : ControllerBase
                     ct);
 
             if (replacement == null)
-                throw ApiException.BadRequest("Replacement mapping not found or belongs to a different local category");
+                throw ApiException.BadRequest(code: "mapping_replacement_invalid");
 
             foreach (var link in linkedProducts)
                 link.categoryMappingId = replacement.Id;
@@ -927,7 +931,7 @@ public class CategoryMappingController : ControllerBase
             var existingCategory = await categoryRepo.FindAsync(
                 c => c.Id == input.localCategoryId.Value && c.storeId == connection.storeId);
             if (existingCategory == null)
-                throw ApiException.NotFound("Local category not found", code: "category_not_found");
+                throw ApiException.NotFound(code: "category_not_found");
         }
 
         var storeId = connection.storeId;
@@ -1002,7 +1006,7 @@ public class CategoryMappingController : ControllerBase
             throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
-            throw ApiException.BadRequest("Adapter does not support fetching category fields");
+            throw ApiException.BadRequest(code: "adapter_capability_missing");
 
         try
         {
@@ -1033,7 +1037,7 @@ public class CategoryMappingController : ControllerBase
         {
             _logger.LogError(ex, "Error getting category fields for connection {ConnectionId}, category {CategoryId}",
                 connectionId, externalCategoryId);
-            throw ApiException.BadRequest($"Failed to get category fields: {ex.Message}");
+            throw ApiException.BadRequest(code: "external_fields_unavailable");
         }
     }
 
@@ -1123,7 +1127,7 @@ public class CategoryMappingController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
 
         var repo = _unitOfWork.Repository<MarketplaceConnection>();
 
@@ -1131,7 +1135,7 @@ public class CategoryMappingController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId.Value);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         return connection;
     }

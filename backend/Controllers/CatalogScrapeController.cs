@@ -63,7 +63,7 @@ public class CatalogScrapeController : ControllerBase
         CancellationToken ct)
     {
         if (input.publicIds == null || input.publicIds.Count == 0)
-            throw ApiException.BadRequest("No public product ids to import", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "public_product_ids_required");
 
         var storeId = await RequireStoreIdAsync();
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -111,7 +111,7 @@ public class CatalogScrapeController : ControllerBase
         CancellationToken ct)
     {
         if (input.publicIds == null || input.publicIds.Count == 0)
-            throw ApiException.BadRequest("No public product ids to import", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "public_product_ids_required");
 
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -128,7 +128,7 @@ public class CatalogScrapeController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
         return selectedStoreId.Value;
     }
 
@@ -139,7 +139,7 @@ public class CatalogScrapeController : ControllerBase
             c => c.Id == connectionId && c.storeId == storeId);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         return connection;
     }

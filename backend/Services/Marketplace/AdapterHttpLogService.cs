@@ -153,8 +153,16 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         var q = db.adapterHttpLogs.AsNoTracking().Where(l => l.storeId == storeId);
         q = ApplyFilters(q, query);
 
-        var total = await q.CountAsync(ct);
-        var errorCount = await q.CountAsync(l => l.statusCode >= 400 || l.statusCode == 0, ct);
+        // Group counts by status in one covered index scan. Separate Count queries
+        // caused two full scans of large per-store log tables on every page load.
+        var statusCounts = await q
+            .GroupBy(l => l.statusCode)
+            .Select(g => new { StatusCode = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var total = statusCounts.Sum(x => x.Count);
+        var errorCount = statusCounts
+            .Where(x => x.StatusCode >= 400 || x.StatusCode == 0)
+            .Sum(x => x.Count);
 
         var limit = Math.Clamp(query.Limit, 1, 200);
         var offset = Math.Max(0, query.Offset);
@@ -264,34 +272,43 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             retentionDays = Math.Clamp(days, 1, 30);
 
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
-        var old = await db.adapterHttpLogs
-            .Where(l => l.createdAt < cutoff)
-            .OrderBy(l => l.createdAt)
-            .ThenBy(l => l.Id)
-            .Take(5000)
-            .ToListAsync(ct);
-        if (old.Count > 0)
-        {
-            db.adapterHttpLogs.RemoveRange(old);
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Adapter HTTP log cleanup removed {Count} rows older than {Days}d", old.Count, retentionDays);
-        }
+        var oldDeleted = await DeleteOldestAdapterLogsAsync(db, cutoff, 100_000, ct);
+        if (oldDeleted > 0)
+            _logger.LogInformation("Adapter HTTP log cleanup removed {Count} rows older than {Days}d", oldDeleted, retentionDays);
 
         var total = await db.adapterHttpLogs.CountAsync(ct);
         if (total > MaxRowsSafety)
         {
-            var excess = total - MaxRowsSafety;
-            var oldest = await db.adapterHttpLogs
-                .OrderBy(l => l.createdAt)
-                .Take(Math.Min(excess, 5000))
-                .ToListAsync(ct);
-            if (oldest.Count > 0)
+            var excess = Math.Min(total - MaxRowsSafety, 100_000);
+            var deleted = await DeleteOldestAdapterLogsAsync(db, null, excess, ct);
+            if (deleted > 0)
+                _logger.LogInformation("Adapter HTTP log safety cap removed {Count} oldest rows", deleted);
+        }
+    }
+
+    private static async Task<int> DeleteOldestAdapterLogsAsync(
+        DataContext db, DateTime? before, int maxRows, CancellationToken ct)
+    {
+        var deleted = 0;
+        while (deleted < maxRows)
+        {
+            var idsQuery = db.adapterHttpLogs.AsNoTracking();
+            if (before.HasValue)
+                idsQuery = idsQuery.Where(l => l.createdAt < before.Value);
+            var ids = await idsQuery.OrderBy(l => l.createdAt).ThenBy(l => l.Id)
+                .Select(l => l.Id).Take(Math.Min(5_000, maxRows - deleted)).ToListAsync(ct);
+            if (ids.Count == 0) break;
+            if (db.Database.IsRelational())
+                deleted += await db.adapterHttpLogs.Where(l => ids.Contains(l.Id)).ExecuteDeleteAsync(ct);
+            else
             {
-                db.adapterHttpLogs.RemoveRange(oldest);
+                var rows = await db.adapterHttpLogs.Where(l => ids.Contains(l.Id)).ToListAsync(ct);
+                db.adapterHttpLogs.RemoveRange(rows);
+                deleted += rows.Count;
                 await db.SaveChangesAsync(ct);
-                _logger.LogInformation("Adapter HTTP log safety cap removed {Count} oldest rows", oldest.Count);
             }
         }
+        return deleted;
     }
 
     /// <summary>

@@ -40,7 +40,11 @@
             </div>
             <span
               class="hidden truncate text-xs sm:inline"
-              :class="isStepActive(s.id) ? 'font-medium text-foreground' : 'text-muted-foreground'"
+              :class="
+                isStepActive(s.id)
+                  ? 'font-medium text-foreground'
+                  : 'text-muted-foreground'
+              "
             >
               {{ s.label }}
             </span>
@@ -56,9 +60,10 @@
       <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <!-- Upload -->
         <div v-if="step === 'upload'" class="space-y-3">
-          <button
+          <Button
+            variant="ghost"
             type="button"
-            class="group flex w-full flex-col items-center justify-center rounded-lg border border-dashed px-6 py-12 text-center transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            class="group h-auto min-h-0 w-full flex-col rounded-lg border border-dashed bg-transparent px-6 py-12 text-center font-normal whitespace-normal hover:bg-muted/30 active:scale-100"
             :class="
               isDragging
                 ? 'border-primary bg-primary/5'
@@ -74,14 +79,18 @@
             >
               <Upload class="size-5" />
             </div>
-            <p class="text-sm font-medium">{{ t("products.importExcelDialog.dropzoneTitle") }}</p>
+            <p class="text-sm font-medium">
+              {{ t("products.importExcelDialog.dropzoneTitle") }}
+            </p>
             <p class="mt-1 text-xs text-muted-foreground">
               {{ t("products.importExcelDialog.dropzoneHint") }}
             </p>
-            <span class="mt-4 inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-medium">
+            <span
+              class="mt-4 inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-medium"
+            >
               {{ t("products.importExcelDialog.browseFile") }}
             </span>
-          </button>
+          </Button>
           <input
             ref="fileInput"
             type="file"
@@ -120,11 +129,15 @@
                 {{ changeset.summary.totalRows ?? 0 }}
               </div>
             </div>
-            <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5">
+            <div
+              class="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5"
+            >
               <div class="text-[11px] text-muted-foreground">
                 {{ t("products.importExcelDialog.changedCount") }}
               </div>
-              <div class="mt-0.5 text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <div
+                class="mt-0.5 text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-400"
+              >
                 {{ changeset.summary.changedProducts ?? 0 }}
               </div>
             </div>
@@ -149,7 +162,11 @@
               </div>
               <div
                 class="mt-0.5 text-lg font-semibold tabular-nums"
-                :class="(changeset.summary.errorCount ?? 0) > 0 ? 'text-destructive' : ''"
+                :class="
+                  (changeset.summary.errorCount ?? 0) > 0
+                    ? 'text-destructive'
+                    : ''
+                "
               >
                 {{ changeset.summary.errorCount ?? 0 }}
               </div>
@@ -163,11 +180,17 @@
             <p class="text-sm font-medium text-destructive">
               {{ t("products.importExcelDialog.errorsTitle") }}
             </p>
-            <ul class="max-h-28 space-y-1.5 overflow-y-auto text-sm text-destructive/90">
+            <ul
+              class="max-h-28 space-y-1.5 overflow-y-auto text-sm text-destructive/90"
+            >
               <li v-for="(err, i) in changeset.errors" :key="i">
                 {{ t("products.importExcelDialog.rowLabel", { row: err.row })
                 }}<template v-if="err.productId">
-                  {{ t("products.importExcelDialog.productIdSuffix", { id: err.productId }) }}
+                  {{
+                    t("products.importExcelDialog.productIdSuffix", {
+                      id: err.productId,
+                    })
+                  }}
                 </template>
                 : {{ err.field }} - {{ err.message }}
               </li>
@@ -197,16 +220,24 @@
             <div
               class="flex size-12 items-center justify-center rounded-md border border-emerald-500/40 bg-emerald-500/10"
             >
-              <CheckCircle2 class="size-6 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle2
+                class="size-6 text-emerald-600 dark:text-emerald-400"
+              />
             </div>
             <p class="text-base font-medium">
-              {{ t("products.importExcelDialog.updatedCount", { count: applyResult.appliedCount }) }}
+              {{
+                t("products.importExcelDialog.updatedCount", {
+                  count: applyResult.appliedCount,
+                })
+              }}
             </p>
             <ul
               v-if="applyResult.errors?.length"
               class="mt-1 max-w-md space-y-1 text-sm text-destructive"
             >
-              <li v-for="(err, i) in applyResult.errors" :key="i">{{ err.message }}</li>
+              <li v-for="(err, i) in applyResult.errors" :key="i">
+                {{ err.message }}
+              </li>
             </ul>
           </template>
           <template v-else-if="applyError">
@@ -227,7 +258,11 @@
               {{ step === "result" ? t("common.close") : t("common.cancel") }}
             </Button>
           </DialogClose>
-          <Button v-if="step === 'preview'" variant="outline" @click="resetToUpload">
+          <Button
+            v-if="step === 'preview'"
+            variant="outline"
+            @click="resetToUpload"
+          >
             {{ t("common.back") }}
           </Button>
         </div>
@@ -246,12 +281,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import { ref, computed, watch } from "vue";
 import { useStore } from "vuex";
-import {
-  Upload,
-  CheckCircle2,
-  AlertCircle,
-  Check,
-} from "lucide-vue-next";
+import { Upload, CheckCircle2, AlertCircle, Check } from "lucide-vue-next";
 import { t } from "@/i18n";
 import {
   Dialog,
@@ -321,7 +351,8 @@ function stepTone(id) {
 }
 
 const changesetItems = computed(() => {
-  if (!changeset.value.changes || changeset.value.changes.length === 0) return [];
+  if (!changeset.value.changes || changeset.value.changes.length === 0)
+    return [];
   return changeset.value.changes.map((product) => ({
     label: `${product.productSku} - ${product.productName}`,
     fields: product.changes.map((change, j) => ({
@@ -365,7 +396,8 @@ async function processFile(file) {
     },
     onError: (error) => {
       uploadError.value =
-        error.response?.data?.message || t("products.importExcelDialog.processError");
+        error.response?.data?.message ||
+        t("products.importExcelDialog.processError");
       step.value = "upload";
     },
   });
@@ -382,13 +414,18 @@ async function handleApply() {
       applyError.value = null;
       step.value = "result";
       if (data.appliedCount > 0) {
-        toast.success(t("products.importExcelDialog.updatedCount", { count: data.appliedCount }));
+        toast.success(
+          t("products.importExcelDialog.updatedCount", {
+            count: data.appliedCount,
+          }),
+        );
         emit("saved");
       }
     },
     onError: (error) => {
       applyError.value =
-        error.response?.data?.message || t("products.importExcelDialog.applyError");
+        error.response?.data?.message ||
+        t("products.importExcelDialog.applyError");
       applyResult.value = null;
       step.value = "result";
     },

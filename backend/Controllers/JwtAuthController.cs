@@ -72,16 +72,16 @@ public class JwtAuthController : ControllerBase
         if (user == null && userName.Contains('@'))
             user = await _userManager.FindByEmailAsync(userName);
         if (user == null)
-            throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
+            throw ApiException.Unauthorized(code: "invalid_credentials");
 
         if (!user.isActive)
-            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
+            throw ApiException.Forbidden(code: "user_deactivated");
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, input.password, lockoutOnFailure: true);
         if (result.IsLockedOut)
-            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
+            throw ApiException.TooManyRequests(code: "account_locked");
         if (!result.Succeeded)
-            throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
+            throw ApiException.Unauthorized(code: "invalid_credentials");
 
         if (await _userManager.GetTwoFactorEnabledAsync(user))
         {
@@ -117,11 +117,11 @@ public class JwtAuthController : ControllerBase
                 code))
         {
             await _userManager.AccessFailedAsync(user);
-            throw ApiException.Unauthorized("Invalid authenticator code", code: "invalid_totp");
+            throw ApiException.Unauthorized(code: "invalid_totp");
         }
 
         if (!_loginTickets.TryConsume(input.loginTicket))
-            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+            throw ApiException.Unauthorized(code: "invalid_login_ticket");
 
         await _userManager.ResetAccessFailedCountAsync(user);
         return await CompletePasswordlessSignInAsync(user, rememberMe);
@@ -140,11 +140,11 @@ public class JwtAuthController : ControllerBase
         if (!redeemed.Succeeded)
         {
             await _userManager.AccessFailedAsync(user);
-            throw ApiException.Unauthorized("Invalid recovery code", code: "invalid_recovery");
+            throw ApiException.Unauthorized(code: "invalid_recovery");
         }
 
         if (!_loginTickets.TryConsume(input.loginTicket))
-            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+            throw ApiException.Unauthorized(code: "invalid_login_ticket");
 
         await _userManager.ResetAccessFailedCountAsync(user);
         return await CompletePasswordlessSignInAsync(user, rememberMe);
@@ -175,13 +175,13 @@ public class JwtAuthController : ControllerBase
     public async Task<IActionResult> PostSignInPasskey([FromBody] JsonElement body)
     {
         var json = PasskeyFido2.TakeChallenge(HttpContext, _cache, "assertion")
-            ?? throw ApiException.Unauthorized("Passkey challenge expired", code: "challenge_expired");
+            ?? throw ApiException.Unauthorized(code: "challenge_expired");
         var options = AssertionOptions.FromJson(json);
         var assertion = JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(body.GetRawText(), PasskeyJson)
-            ?? throw ApiException.Unauthorized("Invalid passkey assertion", code: "passkey_failed");
+            ?? throw ApiException.Unauthorized(code: "passkey_failed");
 
         var cred = await _db.webAuthnCredentials.FirstOrDefaultAsync(c => c.credentialId == assertion.RawId)
-            ?? throw ApiException.Unauthorized("Unknown passkey", code: "passkey_failed");
+            ?? throw ApiException.Unauthorized(code: "passkey_failed");
 
         var fido2 = PasskeyFido2.Create(Request);
         var result = await fido2.MakeAssertionAsync(new MakeAssertionParams
@@ -201,11 +201,11 @@ public class JwtAuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(cred.userId.ToString())
-            ?? throw ApiException.Unauthorized("Unknown passkey", code: "passkey_failed");
+            ?? throw ApiException.Unauthorized(code: "passkey_failed");
         if (!user.isActive)
-            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
+            throw ApiException.Forbidden(code: "user_deactivated");
         if (await _userManager.IsLockedOutAsync(user))
-            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
+            throw ApiException.TooManyRequests(code: "account_locked");
 
         var rememberMe = body.TryGetProperty("rememberMe", out var rm) && rm.ValueKind == JsonValueKind.True;
         return await CompletePasswordlessSignInAsync(user, rememberMe);
@@ -224,14 +224,14 @@ public class JwtAuthController : ControllerBase
     private async Task<User> UserFromTicketAsync(string? ticket)
     {
         if (!_loginTickets.TryUnprotect(ticket, out var payload))
-            throw ApiException.Unauthorized("Sign-in expired. Enter your password again.", code: "invalid_login_ticket");
+            throw ApiException.Unauthorized(code: "invalid_login_ticket");
 
         var user = await _userManager.FindByIdAsync(payload.UserId.ToString())
-            ?? throw ApiException.Unauthorized("Invalid credentials", code: "invalid_credentials");
+            ?? throw ApiException.Unauthorized(code: "invalid_credentials");
         if (!user.isActive)
-            throw ApiException.Forbidden("User is deactivated", code: "user_deactivated");
+            throw ApiException.Forbidden(code: "user_deactivated");
         if (await _userManager.IsLockedOutAsync(user))
-            throw ApiException.TooManyRequests("Account locked. Try again later.", code: "account_locked");
+            throw ApiException.TooManyRequests(code: "account_locked");
         return user;
     }
 
@@ -248,10 +248,10 @@ public class JwtAuthController : ControllerBase
         var tokenEntity = await tokenRepo.FindAsync(t => t.token == token);
 
         if (tokenEntity == null)
-            throw ApiException.BadRequest("Invalid token", code: "invalid_token");
+            throw ApiException.BadRequest(code: "invalid_token");
 
         if (tokenEntity.used)
-            throw ApiException.BadRequest("Token has already been used", code: "invalid_token");
+            throw ApiException.BadRequest(code: "invalid_token");
 
         var user = new User { UserName = input.userName, isActive = true };
         var result = await _userManager.CreateAsync(user, input.password);
@@ -315,7 +315,7 @@ public class JwtAuthController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null || !user.isActive)
-            throw ApiException.NotFound("User not found", code: "user_not_found");
+            throw ApiException.NotFound(code: "user_not_found");
 
         // Sync selected_store_id cookie with DB value
         if (user.selectedStoreId != null)
@@ -385,7 +385,7 @@ public class JwtAuthController : ControllerBase
     public async Task<IActionResult> PostRefresh()
     {
         if (!Request.Cookies.TryGetValue(REFRESH_COOKIE, out var refreshTokenValue) || string.IsNullOrEmpty(refreshTokenValue))
-            throw ApiException.Unauthorized("Refresh token is missing");
+            throw ApiException.Unauthorized(code: "refresh_token_missing");
 
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
 
@@ -399,12 +399,12 @@ public class JwtAuthController : ControllerBase
             var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
             if (refreshToken == null || refreshToken.IsExpired)
-                throw ApiException.Unauthorized("Refresh token is invalid", code: "invalid_token");
+                throw ApiException.Unauthorized(code: "invalid_token");
 
             var userId = refreshToken.userId;
             var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null || !user.isActive)
-                throw ApiException.Unauthorized("User not found", code: "user_not_found");
+                throw ApiException.Unauthorized(code: "user_not_found");
 
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
             resultRememberMe = rememberMe;
@@ -419,7 +419,7 @@ public class JwtAuthController : ControllerBase
                     rt.expiresAt > DateTime.UtcNow);
 
                 if (activeToken == null)
-                    throw ApiException.Unauthorized("Refresh token is invalid", code: "invalid_token");
+                    throw ApiException.Unauthorized(code: "invalid_token");
 
                 resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
                 resultRefreshToken = activeToken.token;

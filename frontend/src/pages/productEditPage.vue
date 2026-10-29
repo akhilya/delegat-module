@@ -40,7 +40,11 @@ import NoteDetailSheet from "@/components/notes/NoteDetailSheet.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import { FieldGroup, FieldError, FieldLabel } from "@/components/ui/field";
-import { InsetGroup, InsetGroupItem, InsetGroupLabel } from "@/components/ui/inset-group";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 
 import {
   Save,
@@ -260,11 +264,8 @@ export default {
       canAct(getCachedMe(), PERMS.CatalogManage),
     );
 
-    const {
-      extendedPriceParameters,
-      storeCurrencies,
-      storeBaseCurrency,
-    } = useSelectedStore();
+    const { extendedPriceParameters, storeCurrencies, storeBaseCurrency } =
+      useSelectedStore();
 
     const priceField = z.number().min(0).optional().nullable();
     const formSchema = computed(() =>
@@ -883,10 +884,7 @@ export default {
     const sortedNotes = computed(() => sortNotesNewestFirst(notes.value));
 
     function noteRowTitle(row) {
-      return notePreviewTitle(
-        row,
-        t("pages.notesPage.sheetTitleFallback"),
-      );
+      return notePreviewTitle(row, t("pages.notesPage.sheetTitleFallback"));
     }
 
     function noteRowImportance(row) {
@@ -1596,9 +1594,10 @@ export default {
                         @update:model-value="onGroupSelectChange"
                       >
                         <template #footer="{ close }">
-                          <button
+                          <Button
+                            variant="ghost"
                             type="button"
-                            class="w-full text-left"
+                            class="h-auto min-h-0 w-full justify-start rounded-md p-0 text-left hover:bg-transparent"
                             :class="MENU_ITEM"
                             @click="openCreateGroupDialogFromSelect(close)"
                           >
@@ -1610,7 +1609,7 @@ export default {
                                 )
                               }}
                             </span>
-                          </button>
+                          </Button>
                         </template>
                       </SearchableSelect>
                       <router-link
@@ -1618,9 +1617,7 @@ export default {
                         :to="`/product-groups/${productGroup.id}/edit`"
                         class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs transition-colors"
                       >
-                        {{
-                          $t("pages.productEditPage.fields.group.editLink")
-                        }}
+                        {{ $t("pages.productEditPage.fields.group.editLink") }}
                       </router-link>
                     </div>
                   </SettingsFormField>
@@ -1642,30 +1639,32 @@ export default {
                       <div
                         class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
                       >
-                        <button
+                        <Button
+                          variant="link"
+                          size="xs"
                           type="button"
-                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
+                          class="h-auto p-0 text-muted-foreground hover:text-foreground"
                           :disabled="isProductLoading"
                           @click="openSkuDialog"
                         >
                           {{
                             $t("pages.productEditPage.fields.sku.changeAction")
                           }}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           v-if="productSKU"
+                          variant="link"
+                          size="xs"
                           type="button"
-                          class="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors disabled:opacity-50"
+                          class="h-auto p-0 text-muted-foreground hover:text-foreground"
                           @click="copySku"
                         >
                           {{
                             skuCopied
                               ? $t("common.copied")
-                              : $t(
-                                  "pages.productEditPage.skuDialog.copyAction",
-                                )
+                              : $t("pages.productEditPage.skuDialog.copyAction")
                           }}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </SettingsFormField>
@@ -2276,7 +2275,11 @@ export default {
             </div>
 
             <!-- Sizes tab -->
-            <div v-if="category?.hasSizes" v-show="tab == 'sizes'" class="space-y-6">
+            <div
+              v-if="category?.hasSizes"
+              v-show="tab == 'sizes'"
+              class="space-y-6"
+            >
               <ProductVariantsEditor :productId="productId" />
             </div>
 

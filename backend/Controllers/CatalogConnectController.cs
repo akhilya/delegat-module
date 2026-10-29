@@ -88,7 +88,7 @@ public class CatalogConnectController : ControllerBase
         CancellationToken ct)
     {
         if (input.items == null || input.items.Count == 0)
-            throw ApiException.BadRequest("No match rows to apply", code: "required_fields_missing");
+            throw ApiException.BadRequest(code: "match_rows_required");
 
         var connection = await GetConnectionAsync(connectionId);
         var userId = _currentUserService.GetUserId() ?? 0;
@@ -121,7 +121,7 @@ public class CatalogConnectController : ControllerBase
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
-            throw ApiException.BadRequest("Store is not selected", code: "store_not_selected");
+            throw ApiException.BadRequest(code: "store_not_selected");
         return selectedStoreId.Value;
     }
 
@@ -132,7 +132,7 @@ public class CatalogConnectController : ControllerBase
             c => c.Id == connectionId && c.storeId == selectedStoreId);
 
         if (connection == null)
-            throw ApiException.NotFound("Connection not found", code: "connection_not_found");
+            throw ApiException.NotFound(code: "connection_not_found");
 
         CatalogMatchService.EnsureConnectionActive(connection);
         return connection;

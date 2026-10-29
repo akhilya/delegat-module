@@ -114,7 +114,7 @@ public class PublicProductsController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
 
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         return Ok(MapDetail(product));
     }
@@ -133,7 +133,10 @@ public class PublicProductsController : ControllerBase
         var repo = _uow.Repository<Product>();
         var existing = await repo.FindAsync(p => p.storeId == storeId && p.sku == input.sku);
         if (existing != null)
-            throw ApiException.Conflict("A product with this SKU already exists", code: "sku_already_used");
+            throw new ApiException(
+                statusCode: StatusCodes.Status409Conflict,
+                data: new { sku = input.sku },
+                code: "sku_already_used");
 
         await _attributeUniqueness.EnsureUniqueAsync(
             storeId,
@@ -197,7 +200,7 @@ public class PublicProductsController : ControllerBase
             .Include(p => p.storeAttributeValues)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         await EnsureCategoryInStoreAsync(storeId, input.categoryId, ct);
         if (!string.IsNullOrEmpty(input.barcode))
@@ -262,7 +265,7 @@ public class PublicProductsController : ControllerBase
         var product = await _db.products
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (product == null)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
 
         product.deletedAt = DateTime.UtcNow;
         product.updatedAt = DateTime.UtcNow;
@@ -351,7 +354,7 @@ public class PublicProductsController : ControllerBase
         var variant = await _db.productVariants
             .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
         if (variant == null)
-            throw ApiException.NotFound("Variant not found", code: "variant_not_found");
+            throw ApiException.NotFound(code: "variant_not_found");
 
         variant.UpdateFill(new ProductVariant.UpdateForm
         {
@@ -378,7 +381,7 @@ public class PublicProductsController : ControllerBase
         var variant = await _db.productVariants
             .FirstOrDefaultAsync(v => v.Id == variantId && v.productId == productId, ct);
         if (variant == null)
-            throw ApiException.NotFound("Variant not found", code: "variant_not_found");
+            throw ApiException.NotFound(code: "variant_not_found");
 
         _db.productVariants.Remove(variant);
         await _db.SaveChangesAsync(ct);
@@ -400,7 +403,7 @@ public class PublicProductsController : ControllerBase
     {
         var exists = await _db.products.AnyAsync(p => p.Id == productId && p.storeId == storeId, ct);
         if (!exists)
-            throw ApiException.NotFound("Product not found", code: "product_not_found");
+            throw ApiException.NotFound(code: "product_not_found");
     }
 
     private async Task EnsureCategoryInStoreAsync(int storeId, int? categoryId, CancellationToken ct)
@@ -410,7 +413,7 @@ public class PublicProductsController : ControllerBase
 
         var exists = await _db.categories.AnyAsync(c => c.Id == categoryId.Value && c.storeId == storeId, ct);
         if (!exists)
-            throw ApiException.NotFound("Category not found", code: "category_not_found");
+            throw ApiException.NotFound(code: "category_not_found");
     }
 
     private static void EnsureBarcodeValid(string? barcode)

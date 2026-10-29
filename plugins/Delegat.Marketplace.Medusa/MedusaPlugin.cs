@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Delegat.Marketplace.Medusa.Models;
 using Delegat.Marketplace.SDK;
@@ -7,7 +8,7 @@ using Delegat.Marketplace.SDK.DTOs;
 
 namespace Delegat.Marketplace.Medusa;
 
-public class MedusaPlugin : MarketplacePluginBase
+public class MedusaPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker
 {
     private const int DefaultBulkChunkSize = 50;
     private const int MaxBulkChunkSize = 200;
@@ -66,6 +67,32 @@ public class MedusaPlugin : MarketplacePluginBase
         MarketplaceCapabilities.GetOrders |
         MarketplaceCapabilities.UpdateOrderStatus |
         MarketplaceCapabilities.GetOrderLabels;
+
+    public async Task<MarketplaceSandboxReadResponse> ReadAsync(
+        ConnectionContext context, string hostKey, string path, CancellationToken ct = default)
+    {
+        if (!string.Equals(hostKey, "api", StringComparison.Ordinal))
+            return new(null, null, false, "host_not_allowed");
+
+        var apiBaseUrl = context.GetCredential("apiBaseUrl")?.Trim();
+        var apiKey = context.GetCredential("apiKey")?.Trim();
+        if (string.IsNullOrWhiteSpace(apiBaseUrl) || string.IsNullOrWhiteSpace(apiKey))
+            return new(null, null, false, "credentials_missing");
+        if (!MarketplaceSandboxReadBrokerHttp.TryCreatePublicApiBaseUri(apiBaseUrl, out var baseUri))
+            return new(null, null, false, "host_not_allowed");
+        if (!MarketplaceSandboxReadBrokerHttp.TryCreatePathTargetUri(baseUri!, path, out var targetUri))
+            return new(null, null, false, "invalid_path");
+
+        var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:"));
+        return await MarketplaceSandboxReadBrokerHttp.GetAsync(
+            baseUri!,
+            targetUri!,
+            new Dictionary<string, string>
+            {
+                ["Authorization"] = $"Basic {basic}",
+            },
+            ct);
+    }
 
     public override CredentialsSchema GetCredentialsSchema()
     {

@@ -4,6 +4,7 @@ using Delegat;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
+using Delegat.Models.Ai;
 using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
@@ -27,12 +28,63 @@ public class AgentToolHostTests
         var mcp = new FakeMcpGateway();
         var host = CreateHost(db, mcp: mcp);
 
-        var (result, summary) = await host.DispatchAsync("mcp4_get_weather", """{"location":"NYC"}""", 1, 1, default);
+        var (result, summary) = await host.DispatchAsync(
+            "mcp4_get_weather", """{"location":"NYC"}""", 1, 1, default, allowConnectedMcp: true);
 
         Assert.Equal("mcp4_get_weather", mcp.LastName);
         Assert.Contains("NYC", mcp.LastInput);
         Assert.Contains("ok", JsonSerializer.Serialize(result));
         Assert.Equal("weather", summary);
+    }
+
+    [Fact]
+    public async Task ConnectedMcp_IsUnavailableOutsideCabinetChat()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var mcp = new FakeMcpGateway();
+        var host = CreateHost(db, mcp: mcp);
+
+        var (result, summary) = await host.DispatchAsync(
+            McpToolNames.ForLlm(3, "write_record"), "{}", 1, 1, default);
+
+        Assert.Null(mcp.LastName);
+        Assert.Contains("not available on this surface", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("connected_tool_not_available", JsonSerializer.Serialize(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WorkspaceView_CannotCallConnectedMcpOrWriteMemories()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.aiMemories.Add(new AiMemory
+        {
+            Id = 1,
+            userId = 1,
+            storeId = 1,
+            category = "preference",
+            key = "tone",
+            value = "Existing",
+        });
+        await db.SaveChangesAsync();
+        var mcp = new FakeMcpGateway();
+        var host = CreateHost(db, permissions: new ViewOnlyPermissions(), mcp: mcp);
+
+        var (mcpResult, mcpSummary) = await host.DispatchAsync(
+            McpToolNames.ForLlm(3, "write_record"), "{}", 1, 1, default, allowConnectedMcp: true);
+        var (saveResult, saveSummary) = await host.DispatchAsync(
+            "memory_save", "{\"category\":\"preference\",\"key\":\"tone\",\"value\":\"Changed\"}", 1, 1, default);
+        var (deleteResult, deleteSummary) = await host.DispatchAsync(
+            "memory_delete", "{\"id\":1}", 1, 1, default);
+
+        Assert.Null(mcp.LastName);
+        Assert.Contains("ai.use required", mcpSummary, StringComparison.Ordinal);
+        Assert.Contains("ai.use required", JsonSerializer.Serialize(mcpResult), StringComparison.Ordinal);
+        Assert.Contains("read-only", saveSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("read_only", JsonSerializer.Serialize(saveResult), StringComparison.Ordinal);
+        Assert.Contains("read-only", deleteSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("read_only", JsonSerializer.Serialize(deleteResult), StringComparison.Ordinal);
+        var stored = Assert.Single(db.aiMemories);
+        Assert.Equal("Existing", stored.value);
     }
 
     [Fact]

@@ -79,13 +79,13 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 {
   "error": {
     "code": "access_denied_store",
-    "message": "No access to this store",
+    "message": "Forbidden",
     "details": null
   }
 }
 ```
 
-`code` is a stable machine-readable identifier (prefer semantic codes such as `product_not_found` when provided; otherwise HTTP-derived codes below). `message` is always English. Clients that need localized UI should map `code` to their own strings.
+`code` is a stable machine-readable identifier (prefer semantic codes such as `product_not_found` when provided; otherwise HTTP-derived codes below). `message` is informational English text and may be generic; clients must use `code` rather than parsing or displaying `message` for localized UI.
 
 | HTTP | code (typical) | When |
 |------|----------------|------|

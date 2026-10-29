@@ -2,14 +2,8 @@
 import { Spinner } from "@/components/ui/spinner";
 import Input from "@/components/ui/input/Input.vue";
 import BarcodeInput from "@/components/ui/barcode/BarcodeInput.vue";
-import {
-  NumberField,
-  NumberFieldInput,
-} from "@/components/ui/number-field";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import { NumberField, NumberFieldInput } from "@/components/ui/number-field";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { GripVertical, Plus, Trash2 } from "lucide-vue-next";
@@ -70,7 +64,9 @@ export default {
     async fetchVariants() {
       this.isLoading = true;
       try {
-        const data = await this.getProductVariants({ productId: this.productId });
+        const data = await this.getProductVariants({
+          productId: this.productId,
+        });
         this.variants = data || [];
       } catch (error) {
         displaySonnerError(error);
@@ -93,7 +89,9 @@ export default {
         });
         this.variants.push(newVariant);
         await this.$nextTick();
-        document.getElementById(`product-variant-size-${newVariant.id}`)?.focus();
+        document
+          .getElementById(`product-variant-size-${newVariant.id}`)
+          ?.focus();
       } catch (error) {
         displaySonnerError(error);
       }
@@ -105,9 +103,12 @@ export default {
         variant.size || t("products.productVariantsEditor.unnamedFallback");
       const ok = await confirm({
         title: t("products.productVariantsEditor.deleteConfirmTitle"),
-        description: t("products.productVariantsEditor.deleteConfirmDescription", {
-          name,
-        }),
+        description: t(
+          "products.productVariantsEditor.deleteConfirmDescription",
+          {
+            name,
+          },
+        ),
         confirmLabel: t("common.delete"),
       });
       if (ok !== true) return;
@@ -189,6 +190,28 @@ export default {
         }
       }
     },
+
+    async moveVariant(variant, offset) {
+      if (!this.canEdit) return;
+      const currentIndex = this.variants.findIndex(
+        (item) => item.id === variant.id,
+      );
+      const nextIndex = currentIndex + offset;
+      if (
+        currentIndex < 0 ||
+        nextIndex < 0 ||
+        nextIndex >= this.variants.length
+      ) {
+        return;
+      }
+
+      const reordered = [...this.variants];
+      const [moved] = reordered.splice(currentIndex, 1);
+      reordered.splice(nextIndex, 0, moved);
+      this.variants = reordered;
+      await this.$nextTick();
+      await this.handleReorder();
+    },
   },
   mounted() {
     this.fetchVariants();
@@ -213,6 +236,7 @@ export default {
       <draggable
         v-if="variants.length > 0"
         v-model="variants"
+        :disabled="!canEdit"
         item-key="id"
         handle=".drag-handle"
         ghost-class="opacity-50"
@@ -226,15 +250,18 @@ export default {
               class="items-start gap-3 px-3.5 py-3 hover:bg-transparent"
             >
               <template #leading>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   type="button"
-                  class="drag-handle text-muted-foreground mt-2 cursor-grab active:cursor-grabbing"
-                  :aria-label="
-                    $t('products.productVariantsEditor.reorderAria')
-                  "
+                  class="drag-handle mt-2 size-6 min-h-0 cursor-grab p-0 text-muted-foreground hover:bg-transparent active:scale-100 active:cursor-grabbing"
+                  :disabled="!canEdit || variants.length < 2"
+                  :aria-label="$t('products.productVariantsEditor.reorderAria')"
+                  @keydown.up.prevent="moveVariant(variant, -1)"
+                  @keydown.down.prevent="moveVariant(variant, 1)"
                 >
                   <GripVertical class="size-4" />
-                </button>
+                </Button>
               </template>
               <div class="space-y-3">
                 <label class="grid gap-1">

@@ -39,7 +39,9 @@ export default {
           width: 1.2,
           lineColor: getLineColor(),
         });
-      } catch {}
+      } catch {
+        // Keep the preview empty when the barcode value is invalid.
+      }
     }
 
     function renderLarge() {
@@ -53,7 +55,9 @@ export default {
           fontSize: 16,
           lineColor: getLineColor(),
         });
-      } catch {}
+      } catch {
+        // Keep the preview empty when the barcode value is invalid.
+      }
     }
 
     async function downloadBarcode() {
@@ -88,16 +92,20 @@ export default {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <button
+      <Button
         type="button"
-        class="flex flex-col items-center gap-0.5 rounded-md px-1 py-0.5 cursor-pointer transition-colors hover:bg-muted/60"
+        variant="ghost"
+        class="h-auto min-h-0 flex-col gap-0.5 rounded-md px-1 py-0.5 font-normal hover:bg-muted/60"
+        :aria-label="$t('barcodeCell.clickToEnlarge')"
         :title="$t('barcodeCell.clickToEnlarge')"
       >
         <svg ref="smallSvg" class="block h-8 w-[96px] max-w-full"></svg>
-        <span class="text-[10px] font-mono leading-none tabular-nums text-foreground/80">
+        <span
+          class="text-[10px] font-mono leading-none tabular-nums text-foreground/80"
+        >
           {{ barcode }}
         </span>
-      </button>
+      </Button>
     </PopoverTrigger>
     <PopoverContent class="!max-w-none !w-max p-2" align="center">
       <div class="flex flex-col items-stretch gap-2">

@@ -331,9 +331,9 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         CancellationToken ct)
     {
         if (file is null || file.Length == 0)
-            throw ApiException.BadRequest("File is required.", code: "file_required");
+            throw ApiException.BadRequest(code: "file_required");
         if (file.Length > MaxUploadBytes)
-            throw ApiException.BadRequest("File exceeds the 2 MB limit.", code: "file_too_large");
+            throw ApiException.BadRequest(code: "file_too_large");
 
         var contentType = (file.ContentType ?? "").Trim();
         if (!AllowedContentTypes.Contains(contentType))
@@ -360,7 +360,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
             {
                 var ok = await _storage.UploadAsync(stream, objectKey, file.Length, contentType, ct);
                 if (!ok)
-                    throw ApiException.InternalServerError("Failed to store branding asset.");
+                    throw ApiException.InternalServerError(code: "branding_asset_failed");
             }
 
             if (!string.IsNullOrEmpty(previousKey)
@@ -466,7 +466,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
             .Select(s => new { s.Id, s.name })
             .FirstOrDefaultAsync(ct);
         if (store is null)
-            throw ApiException.NotFound("Store not found", code: "store_not_found");
+            throw ApiException.NotFound(code: "store_not_found");
 
         row = CreateSeedRow(storeId, store.name);
         db.storeBrandingSettings.Add(row);
@@ -567,7 +567,7 @@ public sealed class BrandingSettingsService : IBrandingSettingsService
         if (trimmed.Length == 6 && !trimmed.StartsWith('#'))
             trimmed = "#" + trimmed;
         if (!HexColor.IsMatch(trimmed))
-            throw ApiException.BadRequest("Color must be #RRGGBB.", code: "invalid_color");
+            throw ApiException.BadRequest(code: "invalid_color");
         return trimmed.ToUpperInvariant();
     }
 

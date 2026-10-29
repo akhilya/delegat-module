@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
+import AppImage from "@/components/AppImage.vue";
 import {
   Field,
   FieldDescription,
@@ -161,7 +162,9 @@ function onConfirm() {
             <Field v-for="(img, idx) in images" :key="img.url" class="min-w-0">
               <FieldLabel
                 class="w-full cursor-pointer items-stretch rounded-lg border p-3 has-data-[state=checked]:border-primary"
-                :class="isSelectable(img.status) ? '' : 'cursor-default opacity-70'"
+                :class="
+                  isSelectable(img.status) ? '' : 'cursor-default opacity-70'
+                "
               >
                 <div class="flex w-full flex-col gap-2">
                   <div class="flex items-start gap-2">
@@ -182,7 +185,7 @@ function onConfirm() {
                   <div
                     class="bg-muted relative aspect-square w-full overflow-hidden rounded-md"
                   >
-                    <img
+                    <AppImage
                       v-if="!brokenUrls.has(img.url)"
                       :src="img.url"
                       :alt="
@@ -190,7 +193,8 @@ function onConfirm() {
                           n: idx + 1,
                         })
                       "
-                      class="size-full object-contain object-center"
+                      class="size-full"
+                      img-class="size-full object-contain object-center"
                       @error="onImgError(img.url)"
                     />
                     <div

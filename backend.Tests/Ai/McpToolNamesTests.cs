@@ -8,17 +8,30 @@ public class McpToolNamesTests
     public void ForLlm_PrefixesServerIdAndSanitizesRemoteName()
     {
         var name = McpToolNames.ForLlm(12, "get weather!");
-        Assert.Equal("mcp12_get_weather", name);
+        Assert.StartsWith("mcp12_get_weather_", name, StringComparison.Ordinal);
         Assert.True(name.Length <= 64);
     }
 
     [Fact]
-    public void TryParse_RoundTripsServerIdAndRemoteName()
+    public void ForLlm_DistinguishesNamesThatSanitizeOrTruncateToTheSamePrefix()
+    {
+        Assert.NotEqual(
+            McpToolNames.ForLlm(12, "get weather!"),
+            McpToolNames.ForLlm(12, "get_weather"));
+
+        var prefix = new string('x', 100);
+        Assert.NotEqual(
+            McpToolNames.ForLlm(12, prefix + "first"),
+            McpToolNames.ForLlm(12, prefix + "second"));
+    }
+
+    [Fact]
+    public void TryParse_ExtractsServerIdAndToolKey()
     {
         var llm = McpToolNames.ForLlm(3, "search-docs");
-        Assert.True(McpToolNames.TryParse(llm, out var serverId, out var remote));
+        Assert.True(McpToolNames.TryParse(llm, out var serverId, out var toolKey));
         Assert.Equal(3, serverId);
-        Assert.Equal("search-docs", remote);
+        Assert.Equal(llm["mcp3_".Length..], toolKey);
     }
 
     [Theory]

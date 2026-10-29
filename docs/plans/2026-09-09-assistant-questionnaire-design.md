@@ -1,5 +1,7 @@
 # Assistant questionnaire (`ask_form` questions)
 
+> **Validated design record.** The current tool and UI contract is documented in [`docs/architecture/ai-assistant.md`](../architecture/ai-assistant.md).
+
 Validated 2026-09-09. Short series on the reply, then one user message.
 
 ## Shape
