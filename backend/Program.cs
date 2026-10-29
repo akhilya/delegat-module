@@ -657,6 +657,17 @@ const string BaselineMigrationId = "20260731183033_Baseline";
 const string EfProductVersion = "8.0.20";
 
 // Apply migrations automatically (with retry for slow MySQL startup).
+const int DefaultMigrationCommandTimeoutSeconds = 30 * 60;
+var migrationCommandTimeoutSeconds = DefaultMigrationCommandTimeoutSeconds;
+var migrationTimeoutRaw = builder.Configuration["DB_MIGRATION_COMMAND_TIMEOUT_SECONDS"];
+if (!string.IsNullOrWhiteSpace(migrationTimeoutRaw)
+    && (!int.TryParse(migrationTimeoutRaw, out migrationCommandTimeoutSeconds)
+        || migrationCommandTimeoutSeconds <= 0))
+{
+    throw new InvalidOperationException(
+        "DB_MIGRATION_COMMAND_TIMEOUT_SECONDS must be a positive integer.");
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
@@ -665,7 +676,7 @@ using (var scope = app.Services.CreateScope())
         ?? throw new InvalidOperationException("EF IMigrator is not available.");
 
     await ApplyMigrationsWithRetryAsync(
-        db, migrator, logger, BaselineMigrationId, EfProductVersion);
+        db, migrator, logger, migrationCommandTimeoutSeconds, BaselineMigrationId, EfProductVersion);
     await StoreOnboardingBackfill.RunAsync(db);
 }
 
@@ -1011,10 +1022,26 @@ static async Task ApplyMigrationsWithRetryAsync(
     DataContext db,
     IMigrator migrator,
     ILogger logger,
+    int migrationCommandTimeoutSeconds,
     string baselineMigrationId,
     string efProductVersion)
 {
     const int maxRetries = 60;
+
+    async Task MigrateWithExtendedTimeoutAsync()
+    {
+        var previousCommandTimeout = db.Database.GetCommandTimeout();
+        db.Database.SetCommandTimeout(migrationCommandTimeoutSeconds);
+        try
+        {
+            await migrator.MigrateAsync();
+        }
+        finally
+        {
+            db.Database.SetCommandTimeout(previousCommandTimeout);
+        }
+    }
+
     for (int i = 0; i < maxRetries; i++)
     {
         try
@@ -1031,9 +1058,9 @@ static async Task ApplyMigrationsWithRetryAsync(
             }
 
             logger.LogInformation(
-                "Applying database migrations to latest (attempt {Attempt}/{Max})...",
-                i + 1, maxRetries);
-            await migrator.MigrateAsync();
+                "Applying database migrations to latest (attempt {Attempt}/{Max}, command timeout {TimeoutSeconds}s)...",
+                i + 1, maxRetries, migrationCommandTimeoutSeconds);
+            await MigrateWithExtendedTimeoutAsync();
             logger.LogInformation("Database migrations applied successfully.");
             return;
         }
@@ -1058,7 +1085,7 @@ static async Task ApplyMigrationsWithRetryAsync(
                             db, logger, baselineMigrationId, efProductVersion))
                     {
                         // Stamp path: no pending left. Wipe path: DB was dropped — recreate via Migrate.
-                        await migrator.MigrateAsync();
+                        await MigrateWithExtendedTimeoutAsync();
                         logger.LogInformation(
                             "Database migrations applied successfully after Baseline recovery.");
                         return;

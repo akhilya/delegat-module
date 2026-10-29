@@ -140,7 +140,7 @@
 - Vue 3 + Vite + Vuex (Options API)
 - MinIO (S3-compatible) for file storage; buffered `GetStreamAsync` capped at 32 MiB (larger objects use streaming)
 - Docker Compose + Dokploy
-- Automatic EF Core migrations on startup
+- Automatic EF Core migrations on startup; migration commands use `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS` (default 1800 seconds), while regular EF commands retain the 120-second timeout
 - Search engines: `robots.txt` Disallow `/`, HTML `noindex`, and `X-Robots-Tag` on SPA nginx and the API
 - Health check: `/api/health` with MySQL + MinIO probes
 

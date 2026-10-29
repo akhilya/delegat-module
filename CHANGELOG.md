@@ -64,6 +64,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Use a migration-only database command timeout (30 minutes by default, configurable with `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`) so large index builds are not interrupted by the regular 120-second query timeout.
 - Ozon's mapping canvas groups price fields and refreshes field metadata without losing saved bindings. Price import falls back to `marketing_seller_price` when `marketing_price` is unavailable.
 - Cabinet assistant asks one clarification when a read-only lookup lacks its product; it does not list the broad catalog or add edit/navigation links unless requested or needed.
 - Cabinet assistant reads requested price, stock, or description fields after identifying a product; omitted fields in a search result are not treated as empty values.
