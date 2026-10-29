@@ -27,12 +27,17 @@ import {
   appendCustomAdapterField,
   nextCustomAdapterField,
 } from "./graphCustomFields.js";
+import {
+  EXTENDED_PRICE_KEYS,
+  syncAdapterPriceFields,
+} from "./graphPriceFields.js";
 
 export {
   ADD_ADAPTER_FIELD_HANDLE,
   appendCustomAdapterField,
   nextCustomAdapterField,
 };
+export { syncAdapterPriceFields };
 
 export {
   PIN_COLORS,
@@ -235,9 +240,6 @@ const MIGRATABLE_PRICE_KEYS = new Set([
   "minPriceForAutoActionsEnabled",
   "discount",
 ]);
-
-/** Shown on the price sink only when the price-fields API returns them (extended price settings on). */
-const EXTENDED_PRICE_KEYS = new Set(["discountedPrice", "sale_price", "salePrice"]);
 
 /**
  * Build a graph from the page's field mappings. Each enabled field becomes a lane:
@@ -646,32 +648,6 @@ export function ensurePriceNode(nodes, edges, priceFieldMappings) {
     return kept.has(key);
   });
   return { nodes: list, edges: prunedEdges };
-}
-
-export function syncAdapterPriceFields(nodes, priceFieldMappings) {
-  const priceNode = (nodes || []).find((n) => n.type === "adapterPriceFields");
-  if (!priceNode) return nodes;
-  const allowed = new Set(
-    (priceFieldMappings || []).map((fm) => fm.externalFieldKey).filter(Boolean),
-  );
-  const fields = (priceNode.data?.fields || []).filter(
-    (f) => !f?.fieldKey || !EXTENDED_PRICE_KEYS.has(f.fieldKey) || allowed.has(f.fieldKey),
-  );
-  priceNode.data = { ...(priceNode.data || {}), fields };
-  const have = new Set(fields.map((f) => f.fieldKey));
-  for (const fm of priceFieldMappings || []) {
-    const key = fm.externalFieldKey;
-    if (!key || have.has(key)) continue;
-    fields.push({
-      fieldKey: key,
-      label: fm.externalFieldName || key,
-      outputType: fm.externalFieldType || "string",
-      isRequired: !!fm.isRequired,
-    });
-    have.add(key);
-  }
-  priceNode.data = { ...(priceNode.data || {}), fields };
-  return nodes;
 }
 
 // ---- Display helpers -----------------------------------------------------

@@ -111,6 +111,7 @@ import {
   localizeExternalFieldName,
   localizeStandardSourceName,
 } from "./fieldLabels.js";
+import { samePriceFieldSchema } from "./graphPriceFields.js";
 
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
@@ -414,7 +415,9 @@ function enrichFieldsWithDefs(fields, defs) {
       ...f,
       label: localizeExternalFieldName(f.fieldKey, apiName),
       outputType: def?.type || f.outputType,
+      group: def?.group ?? f.group ?? null,
       description: localizeExternalFieldDescription(f.fieldKey, apiDesc),
+      sortOrder: def?.sortOrder ?? f.sortOrder ?? null,
       unit: def?.unit ?? f.unit ?? null,
       minValue: def?.minValue ?? f.minValue ?? null,
       maxValue: def?.maxValue ?? f.maxValue ?? null,
@@ -1154,7 +1157,6 @@ watch(
   (mappings) => {
     if (loading.value || !findNode(ADAPTER_PRICE_NODE_ID)) return;
     const cur = findNode(ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
-    const curKeys = cur.map((f) => f.fieldKey).join("\0");
     const copy = nodes.value.map((n) => ({
       ...n,
       data: n.data?.fields
@@ -1163,8 +1165,8 @@ watch(
     }));
     syncAdapterPriceFields(copy, mappings);
     const next = copy.find((n) => n.id === ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
-    const nextKeys = next.map((f) => f.fieldKey).join("\0");
-    if (nextKeys !== curKeys) {
+    const enrichedNext = enrichFieldsWithDefs(next, props.priceFieldDefs);
+    if (!samePriceFieldSchema(cur, enrichedNext)) {
       const kept = new Set(next.map((f) => f.fieldKey));
       setEdges(edges.value.filter((e) => {
         if (e.target !== ADAPTER_PRICE_NODE_ID) return true;
@@ -1175,7 +1177,7 @@ watch(
         return kept.has(key);
       }));
       updateNodeData(ADAPTER_PRICE_NODE_ID, {
-        fields: enrichFieldsWithDefs(next, props.priceFieldDefs),
+        fields: enrichedNext,
       });
       dirty.value = true;
     }
@@ -2621,6 +2623,21 @@ async function importMappingFile(event) {
   height: 24px;
   padding: 0 10px;
   font-size: 12px;
+}
+.vf-adapter__group {
+  box-sizing: border-box;
+  height: 18px;
+  padding: 0 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 17px;
+  text-transform: uppercase;
+}
+.vf-adapter__group--first {
+  border-top: 0;
 }
 .vf-adapter__row:hover {
   background: var(--accent);

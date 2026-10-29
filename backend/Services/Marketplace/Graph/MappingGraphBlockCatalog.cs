@@ -119,7 +119,7 @@ public static class MappingGraphBlockCatalog
                 type = "adapterPriceFields",
                 kind = "sink",
                 width = AdapterWidth,
-                height = "30 + fieldCount * 24 + 6",
+                height = "30 + fieldCount * 24 + groupCount * 18 + 6",
                 inputs = new[] { new { id = "f:{key}", pinType = "field.outputType", side = "left" } },
                 outputs = Array.Empty<object>(),
             },

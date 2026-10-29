@@ -228,7 +228,7 @@ public class GraphGeneratorSyncPreservesCollapsedTests
     {
         var fields = new List<ExternalField>
         {
-            new("price", "Price", true, "number"),
+            new("price", "Price", true, "number", Description: "Current price", Group: "Prices", SortOrder: 0),
             new("discountedPrice", "Discounted price", false, "number"),
             new("sale_price", "Sale price", false, "number"),
             new("oldPrice", "Old price", false, "number"),
@@ -238,6 +238,9 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         Assert.DoesNotContain(off, s => s.externalFieldKey is "discountedPrice" or "sale_price");
         Assert.Contains(off, s => s.externalFieldKey == "oldPrice");
         Assert.Contains(off, s => s.externalFieldKey == "price" && s.sourceField == "price");
+        var price = Assert.Single(off, s => s.externalFieldKey == "price");
+        Assert.Equal("Prices", price.externalFieldGroup);
+        Assert.Equal("Current price", price.externalFieldDescription);
 
         var on = CategoryImportService.BuildPriceFieldSpecs(
             fields, new Dictionary<string, int>(), extendedPriceParameters: true);
@@ -245,6 +248,90 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         Assert.Equal("discountedPrice", discounted.sourceField);
         var sale = Assert.Single(on, s => s.externalFieldKey == "sale_price");
         Assert.Equal("discountedPrice", sale.sourceField);
+    }
+
+    [Fact]
+    public void SyncPriceFields_RefreshesSchemaMetadataAndPreservesBindings()
+    {
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "adapter-price-fields",
+                  "type": "adapterPriceFields",
+                  "data": {
+                    "fields": [
+                      {
+                        "fieldKey": "price",
+                        "label": "Stale price label",
+                        "outputType": "string",
+                        "isRequired": false,
+                        "group": "Old group",
+                        "source": { "type": "productField", "field": "price" }
+                      },
+                      {
+                        "fieldKey": "minPrice",
+                        "label": "Stale minimum",
+                        "outputType": "string",
+                        "isRequired": false,
+                        "omit": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "edges": [
+                { "id": "edge-price", "source": "src-price", "target": "adapter-price-fields", "targetHandle": "f:price" }
+              ]
+            }
+            """;
+
+        var result = GraphGenerator.SyncPriceFields(graph, [
+            new FieldSpec
+            {
+                externalFieldKey = "minPrice",
+                externalFieldName = "Minimum price",
+                externalFieldType = "number",
+                externalFieldGroup = "Price strategy",
+                externalFieldDescription = "Promotion floor",
+                isRequired = true,
+                isEnabled = true,
+                sortOrder = 0,
+                sourceType = FieldMappingSourceType.Static,
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "price",
+                externalFieldName = "Price",
+                externalFieldType = "number",
+                externalFieldGroup = "Prices",
+                externalFieldDescription = "Current seller price",
+                isRequired = true,
+                isEnabled = true,
+                sortOrder = 1,
+                sourceType = FieldMappingSourceType.Static,
+            },
+        ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .Single(n => n.GetProperty("type").GetString() == "adapterPriceFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray().ToList();
+
+        Assert.Equal("minPrice", fields[0].GetProperty("fieldKey").GetString());
+        Assert.Equal("Minimum price", fields[0].GetProperty("label").GetString());
+        Assert.Equal("number", fields[0].GetProperty("outputType").GetString());
+        Assert.Equal("Price strategy", fields[0].GetProperty("group").GetString());
+        Assert.Equal("Promotion floor", fields[0].GetProperty("description").GetString());
+        Assert.True(fields[0].GetProperty("isRequired").GetBoolean());
+        Assert.True(fields[0].GetProperty("omit").GetBoolean());
+
+        Assert.Equal("Price", fields[1].GetProperty("label").GetString());
+        Assert.Equal("Prices", fields[1].GetProperty("group").GetString());
+        Assert.Equal("productField", fields[1].GetProperty("source").GetProperty("type").GetString());
+        Assert.Equal("price", fields[1].GetProperty("source").GetProperty("field").GetString());
+        Assert.Equal("edge-price", Assert.Single(doc.RootElement.GetProperty("edges").EnumerateArray())
+            .GetProperty("id").GetString());
     }
 
     [Fact]

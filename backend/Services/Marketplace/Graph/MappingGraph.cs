@@ -158,6 +158,12 @@ public class AdapterField
     public string? fieldKey { get; set; }
     public string? label { get; set; }
     public string? outputType { get; set; }
+    /// <summary>Marketplace schema group, used to visually organize the price-field sink.</summary>
+    public string? group { get; set; }
+    /// <summary>Marketplace-provided field hint.</summary>
+    public string? description { get; set; }
+    /// <summary>Marketplace schema order. User bindings are keyed by fieldKey and survive reordering.</summary>
+    public int? sortOrder { get; set; }
     public bool isRequired { get; set; }
     /// <summary>Optional direct source binding (set via the adapter dropdown) - when present the field
     /// has no input pin and its value is resolved straight from this source instead of an edge.</summary>

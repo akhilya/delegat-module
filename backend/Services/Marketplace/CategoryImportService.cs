@@ -540,6 +540,8 @@ public class CategoryImportService
                     externalFieldKey = field.Key,
                     externalFieldName = field.Name,
                     externalFieldType = field.Type,
+                    externalFieldGroup = field.Group,
+                    externalFieldDescription = field.Description,
                     isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                     isEnabled = true,
                     sortOrder = index,

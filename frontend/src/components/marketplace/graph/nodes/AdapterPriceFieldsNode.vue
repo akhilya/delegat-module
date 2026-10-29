@@ -7,6 +7,10 @@ import {
   localizeExternalFieldName,
   localizeStandardSourceName,
 } from "../fieldLabels.js";
+import {
+  PRICE_FIELD_GROUP_HEADER_HEIGHT,
+  priceFieldGroupCount,
+} from "../graphPriceFields.js";
 import { t } from "@/i18n";
 
 const props = defineProps({
@@ -51,6 +55,7 @@ function pillStyle(type) {
 
 function fieldTooltip(f) {
   const parts = [];
+  if (f.group) parts.push(groupLabel(f.group));
   if (f.description) parts.push(String(f.description).trim());
   if (f.unit) parts.push(t("marketplace.graph.unitLabel", { unit: f.unit }));
   parts.push(t("marketplace.graph.keyLabel", { key: f.fieldKey }));
@@ -71,7 +76,25 @@ function pinHidden(f) {
 
 const HEADER = 30;
 const ROW = 24;
-const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
+const topFor = (i) => {
+  const groupOffset =
+    priceFieldGroupCount(fields.value.slice(0, i + 1)) *
+    PRICE_FIELD_GROUP_HEADER_HEIGHT;
+  return `${HEADER + i * ROW + groupOffset + ROW / 2}px`;
+};
+
+function isGroupStart(index) {
+  const group = String(fields.value[index]?.group || "").trim();
+  const previous = String(fields.value[index - 1]?.group || "").trim();
+  return !!group && group !== previous;
+}
+
+function groupLabel(group) {
+  const normalized = String(group || "").trim().toLowerCase();
+  if (normalized === "prices") return t("marketplace.graph.priceGroupValues");
+  if (normalized === "price strategy") return t("marketplace.graph.priceGroupStrategy");
+  return group;
+}
 </script>
 
 <template>
@@ -98,53 +121,59 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
     </div>
 
     <div class="vf-adapter__list">
-      <div
-        v-for="f in fields"
-        :key="f.fieldKey"
-        class="vf-adapter__row cursor-pointer"
-        :title="fieldTooltip(f)"
-        @click.stop="data.openField?.(f.fieldKey)"
-      >
-        <span class="vf-adapter__label" :title="fieldTooltip(f)">
-          {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
-        </span>
-
-        <span
-          v-if="f.omit"
-          class="vf-adapter__pill vf-adapter__pill--omit"
-          :title="t('marketplace.graph.omitFieldTitle')"
-          @click.stop="data.openField?.(f.fieldKey)"
-        >{{ t("marketplace.graph.omitFieldShort") }}</span>
-
-        <span
-          v-if="f.aliasOf"
-          class="vf-adapter__pill vf-adapter__pill--alias"
-          :title="t('marketplace.graph.aliasMergedShortTitle', { primary: aliasPrimaryLabel(f) })"
+      <template v-for="(f, i) in fields" :key="f.fieldKey">
+        <div
+          v-if="isGroupStart(i)"
+          :class="['vf-adapter__group', i === 0 && 'vf-adapter__group--first']"
+        >
+          {{ groupLabel(f.group) }}
+        </div>
+        <div
+          class="vf-adapter__row cursor-pointer"
+          :title="fieldTooltip(f)"
           @click.stop="data.openField?.(f.fieldKey)"
         >
-          = {{ aliasPrimaryLabel(f) }}
-        </span>
+          <span class="vf-adapter__label" :title="fieldTooltip(f)">
+            {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
+          </span>
 
-        <component
-          v-if="f.source"
-          :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
-          :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
-        />
+          <span
+            v-if="f.omit"
+            class="vf-adapter__pill vf-adapter__pill--omit"
+            :title="t('marketplace.graph.omitFieldTitle')"
+            @click.stop="data.openField?.(f.fieldKey)"
+          >{{ t("marketplace.graph.omitFieldShort") }}</span>
 
-        <AlertTriangle
-          v-if="analysis[f.fieldKey]?.fanOut"
-          class="size-2.5 shrink-0 cursor-help text-amber-500"
-          :title="t('marketplace.graph.fanOutPriceUsed')"
-        />
+          <span
+            v-if="f.aliasOf"
+            class="vf-adapter__pill vf-adapter__pill--alias"
+            :title="t('marketplace.graph.aliasMergedShortTitle', { primary: aliasPrimaryLabel(f) })"
+            @click.stop="data.openField?.(f.fieldKey)"
+          >
+            = {{ aliasPrimaryLabel(f) }}
+          </span>
 
-        <span
-          v-if="f.source"
-          class="vf-adapter__pill"
-          :style="pillStyle(f.outputType)"
-          :title="t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })"
-          @click.stop="data.openField?.(f.fieldKey)"
-        >{{ boundLabel(f) }}</span>
-      </div>
+          <component
+            v-if="f.source"
+            :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
+            :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
+          />
+
+          <AlertTriangle
+            v-if="analysis[f.fieldKey]?.fanOut"
+            class="size-2.5 shrink-0 cursor-help text-amber-500"
+            :title="t('marketplace.graph.fanOutPriceUsed')"
+          />
+
+          <span
+            v-if="f.source"
+            class="vf-adapter__pill"
+            :style="pillStyle(f.outputType)"
+            :title="t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })"
+            @click.stop="data.openField?.(f.fieldKey)"
+          >{{ boundLabel(f) }}</span>
+        </div>
+      </template>
     </div>
   </div>
 </template>

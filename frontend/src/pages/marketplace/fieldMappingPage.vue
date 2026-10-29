@@ -390,11 +390,21 @@ export default {
               type: f.type,
               options: localizeExternalFieldOptions(f.options || []),
               description: f.description,
+              group: f.group,
+              sortOrder: f.sortOrder,
+              minValue: f.minValue,
+              maxValue: f.maxValue,
+              maxLength: f.maxLength,
+              maxValues: f.maxValues,
+              allowCustomValues: f.allowCustomValues,
             };
             mappings.push({
               externalFieldKey: f.key,
               externalFieldName: f.name,
               externalFieldType: f.type,
+              group: f.group,
+              description: f.description,
+              sortOrder: f.sortOrder,
               isRequired: !!f.isRequired,
               isEnabled: true,
             });

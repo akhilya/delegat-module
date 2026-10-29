@@ -259,6 +259,7 @@ public class OzonCommerceMapperTests
                 OldPrice = "1200",
                 MinPrice = "800",
                 MarketingPrice = "900",
+                MarketingSellerPrice = "875",
                 NetPrice = "400",
                 CurrencyCode = "RUB",
                 AutoActionEnabled = true,
@@ -279,6 +280,26 @@ public class OzonCommerceMapperTests
         Assert.Equal("DISABLED", price.PriceStrategyEnabled);
         Assert.True(price.MinPriceForAutoActionsEnabled);
         Assert.Equal("SKU-1", price.ExternalSku);
+    }
+
+    [Fact]
+    public void MapPrice_UsesMarketingSellerPriceWhenMarketingPriceIsUnavailable()
+    {
+        var item = new PriceInfoItem
+        {
+            ProductId = 42,
+            Price = new PriceDetails
+            {
+                CurrentPrice = "3348",
+                MarketingPrice = "0",
+                MarketingSellerPrice = "3348",
+            }
+        };
+
+        var price = OzonCommerceMapper.MapPrice(item);
+
+        Assert.Equal(3348m, price.Price);
+        Assert.Equal(3348m, price.DiscountedPrice);
     }
 
     [Fact]

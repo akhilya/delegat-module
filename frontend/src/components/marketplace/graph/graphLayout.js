@@ -8,6 +8,10 @@
  */
 
 import dagre from "@dagrejs/dagre";
+import {
+  PRICE_FIELD_GROUP_HEADER_HEIGHT,
+  priceFieldGroupCount,
+} from "./graphPriceFields.js";
 
 const SINK_GAP = 48;
 const LANE_GAP = 24;
@@ -55,7 +59,12 @@ export function estimateNodeHeight(node) {
   if (node.type === "adapterFields" || node.type === "adapterPriceFields") {
     const n = node.data?.fields?.length || 1;
     const extra = node.type === "adapterFields" ? 1 : 0;
-    return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + 6;
+    const groups =
+      node.type === "adapterPriceFields"
+        ? priceFieldGroupCount(node.data?.fields) *
+          PRICE_FIELD_GROUP_HEADER_HEIGHT
+        : 0;
+    return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + groups + 6;
   }
 
   if (node.data?.collapsed) return 44;

@@ -63,8 +63,7 @@ describe("mapping graph layout", () => {
     const price = laid.find((n) => n.type === "adapterPriceFields");
     assert.equal(adapter.position.x, price.position.x);
     assert.ok(
-      price.position.y >=
-        adapter.position.y + estimateNodeHeight(adapter) + 24,
+      price.position.y >= adapter.position.y + estimateNodeHeight(adapter) + 24,
       `price y ${price.position.y} must sit below adapter`,
     );
     assertNoOverlaps(laid);
@@ -111,6 +110,24 @@ describe("mapping graph layout", () => {
     const price = laid.find((n) => n.type === "adapterPriceFields");
     assert.ok(price.position.y >= adapter.position.y + 900 + 24);
     assertNoOverlaps(laid, measured);
+  });
+
+  it("includes price-group headings in the sink height estimate", () => {
+    const ungrouped = adapterNode("prices-plain", 3, "adapterPriceFields");
+    const grouped = {
+      ...adapterNode("prices-grouped", 3, "adapterPriceFields"),
+      data: {
+        fields: [
+          { fieldKey: "price", group: "Prices" },
+          { fieldKey: "oldPrice", group: "Prices" },
+          { fieldKey: "autoActionEnabled", group: "Price strategy" },
+        ],
+      },
+    };
+    assert.equal(
+      estimateNodeHeight(grouped),
+      estimateNodeHeight(ungrouped) + 36,
+    );
   });
 
   it("detects overlapping sinks from the old side-by-side columns", () => {

@@ -14,6 +14,8 @@ public sealed class FieldSpec
     public required string externalFieldKey { get; set; }
     public string? externalFieldName { get; set; }
     public string? externalFieldType { get; set; }
+    public string? externalFieldGroup { get; set; }
+    public string? externalFieldDescription { get; set; }
     public bool isRequired { get; set; }
     public bool isEnabled { get; set; } = true;
     public int sortOrder { get; set; }
@@ -144,6 +146,9 @@ public static class GraphGenerator
                 fieldKey = fm.externalFieldKey,
                 label = fm.externalFieldName ?? fm.externalFieldKey,
                 outputType = fm.externalFieldType ?? "string",
+                group = fm.externalFieldGroup,
+                description = fm.externalFieldDescription,
+                sortOrder = fm.sortOrder,
                 isRequired = fm.isRequired,
             };
 
@@ -280,10 +285,6 @@ public static class GraphGenerator
 
         priceNode.data ??= new GraphNodeData();
         priceNode.data.fields ??= new List<AdapterField>();
-        var have = new HashSet<string>(priceNode.data.fields
-            .Where(f => !string.IsNullOrEmpty(f.fieldKey))
-            .Select(f => f.fieldKey!), StringComparer.OrdinalIgnoreCase);
-
         var adapter = graph.nodes.FirstOrDefault(n => n.type == "adapterFields");
         if (adapter != null)
         {
@@ -293,15 +294,16 @@ public static class GraphGenerator
 
         var incoming = AliasDuplicateProductFieldSources(
             specs.Where(f => f.isEnabled).ToList());
+        var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var fm in incoming.OrderBy(f => f.sortOrder))
         {
             if (string.IsNullOrEmpty(fm.externalFieldKey))
                 continue;
+            incomingKeys.Add(fm.externalFieldKey);
 
             AdapterFieldSource? migratedSource = null;
             string? migratedLabel = null;
             string? migratedType = null;
-            bool? migratedRequired = null;
 
             if (adapter?.data?.fields is { Count: > 0 })
             {
@@ -312,7 +314,6 @@ public static class GraphGenerator
                     migratedSource = legacy.source;
                     migratedLabel = legacy.label;
                     migratedType = legacy.outputType;
-                    migratedRequired = legacy.isRequired;
                     adapter.data.fields.Remove(legacy);
 
                     // Drop edges that targeted the card-field sink for this key
@@ -324,37 +325,44 @@ public static class GraphGenerator
                 }
             }
 
-            if (have.Contains(fm.externalFieldKey))
+            var existingField = priceNode.data.fields.FirstOrDefault(f =>
+                string.Equals(f.fieldKey, fm.externalFieldKey, StringComparison.OrdinalIgnoreCase));
+            if (existingField != null)
             {
                 // Prefer a migrated binding when the price field is still unbound
                 if (migratedSource != null)
                 {
-                    var existing = priceNode.data.fields.FirstOrDefault(f =>
-                        string.Equals(f.fieldKey, fm.externalFieldKey, StringComparison.OrdinalIgnoreCase));
-                    if (existing != null && existing.source == null)
-                        existing.source = migratedSource;
+                    if (existingField.source == null)
+                        existingField.source = migratedSource;
                 }
+
+                // Marketplace metadata is authoritative; keep the user's binding, alias, and omit state.
+                existingField.label = fm.externalFieldName ?? fm.externalFieldKey;
+                existingField.outputType = fm.externalFieldType ?? "string";
+                existingField.group = fm.externalFieldGroup;
+                existingField.description = fm.externalFieldDescription;
+                existingField.sortOrder = fm.sortOrder;
+                existingField.isRequired = fm.isRequired;
                 continue;
             }
 
             priceNode.data.fields.Add(new AdapterField
             {
                 fieldKey = fm.externalFieldKey,
-                label = migratedLabel ?? fm.externalFieldName ?? fm.externalFieldKey,
-                outputType = migratedType ?? fm.externalFieldType ?? "string",
-                isRequired = migratedRequired ?? fm.isRequired,
+                label = fm.externalFieldName ?? migratedLabel ?? fm.externalFieldKey,
+                outputType = fm.externalFieldType ?? migratedType ?? "string",
+                group = fm.externalFieldGroup,
+                description = fm.externalFieldDescription,
+                sortOrder = fm.sortOrder,
+                isRequired = fm.isRequired,
                 aliasOf = fm.aliasOf,
                 source = migratedSource ?? (string.IsNullOrEmpty(fm.aliasOf)
                     && ParseActiveModifiers(fm.modifiersJson).Count == 0
                     ? DirectBinding(fm)
                     : null),
             });
-            have.Add(fm.externalFieldKey);
         }
 
-        var incomingKeys = new HashSet<string>(
-            incoming.Select(f => f.externalFieldKey).Where(k => !string.IsNullOrEmpty(k))!,
-            StringComparer.OrdinalIgnoreCase);
         var dropped = priceNode.data.fields
             .Where(f => !string.IsNullOrEmpty(f.fieldKey)
                 && CategoryImportService.IsStoreExtendedPriceKey(f.fieldKey)
@@ -376,6 +384,20 @@ public static class GraphGenerator
                     f.fieldKey != null && dropped.Contains(f.fieldKey, StringComparer.OrdinalIgnoreCase));
             }
         }
+
+        var schemaOrder = incoming
+            .OrderBy(field => field.sortOrder)
+            .Select((field, index) => (key: field.externalFieldKey, index))
+            .Where(item => !string.IsNullOrEmpty(item.key))
+            .ToDictionary(item => item.key!, item => item.index, StringComparer.OrdinalIgnoreCase);
+        priceNode.data.fields = priceNode.data.fields
+            .Select((field, index) => (field, index))
+            .OrderBy(item => item.field.fieldKey != null && schemaOrder.ContainsKey(item.field.fieldKey) ? 0 : 1)
+            .ThenBy(item => item.field.fieldKey != null && schemaOrder.TryGetValue(item.field.fieldKey, out var order)
+                ? order
+                : item.index)
+            .Select(item => item.field)
+            .ToList();
 
         return JsonSerializer.Serialize(graph, SerializeOpts);
     }
