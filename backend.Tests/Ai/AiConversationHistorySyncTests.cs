@@ -67,6 +67,82 @@ public class AiConversationHistorySyncTests
     }
 
     [Fact]
+    public async Task SaveMessages_ReconcilesServerInsertedTailWithoutClientIds()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = new AiConversation
+        {
+            sessionId = "server-tail-sync-session",
+            storeId = 1,
+            userId = 2,
+        };
+        db.aiConversations.Add(conversation);
+        await db.SaveChangesAsync();
+
+        var createdAt = DateTime.UtcNow;
+        db.aiConversationMessages.AddRange(
+            new AiConversationMessage
+            {
+                conversationId = conversation.Id,
+                role = "user",
+                content = "Find archived Ozon products",
+                createdAt = createdAt,
+            },
+            new AiConversationMessage
+            {
+                conversationId = conversation.Id,
+                role = "assistant",
+                content = "Checking the linked products.",
+                toolCallsJson = """
+                    {"_ui":"assistantTurn","tools":[],"timeline":[],"plan":{"proposalId":"server-plan"}}
+                    """,
+                createdAt = createdAt.AddMilliseconds(1),
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db,
+            new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!,
+            null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "user",
+                    Content = "Find archived Ozon products",
+                    ToolCallsJson = """
+                        {"_ui":"operationContext","card":{"title":"Archive products"}}
+                        """,
+                },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "Found 3 linked products outside the archive.",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","tools":[{"name":"search_catalog"}],"timeline":[],"plan":{"proposalId":"client-plan"}}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(2, await db.aiConversationMessages.CountAsync());
+        var savedUser = await db.aiConversationMessages.SingleAsync(message => message.role == "user");
+        var savedAssistant = await db.aiConversationMessages.SingleAsync(message => message.role == "assistant");
+        Assert.Contains("Found 3 linked products", savedAssistant.content);
+        Assert.Equal(
+            "server-plan",
+            JsonNode.Parse(savedAssistant.toolCallsJson!)?["plan"]?["proposalId"]?.GetValue<string>());
+        Assert.Equal(
+            "operationContext",
+            JsonNode.Parse(savedUser.toolCallsJson!)?["_ui"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task SaveMessages_MergesFormMetadataForUnpersistedTailAfterKnownHistory()
     {
         await using var db = TestDbFactory.CreateDb();

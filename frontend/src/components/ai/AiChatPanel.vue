@@ -408,7 +408,6 @@ function onFormSubmit(msg, payload) {
     formId: payload.formId,
     answers: payload.answers || {},
   });
-  store.dispatch("aiChat/syncHistory");
   store.dispatch("aiChat/sendMessage", {
     content: prompt,
     formReply: {

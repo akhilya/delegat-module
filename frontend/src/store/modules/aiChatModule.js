@@ -138,7 +138,7 @@ function buildHistory(messages) {
 }
 
 // Shared SSE consumer for /ai/chat and /ai/execute-plan
-async function consumeSse(response, commit, dispatch) {
+async function consumeSse(response, commit) {
   if (!response.body) throw new Error("No response body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -214,7 +214,6 @@ async function consumeSse(response, commit, dispatch) {
             if (typeof event.data?.ok === "boolean")
               patch.planFailed = !event.data.ok;
             commit("updateLastAssistantMessage", patch);
-            dispatch?.("syncHistory");
             break;
           }
           case "error":
@@ -508,11 +507,14 @@ export default {
 
     async reloadConversationMessages({ state, commit }) {
       if (!state.sessionId) return;
+      const sessionId = state.sessionId;
       try {
         const { http } = await import("@/main");
-        const res = await http.get(`/ai/conversations/${state.sessionId}`);
+        const res = await http.get(
+          `/ai/conversations/${encodeURIComponent(sessionId)}`,
+        );
         const data = res.data;
-        if (!data) return;
+        if (!data || state.sessionId !== sessionId) return;
         if (data.title) commit("setConversationTitle", data.title);
         commit("setMessages", hydrateConversation(data.messages || []));
       } catch {
@@ -553,13 +555,16 @@ export default {
         } else {
           commit("addMessage", emptyAssistantMessage());
         }
-        await consumeSse(response, commit, dispatch);
+        await consumeSse(response, commit);
+        if (state.sessionId === sessionId) {
+          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+          await dispatch("reloadConversationMessages");
+        }
       } catch (err) {
         if (state.sessionId !== sessionId) return;
         if (err.name === "AbortError") {
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
-            dispatch("syncHistory");
           }
         } else if (err.message !== "Session expired") {
           commit("updateLastAssistantMessage", {
@@ -631,8 +636,13 @@ export default {
 
       commit("addMessage", emptyAssistantMessage());
 
-      // Save user message immediately so it's not lost if generation is interrupted
-      dispatch("syncHistory");
+      // Persist the user turn before the server live-turn can append it. The live
+      // endpoint remains the sole writer for the generated assistant turn.
+      await dispatch("syncHistory");
+      if (state.sessionId !== activeSessionId) {
+        commit("setLoading", false);
+        return;
+      }
 
       abortController = new AbortController();
 
@@ -654,7 +664,11 @@ export default {
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        await consumeSse(response, commit, dispatch);
+        await consumeSse(response, commit);
+        if (state.sessionId === activeSessionId) {
+          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+          await dispatch("reloadConversationMessages");
+        }
       } catch (err) {
         // If the session was switched while streaming, don't corrupt the new conversation's messages
         if (state.sessionId !== activeSessionId) return;
@@ -662,7 +676,6 @@ export default {
         if (err.name === "AbortError") {
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
-            dispatch("syncHistory");
           }
         } else if (err.message !== "Session expired") {
           commit("updateLastAssistantMessage", {
@@ -727,13 +740,16 @@ export default {
           signal: abortController.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        await consumeSse(response, commit, dispatch);
+        await consumeSse(response, commit);
+        if (state.sessionId === activeSessionId) {
+          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+          await dispatch("reloadConversationMessages");
+        }
       } catch (err) {
         if (state.sessionId !== activeSessionId) return;
         if (err.name === "AbortError") {
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
-            dispatch("syncHistory");
           }
         } else if (err.message !== "Session expired") {
           commit("updateLastAssistantMessage", {

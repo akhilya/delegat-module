@@ -216,49 +216,57 @@ public class AiConversationController : ControllerBase
             return Ok(new { saved });
         }
 
-        var savedCount = existing.Count;
-        if (req.Messages.Count == savedCount && savedCount > 0)
+        var nextExistingIndex = 0;
+        for (var requestIndex = 0; requestIndex < req.Messages.Count; requestIndex++)
         {
-            var lastReq = req.Messages[^1];
-            var last = existing[^1];
-            if (string.Equals(lastReq.Role, "assistant", StringComparison.OrdinalIgnoreCase)
-                && last.role == "assistant")
+            var incoming = req.Messages[requestIndex];
+            var matchingIndex = existing.FindIndex(
+                nextExistingIndex,
+                candidate => string.Equals(candidate.role, incoming.Role, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(candidate.content, incoming.Content, StringComparison.Ordinal));
+            if (matchingIndex >= 0)
             {
-                last.content = lastReq.Content;
-                last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(last.toolCallsJson, lastReq.ToolCallsJson);
-                historyUpdates[last.Id] = lastReq;
-            }
-            else if (string.Equals(lastReq.Role, "user", StringComparison.OrdinalIgnoreCase)
-                && last.role == "user"
-                && string.Equals(lastReq.Content, last.content, StringComparison.Ordinal))
-            {
-                // The live chat endpoint may append this user turn before the client sync arrives.
-                // Preserve its form/attachment metadata when both sides already have the same row.
-                last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(last.toolCallsJson, lastReq.ToolCallsJson);
-                historyUpdates[last.Id] = lastReq;
+                var matched = existing[matchingIndex];
+                nextExistingIndex = matchingIndex + 1;
+                matched.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
+                    matched.toolCallsJson, incoming.ToolCallsJson);
+                historyUpdates[matched.Id] = incoming;
+                saved.Add(new { role = incoming.Role, dbId = matched.Id });
+                continue;
             }
 
-            conv.lastMessageAt = DateTime.UtcNow;
-            if (conv.modelName == null && req.ModelName != null)
-                conv.modelName = req.ModelName;
-            await SaveHistoryChangesAsync(historyUpdates, ct);
-            return Ok(new { saved });
-        }
+            // The live turn can persist its final assistant row before a client sync
+            // arrives with a slightly different snapshot. Rebase that final row instead
+            // of appending a duplicate assistant message.
+            if (requestIndex == req.Messages.Count - 1
+                && string.Equals(incoming.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+                && nextExistingIndex == existing.Count - 1
+                && nextExistingIndex >= 0
+                && existing[nextExistingIndex].role == "assistant")
+            {
+                var last = existing[nextExistingIndex];
+                last.content = incoming.Content;
+                last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
+                    last.toolCallsJson, incoming.ToolCallsJson);
+                historyUpdates[last.Id] = incoming;
+                saved.Add(new { role = incoming.Role, dbId = last.Id });
+                nextExistingIndex++;
+                continue;
+            }
 
-        var newMessages = req.Messages.Skip(savedCount).ToList();
-        foreach (var m in newMessages)
-        {
             var msg = new AiConversationMessage
             {
                 conversationId = conv.Id,
-                role = m.Role,
-                content = m.Content,
-                toolCallsJson = AiConversationTurnStore.PreserveServerPlan(null, m.ToolCallsJson),
-                createdAt = m.CreatedAt ?? DateTime.UtcNow,
+                role = incoming.Role,
+                content = incoming.Content,
+                toolCallsJson = AiConversationTurnStore.PreserveServerPlan(null, incoming.ToolCallsJson),
+                createdAt = incoming.CreatedAt ?? DateTime.UtcNow,
             };
             _context.aiConversationMessages.Add(msg);
             await SaveHistoryChangesAsync(historyUpdates, ct);
-            saved.Add(new { role = m.Role, dbId = msg.Id });
+            saved.Add(new { role = incoming.Role, dbId = msg.Id });
+            existing.Add(msg);
+            nextExistingIndex = existing.Count;
         }
 
         conv.lastMessageAt = DateTime.UtcNow;

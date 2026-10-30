@@ -189,6 +189,37 @@ public static class AiConversationTurnStore
         int userId,
         CancellationToken ct)
     {
+        var strategy = db.Database.CreateExecutionStrategy();
+        var firstAttempt = true;
+        return await strategy.ExecuteAsync(async () =>
+        {
+            // A failed transient attempt can leave tracked entities in a modified state.
+            // Clear those changes before retrying the whole transaction as one unit.
+            if (!firstAttempt)
+                db.ChangeTracker.Clear();
+            firstAttempt = false;
+
+            await using var transaction = db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(ct)
+                : null;
+
+            var steps = await ConsumePendingPlanAttemptAsync(
+                db, sessionId, proposalId, storeId, userId, ct);
+            if (steps != null && transaction != null)
+                await transaction.CommitAsync(ct);
+
+            return steps;
+        });
+    }
+
+    private static async Task<IReadOnlyList<PlanStepInput>?> ConsumePendingPlanAttemptAsync(
+        DataContext db,
+        string sessionId,
+        string proposalId,
+        int storeId,
+        int userId,
+        CancellationToken ct)
+    {
         var conversation = await db.aiConversations.AsNoTracking()
             .FirstOrDefaultAsync(c => c.sessionId == sessionId
                 && c.storeId == storeId
@@ -203,9 +234,6 @@ public static class AiConversationTurnStore
             .FirstOrDefaultAsync(ct);
         if (!lastId.HasValue) return null;
 
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(ct)
-            : null;
         var last = db.Database.IsRelational()
             ? await db.aiConversationMessages
                 .FromSqlInterpolated($"SELECT * FROM aiConversationMessages WHERE Id = {lastId.Value} FOR UPDATE")
@@ -269,8 +297,6 @@ public static class AiConversationTurnStore
         try
         {
             await db.SaveChangesAsync(ct);
-            if (transaction != null)
-                await transaction.CommitAsync(ct);
             return steps;
         }
         catch (DbUpdateConcurrencyException)
