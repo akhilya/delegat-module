@@ -17,6 +17,7 @@ import {
   History,
   MessageSquare,
   Files,
+  AlertTriangle,
 } from "lucide-vue-next";
 import AiPlanCard from "./AiPlanCard.vue";
 import AiChatProcess from "./AiChatProcess.vue";
@@ -44,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -95,7 +97,7 @@ import { planHasContent } from "@/lib/ai/planSteps";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const store = useStore();
 const { edgeOffset } = useCompanionSheets();
 const aiEdgeOffset = edgeOffset("ai");
@@ -151,6 +153,46 @@ const lastModelName = computed(
   () =>
     [...messages.value].reverse().find((m) => m.modelName)?.modelName ?? null,
 );
+
+function planErrorText(message) {
+  const error = message?.planConfirmationError || message?.requestError;
+  const reasonKey = error?.reason
+    ? `ai.planConfirmationReasons.${error.reason}`
+    : "";
+  if (
+    error?.code === "plan_not_pending_or_mismatched" &&
+    reasonKey &&
+    te(reasonKey)
+  )
+    return t(reasonKey);
+  const key = error?.code ? `errors.${error.code}` : "";
+  if (key && te(key)) return t(key);
+  return t(
+    error?.stage === "execution"
+      ? "ai.planExecutionStatusUnknown"
+      : error?.stage === "confirmation"
+        ? "ai.planConfirmationStatusUnknown"
+        : "ai.requestStatusUnknown",
+  );
+}
+
+function planErrorTitle(message) {
+  const stage =
+    message?.planConfirmationError?.stage || message?.requestError?.stage;
+  if (stage === "execution") return t("ai.planExecutionStatusUnknownTitle");
+  if (stage === "confirmation") return t("ai.planConfirmationFailedTitle");
+  return t("ai.requestFailedTitle");
+}
+
+function planErrorNextStep(message) {
+  const error = message?.planConfirmationError || message?.requestError;
+  const stage = error?.stage;
+  if (stage === "execution") return t("ai.planExecutionStatusUnknownNextStep");
+  if (stage === "confirmation" && error?.reason === "already_processed")
+    return t("ai.planConfirmationAlreadyProcessedNextStep");
+  if (stage === "confirmation") return t("ai.planConfirmationNextStep");
+  return t("ai.requestNextStep");
+}
 
 const allModels = computed(() => store.state.aiModels?.models ?? []);
 const pickerModels = computed(() => store.state.aiModels?.pickerModels ?? []);
@@ -817,6 +859,36 @@ function isLatestTurn(msg) {
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   />
 
+                  <Alert
+                    v-if="msg.planConfirmationError || msg.requestError"
+                    variant="destructive"
+                    class="w-full"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                  >
+                    <AlertTriangle class="size-4" />
+                    <AlertTitle>
+                      {{ planErrorTitle(msg) }}
+                    </AlertTitle>
+                    <AlertDescription>
+                      <p>{{ planErrorText(msg) }}</p>
+                      <p
+                        v-if="
+                          (msg.planConfirmationError || msg.requestError).status
+                        "
+                        class="mt-1 text-xs"
+                      >
+                        {{
+                          t("ai.planHttpStatus", {
+                            status: (
+                              msg.planConfirmationError || msg.requestError
+                            ).status,
+                          })
+                        }}
+                      </p>
+                      <p class="mt-1">{{ planErrorNextStep(msg) }}</p>
+                    </AlertDescription>
+                  </Alert>
+
                   <div
                     v-if="planHasContent(msg.plan)"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
@@ -828,8 +900,13 @@ function isLatestTurn(msg) {
                       :superseded="msg.planSuperseded"
                       :executed="msg.planExecuted"
                       :failed="msg.planFailed"
+                      :confirming="msg.planConfirming"
+                      :confirmation-blocked="
+                        msg.planConfirmationError?.stage === 'confirmation' &&
+                        !msg.planConfirmed
+                      "
                       :tool-calls="msg.toolCalls"
-                      :ready="msg.done"
+                      :ready="msg.done && !isLoading"
                       @confirm="confirmPlan"
                       @cancel="cancelPlan"
                     />

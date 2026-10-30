@@ -8,9 +8,7 @@ export function getApiErrorText(
   fallbackKey = "apiErrors.default",
 ) {
   const localize = typeof translate === "function" ? translate : (key) => key;
-  const body = error?.response?.data ?? error?.data ?? error;
-  const payload = body?.error ?? body;
-  const code = typeof payload?.code === "string" ? payload.code : "";
+  const code = getApiErrorCode(error);
 
   if (code) {
     const key = `apiErrors.${code}`;
@@ -20,4 +18,15 @@ export function getApiErrorText(
 
   const fallback = localize(fallbackKey);
   return fallback || "Something went wrong. Please try again.";
+}
+
+/** Extract a stable code from standard API envelopes, including legacy string errors. */
+export function getApiErrorCode(error) {
+  const body = error?.response?.data ?? error?.data ?? error;
+  const payload = body?.error ?? body;
+  if (typeof payload?.code === "string") return payload.code;
+  if (typeof payload === "string" && /^[a-z][a-z0-9_]*$/i.test(payload)) {
+    return payload;
+  }
+  return "";
 }

@@ -6,6 +6,7 @@ import {
   appendAssistantApiBlock,
 } from "@/lib/ai/chatHistory.js";
 import { appendTextDelta, appendTool } from "@/lib/ai/timeline";
+import { getApiErrorCode } from "@/lib/apiErrorText.js";
 import {
   emptyAssistantMessage,
   hydrateConversation,
@@ -43,6 +44,24 @@ async function uploadChatAttachments(sessionId, attached) {
   } catch {
     return [];
   }
+}
+
+async function responseError(response) {
+  const payload = await response.json().catch(() => null);
+  const error = new Error("AI request failed");
+  error.code = getApiErrorCode(payload);
+  error.status = response.status;
+  const details = payload?.data ?? payload?.error?.details;
+  error.reason = typeof details?.reason === "string" ? details.reason : "";
+  return error;
+}
+
+function requestErrorDetails(error) {
+  return {
+    code: error?.code || "",
+    status: Number.isInteger(error?.status) ? error.status : null,
+    reason: error?.reason || "",
+  };
 }
 
 let abortController = null;
@@ -432,15 +451,44 @@ export default {
     triggerProductRefresh(state) {
       state.productRefreshToken++;
     },
-    setLastPlanConfirmed(state) {
-      const planMsg = [...state.messages].reverse().find((m) => isOpenPlan(m));
+    setPlanConfirming(state, { proposalId, confirming }) {
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan?.proposalId === proposalId);
       if (!planMsg) return;
+      planMsg.planConfirming = confirming;
+      if (confirming) planMsg.planConfirmationError = null;
+    },
+    setPlanConfirmationError(state, { proposalId, error }) {
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan?.proposalId === proposalId);
+      if (!planMsg) return;
+      planMsg.planConfirming = false;
+      planMsg.planConfirmationError = error;
+    },
+    setPlanConfirmed(state, proposalId) {
+      const planMsg = [...state.messages]
+        .reverse()
+        .find((m) => m.plan?.proposalId === proposalId);
+      if (!planMsg) return;
+      planMsg.planConfirming = false;
       planMsg.planConfirmed = true;
       planMsg.planFailed = false;
+      planMsg.planConfirmationError = null;
       if (!Number.isInteger(planMsg.planExecStart)) {
         planMsg.planExecStart = (planMsg.timeline || []).length;
       }
       planMsg.done = false;
+    },
+    setLastAssistantRequestError(state, error) {
+      let last = state.messages.at(-1);
+      if (!last || last.role !== "assistant") {
+        last = emptyAssistantMessage();
+        state.messages.push(last);
+      }
+      last.requestError = error;
+      last.done = true;
     },
     setFormReply(state, { messageId, formId, answers }) {
       const id = String(formId ?? "");
@@ -542,7 +590,7 @@ export default {
           await dispatch("reloadConversationMessages");
           return;
         }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw await responseError(response);
 
         const current = state.messages.at(-1);
         if (current?.role === "assistant") {
@@ -566,11 +614,9 @@ export default {
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
           }
-        } else if (err.message !== "Session expired") {
-          commit("updateLastAssistantMessage", {
-            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
-            done: true,
-          });
+        } else {
+          await dispatch("reloadConversationMessages");
+          commit("setLastAssistantRequestError", requestErrorDetails(err));
         }
       } finally {
         abortController = null;
@@ -663,7 +709,7 @@ export default {
           signal: abortController.signal,
         });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw await responseError(response);
         await consumeSse(response, commit);
         if (state.sessionId === activeSessionId) {
           if (userStopped) commit("updateLastAssistantMessage", { done: true });
@@ -677,11 +723,9 @@ export default {
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
           }
-        } else if (err.message !== "Session expired") {
-          commit("updateLastAssistantMessage", {
-            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
-            done: true,
-          });
+        } else {
+          await dispatch("reloadConversationMessages");
+          commit("setLastAssistantRequestError", requestErrorDetails(err));
         }
       } finally {
         abortController = null;
@@ -715,6 +759,14 @@ export default {
       const executable =
         proposalId && steps.length > 0 && steps.every((s) => s.tool && s.args);
 
+      if (
+        !planMsg ||
+        planMsg.planConfirming ||
+        planMsg.planConfirmationError ||
+        state.isLoading
+      )
+        return;
+
       if (!executable) {
         commit("updateLastAssistantMessage", {
           delta: `\n\n${t("store.aiChatModule.planUnavailable")}`,
@@ -722,12 +774,12 @@ export default {
         return;
       }
 
-      commit("setLastPlanConfirmed");
-
+      commit("setPlanConfirming", { proposalId, confirming: true });
       userStopped = false;
       const activeSessionId = state.sessionId;
       commit("setLoading", true);
       abortController = new AbortController();
+      let responseAccepted = false;
 
       try {
         const response = await fetchWithAuth("/api/ai/execute-plan", {
@@ -739,7 +791,11 @@ export default {
           }),
           signal: abortController.signal,
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          throw await responseError(response);
+        }
+        responseAccepted = true;
+        commit("setPlanConfirmed", proposalId);
         await consumeSse(response, commit);
         if (state.sessionId === activeSessionId) {
           if (userStopped) commit("updateLastAssistantMessage", { done: true });
@@ -748,17 +804,23 @@ export default {
       } catch (err) {
         if (state.sessionId !== activeSessionId) return;
         if (err.name === "AbortError") {
+          await dispatch("reloadConversationMessages");
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
           }
-        } else if (err.message !== "Session expired") {
-          commit("updateLastAssistantMessage", {
-            delta: `\n\n${t("store.aiChatModule.connectionError", { message: err.message })}`,
-            done: true,
+        } else {
+          await dispatch("reloadConversationMessages");
+          commit("setPlanConfirmationError", {
+            proposalId,
+            error: {
+              stage: responseAccepted ? "execution" : "confirmation",
+              ...requestErrorDetails(err),
+            },
           });
         }
       } finally {
         abortController = null;
+        commit("setPlanConfirming", { proposalId, confirming: false });
         if (state.sessionId === activeSessionId) {
           const last = state.messages.at(-1);
           if (!userStopped && last?.role === "assistant" && !last.done) {

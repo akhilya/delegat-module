@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getApiErrorText } from "./apiErrorText.js";
+import { getApiErrorCode, getApiErrorText } from "./apiErrorText.js";
 
 const translations = {
   "apiErrors.connection_not_found": "Connection not found.",
@@ -39,6 +39,20 @@ test("localizes public API and standard API error envelopes by code", () => {
     ),
     "Connection not found.",
   );
+});
+
+test("extracts stable API codes without exposing server-authored error text", () => {
+  assert.equal(
+    getApiErrorCode({
+      response: { data: { code: "plan_not_pending_or_mismatched" } },
+    }),
+    "plan_not_pending_or_mismatched",
+  );
+  assert.equal(
+    getApiErrorCode({ error: "plan_not_pending_or_mismatched" }),
+    "plan_not_pending_or_mismatched",
+  );
+  assert.equal(getApiErrorCode({ error: "Something went wrong" }), "");
 });
 
 test("uses a generic localized message for unknown or missing codes", () => {

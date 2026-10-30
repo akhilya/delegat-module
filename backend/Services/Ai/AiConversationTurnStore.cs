@@ -10,6 +10,10 @@ using MySqlConnector;
 
 namespace Delegat.Services.Ai;
 
+public sealed record PlanConfirmationAttempt(
+    IReadOnlyList<PlanStepInput>? Steps,
+    string? RejectionReason);
+
 /// <summary>Persists the live user/assistant turn so a reload can restore it from MySQL.</summary>
 public static class AiConversationTurnStore
 {
@@ -187,6 +191,15 @@ public static class AiConversationTurnStore
         string proposalId,
         int storeId,
         int userId,
+        CancellationToken ct) =>
+        (await ConsumePendingPlanDetailedAsync(db, sessionId, proposalId, storeId, userId, ct)).Steps;
+
+    public static async Task<PlanConfirmationAttempt> ConsumePendingPlanDetailedAsync(
+        DataContext db,
+        string sessionId,
+        string proposalId,
+        int storeId,
+        int userId,
         CancellationToken ct)
     {
         var strategy = db.Database.CreateExecutionStrategy();
@@ -203,16 +216,16 @@ public static class AiConversationTurnStore
                 ? await db.Database.BeginTransactionAsync(ct)
                 : null;
 
-            var steps = await ConsumePendingPlanAttemptAsync(
+            var attempt = await ConsumePendingPlanAttemptAsync(
                 db, sessionId, proposalId, storeId, userId, ct);
-            if (steps != null && transaction != null)
+            if (attempt.Steps != null && transaction != null)
                 await transaction.CommitAsync(ct);
 
-            return steps;
+            return attempt;
         });
     }
 
-    private static async Task<IReadOnlyList<PlanStepInput>?> ConsumePendingPlanAttemptAsync(
+    private static async Task<PlanConfirmationAttempt> ConsumePendingPlanAttemptAsync(
         DataContext db,
         string sessionId,
         string proposalId,
@@ -224,7 +237,7 @@ public static class AiConversationTurnStore
             .FirstOrDefaultAsync(c => c.sessionId == sessionId
                 && c.storeId == storeId
                 && c.userId == userId, ct);
-        if (conversation == null) return null;
+        if (conversation == null) return Rejected("conversation_missing");
 
         var lastId = await db.aiConversationMessages.AsNoTracking()
             .Where(m => m.conversationId == conversation.Id)
@@ -232,31 +245,36 @@ public static class AiConversationTurnStore
             .ThenByDescending(m => m.Id)
             .Select(m => (int?)m.Id)
             .FirstOrDefaultAsync(ct);
-        if (!lastId.HasValue) return null;
+        if (!lastId.HasValue) return Rejected("conversation_empty");
 
         var last = db.Database.IsRelational()
             ? await db.aiConversationMessages
                 .FromSqlInterpolated($"SELECT * FROM aiConversationMessages WHERE Id = {lastId.Value} FOR UPDATE")
                 .FirstOrDefaultAsync(ct)
             : await db.aiConversationMessages.FirstOrDefaultAsync(m => m.Id == lastId.Value, ct);
-        if (last is not { role: "assistant" }) return null;
+        if (last is not { role: "assistant" }) return Rejected("conversation_advanced");
 
         var turn = ReadTurn(last.toolCallsJson);
-        if (turn?["plan"] is not JsonObject plan
-            || turn["planCancelled"]?.GetValue<bool>() == true
-            || turn["planConfirmed"]?.GetValue<bool>() == true
-            || HasExecutedPlan(last.toolCallsJson)
-            || !string.Equals(plan["proposalId"]?.GetValue<string>(), proposalId, StringComparison.Ordinal)
-            || plan["steps"] is not JsonArray plannedSteps
+        if (turn?["plan"] is not JsonObject plan)
+            return Rejected("plan_missing");
+        if (turn["planCancelled"]?.GetValue<bool>() == true)
+            return Rejected("plan_cancelled");
+        if (turn["planConfirmed"]?.GetValue<bool>() == true || HasExecutedPlan(last.toolCallsJson))
+            return Rejected("already_processed");
+        if (!string.Equals(plan["proposalId"]?.GetValue<string>(), proposalId, StringComparison.Ordinal))
+            return Rejected("proposal_mismatch");
+        if (plan["steps"] is not JsonArray plannedSteps
             || plannedSteps.Count == 0
             || plan["stepsHash"]?.GetValue<string>() is not { } expectedHash
             || plan["createdAtUtc"]?.GetValue<DateTime>() is not { } createdAtUtc
-            || plan["expiresAtUtc"]?.GetValue<DateTime>() is not { } expiresAtUtc
-            || createdAtUtc > DateTime.UtcNow
-            || DateTime.UtcNow - createdAtUtc > PlanProposalTtl
-            || expiresAtUtc <= DateTime.UtcNow
-            || !string.Equals(expectedHash, ComputeStepsHash(plannedSteps), StringComparison.Ordinal))
-            return null;
+            || plan["expiresAtUtc"]?.GetValue<DateTime>() is not { } expiresAtUtc)
+            return Rejected("invalid_plan");
+
+        var now = DateTime.UtcNow;
+        if (createdAtUtc > now || now - createdAtUtc > PlanProposalTtl || expiresAtUtc <= now)
+            return Rejected("expired");
+        if (!string.Equals(expectedHash, ComputeStepsHash(plannedSteps), StringComparison.Ordinal))
+            return Rejected("steps_changed");
 
         if (!AiPlanProposalToken.TryValidate(
                 proposalId,
@@ -267,21 +285,21 @@ public static class AiConversationTurnStore
                 expiresAtUtc,
                 out var nonce)
             || !string.Equals(plan["proposalNonce"]?.GetValue<string>(), nonce, StringComparison.Ordinal))
-            return null;
+            return Rejected("signature_invalid");
 
         if (await db.aiAgentAudits.AnyAsync(a => a.storeId == storeId
                 && a.userId == userId
                 && a.tool == "plan_confirmation"
                 && a.summary.StartsWith($"proposal:{proposalId}:"), ct))
-            return null;
+            return Rejected("already_processed");
 
         var steps = JsonSerializer.Deserialize<List<PlanStepInput>>(plannedSteps.ToJsonString(PlanJsonOptions), PlanJsonOptions);
-        if (steps is not { Count: > 0 }) return null;
+        if (steps is not { Count: > 0 }) return Rejected("invalid_plan");
 
-        var now = DateTime.UtcNow;
+        var confirmedAt = DateTime.UtcNow;
         turn["planConfirmed"] = true;
         turn["planConfirmedBy"] = userId;
-        turn["planConfirmedAtUtc"] = now;
+        turn["planConfirmedAtUtc"] = confirmedAt;
         turn["planConfirmationId"] = proposalId;
         last.toolCallsJson = turn.ToJsonString(PlanJsonOptions);
         var audit = new AiAgentAudit
@@ -290,21 +308,23 @@ public static class AiConversationTurnStore
             storeId = storeId,
             tool = "plan_confirmation",
             summary = $"proposal:{proposalId}: confirmed; execution started",
-            createdAt = now,
+            createdAt = confirmedAt,
         };
         db.aiAgentAudits.Add(audit);
 
         try
         {
             await db.SaveChangesAsync(ct);
-            return steps;
+            return new PlanConfirmationAttempt(steps, null);
         }
         catch (DbUpdateConcurrencyException)
         {
             db.Entry(last).State = EntityState.Detached;
             db.Entry(audit).State = EntityState.Detached;
-            return null;
+            return Rejected("already_processed");
         }
+
+        static PlanConfirmationAttempt Rejected(string reason) => new(null, reason);
     }
 
     internal static bool TryMergePlanExecution(

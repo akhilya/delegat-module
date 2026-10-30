@@ -190,6 +190,7 @@ describe("locale message catalogs", () => {
       "owner_role_assignment_forbidden",
       "tool_not_supported",
       "category_not_mappable",
+      "plan_not_pending_or_mismatched",
     ];
 
     for (const code of codes) {

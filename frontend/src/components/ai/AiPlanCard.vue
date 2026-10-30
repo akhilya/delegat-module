@@ -13,7 +13,7 @@ import {
   PLAN_STEP_PREVIEW,
   planHiddenStepCount,
   planHasContent,
-  planStepList,
+  planStepPresentation,
   planStepsNeedCollapse,
 } from "@/lib/ai/planSteps";
 import { useI18n } from "vue-i18n";
@@ -30,19 +30,38 @@ const props = defineProps({
   superseded: { type: Boolean, default: false },
   executed: { type: Boolean, default: false },
   failed: { type: Boolean, default: false },
+  confirming: { type: Boolean, default: false },
+  confirmationBlocked: { type: Boolean, default: false },
   toolCalls: { type: Array, default: () => [] },
   ready: { type: Boolean, default: true },
 });
 defineEmits(["confirm", "cancel"]);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const store = useStore();
 const expanded = ref(false);
+const productDetailsExpanded = ref(false);
 const operationStatuses = ref({});
 let pollTimer = null;
 let pollStopped = false;
 
-const steps = computed(() => planStepList(props.plan));
+const stepPresentation = computed(() => planStepPresentation(props.plan));
+const steps = computed(() => stepPresentation.value.otherSteps);
+const productChanges = computed(() => stepPresentation.value.productChanges);
+const productChangeDetails = computed(() =>
+  productChanges.value.filter((change) => change.description.trim()),
+);
+const bulkPriceChanges = computed(() =>
+  productChanges.value.filter((change) => change.kind === "bulk-price"),
+);
+const individualProductChangeCount = computed(
+  () =>
+    productChanges.value.filter((change) => change.kind === "product").length,
+);
+const productDetailsNeedCollapse = computed(
+  () =>
+    productChangeDetails.value.length > 1 || bulkPriceChanges.value.length > 0,
+);
 const needsCollapse = computed(() => planStepsNeedCollapse(steps.value.length));
 const hiddenCount = computed(() => planHiddenStepCount(steps.value.length));
 const head = computed(() =>
@@ -55,6 +74,15 @@ const operationIds = computed(() => operationIdsFromToolCalls(props.toolCalls));
 const operationSummary = computed(() =>
   summarizePlanOperations(operationIds.value, operationStatuses.value),
 );
+
+function formatPriceDelta(value) {
+  const amount = new Intl.NumberFormat(locale.value, {
+    maximumFractionDigits: 2,
+  }).format(Math.abs(value));
+  if (value > 0) return `+${amount}`;
+  if (value < 0) return `−${amount}`;
+  return amount;
+}
 
 async function pollOperations() {
   if (pollStopped || !operationIds.value.length) return;
@@ -100,10 +128,15 @@ function openOperations() {
 }
 
 const pending = computed(
-  () => !props.confirmed && !props.cancelled && !props.superseded,
+  () =>
+    !props.confirmed &&
+    !props.cancelled &&
+    !props.superseded &&
+    !props.confirmationBlocked,
 );
 
 const statusLabel = computed(() => {
+  if (props.confirmationBlocked) return t("ai.planConfirmationUnavailable");
   if (operationSummary.value.active && operationIds.value.length)
     return t("ai.planBackgroundRunning");
   if (operationSummary.value.failed) return t("ai.planFailed");
@@ -132,6 +165,86 @@ const statusLabel = computed(() => {
         {{ t("ai.planAffected") }}
         <span class="text-foreground">{{ plan.affectedCount }}</span>
       </p>
+    </div>
+
+    <div v-if="productChanges.length" class="mx-1 border-t border-border/70">
+      <div class="flex items-center justify-between gap-3 px-2 py-2">
+        <span class="text-sm font-medium">{{
+          t("ai.planProductChanges")
+        }}</span>
+        <span
+          v-if="individualProductChangeCount > 1"
+          class="shrink-0 text-xs tabular-nums text-muted-foreground"
+        >
+          {{
+            t("ai.planProductChangeCount", {
+              count: individualProductChangeCount,
+            })
+          }}
+        </span>
+      </div>
+
+      <div
+        v-for="(change, i) in bulkPriceChanges"
+        :key="'price-' + i"
+        class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-2 pb-2 text-sm"
+      >
+        <span>{{ t("ai.planPriceDelta") }}</span>
+        <span class="text-right font-medium tabular-nums">
+          {{ formatPriceDelta(change.priceDelta) }}
+        </span>
+        <span
+          v-if="
+            change.targetCount !== null &&
+            (!plan.affectedCount || change.targetCount !== plan.affectedCount)
+          "
+          class="col-span-2 text-xs text-muted-foreground"
+        >
+          {{ t("ai.planProductTargets", { count: change.targetCount }) }}
+        </span>
+      </div>
+
+      <ol
+        v-if="productChangeDetails.length && !productDetailsNeedCollapse"
+        class="border-t border-border/70"
+      >
+        <li class="px-2 py-2 text-sm leading-snug">
+          {{ productChangeDetails[0].description }}
+        </li>
+      </ol>
+
+      <Collapsible
+        v-else-if="productChangeDetails.length"
+        v-model:open="productDetailsExpanded"
+      >
+        <CollapsibleContent>
+          <ol class="border-t border-border/70">
+            <li
+              v-for="(change, i) in productChangeDetails"
+              :key="'product-detail-' + i"
+              class="border-b border-border/70 px-2 py-2 text-sm leading-snug last:border-b-0"
+            >
+              {{ change.description }}
+            </li>
+          </ol>
+        </CollapsibleContent>
+        <CollapsibleTrigger
+          class="flex min-h-9 w-full items-center gap-2 border-t border-border/70 px-2 py-2 text-left text-xs font-medium text-muted-foreground outline-none transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:[&_svg]:rotate-180"
+        >
+          <ChevronDown
+            class="size-3.5 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
+          />
+          <span>
+            {{
+              productDetailsExpanded
+                ? t("ai.planProductDetailsHide")
+                : t("ai.planProductDetails", {
+                    count: productChangeDetails.length,
+                  })
+            }}
+          </span>
+        </CollapsibleTrigger>
+      </Collapsible>
     </div>
 
     <ol v-if="steps.length" class="mx-1">
@@ -183,12 +296,23 @@ const statusLabel = computed(() => {
     </Collapsible>
 
     <div v-if="pending" class="flex flex-col gap-1 px-2 pt-1 pb-2">
-      <Button class="h-9 w-full" :disabled="!ready" @click="$emit('confirm')">
-        {{ ready ? t("ai.planExecute") : t("ai.planPreparing") }}
+      <Button
+        class="h-9 w-full"
+        :disabled="!ready || confirming"
+        @click="$emit('confirm')"
+      >
+        {{
+          confirming
+            ? t("ai.planConfirming")
+            : ready
+              ? t("ai.planExecute")
+              : t("ai.planPreparing")
+        }}
       </Button>
       <Button
         variant="ghost"
         class="h-9 w-full text-muted-foreground"
+        :disabled="confirming"
         @click="$emit('cancel')"
       >
         {{ t("common.cancel") }}
@@ -205,10 +329,16 @@ const statusLabel = computed(() => {
       <X
         v-else
         class="size-3.5"
-        :class="(failed || operationSummary.failed) && 'text-destructive'"
+        :class="
+          (confirmationBlocked || failed || operationSummary.failed) &&
+          'text-destructive'
+        "
       />
       <span
-        :class="(failed || operationSummary.failed) && 'text-destructive'"
+        :class="
+          (confirmationBlocked || failed || operationSummary.failed) &&
+          'text-destructive'
+        "
         >{{ statusLabel }}</span
       >
     </div>

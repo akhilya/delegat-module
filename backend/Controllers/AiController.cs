@@ -176,10 +176,13 @@ public class AiController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.ProposalId))
             return BadRequest("proposalId required");
 
-        var steps = await _chatService.ConsumeConfirmedPlanAsync(
+        var attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
             request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
-        if (steps == null)
-            return Conflict(new { error = "plan_not_pending_or_mismatched" });
+        if (attempt.Steps is not { } steps)
+            throw ApiException.Conflict(
+                "Plan confirmation was rejected",
+                new { reason = attempt.RejectionReason ?? "unknown" },
+                code: "plan_not_pending_or_mismatched");
 
         var sessionId = request.SessionId;
         _liveTurns.TryStart(

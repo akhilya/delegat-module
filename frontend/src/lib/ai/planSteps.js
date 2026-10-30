@@ -6,6 +6,61 @@ export function planStepList(plan) {
   return Array.isArray(steps) ? steps : [];
 }
 
+/** Separates catalog writes from operational steps without exposing API IDs. */
+export function planStepPresentation(plan) {
+  const productChanges = [];
+  const otherSteps = [];
+
+  for (const step of planStepList(plan)) {
+    const args = step?.args;
+    const method =
+      typeof args?.method === "string" ? args.method.toUpperCase() : "";
+    const rawPath = typeof args?.path === "string" ? args.path : "";
+    const path = rawPath
+      .split(/[?#]/, 1)[0]
+      .replace(/^\/api(?=\/)/i, "")
+      .replace(/\/+$/, "");
+    const body = args?.body;
+    const description =
+      typeof step?.description === "string" ? step.description : "";
+
+    const isPlatformRequest = step?.tool === "platform_request";
+    const priceDelta = body?.updates?.priceDelta;
+    if (
+      isPlatformRequest &&
+      method === "PATCH" &&
+      /^\/products\/bulk$/i.test(path) &&
+      typeof priceDelta === "number" &&
+      Number.isFinite(priceDelta)
+    ) {
+      productChanges.push({
+        kind: "bulk-price",
+        description,
+        priceDelta,
+        targetCount: Array.isArray(body.productIds)
+          ? body.productIds.length
+          : null,
+      });
+      continue;
+    }
+
+    const productPath = path.match(/^\/products\/([^/]+)$/i);
+    if (
+      isPlatformRequest &&
+      productPath &&
+      !["bulk", "trash", "count"].includes(productPath[1].toLowerCase()) &&
+      ["PATCH", "PUT", "POST", "DELETE"].includes(method)
+    ) {
+      productChanges.push({ kind: "product", description });
+      continue;
+    }
+
+    otherSteps.push(step);
+  }
+
+  return { productChanges, otherSteps };
+}
+
 /** A plan with no summary and no steps is not something the user can confirm. */
 export function planHasContent(plan) {
   if (String(plan?.summary || "").trim()) return true;

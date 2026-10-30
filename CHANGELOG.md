@@ -64,6 +64,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Assistant plans group product changes, summarize bulk price adjustments, and keep lengthy item details collapsed until opened.
 - Use a migration-only database command timeout (30 minutes by default, configurable with `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`) so large index builds are not interrupted by the regular 120-second query timeout.
 - Ozon's mapping canvas groups price fields and refreshes field metadata without losing saved bindings. Price import falls back to `marketing_seller_price` when `marketing_price` is unavailable.
 - Cabinet assistant asks one clarification when a read-only lookup lacks its product; it does not list the broad catalog or add edit/navigation links unless requested or needed.
@@ -196,7 +197,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet assistant questionnaire submissions reliably include typed answers instead of sending a blank follow-up.
 - Cabinet assistant preserves questionnaire/attachment metadata when the live server has already inserted the matching user message before client history sync.
 - Conversation history sync no longer deletes server messages omitted from a stale client snapshot; it reconciles server-inserted messages with the unpersisted client tail so form metadata is retained without duplicate rows. The client persists user turns before starting live generation and reloads the server-authoritative assistant turn after streaming. Concurrent live/history writes rebase on the latest row and preserve server-owned plan metadata.
-- Confirming an assistant plan runs its read, row lock, and confirmation write inside the MySQL retry execution strategy, avoiding transaction-strategy failures while keeping confirmation atomic.
+- Assistant plan confirmation becomes available only after the live turn is saved, then consumes the proposal atomically inside the MySQL retry execution strategy.
+- Assistant plan confirmation errors return a safe rejection reason, refresh the server-owned conversation state, and appear in a localized alert instead of being appended as ordinary chat text.
 - MCP discovery/resource reads require agent permission; workspace-view users cannot write memories or invoke connected MCP tools. Direct Python/connected MCP chat calls require a standalone confirmed plan, and oversized MCP responses are rejected at 256,000 bytes.
 - DeepSeek Anthropic-compatible model discovery uses its `/models` endpoint, and chat requests retain the `/anthropic` base path.
 - Single-connection marketplace actions now open their connection selector instead of offering an ambiguous Quick Run. Product imports validate the 1–200 limit, and schedule time zones are configurable and shown with run times. Radio choices now support arrow-key navigation.
@@ -324,6 +326,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
+- Update Vue I18n to 11.4.16 and pin MySqlConnector to 2.6.1 to address published dependency advisories.
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling

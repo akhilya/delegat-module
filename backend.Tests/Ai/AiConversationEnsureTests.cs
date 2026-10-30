@@ -79,16 +79,81 @@ public class AiConversationEnsureTests
         });
         await db.SaveChangesAsync();
 
+        var mismatch = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+            db, "plan-session", "different-proposal", 3, 4, CancellationToken.None);
+        Assert.Null(mismatch.Steps);
+        Assert.Equal("proposal_mismatch", mismatch.RejectionReason);
+
         var consumed = await AiConversationTurnStore.ConsumePendingPlanAsync(
             db, "plan-session", proposalToken, 3, 4, CancellationToken.None);
         Assert.NotNull(consumed);
         Assert.Equal("platform_request", consumed[0].Tool);
         Assert.Equal(1, db.aiAgentAudits.Count(a => a.tool == "plan_confirmation"));
 
-        Assert.Null(await AiConversationTurnStore.ConsumePendingPlanAsync(
-            db, "plan-session", proposalToken, 3, 4, CancellationToken.None));
-        Assert.Null(await AiConversationTurnStore.ConsumePendingPlanAsync(
-            db, "plan-session", proposalToken, 3, 99, CancellationToken.None));
+        var duplicate = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+            db, "plan-session", proposalToken, 3, 4, CancellationToken.None);
+        Assert.Null(duplicate.Steps);
+        Assert.Equal("already_processed", duplicate.RejectionReason);
+
+        var wrongOwner = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+            db, "plan-session", proposalToken, 3, 99, CancellationToken.None);
+        Assert.Null(wrongOwner.Steps);
+        Assert.Equal("conversation_missing", wrongOwner.RejectionReason);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ENCRYPTION_KEY", originalKey);
+        }
+    }
+
+    [Fact]
+    public async Task RecordedPlan_RoundTripsThroughPersistenceAndCanBeConfirmedOnce()
+    {
+        var originalKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+        Environment.SetEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray()));
+        try
+        {
+            using var db = TestDbFactory.CreateDb();
+            const string sessionId = "recorded-plan-session";
+            var steps = JsonNode.Parse(
+                """[{"tool":"platform_request","description":"Update item","args":{"method":"PATCH","path":"/products/7","body":{"name":"new"}}}]""")!.AsArray();
+            var createdAt = DateTime.UtcNow;
+            var expiresAt = createdAt.AddMinutes(15);
+            var stepsHash = AiConversationTurnStore.ComputeStepsHash(steps);
+            var (proposalId, proposalNonce) = AiPlanProposalToken.Mint(
+                sessionId, 3, 4, stepsHash, expiresAt);
+            var snapshot = AiSseTurnRecorder.Fold(new[]
+            {
+                AiSseTurnRecorder.Format("plan", new
+                {
+                    proposalId,
+                    proposalNonce,
+                    stepsHash,
+                    createdAtUtc = createdAt,
+                    expiresAtUtc = expiresAt,
+                    summary = "Update item",
+                    steps,
+                }),
+            });
+
+            var recordedPlan = JsonNode.Parse(snapshot.ToolCallsJson!)!["plan"]!;
+            Assert.Equal(proposalId, recordedPlan["proposalId"]?.GetValue<string>());
+            Assert.Equal(proposalNonce, recordedPlan["proposalNonce"]?.GetValue<string>());
+            Assert.Equal(stepsHash, recordedPlan["stepsHash"]?.GetValue<string>());
+
+            await AiConversationTurnStore.UpsertAssistantAsync(
+                db, sessionId, 3, 4, snapshot, CancellationToken.None);
+
+            var attempt = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+                db, sessionId, proposalId, 3, 4, CancellationToken.None);
+            Assert.Null(attempt.RejectionReason);
+            Assert.Equal("platform_request", Assert.Single(attempt.Steps!).Tool);
+
+            var savedTurn = JsonNode.Parse(db.aiConversationMessages.Single().toolCallsJson!)!;
+            Assert.True(savedTurn["planConfirmed"]?.GetValue<bool>());
+            var duplicate = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+                db, sessionId, proposalId, 3, 4, CancellationToken.None);
+            Assert.Equal("already_processed", duplicate.RejectionReason);
         }
         finally
         {
