@@ -95,6 +95,8 @@ public class AiStreamEvent
     public AiStreamUsage? usage { get; set; }
     public int? index { get; set; }
     public string? error { get; set; }
+    public string? errorCode { get; set; }
+    public int? errorStatus { get; set; }
 }
 
 /// <summary>Provider-reported token usage, when available in the response stream.</summary>

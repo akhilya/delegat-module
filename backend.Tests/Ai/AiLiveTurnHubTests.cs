@@ -59,6 +59,24 @@ public class AiLiveTurnHubTests
     }
 
     [Fact]
+    public void Recorder_PersistsHostedAiErrorCodeForLocalizedDisplay()
+    {
+        var snapshot = AiSseTurnRecorder.Fold(new[]
+        {
+            AiSseTurnRecorder.Format(SseEventType.Error, new
+            {
+                code = "hosted_ai_quota_exceeded",
+                status = 429,
+            }),
+            AiSseTurnRecorder.Format(SseEventType.Done, new { }),
+        });
+
+        Assert.Equal(string.Empty, snapshot.Content);
+        Assert.Contains("hosted_ai_quota_exceeded", snapshot.ToolCallsJson);
+        Assert.Contains("429", snapshot.ToolCallsJson);
+    }
+
+    [Fact]
     public void Recorder_ExecutePlanHttpError_SetsPlanFailedWithoutClaimingSuccess()
     {
         var result = """{"error":"product_limit_reached","status":409,"title":"Product limit reached"}""";

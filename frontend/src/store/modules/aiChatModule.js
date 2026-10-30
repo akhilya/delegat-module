@@ -237,9 +237,17 @@ async function consumeSse(response, commit) {
           }
           case "error":
             commit("finalizeRunningTools");
-            commit("updateLastAssistantMessage", {
-              delta: `\n\n${event.data?.message}`,
-            });
+            if (event.data?.code) {
+              commit("setLastAssistantRequestError", {
+                code: event.data.code,
+                status: Number.isInteger(event.data.status) ? event.data.status : null,
+                reason: "",
+              });
+            } else {
+              commit("updateLastAssistantMessage", {
+                delta: `\n\n${event.data?.message}`,
+              });
+            }
             break;
         }
       } catch {
@@ -328,6 +336,7 @@ export default {
         dbId,
         resume,
         planFailed,
+        requestError,
       },
     ) {
       const last = state.messages[state.messages.length - 1];
@@ -340,6 +349,7 @@ export default {
       if (dbId !== undefined) last.dbId = dbId;
       if (planFailed === true) last.planFailed = true;
       if (planFailed === false) last.planFailed = false;
+      if (requestError !== undefined) last.requestError = requestError;
 
       if (!last.apiBlocks) last.apiBlocks = [];
       if (!last.toolCalls) last.toolCalls = [];

@@ -27,6 +27,8 @@ public static class AiSseTurnRecorder
         var timeline = new List<Dictionary<string, object?>>();
         JsonElement? plan = null;
         string? modelName = null;
+        string? requestErrorCode = null;
+        int? requestErrorStatus = null;
         var planFailed = false;
         var turnEnded = false;
 
@@ -67,6 +69,15 @@ public static class AiSseTurnRecorder
                         break;
                     case SseEventType.Error:
                         turnEnded = true;
+                        if (data.ValueKind == JsonValueKind.Object)
+                        {
+                            if (data.TryGetProperty("code", out var codeEl)
+                                && codeEl.ValueKind == JsonValueKind.String)
+                                requestErrorCode = codeEl.GetString();
+                            if (data.TryGetProperty("status", out var statusEl)
+                                && statusEl.TryGetInt32(out var status))
+                                requestErrorStatus = status;
+                        }
                         if (data.ValueKind == JsonValueKind.Object
                             && data.TryGetProperty("message", out var msgEl))
                         {
@@ -96,7 +107,7 @@ public static class AiSseTurnRecorder
             MarkInterruptedTools(tools);
 
         string? toolCallsJson = null;
-        if (plan != null || tools.Count > 0)
+        if (plan != null || tools.Count > 0 || requestErrorCode != null)
         {
             var envelope = new Dictionary<string, object?>
             {
@@ -105,6 +116,14 @@ public static class AiSseTurnRecorder
                 ["timeline"] = timeline,
                 ["plan"] = plan,
             };
+            if (requestErrorCode != null)
+            {
+                envelope["requestError"] = new
+                {
+                    code = requestErrorCode,
+                    status = requestErrorStatus,
+                };
+            }
             if (planFailed && plan == null)
                 envelope["planFailed"] = true;
             toolCallsJson = JsonSerializer.Serialize(envelope, JsonOpts);

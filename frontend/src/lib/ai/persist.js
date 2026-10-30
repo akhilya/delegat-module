@@ -79,7 +79,7 @@ function readAttachments(parsed) {
 /** Parse persisted toolCallsJson — tool-call array or UI context / assistant-turn envelope. */
 export function parsePersistedMessageMeta(toolCallsJson) {
   if (!toolCallsJson) {
-    return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null };
+    return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null, requestError: null };
   }
   try {
     const parsed = JSON.parse(toolCallsJson);
@@ -122,6 +122,7 @@ export function parsePersistedMessageMeta(toolCallsJson) {
         attachments: [],
         timeline: hydrateTimeline(parsed.timeline || [], toolCalls),
         plan: parsed.plan || null,
+        requestError: parsed.requestError || null,
         planConfirmed: !!parsed.planConfirmed,
         planCancelled: !!parsed.planCancelled,
         planSuperseded: !!parsed.planSuperseded,
@@ -161,6 +162,7 @@ export function mapStoredMessage(m) {
     planExecuted,
     planFailed,
     planExecStart,
+    requestError,
     formReply,
     formReplies,
   } = parsePersistedMessageMeta(m.toolCallsJson);
@@ -184,6 +186,7 @@ export function mapStoredMessage(m) {
     planExecuted: !!planExecuted,
     planFailed: !!planFailed,
     planExecStart,
+    requestError: requestError || null,
     formReply: formReply || null,
     formReplies: formReplies || {},
     apiBlocks: [],
@@ -217,7 +220,7 @@ export function serializeToolCallsJson(m) {
   }));
   const formReplies = readFormReplies(m.formReplies);
   const hasFormReplies = Object.keys(formReplies).length > 0;
-  if (m.plan || hasFormReplies || m.timeline?.some((item) => item.type === "tool")) {
+  if (m.plan || m.requestError || hasFormReplies || m.timeline?.some((item) => item.type === "tool")) {
     return JSON.stringify({
       _ui: "assistantTurn",
       tools,
@@ -233,6 +236,7 @@ export function serializeToolCallsJson(m) {
       planExecuted: m.planExecuted || undefined,
       planFailed: m.planFailed || undefined,
       planExecStart: Number.isInteger(m.planExecStart) ? m.planExecStart : undefined,
+      requestError: m.requestError || undefined,
       ...(hasFormReplies ? { formReplies } : {}),
     });
   }

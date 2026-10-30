@@ -13,6 +13,8 @@ public interface IPlatformLinkClient
     Task ReportErrorAsync(PlatformErrorReportDto report, CancellationToken ct = default);
     Task SendHeartbeatAsync(PlatformHeartbeatDto heartbeat, CancellationToken ct = default);
     Task<PlatformEntitlementsDto?> GetEntitlementsAsync(CancellationToken ct = default);
+    Task<PlatformHostedAiConfigDto?> GetHostedAiConfigAsync(CancellationToken ct = default) =>
+        Task.FromResult<PlatformHostedAiConfigDto?>(null);
     Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(string adapter, string? query, CancellationToken ct = default);
 }
 
@@ -73,6 +75,35 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         return await JsonSerializer.DeserializeAsync<PlatformEntitlementsDto>(stream, JsonOptions, ct);
+    }
+
+    public async Task<PlatformHostedAiConfigDto?> GetHostedAiConfigAsync(CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+
+        try
+        {
+            using var response = await SendRawAsync(HttpMethod.Get, "/platform/v1/ai/config", body: null, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Platform Link GET /platform/v1/ai/config returned {StatusCode}",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            return await JsonSerializer.DeserializeAsync<PlatformHostedAiConfigDto>(stream, JsonOptions, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Platform Link GET /platform/v1/ai/config failed");
+            return null;
+        }
     }
 
     public async Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(

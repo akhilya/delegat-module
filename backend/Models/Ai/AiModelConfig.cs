@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Delegat.Infrastructure.Interfaces;
 
 namespace Delegat.Models.Ai;
@@ -32,6 +33,9 @@ public class AiModelConfig : IEntity
 
     [StringLength(500)]
     public string? proxyUrl { get; set; }
+
+    [NotMapped]
+    public bool isPlatformHosted { get; set; }
 }
 
 public enum AiModelProvider

@@ -66,10 +66,11 @@ public class AiSettingsController : ControllerBase
         if (user == null)
             throw ApiException.Unauthorized();
 
-        var models = await _modelService.GetAllAsync(ct);
+        var models = await _modelService.GetPickerModelsAsync(ct);
         return Ok(models
             .Where(m => m.isEnabled)
-            .OrderByDescending(m => m.isDefault)
+            .OrderBy(m => m.isPlatformHosted)
+            .ThenByDescending(m => m.isDefault)
             .ThenBy(m => m.name)
             .Select(m => new
             {
@@ -77,7 +78,28 @@ public class AiSettingsController : ControllerBase
                 name = m.name,
                 modelId = m.modelId,
                 isDefault = m.isDefault,
+                isPlatformHosted = m.isPlatformHosted,
             }));
+    }
+
+    [HttpGet("hosted-ai")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    public async Task<IActionResult> GetHostedAiStatus(CancellationToken ct)
+    {
+        var config = await _modelService.GetPlatformHostedConfigAsync(ct);
+        return Ok(new
+        {
+            configured = config?.Configured ?? false,
+            entitled = config?.Entitled ?? false,
+            available = config?.Available ?? false,
+            quotaTokens = config?.QuotaTokens ?? 0,
+            usedTokens = config?.UsedTokens ?? 0,
+            reservedTokens = config?.ReservedTokens ?? 0,
+            remainingTokens = config?.RemainingTokens ?? 0,
+            periodStart = config?.PeriodStart,
+            periodEnd = config?.PeriodEnd,
+            usageUnavailable = config?.UsageUnavailable ?? false,
+        });
     }
 
     // POST /api/ai/models

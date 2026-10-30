@@ -154,3 +154,48 @@ public sealed class PlatformEntitlementsDto
     [JsonPropertyName("maxConnections")]
     public int? MaxConnections { get; set; }
 }
+
+public sealed class PlatformHostedAiConfigDto
+{
+    [JsonPropertyName("configured")]
+    public bool Configured { get; set; }
+
+    [JsonPropertyName("entitled")]
+    public bool Entitled { get; set; }
+
+    [JsonPropertyName("available")]
+    public bool Available { get; set; }
+
+    [JsonPropertyName("provider")]
+    public string? Provider { get; set; }
+
+    [JsonPropertyName("modelId")]
+    public string? ModelId { get; set; }
+
+    [JsonPropertyName("apiUrl")]
+    public string? ApiUrl { get; set; }
+
+    [JsonPropertyName("maxOutputTokens")]
+    public int MaxOutputTokens { get; set; }
+
+    [JsonPropertyName("quotaTokens")]
+    public long QuotaTokens { get; set; }
+
+    [JsonPropertyName("usedTokens")]
+    public long UsedTokens { get; set; }
+
+    [JsonPropertyName("reservedTokens")]
+    public long ReservedTokens { get; set; }
+
+    [JsonPropertyName("remainingTokens")]
+    public long RemainingTokens { get; set; }
+
+    [JsonPropertyName("periodStart")]
+    public DateTimeOffset PeriodStart { get; set; }
+
+    [JsonPropertyName("periodEnd")]
+    public DateTimeOffset PeriodEnd { get; set; }
+
+    [JsonPropertyName("usageUnavailable")]
+    public bool UsageUnavailable { get; set; }
+}

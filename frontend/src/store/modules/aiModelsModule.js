@@ -12,6 +12,7 @@ export default {
   state: () => ({
     models: [],
     pickerModels: [],
+    hostedAiStatus: null,
   }),
 
   mutations: {
@@ -20,6 +21,9 @@ export default {
     },
     setPickerModels(state, models) {
       state.pickerModels = models;
+    },
+    setHostedAiStatus(state, status) {
+      state.hostedAiStatus = status;
     },
   },
 
@@ -72,6 +76,19 @@ export default {
         });
 
       return await pickerInFlight;
+    },
+
+    async getHostedAiStatus(ctx, { onSuccess, onError } = {}) {
+      return await useAxios("/ai/hosted-ai", { method: "GET", cache: false }, http, { immediate: true })
+        .then((r) => {
+          ctx.commit("setHostedAiStatus", r.data.value ?? null);
+          onSuccess?.(r);
+          return r.data.value ?? null;
+        })
+        .catch((e) => {
+          onError?.(e);
+          throw e;
+        });
     },
 
     async discoverModels(ctx, { data, onSuccess, onError }) {

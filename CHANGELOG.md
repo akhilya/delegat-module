@@ -11,6 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Optional Platform AI for linked instances, using the Control Plane's organization-wide monthly token quota and provider proxy; existing customer-connected (BYOK) models remain independent.
 - Optional sampled Sentry traces for AI turns, with model/tool spans and aggregate usage measurements. Export is disabled without `SENTRY_DSN` and does not include prompts, tool arguments/results, or request data.
 - Cabinet assistant remembers user-stated, non-sensitive preferences and useful facts across chats. Memories are scoped to the user and store, can be searched/saved/forgotten through assistant tools, are injected as untrusted context, and are capped at 40 entries.
 

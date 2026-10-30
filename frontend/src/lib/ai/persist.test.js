@@ -143,6 +143,28 @@ describe("mapStoredMessage", () => {
     assert.equal(m.timeline.length, 2);
     assert.equal(m.timeline[1].tool.name, "search_catalog");
   });
+
+  it("restores a localized API error code on a saved assistant turn", () => {
+    const json = serializeToolCallsJson({
+      toolCalls: [],
+      timeline: [],
+      requestError: { code: "hosted_ai_quota_exceeded", status: 429 },
+    });
+    const parsed = JSON.parse(json);
+    assert.equal(parsed._ui, "assistantTurn");
+    assert.equal(parsed.requestError.code, "hosted_ai_quota_exceeded");
+
+    const message = mapStoredMessage({
+      dbId: 10,
+      role: "assistant",
+      content: "",
+      toolCallsJson: json,
+    });
+    assert.deepEqual(message.requestError, {
+      code: "hosted_ai_quota_exceeded",
+      status: 429,
+    });
+  });
 });
 
 describe("user attachments", () => {

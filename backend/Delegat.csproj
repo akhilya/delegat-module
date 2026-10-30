@@ -32,6 +32,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.3" />
+    <!-- Keep Pomelo's transitive driver on the release patched for GHSA-473q-m89c-ghf8. -->
+    <PackageReference Include="MySqlConnector" Version="2.6.1" />
 
     <!-- ASP.NET Identity -->
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.20" />

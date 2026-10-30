@@ -2,6 +2,8 @@ using System.ClientModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Delegat.Models.Ai;
+using Delegat.Infrastructure.Middleware;
+using Delegat.Services.PlatformLink;
 using OpenAI;
 using OpenAI.Chat;
 
@@ -19,6 +21,7 @@ namespace Delegat.Services.Ai;
 public class AiApiClient : IAiApiClient
 {
     private readonly ILogger<AiApiClient> _logger;
+    private readonly IHttpClientFactory? _httpClientFactory;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -27,10 +30,11 @@ public class AiApiClient : IAiApiClient
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public AiApiClient(HttpClient http, ILogger<AiApiClient> logger)
+    public AiApiClient(HttpClient http, ILogger<AiApiClient> logger, IHttpClientFactory? httpClientFactory = null)
     {
         // http is kept for DI compatibility (typed-client registration); SDKs manage their own transport
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -68,9 +72,28 @@ public class AiApiClient : IAiApiClient
     public Task<AiResponse> SendAsync(AiModelConfig model, AiRequest request, CancellationToken ct)
     {
         request.model = model.modelId;
-        return model.provider == AiModelProvider.Anthropic
-            ? SendAnthropicAsync(model, request, ct)
-            : SendOpenAiAsync(model, request, ct);
+        return SendModelRequestAsync(model, request, ct);
+    }
+
+    private async Task<AiResponse> SendModelRequestAsync(AiModelConfig model, AiRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return model.provider == AiModelProvider.Anthropic
+                ? await SendAnthropicAsync(model, request, ct)
+                : await SendOpenAiAsync(model, request, ct);
+        }
+        catch (PlatformHostedAiRequestException ex)
+        {
+            throw ToApiException(ex);
+        }
+        catch (Exception ex) when (model.isPlatformHosted && ex is not ApiException)
+        {
+            _logger.LogWarning("Platform AI request failed for model {ModelId}: {ExceptionType}",
+                model.modelId, ex.GetType().Name);
+            throw new ApiException("Platform AI request failed.", StatusCodes.Status503ServiceUnavailable,
+                innerException: ex, code: "hosted_ai_unavailable");
+        }
     }
 
     public async IAsyncEnumerable<AiStreamEvent> StreamAsync(
@@ -100,8 +123,23 @@ public class AiApiClient : IAiApiClient
                 catch (OperationCanceledException) { has = false; }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "AI stream error ({Provider})", model.provider);
-                    errorEv = new AiStreamEvent { type = "error", error = ex.Message };
+                    if (model.isPlatformHosted)
+                    {
+                        var hostedError = ex as PlatformHostedAiRequestException;
+                        _logger.LogWarning("Platform AI stream failed for model {ModelId} with {ErrorCode}",
+                            model.modelId, hostedError?.Code ?? "hosted_ai_unavailable");
+                        errorEv = new AiStreamEvent
+                        {
+                            type = "error",
+                            errorCode = hostedError?.Code ?? "hosted_ai_unavailable",
+                            errorStatus = hostedError?.StatusCode ?? StatusCodes.Status503ServiceUnavailable,
+                        };
+                    }
+                    else
+                    {
+                        _logger.LogError(ex, "AI stream error ({Provider})", model.provider);
+                        errorEv = new AiStreamEvent { type = "error", error = ex.Message };
+                    }
                 }
 
                 if (errorEv != null)
@@ -137,9 +175,16 @@ public class AiApiClient : IAiApiClient
         var key = string.IsNullOrWhiteSpace(model.apiKeyEncrypted) ? "not-needed" : model.apiKeyEncrypted;
 
         var options = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
-        var proxied = CreateProxiedClient(model.proxyUrl);
-        if (proxied != null)
-            options.Transport = new System.ClientModel.Primitives.HttpClientPipelineTransport(proxied);
+        if (model.isPlatformHosted)
+        {
+            options.Transport = new System.ClientModel.Primitives.HttpClientPipelineTransport(CreateHostedAiClient());
+        }
+        else
+        {
+            var proxied = CreateProxiedClient(model.proxyUrl);
+            if (proxied != null)
+                options.Transport = new System.ClientModel.Primitives.HttpClientPipelineTransport(proxied);
+        }
 
         return new ChatClient(model.modelId, new ApiKeyCredential(key), options);
     }
@@ -405,7 +450,9 @@ public class AiApiClient : IAiApiClient
         // Keep custom path prefixes (e.g. DeepSeek's /anthropic); the SDK appends /v1/messages.
         var baseUrl = GetAnthropicBaseUrl(model.apiUrl);
 
-        var transport = CreateProxiedClient(model.proxyUrl) ?? httpClient;
+        var transport = model.isPlatformHosted
+            ? CreateHostedAiClient()
+            : CreateProxiedClient(model.proxyUrl) ?? httpClient;
 
         var apiKey = model.apiKeyEncrypted ?? string.Empty;
 
@@ -619,6 +666,22 @@ public class AiApiClient : IAiApiClient
             }
         }
         return response;
+    }
+
+    private HttpClient CreateHostedAiClient() =>
+        _httpClientFactory?.CreateClient("platform-link-hosted-ai")
+        ?? throw new PlatformHostedAiRequestException("hosted_ai_unavailable", StatusCodes.Status503ServiceUnavailable);
+
+    private static ApiException ToApiException(PlatformHostedAiRequestException ex)
+    {
+        var statusCode = ex.StatusCode is StatusCodes.Status400BadRequest
+            or StatusCodes.Status403Forbidden
+            or StatusCodes.Status409Conflict
+            or StatusCodes.Status413PayloadTooLarge
+            or StatusCodes.Status429TooManyRequests
+            ? ex.StatusCode
+            : StatusCodes.Status503ServiceUnavailable;
+        return new ApiException("Platform AI request failed.", statusCode, code: ex.Code, innerException: ex);
     }
 
     private async IAsyncEnumerable<AiStreamEvent> StreamAnthropicAsync(

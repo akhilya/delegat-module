@@ -27,6 +27,7 @@ If URL or secret is empty, Platform Link is **disabled**.
 4. Auth JWT must have non-empty `iss`/`aud`. CP provision sets `JWT_ISSUER` / `JWT_AUDIENCE` (default `delegat`); API falls back to `delegat` if env is missing. Cookies use HTTPS/`COOKIE_SECURE`, not `ASPNETCORE_ENVIRONMENT=Production`.
 5. **Usage / entitlements:** heartbeat may include a usage snapshot; instance polls `GET /platform/v1/entitlements` for plan name and `overagePurgeAt` (cached in `instancePlatformEntitlements`). Admin UI: Settings → Admin → Usage. Auto-trim runs on the instance when the purge deadline is due and usage is still over caps.
 6. **Seller docs:** Control Plane downloads Wildberries (items and FBS orders), Ozon Seller, and Yandex Market documentation once a day. The cabinet assistant reads the current excerpt with `GET /api/agent/stores/{storeId}/marketplace-docs/{adapter}?q=` (Platform Link `GET /platform/v1/marketplace-docs/{adapter}`) and does not fetch those portals itself.
+7. **Hosted AI:** when configured and entitled by the Control Plane, Platform AI appears in the cabinet model picker. Calls are HMAC-signed with a unique request ID and proxied by the Control Plane; its provider key is never sent to the instance. Organization-wide monthly token usage is quota-limited. BYOK model connections remain a separate path and do not use the hosted quota. See [AI system](../architecture/ai-system.md#optional-platform-ai) and the `Hosted AI` section of `delegat-module-platform/docs/platform-link.md` in the Control Plane repository.
 
 ## Related
 

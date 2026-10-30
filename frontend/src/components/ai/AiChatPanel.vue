@@ -97,7 +97,7 @@ import { planHasContent } from "@/lib/ai/planSteps";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
-const { t, te } = useI18n();
+const { t, te, locale } = useI18n();
 const store = useStore();
 const { edgeOffset } = useCompanionSheets();
 const aiEdgeOffset = edgeOffset("ai");
@@ -200,6 +200,20 @@ const enabledModels = computed(() => {
   const src = pickerModels.value.length ? pickerModels.value : allModels.value;
   return src.filter((m) => m.isEnabled !== false && (m.id ?? m.Id) != null);
 });
+const hostedAiStatus = computed(() => store.state.aiModels?.hostedAiStatus);
+const showHostedAiUsage = computed(
+  () => hostedAiStatus.value?.configured && hostedAiStatus.value?.entitled,
+);
+const hostedAiUsageText = computed(() => {
+  const status = hostedAiStatus.value;
+  if (!status?.configured || !status?.entitled) return "";
+  if (status.usageUnavailable) return t("ai.hostedUsageUnavailable");
+  const used = (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
+  return t("ai.hostedUsage", {
+    used: formatTokenCount(used),
+    quota: formatTokenCount(status.quotaTokens),
+  });
+});
 const hasEnabledModels = computed(() => enabledModels.value.length > 0);
 const selectedModelId = computed(() => store.state.aiChat.selectedModelId);
 const defaultModel = computed(
@@ -218,6 +232,17 @@ const effectiveModelId = computed(() => {
   return defaultModel.value
     ? String(defaultModel.value.id ?? defaultModel.value.Id)
     : "";
+});
+
+watch([enabledModels, selectedModelId], () => {
+  if (
+    selectedModelId.value &&
+    !enabledModels.value.some(
+      (model) => String(model.id ?? model.Id) === String(selectedModelId.value),
+    )
+  ) {
+    store.commit("aiChat/setSelectedModel", null);
+  }
 });
 
 const emptyPromptKeys = computed(() =>
@@ -525,7 +550,21 @@ function scrollToLatest() {
 onMounted(() => {
   store.dispatch("aiChat/loadLastConversation");
   store.dispatch("aiModels/getPickerModels", { onError: () => {} });
+  store.dispatch("aiModels/getHostedAiStatus", { onError: () => {} });
 });
+
+watch(isOpen, (open) => {
+  if (open) store.dispatch("aiModels/getHostedAiStatus", { onError: () => {} });
+});
+
+watch(isLoading, (loading, wasLoading) => {
+  if (wasLoading && !loading)
+    store.dispatch("aiModels/getHostedAiStatus", { onError: () => {} });
+});
+
+function formatTokenCount(value) {
+  return new Intl.NumberFormat(locale.value).format(Math.max(0, Number(value) || 0));
+}
 
 function onPanelWidth(w) {
   store.commit("aiChat/setPanelWidth", w);
@@ -1107,7 +1146,7 @@ function isLatestTurn(msg) {
                     :value="String(m.id)"
                     class="text-xs"
                   >
-                    {{ m.name }}
+                    {{ m.isPlatformHosted ? t("ai.platformModelName") : m.name }}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1150,6 +1189,14 @@ function isLatestTurn(msg) {
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
+        <p
+          v-if="showHostedAiUsage"
+          class="px-1 text-[11px] leading-4 tabular-nums"
+          :class="hostedAiStatus.usageUnavailable ? 'text-warning-foreground' : 'text-muted-foreground'"
+          aria-live="polite"
+        >
+          {{ hostedAiUsageText }}
+        </p>
       </SheetFooter>
     </SheetContent>
   </Sheet>

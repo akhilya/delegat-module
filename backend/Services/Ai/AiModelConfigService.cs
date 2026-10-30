@@ -3,33 +3,49 @@ using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
+using Delegat.Services.PlatformLink;
 
 namespace Delegat.Services.Ai;
 
 public class AiModelConfigService
 {
+    public const int PlatformHostedModelId = -1;
+
     private readonly DataContext _context;
     private readonly EncryptionService _encryption;
     private readonly AiApiClient _apiClient;
+    private readonly IPlatformLinkClient? _platformLink;
 
-    public AiModelConfigService(DataContext context, AiApiClient apiClient, EncryptionService encryption)
+    public AiModelConfigService(
+        DataContext context,
+        AiApiClient apiClient,
+        EncryptionService encryption,
+        IPlatformLinkClient? platformLink = null)
     {
         _context = context;
         _encryption = encryption;
         _apiClient = apiClient;
+        _platformLink = platformLink;
     }
 
     /// <summary>First enabled model; prefers the one marked as default.</summary>
     public async Task<AiModelConfig?> GetDefaultModelAsync(CancellationToken ct = default)
-        => await _context.aiModelConfigs.AsNoTracking()
+    {
+        var model = await _context.aiModelConfigs.AsNoTracking()
             .Where(m => m.isEnabled)
             .OrderByDescending(m => m.isDefault)
             .ThenBy(m => m.Id)
             .FirstOrDefaultAsync(ct);
 
+        return model ?? await GetPlatformHostedModelAsync(ct);
+    }
+
     /// <summary>Resolve an enabled model: explicit id (if enabled) or default enabled model.</summary>
     public async Task<AiModelConfig?> ResolveEnabledModelAsync(int? modelId, CancellationToken ct = default)
     {
+        if (modelId == PlatformHostedModelId)
+            return await GetPlatformHostedModelAsync(ct);
+
         if (modelId.HasValue)
         {
             var explicitModel = await _context.aiModelConfigs.AsNoTracking()
@@ -38,11 +54,60 @@ public class AiModelConfigService
                 return explicitModel;
         }
 
-        return await GetDefaultModelAsync(ct);
+        var model = await _context.aiModelConfigs.AsNoTracking()
+            .Where(m => m.isEnabled)
+            .OrderByDescending(m => m.isDefault)
+            .ThenBy(m => m.Id)
+            .FirstOrDefaultAsync(ct);
+        return model ?? await GetPlatformHostedModelAsync(ct);
     }
 
     public async Task<bool> HasEnabledModelsAsync(CancellationToken ct = default)
-        => await _context.aiModelConfigs.AsNoTracking().AnyAsync(m => m.isEnabled, ct);
+        => await _context.aiModelConfigs.AsNoTracking().AnyAsync(m => m.isEnabled, ct)
+            || await GetPlatformHostedModelAsync(ct) != null;
+
+    public Task<PlatformHostedAiConfigDto?> GetPlatformHostedConfigAsync(CancellationToken ct = default) =>
+        _platformLink?.GetHostedAiConfigAsync(ct) ?? Task.FromResult<PlatformHostedAiConfigDto?>(null);
+
+    public async Task<List<AiModelConfig>> GetPickerModelsAsync(CancellationToken ct = default)
+    {
+        var models = await GetAllAsync(ct);
+        var hosted = await GetPlatformHostedModelAsync(ct);
+        if (hosted != null)
+            models.Add(hosted);
+        return models;
+    }
+
+    private async Task<AiModelConfig?> GetPlatformHostedModelAsync(CancellationToken ct)
+    {
+        var config = await GetPlatformHostedConfigAsync(ct);
+        if (config is not
+            {
+                Configured: true,
+                Entitled: true,
+                ApiUrl: { Length: > 0 },
+                ModelId: { Length: > 0 },
+                Provider: { Length: > 0 },
+            })
+            return null;
+
+        if (!Enum.TryParse<AiModelProvider>(config.Provider, ignoreCase: true, out var provider))
+            return null;
+
+        return new AiModelConfig
+        {
+            Id = PlatformHostedModelId,
+            name = "Platform AI",
+            apiUrl = config.ApiUrl!,
+            apiKeyEncrypted = "platform-link",
+            modelId = config.ModelId!,
+            provider = provider,
+            maxTokens = Math.Max(1, config.MaxOutputTokens),
+            isDefault = false,
+            isEnabled = true,
+            isPlatformHosted = true,
+        };
+    }
 
     public async Task<List<AiModelConfig>> GetAllAsync(CancellationToken ct = default)
         => await _context.aiModelConfigs.AsNoTracking().OrderBy(m => m.createdAt).ToListAsync(ct);
@@ -156,6 +221,7 @@ public class AiModelConfigService
             isDefault = model.isDefault,
             isEnabled = model.isEnabled,
             proxyUrl = model.proxyUrl,
+            isPlatformHosted = model.isPlatformHosted,
         };
     }
 

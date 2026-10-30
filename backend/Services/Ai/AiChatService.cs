@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Prompts;
+using Delegat.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -216,6 +217,8 @@ public class AiChatService
                 var currentToolInput = new StringBuilder();
                 var isCollectingTool = false;
                 var gotApiError = false;
+                string? apiErrorCode = null;
+                int? apiErrorStatus = null;
 
                 using var modelSpan = turnTelemetry.StartModelRound();
                 await foreach (var ev in _apiClient.StreamAsync(model, request, ct))
@@ -259,7 +262,10 @@ public class AiChatService
                             break;
                         case "error":
                             gotApiError = true;
-                            _logger.LogWarning("API error event in iteration {Iter}: {Err}", iteration, ev.error);
+                            apiErrorCode = ev.errorCode;
+                            apiErrorStatus = ev.errorStatus;
+                            if (apiErrorCode == null)
+                                _logger.LogWarning("AI provider error event in iteration {Iter}", iteration);
                             break;
                         case "usage":
                             roundUsage.MergeLatest(ev.usage);
@@ -280,12 +286,14 @@ public class AiChatService
                             + toolUses.Sum(t => (long)t.inputJson.Length),
                         roundUsage);
                     turnTelemetry.Complete("provider_error");
-                    yield return Sse(SseEventType.Error, new
-                    {
-                        message = iteration > 0
-                            ? AgentToolResult.TurnInterruptedMessage
-                            : AgentToolResult.ProviderErrorMessage,
-                    });
+                    yield return apiErrorCode is { Length: > 0 }
+                        ? Sse(SseEventType.Error, new { code = apiErrorCode, status = apiErrorStatus })
+                        : Sse(SseEventType.Error, new
+                        {
+                            message = iteration > 0
+                                ? AgentToolResult.TurnInterruptedMessage
+                                : AgentToolResult.ProviderErrorMessage,
+                        });
                     break;
                 }
 
@@ -666,6 +674,7 @@ public class AiChatService
             return text;
         }
         catch (InvalidOperationException) { throw; }
+        catch (ApiException) { throw; }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "AI description generation failed for model config {ModelConfigId}", modelConfig.Id);

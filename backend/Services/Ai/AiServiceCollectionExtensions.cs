@@ -1,5 +1,6 @@
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
+using Delegat.Services.PlatformLink;
 using System.Net;
 
 namespace Delegat.Services.Ai;
@@ -10,6 +11,9 @@ public static class AiServiceCollectionExtensions
     {
         services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<IAiApiClient>(sp => sp.GetRequiredService<AiApiClient>());
+        services.AddTransient<PlatformLinkHostedAiSigningHandler>();
+        services.AddHttpClient("platform-link-hosted-ai", c => c.Timeout = TimeSpan.FromMinutes(5))
+            .AddHttpMessageHandler<PlatformLinkHostedAiSigningHandler>();
         services.AddHttpClient(nameof(PythonSandboxClient), c => c.Timeout = TimeSpan.FromMinutes(2));
         services.AddHttpClient<MarketplaceCredentialBroker>(c => c.Timeout = TimeSpan.FromSeconds(20))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler

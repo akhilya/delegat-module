@@ -191,6 +191,12 @@ describe("locale message catalogs", () => {
       "tool_not_supported",
       "category_not_mappable",
       "plan_not_pending_or_mismatched",
+      "hosted_ai_quota_exceeded",
+      "hosted_ai_usage_unavailable",
+      "hosted_ai_not_entitled",
+      "hosted_ai_unavailable",
+      "hosted_ai_provider_unavailable",
+      "hosted_ai_request_too_large",
     ];
 
     for (const code of codes) {
