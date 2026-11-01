@@ -507,7 +507,7 @@ function submitExample(example) {
 }
 
 function onComposerKeydown(e) {
-  if (e.key !== "Enter" || e.shiftKey) return;
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
   e.preventDefault();
   submit();
 }
@@ -661,6 +661,22 @@ function isLatestTurn(msg) {
         class="animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
       >
         <div class="flex min-h-8 items-center gap-2">
+          <div class="min-w-0 flex-1">
+            <Input
+              v-if="isEditingTitle"
+              ref="titleInputEl"
+              v-model="editingTitleValue"
+              class="h-8 shadow-none"
+              :placeholder="t('ai.conversationTitlePlaceholder')"
+              maxlength="100"
+              @blur="saveTitle"
+              @keydown.enter.prevent="saveTitle"
+              @keydown.escape.prevent="cancelEditTitle"
+            />
+            <SheetTitle v-else class="min-w-0 truncate">
+              {{ conversationTitle || t("ai.newConversation") }}
+            </SheetTitle>
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -681,22 +697,6 @@ function isLatestTurn(msg) {
           >
             <Plus class="size-4" />
           </Button>
-          <div class="min-w-0 flex-1">
-            <Input
-              v-if="isEditingTitle"
-              ref="titleInputEl"
-              v-model="editingTitleValue"
-              class="h-8 shadow-none"
-              :placeholder="t('ai.conversationTitlePlaceholder')"
-              maxlength="100"
-              @blur="saveTitle"
-              @keydown.enter.prevent="saveTitle"
-              @keydown.escape.prevent="cancelEditTitle"
-            />
-            <SheetTitle v-else class="min-w-0 truncate">
-              {{ conversationTitle || t("ai.newConversation") }}
-            </SheetTitle>
-          </div>
           <Button
             v-if="!isEditingTitle && messages.length > 0 && conversationTitle"
             variant="ghost"
@@ -812,11 +812,11 @@ function isLatestTurn(msg) {
 
       <div
         v-else
-        class="relative min-h-0 flex-1 animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+        class="relative min-h-0 flex-1 bg-background animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
       >
         <div
           ref="messagesEl"
-          class="h-full overflow-y-auto px-4 py-4"
+          class="h-full overflow-y-auto px-4 py-5"
           @scroll="onScroll"
         >
           <AiChatEmpty
@@ -831,13 +831,13 @@ function isLatestTurn(msg) {
             @pick="submitExample"
           />
 
-          <div v-else class="ai-thread flex flex-col gap-4">
+          <div v-else class="ai-thread flex flex-col gap-6 pb-2">
             <template v-for="msg in messages" :key="msg.id">
               <Message
                 v-if="msg.role === 'user' && !isHiddenUserMessage(msg)"
                 align="end"
               >
-                <MessageContent>
+                <MessageContent class="gap-1.5">
                   <OperationContextBubble
                     v-if="msg.contextCard"
                     :card="msg.contextCard"
@@ -851,7 +851,7 @@ function isLatestTurn(msg) {
                         msg.content === t('ai.attachedFilesMessage')
                       )
                     "
-                    variant="default"
+                    variant="secondary"
                     align="end"
                   >
                     <BubbleContent>{{ msg.content }}</BubbleContent>
@@ -861,7 +861,7 @@ function isLatestTurn(msg) {
                     :files="msg.attachments"
                   />
                   <MessageFooter
-                    class="opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100"
+                    class="opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100 group-focus-within/message:opacity-100"
                   >
                     <Button
                       variant="ghost"
@@ -870,6 +870,7 @@ function isLatestTurn(msg) {
                       :title="
                         copiedId === msg.id ? t('ai.copied') : t('common.copy')
                       "
+                      :aria-label="t('common.copy')"
                       @click="copyText(msg.id, userClipboard(msg))"
                     >
                       <Check
@@ -883,7 +884,7 @@ function isLatestTurn(msg) {
               </Message>
 
               <Message v-else-if="msg.role === 'assistant'" align="start">
-                <MessageContent>
+                <MessageContent class="gap-3">
                   <AiChatProcess
                     :process="proposalView(msg).process"
                     :done="!!msg.done || hasPlanExec(msg)"
@@ -1009,7 +1010,7 @@ function isLatestTurn(msg) {
 
                   <MessageFooter
                     v-if="msg.done && (msg.content || msg.toolCalls?.length)"
-                    class="gap-1 opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100"
+                    class="gap-1 opacity-0 transition-opacity duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] group-hover/message:opacity-100 group-focus-within/message:opacity-100"
                   >
                     <Button
                       variant="ghost"
@@ -1018,6 +1019,7 @@ function isLatestTurn(msg) {
                       :title="
                         copiedId === msg.id ? t('ai.copied') : t('common.copy')
                       "
+                      :aria-label="t('common.copy')"
                       @click="copyText(msg.id, messageClipboard(msg))"
                     >
                       <Check
@@ -1036,6 +1038,7 @@ function isLatestTurn(msg) {
                           : 'text-muted-foreground'
                       "
                       :title="t('ai.goodResponse')"
+                      :aria-label="t('ai.goodResponse')"
                       @click="sendFeedback(msg, 1)"
                     >
                       <ThumbsUp class="size-3.5" />
@@ -1050,6 +1053,7 @@ function isLatestTurn(msg) {
                           : 'text-muted-foreground'
                       "
                       :title="t('ai.badResponse')"
+                      :aria-label="t('ai.badResponse')"
                       @click="sendFeedback(msg, -1)"
                     >
                       <ThumbsDown class="size-3.5" />
@@ -1079,7 +1083,7 @@ function isLatestTurn(msg) {
       <SheetFooter
         v-if="activeView === 'chat'"
         variant="bar"
-        class="flex-col items-stretch sm:flex-col sm:items-stretch sm:justify-start animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
+        class="flex-col items-stretch gap-2 px-4 py-3 sm:flex-col sm:items-stretch sm:justify-start animate-in fade-in-0 duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
       >
         <input
           ref="filesInputEl"
@@ -1091,17 +1095,16 @@ function isLatestTurn(msg) {
         <Transition name="ai-fade">
           <AiChatAttachmentList
             v-if="attachedCount"
-            class="mb-2"
             :files="attachedFiles"
             clearable
             @clear="clearAttachments"
           />
         </Transition>
-        <InputGroup class="w-full">
+        <InputGroup class="w-full bg-background dark:bg-input/30">
           <InputGroupTextarea
             ref="inputEl"
             v-model="inputText"
-            class="min-h-[44px] max-h-[120px] field-sizing-content"
+            class="min-h-12 max-h-40 overflow-y-auto px-3 py-3 text-sm leading-6"
             :placeholder="
               hasEnabledModels
                 ? t('ai.inputPlaceholder')
@@ -1111,13 +1114,15 @@ function isLatestTurn(msg) {
             :disabled="isLoading || !hasEnabledModels"
             @keydown="onComposerKeydown"
           />
-          <InputGroupAddon align="block-end" class="justify-between">
+          <InputGroupAddon
+            align="block-end"
+            class="justify-between gap-2 px-2 pb-2 pt-0"
+          >
             <div class="flex min-w-0 items-center gap-1">
               <InputGroupButton
                 v-if="canAttach"
                 variant="ghost"
                 size="icon-sm"
-                class="rounded-md"
                 :disabled="isLoading || !hasEnabledModels"
                 :title="t('ai.attach')"
                 :aria-label="t('ai.attach')"
@@ -1133,7 +1138,9 @@ function isLatestTurn(msg) {
                 "
               >
                 <SelectTrigger
-                  class="h-auto w-auto border-0 bg-transparent p-0 shadow-none focus:ring-0 gap-1 text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground [&>svg]:size-2.5 [&>svg]:opacity-50"
+                  size="sm"
+                  class="max-w-[min(12rem,45vw)] gap-1 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground focus-visible:border-transparent focus-visible:ring-2 [&>svg]:size-3"
+                  :aria-label="t('ai.modelPlaceholder')"
                 >
                   <SelectValue
                     :placeholder="lastModelName ?? t('ai.modelPlaceholder')"
@@ -1152,7 +1159,7 @@ function isLatestTurn(msg) {
               </Select>
               <span
                 v-else
-                class="max-w-[200px] truncate font-mono text-[10px] leading-none text-muted-foreground/60 select-none"
+                class="max-w-[min(12rem,45vw)] truncate px-2 text-xs text-muted-foreground select-none"
                 :title="t('ai.noModelsPlaceholder')"
               >
                 {{ t("ai.noEnabledModels") }}
@@ -1162,7 +1169,6 @@ function isLatestTurn(msg) {
               v-if="isLoading"
               variant="secondary"
               size="icon-sm"
-              class="rounded-md"
               :title="t('ai.stopGeneration')"
               :aria-label="t('ai.stopGeneration')"
               @click="stopGeneration"
@@ -1172,7 +1178,6 @@ function isLatestTurn(msg) {
             <InputGroupButton
               v-else
               size="icon-sm"
-              class="rounded-md"
               :variant="
                 inputText.trim() || attachedCount ? 'default' : 'secondary'
               "

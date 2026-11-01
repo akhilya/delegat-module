@@ -27,13 +27,13 @@ const visiblePrompts = computed(() =>
       class="flex flex-1 flex-col items-center justify-center px-2 py-8 text-center"
     >
       <h2
-        class="max-w-[16rem] text-[1.375rem] font-medium leading-tight tracking-tight"
+        class="max-w-[18rem] text-xl font-medium leading-snug tracking-tight"
       >
         {{ title }}
       </h2>
       <p
         v-if="description"
-        class="mt-2 max-w-[18rem] text-sm leading-relaxed text-muted-foreground"
+        class="mt-2 max-w-[19rem] text-sm leading-relaxed text-muted-foreground"
       >
         {{ description }}
       </p>

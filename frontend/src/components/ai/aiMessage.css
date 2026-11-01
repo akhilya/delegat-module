@@ -46,3 +46,9 @@
 .ai-tool-leave-to {
   opacity: 0;
 }
+
+@media (hover: none) {
+  .ai-thread [data-slot="message-footer"] {
+    opacity: 1;
+  }
+}

@@ -199,6 +199,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Unified assistant chat chrome and message spacing with quieter user bubbles, a clearer conversation header, accessible message actions, and a composer matching dashboard controls. Enter no longer submits during IME composition.
 - Adapter HTTP log retention deletes in smaller batches so pruning large log tables does not exceed the regular database command timeout.
 - Cabinet assistant preserves Anthropic tool-call/result order across multi-round chat history, avoiding provider rejections on later turns.
 - Cabinet assistant questionnaire submissions reliably include typed answers instead of sending a blank follow-up.
