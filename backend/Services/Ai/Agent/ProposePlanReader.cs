@@ -10,8 +10,23 @@ internal static class ProposePlanReader
     internal sealed record Plan(string Summary, IReadOnlyList<JsonElement> Steps, int AffectedCount, bool IsDestructive)
     {
         public bool HasContent =>
-            !string.IsNullOrWhiteSpace(Summary) || Steps.Count > 0;
+            !string.IsNullOrWhiteSpace(Summary)
+            && Steps.Count > 0
+            && Steps.All(IsWellFormedStep);
     }
+
+    private static bool IsWellFormedStep(JsonElement step) =>
+        step.ValueKind == JsonValueKind.Object
+        && HasText(step, "tool")
+        && !string.Equals(step.GetProperty("tool").GetString(), "propose_plan", StringComparison.OrdinalIgnoreCase)
+        && HasText(step, "description")
+        && step.TryGetProperty("args", out var args)
+        && args.ValueKind == JsonValueKind.Object;
+
+    private static bool HasText(JsonElement step, string name) =>
+        step.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(value.GetString());
 
     public static Plan Read(string? json)
     {

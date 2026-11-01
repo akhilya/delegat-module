@@ -44,4 +44,13 @@ public class ProposePlanReaderTests
         Assert.Equal("Send the batch", plan.Steps[0].GetProperty("description").GetString());
         Assert.Equal(JsonValueKind.Object, plan.Steps[0].GetProperty("args").ValueKind);
     }
+
+    [Theory]
+    [InlineData("{\"summary\":\"Update\",\"steps\":[]}")]
+    [InlineData("{\"summary\":\"Update\",\"steps\":[{\"description\":\"Update\"}]}")]
+    [InlineData("{\"summary\":\"Update\",\"steps\":[{\"tool\":\"platform_request\",\"description\":\"Update\",\"args\":null}]}")]
+    [InlineData("{\"summary\":\"Update\",\"steps\":[{\"tool\":\"propose_plan\",\"description\":\"Update\",\"args\":{}}]}")]
+    [InlineData("{\"steps\":[{\"tool\":\"platform_request\",\"description\":\"Update\",\"args\":{}}]}")]
+    public void InvalidPlanCannotBePresented(string json) =>
+        Assert.False(ProposePlanReader.Read(json).HasContent);
 }

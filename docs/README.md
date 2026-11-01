@@ -39,6 +39,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 
 - [AI architecture](architecture/ai-system.md)
 - [AI maintenance and prompt/tool contract](architecture/ai-assistant.md)
+- [Assistant quality evaluation](ai/assistant-quality-evaluation.md) — offline fixtures, measurements, and comparison gates
 - [AI-agent quality and efficiency audit](architecture/ai-agent-audit.md) — snapshot dated 2026-10-28; remaining work is listed in the document
 - [Authentication implementation notes](architecture/authentication.md)
 - [Operator playbook](ai/operator-playbook.md) — indexed operational procedures; keep aligned with API and implementation

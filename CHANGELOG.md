@@ -69,6 +69,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Cabinet assistant ranks exact catalog identities ahead of partial matches, marks incomplete search results, and can answer an exact-SKU field lookup with one grounded read instead of two.
+- Cabinet assistant rejects incomplete action plans before showing a confirmation card, rather than letting the user confirm a plan that cannot execute.
 - Assistant plans group product changes, summarize bulk price adjustments, and keep lengthy item details collapsed until opened.
 - Use a migration-only database command timeout (30 minutes by default, configurable with `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`) so large index builds are not interrupted by the regular 120-second query timeout.
 - Ozon's mapping canvas groups price fields and refreshes field metadata without losing saved bindings. Price import falls back to `marketing_seller_price` when `marketing_price` is unavailable.

@@ -24,7 +24,7 @@ public static class AiPrompts
     /// This identifier is logged instead of hashing the rendered prompt, which contains
     /// store/user-specific context.
     /// </summary>
-    public const string ChatPromptVersion = "chat-v10";
+    public const string ChatPromptVersion = "chat-v11";
 
     public record ConnectionInfo(int Id, string Name, string AdapterKey, bool IsActive, DateTime? LastSyncAt);
 
@@ -269,9 +269,15 @@ public static class AiPrompts
         Never say you cannot see a value you can fetch. Never ask the user to paste it.
         `search_catalog` identifies matching product/file records only; its product hits do not
         contain price, storageQuantity, or description. A missing field in that result is unknown,
-        not null. If the user asks for one of those facts, identify the exact product first, then
-        use sql_readonly to read the requested field by that product's exact id or SKU. Never say
+        not null. If the user supplied an exact SKU (or CURRENT PAGE has the product id)
+        and asks for a field, use one sql_readonly query selecting id, sku, and only the
+        requested field by that exact SKU/id; do not search_catalog first. If the product
+        is only described by a name or other ambiguous text, identify it with
+        search_catalog first, then read the requested field by its returned id. Never say
         a price/quantity/description is empty unless that field itself was read and returned null.
+        If productsHasMore or filesHasMore is true, this is only a limited preview; do not
+        report its length as the total or say those are all matches. Use a narrow read for
+        the requested fact, or say that additional matches were not listed.
         If they only asked whether a helper/sandbox exists, or to pause: answer that from
         TOOLS (run_python listed = yes). Do not propose_plan, do not sql_readonly, and do
         not resume an earlier write.
@@ -465,7 +471,8 @@ public static class AiPrompts
         get_doc — product article by slug OR indexed instance sourcePath from a knowledge hit
         read_chat_attachment — read bounded extracted text/worksheet rows from a live chat attachment (chat only)
         search_catalog — identify this store’s products (name/SKU/barcode) and file names. Product
-        hits omit price, storageQuantity, and description; read those fields separately. Specific
+        hits omit price, storageQuantity, and description; read those fields separately unless
+        an exact SKU/id was supplied and a single sql_readonly read can return the needed field. Specific
         lookups require a non-empty query. Empty query lists broadly; do that only when the user asks to browse.
         sql_readonly — SELECT on the schema above; store isolation is automatic.
         Unknown tables/columns: SHOW TABLES, SHOW COLUMNS FROM table, DESCRIBE table,

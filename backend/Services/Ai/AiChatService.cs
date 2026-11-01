@@ -397,7 +397,7 @@ public class AiChatService
                             {
                                 type = "tool_result",
                                 tool_use_id = toolId,
-                                content = "Plan was empty. Call propose_plan again with a summary and at least one step. Each step needs description in the store language and exact args. Do not call other tools."
+                                content = "Plan not presented: provide a nonempty summary and at least one step. Every step needs a tool other than propose_plan, a nonempty description in the store language, and an args object with exact arguments. Call propose_plan again by itself."
                             });
                             continue;
                         }

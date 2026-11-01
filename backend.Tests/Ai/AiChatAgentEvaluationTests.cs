@@ -42,6 +42,62 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("\"status\":\"done\"", string.Concat(chunks), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("en", "What is the price of SKU-42?", "100")]
+    [InlineData("ru", "Сколько стоит SKU-42?", "100")]
+    public async Task ExactSkuPrice_RequiresGroundedFieldReadAfterIdentitySearch(
+        string locale, string question, string expectedPrice)
+    {
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("search_catalog", "{\"query\":\"SKU-42\",\"limit\":5}", "identity"),
+            ToolCall("sql_readonly", "{\"sql\":\"SELECT id, sku, price FROM products WHERE sku = 'SKU-42' LIMIT 1\"}", "price"),
+            Text(expectedPrice));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage(question)], fixture.StoreId, fixture.UserId,
+            sessionId: "eval-price-" + locale, locale: locale));
+
+        Assert.Equal(3, fixture.Client.Requests.Count);
+        var identityResult = fixture.Client.Requests[1].Messages.Last().Content;
+        Assert.Contains("SKU-42", identityResult, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"price\"", identityResult, StringComparison.OrdinalIgnoreCase);
+        var fieldResult = fixture.Client.Requests[2].Messages.Last().Content;
+        Assert.Contains("\"price\"", fieldResult, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedPrice, fieldResult, StringComparison.Ordinal);
+        Assert.Equal(expectedPrice, AiSseTurnRecorder.Fold(chunks).Content.Trim());
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Contains("ModelRounds=3", fixture.Logger.Messages.Single(m => m.Contains("AI chat turn telemetry", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData("en", "What is the price of SKU-42?")]
+    [InlineData("ru", "Сколько стоит SKU-42?")]
+    public async Task ExactSkuPrice_CanBeGroundedInOneReadWithoutCatalogSearch(
+        string locale, string question)
+    {
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("sql_readonly", "{\"sql\":\"SELECT id, sku, price FROM products WHERE sku = 'SKU-42' LIMIT 1\"}", "exact-price"),
+            Text("100"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage(question)], fixture.StoreId, fixture.UserId,
+            sessionId: "eval-direct-price-" + locale, locale: locale));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        var result = fixture.Client.Requests[1].Messages.Last().Content;
+        using var blocks = JsonDocument.Parse(result);
+        using var payload = JsonDocument.Parse(blocks.RootElement[0].GetProperty("content").GetString()!);
+        Assert.Equal("products", payload.RootElement.GetProperty("table").GetString());
+        Assert.Contains(payload.RootElement.GetProperty("columns").EnumerateArray(),
+            column => column.GetString() == "price");
+        Assert.Contains("SKU-42", result, StringComparison.Ordinal);
+        Assert.Equal("100", AiSseTurnRecorder.Fold(chunks).Content.Trim());
+        Assert.Equal(0, fixture.Invoker.Calls);
+        var telemetry = fixture.Logger.Messages.Single(m => m.Contains("AI chat turn telemetry", StringComparison.Ordinal));
+        Assert.Contains("ModelRounds=2", telemetry, StringComparison.Ordinal);
+        Assert.Contains("ExecutedTools=1", telemetry, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task MissingFacts_AreReadBeforeStandalonePlan_AndPlanDoesNotExecuteWrite()
     {
@@ -63,6 +119,27 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("tool_result", fixture.Client.Requests[1].Messages[2].Content, StringComparison.Ordinal);
         Assert.Contains("propose_plan", fixture.Client.Requests[1].ToolNames);
         Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task SummaryOnlyPlan_IsRejectedBeforePresentation_AndCanBeCorrected()
+    {
+        using var signingKey = new TemporaryEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("propose_plan", "{\"summary\":\"Create Approved\",\"steps\":[]}", "invalid-plan"),
+            ToolCall("propose_plan", "{\"summary\":\"Create Approved\",\"steps\":[{\"tool\":\"platform_request\",\"description\":\"Create Approved\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Approved\"}}}]}", "valid-plan"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Create Approved")], fixture.StoreId, fixture.UserId,
+            sessionId: "eval-invalid-plan", locale: "en"));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains("Plan not presented", fixture.Client.Requests[1].Messages.Last().Content,
+            StringComparison.Ordinal);
+        Assert.Single(chunks, chunk => chunk.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
         Assert.Equal(0, fixture.Invoker.Calls);
     }
 

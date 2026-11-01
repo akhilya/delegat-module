@@ -8,9 +8,9 @@ namespace Delegat.Tests;
 public class AiPromptsChatTests
 {
     [Fact]
-    public void ChatPromptVersion_IsBumpedForConfirmationMemoryOutputAndClarificationPolicy()
+    public void ChatPromptVersion_IsBumpedForCatalogResultCompletenessPolicy()
     {
-        Assert.Equal("chat-v10", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v11", AiPrompts.ChatPromptVersion);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class AiPromptsChatTests
             StringComparison.Ordinal);
         Assert.Contains("A missing field in that result is unknown, not null", prompt,
             StringComparison.Ordinal);
-        Assert.Contains("use sql_readonly to read the requested field by that product's exact id or SKU",
+        Assert.Contains("use one sql_readonly query selecting id, sku",
             prompt, StringComparison.Ordinal);
         Assert.Contains("Never say a price/quantity/description is empty unless that field itself was read",
             prompt, StringComparison.Ordinal);
@@ -79,6 +79,17 @@ public class AiPromptsChatTests
         Assert.Contains("identity metadata only", description, StringComparison.Ordinal);
         Assert.Contains("not price, storageQuantity, or description", description, StringComparison.Ordinal);
         Assert.Contains("missing fields are not evidence of null", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SearchCatalog_LimitedPreviewMustNotBePresentedAsComplete()
+    {
+        var prompt = NormalizeWhitespace(Prompt());
+        Assert.Contains("productsHasMore or filesHasMore is true", prompt, StringComparison.Ordinal);
+        Assert.Contains("do not report its length as the total", prompt, StringComparison.Ordinal);
+        var tool = AgentToolCatalog.Build().Single(t => t.name == "search_catalog");
+        Assert.Contains("never present a limited result as a complete list", tool.description,
+            StringComparison.Ordinal);
     }
 
     private static string Prompt(

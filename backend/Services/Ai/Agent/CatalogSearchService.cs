@@ -34,8 +34,12 @@ public sealed class CatalogSearchService
         }
 
         var items = await products
-            .OrderBy(p => p.name)
-            .Take(take)
+            .OrderByDescending(p => q.Length > 0 && p.sku == q)
+            .ThenByDescending(p => q.Length > 0 && p.barcode == q)
+            .ThenByDescending(p => q.Length > 0 && p.name == q)
+            .ThenBy(p => p.name)
+            .ThenBy(p => p.Id)
+            .Take(take + 1)
             .Select(p => new CatalogSearchHit
             {
                 Id = p.Id,
@@ -47,6 +51,9 @@ public sealed class CatalogSearchService
             })
             .ToListAsync(ct);
 
+        var productsHasMore = items.Count > take;
+        if (productsHasMore) items.RemoveAt(items.Count - 1);
+
         List<CatalogSearchHit> files = [];
         if (q.Length > 0)
         {
@@ -54,7 +61,9 @@ public sealed class CatalogSearchService
                 .Where(f => f.product.storeId == storeId && f.product.deletedAt == null
                     && ((f.displayName != null && f.displayName.Contains(q))
                         || f.filePath.Contains(q)))
-                .Take(take)
+                .OrderByDescending(f => f.displayName == q)
+                .ThenBy(f => f.Id)
+                .Take(take + 1)
                 .Select(f => new CatalogSearchHit
                 {
                     Id = f.Id,
@@ -67,10 +76,15 @@ public sealed class CatalogSearchService
                 .ToListAsync(ct);
         }
 
+        var filesHasMore = files.Count > take;
+        if (filesHasMore) files.RemoveAt(files.Count - 1);
+
+        var productSummary = productsHasMore ? $"at least {items.Count + 1} products" : $"{items.Count} products";
+        var fileSummary = filesHasMore ? $"at least {files.Count + 1} files" : $"{files.Count} files";
         var summary = q.Length == 0
-            ? $"{items.Count} products"
-            : $"{items.Count} products, {files.Count} files for '{q}'";
-        return (new { products = items, files, query = q }, summary);
+            ? productSummary
+            : $"{productSummary}, {fileSummary} for '{q}'";
+        return (new { products = items, files, query = q, productsHasMore, filesHasMore }, summary);
     }
 
 }
