@@ -107,7 +107,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             ConnectionId = "agent-nested",
         });
 
-        var responseBuffer = new MemoryStream();
+        using var responseBuffer = new BoundedResponseStream(inner.Response, MaxResponseBytes);
         inner.Response.Body = responseBuffer;
 
         var previous = _http.HttpContext;
@@ -116,6 +116,18 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         try
         {
             await next(inner);
+        }
+        catch (BinaryResponseRejectedException)
+        {
+            return BinaryResponseNotSupported(inner.Response.StatusCode, inner.Response.ContentType);
+        }
+        catch (ResponseBodyTooLargeException)
+        {
+            return TextResponseTooLarge(inner.Response.StatusCode, responseBuffer.BytesObserved, inner.Response.ContentType);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -127,8 +139,125 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             _http.HttpContext = previous;
         }
 
+        if (responseBuffer.IsBinaryResponse)
+            return BinaryResponseNotSupported(inner.Response.StatusCode, inner.Response.ContentType);
+
         return InterpretResponse(inner.Response.StatusCode, responseBuffer.ToArray());
     }
+
+    private static (object result, string summary) BinaryResponseNotSupported(int status, string? contentType) =>
+        (new
+        {
+            error = "binary_response_requires_download",
+            status,
+            contentType,
+            hint = "Do not transfer file bytes through platform_request or MCP JSON. Call create_file_download_link with the file id, then GET its short-lived downloadUrl directly; Range requests are supported.",
+        }, "Binary response rejected before buffering; use create_file_download_link and download it over HTTP");
+
+    private static (object result, string summary) TextResponseTooLarge(int status, long bytesObserved, string? contentType) =>
+        (new
+        {
+            error = "response_too_large",
+            status,
+            limitBytes = MaxResponseBytes,
+            bytesAtLeast = bytesObserved,
+            format = IsJsonContentType(contentType) ? "json" : "text",
+            hint = "Keep JSON/text reads within 256,000 bytes by requesting a smaller page or narrower fields. For a file, call create_file_download_link and download it over HTTP.",
+        }, $"HTTP {status} text response exceeded the {MaxResponseBytes}-byte limit");
+
+    private static bool IsJsonContentType(string? contentType)
+    {
+        var mediaType = contentType?.Split(';', 2)[0].Trim();
+        return mediaType != null
+            && (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase)
+                || mediaType.Equals("text/json", StringComparison.OrdinalIgnoreCase)
+                || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsBinaryResponse(HttpResponse response)
+    {
+        if (response.Headers.ContentDisposition.ToString().Contains("attachment", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var mediaType = response.ContentType?.Split(';', 2)[0].Trim();
+        if (string.IsNullOrEmpty(mediaType) || IsJsonContentType(mediaType))
+            return false;
+
+        if (mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.Equals("application/xml", StringComparison.OrdinalIgnoreCase)
+            || mediaType.EndsWith("+xml", StringComparison.OrdinalIgnoreCase)
+            || mediaType.Equals("application/javascript", StringComparison.OrdinalIgnoreCase)
+            || mediaType.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase)
+            || mediaType.Equals("application/x-ndjson", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return mediaType.StartsWith("application/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("model/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("font/", StringComparison.OrdinalIgnoreCase)
+            || mediaType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class BoundedResponseStream(HttpResponse response, int maxBytes) : Stream
+    {
+        private readonly MemoryStream _buffer = new(Math.Min(maxBytes, 16_384));
+
+        public long BytesObserved { get; private set; }
+        public bool IsBinaryResponse => CabinetRequestInvoker.IsBinaryResponse(response);
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _buffer.Length;
+        public override long Position
+        {
+            get => _buffer.Length;
+            set => throw new NotSupportedException();
+        }
+
+        public byte[] ToArray() => _buffer.ToArray();
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            EnsureCanCapture(buffer.Length);
+            _buffer.Write(buffer);
+            BytesObserved += buffer.Length;
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureCanCapture(buffer.Length);
+            _buffer.Write(buffer.Span);
+            BytesObserved += buffer.Length;
+            return ValueTask.CompletedTask;
+        }
+
+        private void EnsureCanCapture(int incomingBytes)
+        {
+            if (IsBinaryResponse)
+                throw new BinaryResponseRejectedException();
+            if (_buffer.Length + incomingBytes > maxBytes)
+            {
+                BytesObserved = Math.Max(BytesObserved, (long)maxBytes + 1);
+                throw new ResponseBodyTooLargeException();
+            }
+        }
+    }
+
+    private sealed class BinaryResponseRejectedException : Exception { }
+    private sealed class ResponseBodyTooLargeException : Exception { }
 
     internal static (object result, string summary) InterpretResponse(int status, byte[] bytes)
     {

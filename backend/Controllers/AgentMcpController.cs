@@ -135,7 +135,7 @@ public class AgentMcpController : ControllerBase
     {
         var session = await _session.ResolveAsync(null, ct);
         var tools = AgentToolCatalog.Build()
-            .Where(t => t.name != "propose_plan");
+            .Where(t => t.name is not "propose_plan" and not "read_chat_attachment");
         if (AgentAccess.IsReadOnly(session.Permissions))
             tools = tools.Where(t => t.name is not "run_python" and not "memory_save" and not "memory_delete");
         return new

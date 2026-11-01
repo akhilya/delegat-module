@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Delegat;
+using Delegat.Infrastructure.Storage;
 using Delegat.Infrastructure.Security;
 using Delegat.Models.Ai;
 using Delegat.Services;
@@ -61,6 +63,41 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("tool_result", fixture.Client.Requests[1].Messages[2].Content, StringComparison.Ordinal);
         Assert.Contains("propose_plan", fixture.Client.Requests[1].ToolNames);
         Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task AttachmentReadInMixedBatch_CompletesBeforePlanIsPresented()
+    {
+        using var signingKey = new TemporaryEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        const string sessionId = "eval-attachment-plan";
+        const string csv = "SKU,Status\nSKU-42,Inactive";
+        await using var fixture = await CreateFixtureWithAttachmentAsync(
+            sessionId,
+            "status.csv",
+            Encoding.UTF8.GetBytes(csv),
+            ToolBatch(
+                ("read_chat_attachment", "{\"attachmentId\":71}", "read-attachment"),
+                ("propose_plan", "{\"summary\":\"Update SKU-42\",\"steps\":[{\"description\":\"Update SKU-42 status\",\"tool\":\"platform_request\",\"args\":{\"method\":\"PATCH\",\"path\":\"/products/42\",\"body\":{\"status\":\"active\"}}}]}", "premature-plan")),
+            ToolCall("propose_plan", "{\"summary\":\"Update SKU-42 after checking the attachment\",\"steps\":[{\"description\":\"Update SKU-42 status\",\"tool\":\"platform_request\",\"args\":{\"method\":\"PATCH\",\"path\":\"/products/42\",\"body\":{\"status\":\"active\"}}}]}", "validated-plan"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Use the attached status file to update SKU-42")], fixture.StoreId, fixture.UserId,
+            sessionId: sessionId, locale: "en"));
+        var serialized = string.Concat(chunks);
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        var followUpRequest = string.Concat(fixture.Client.Requests[1].Messages.Select(message => message.Content));
+        Assert.Contains("SKU-42", followUpRequest, StringComparison.Ordinal);
+        Assert.Contains("Inactive", followUpRequest, StringComparison.Ordinal);
+        var readCompletedAt = serialized.IndexOf("\"name\":\"read_chat_attachment\",\"status\":\"done\"", StringComparison.Ordinal);
+        var planPresentedAt = serialized.IndexOf("\"type\":\"plan\"", StringComparison.Ordinal);
+        Assert.True(readCompletedAt >= 0, "The attachment read should complete in the turn.");
+        Assert.True(planPresentedAt > readCompletedAt, "The plan must not be presented before the attachment read result.");
+        Assert.Contains("Update SKU-42 after checking the attachment", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("premature-plan", serialized, StringComparison.Ordinal);
         Assert.Equal(0, fixture.Invoker.Calls);
     }
 
@@ -390,10 +427,25 @@ public class AiChatAgentEvaluationTests
     }
 
     private static Task<ChatFixture> CreateFixtureAsync(params IReadOnlyList<AiStreamEvent>[] responses) =>
-        CreateFixtureAsync(new EmptyMcpGateway(), responses);
+        CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null, responses);
 
     private static async Task<ChatFixture> CreateFixtureAsync(
         EmptyMcpGateway mcp,
+        params IReadOnlyList<AiStreamEvent>[] responses)
+        => await CreateFixtureCoreAsync(mcp, null, null, null, responses);
+
+    private static Task<ChatFixture> CreateFixtureWithAttachmentAsync(
+        string sessionId,
+        string fileName,
+        byte[] attachmentBytes,
+        params IReadOnlyList<AiStreamEvent>[] responses) =>
+        CreateFixtureCoreAsync(new EmptyMcpGateway(), sessionId, fileName, attachmentBytes, responses);
+
+    private static async Task<ChatFixture> CreateFixtureCoreAsync(
+        EmptyMcpGateway mcp,
+        string? attachmentSessionId,
+        string? attachmentFileName,
+        byte[]? attachmentBytes,
         params IReadOnlyList<AiStreamEvent>[] responses)
     {
         var db = TestDbFactory.CreateDb();
@@ -401,6 +453,21 @@ public class AiChatAgentEvaluationTests
         var user = data.AddUser("agent-eval");
         var store = data.AddStore("Eval store", "RUB", "UTC", user);
         data.AddProduct(store.Id, name: "Ceramic Mug", sku: "SKU-42");
+        if (attachmentSessionId != null && attachmentFileName != null && attachmentBytes != null)
+        {
+            db.aiChatAttachments.Add(new AiChatAttachment
+            {
+                Id = 71,
+                sessionId = attachmentSessionId,
+                storeId = store.Id,
+                userId = user.Id,
+                fileName = attachmentFileName,
+                contentType = "text/csv",
+                length = attachmentBytes.Length,
+                storageKey = "staged/" + attachmentFileName,
+                createdAt = DateTime.UtcNow,
+            });
+        }
         var otherStore = data.AddStore("Other eval store", "RUB", "UTC", user);
         data.AddProduct(otherStore.Id, name: "Private Product", sku: "PRIVATE-OTHER-STORE");
         db.aiModelConfigs.Add(new AiModelConfig
@@ -421,19 +488,21 @@ public class AiChatAgentEvaluationTests
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var quota = new QuotaService(uow, db);
         var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
+        IStorageService storage = attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
         var python = new PythonSandboxClient(
             db, new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
             new HttpContextAccessor(), new FakeJwt());
         var toolHost = new AgentToolHost(
             new CatalogSearchService(db),
             new SqlReadonlyService(db),
-            new KnowledgeIndexService(db, new FakeStorage(), NullLogger<KnowledgeIndexService>.Instance),
+            new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
             new AgentPlatformGateway(uploads, invoker),
             python,
             new GrantAllPermissions(),
             db,
             NullLogger<AgentToolHost>.Instance,
-            mcp);
+            mcp,
+            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage));
         var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
         var modelService = new AiModelConfigService(
             db,
@@ -528,6 +597,24 @@ public class AiChatAgentEvaluationTests
         public int StoreId { get; } = storeId;
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
+    }
+
+    private sealed class AttachmentStorage(byte[] bytes) : IStorageService
+    {
+        public string Bucket => "test";
+        public Task<bool> UploadAsync(IFormFile file, string path, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> UploadAsync(Stream stream, string path, long contentLength, string contentType, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> UploadFromUriAsync(string uri, string path, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default) => Task.FromResult<FileUploadResult?>(null);
+        public Task<bool> CopyAsync(string sourcePath, string destinationPath, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> DeleteAsync(string path, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> ExistsAsync(string path, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default) => Task.FromResult<Stream?>(new MemoryStream(bytes, writable: false));
+        public string GetFullPath(string path) => path;
+        public Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600) => Task.FromResult(path);
+        public Task<string> GetPublicPresignedUrlAsync(string path, int expirySeconds = 3600) => Task.FromResult(path);
+        public Task<List<string>> ListObjectsByPrefixAsync(string prefix, CancellationToken ct = default) => Task.FromResult(new List<string>());
     }
 
     private sealed record CapturedMessage(string Role, string Content);

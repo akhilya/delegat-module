@@ -34,7 +34,10 @@ public sealed class McpToolGateway : IMcpToolGateway
             try
             {
                 var listed = await _http.ListToolsAsync(row.Id, row.url, _servers.DecryptApiKey(row), ct);
-                tools.AddRange(listed);
+                tools.AddRange(ConnectedMcpToolAllowlist.FilterTools(
+                    Environment.GetEnvironmentVariable(ConnectedMcpToolAllowlist.EnvironmentVariable),
+                    row.Id,
+                    listed));
             }
             catch (Exception ex)
             {
@@ -58,7 +61,12 @@ public sealed class McpToolGateway : IMcpToolGateway
 
         try
         {
-            return await _http.CallMappedToolAsync(row.Id, row.url, _servers.DecryptApiKey(row), llmName, inputJson, ct);
+            var bearerToken = _servers.DecryptApiKey(row);
+            var remoteTool = await _http.ResolveMappedRemoteNameAsync(row.Id, row.url, bearerToken, llmName, ct);
+            if (!ConnectedMcpToolAllowlist.IsAllowed(row.Id, remoteTool))
+                return (new { error = "connected_tool_not_allowlisted" }, "Connected tool is not in the instance allowlist");
+
+            return await _http.CallMappedToolAsync(row.Id, row.url, bearerToken, llmName, inputJson, ct);
         }
         catch (Exception ex)
         {

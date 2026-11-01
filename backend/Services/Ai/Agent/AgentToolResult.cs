@@ -72,7 +72,7 @@ public static class AgentToolResult
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 return fields;
 
-            string[] names = ["error", "status", "code", "title", "message", "id", "operationId", "totalCount", "hasMore", "isError"];
+            string[] names = ["error", "status", "code", "exitCode", "title", "message", "id", "fileName", "operationId", "totalCount", "totalRows", "totalCharacters", "nextStartRow", "nextStartColumn", "nextStartOffset", "hasMore", "truncated", "isError"];
             foreach (var name in names)
             {
                 var pascalName = char.ToUpperInvariant(name[0]) + name[1..];
@@ -135,6 +135,11 @@ public static class AgentToolResult
     {
         if (result.ValueKind != JsonValueKind.Object)
             return false;
+        if (result.TryGetProperty("exitCode", out var exitCode)
+            && exitCode.ValueKind == JsonValueKind.Number
+            && exitCode.TryGetInt32(out var processExitCode)
+            && processExitCode != 0)
+            return true;
         if (result.TryGetProperty("status", out var st))
         {
             if (st.ValueKind == JsonValueKind.String)

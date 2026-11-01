@@ -10,7 +10,7 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatPromptVersion_IsBumpedForConfirmationMemoryOutputAndClarificationPolicy()
     {
-        Assert.Equal("chat-v9", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v10", AiPrompts.ChatPromptVersion);
     }
 
     [Fact]
@@ -403,6 +403,18 @@ public class AiPromptsChatTests
         Assert.Contains("4xx on that step means that write", prompt, StringComparison.Ordinal);
         Assert.Contains("catalog is unchanged", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Every characteristic value is a string", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_FileDrivenWrites_ReadAndReconcileAttachmentsBeforePlanning()
+    {
+        var prompt = NormalizeWhitespace(Prompt());
+
+        Assert.Contains("read_chat_attachment before using it as a source", prompt, StringComparison.Ordinal);
+        Assert.Contains("Never find an attachment by scanning server paths", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not propose a write plan until you know the exact target", prompt, StringComparison.Ordinal);
+        Assert.Contains("Python non-zero exit code, timeout, or tool error is a failed step", prompt, StringComparison.Ordinal);
+        Assert.Contains("distinguish partial and queued work", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

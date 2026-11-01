@@ -2,8 +2,10 @@ using System.Text.Json;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Infrastructure.Middleware;
+using Delegat.Infrastructure.Storage;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.PlatformLink;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -20,6 +22,7 @@ public class AgentController : ControllerBase
     private readonly KnowledgeIndexService _knowledge;
     private readonly IPlatformLinkClient _platform;
     private readonly MarketplaceCredentialBroker _marketplaceBroker;
+    private readonly AgentFileDownloadService _fileDownloads;
     private static readonly JsonSerializerOptions Camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public AgentController(
@@ -28,7 +31,8 @@ public class AgentController : ControllerBase
         AgentFileUploadService uploads,
         KnowledgeIndexService knowledge,
         IPlatformLinkClient platform,
-        MarketplaceCredentialBroker marketplaceBroker)
+        MarketplaceCredentialBroker marketplaceBroker,
+        AgentFileDownloadService fileDownloads)
     {
         _session = session;
         _tools = tools;
@@ -36,6 +40,7 @@ public class AgentController : ControllerBase
         _knowledge = knowledge;
         _platform = platform;
         _marketplaceBroker = marketplaceBroker;
+        _fileDownloads = fileDownloads;
     }
 
     [HttpPut("stores/{storeId:int}/products/{productId:int}/files")]
@@ -100,16 +105,6 @@ public class AgentController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("stores/{storeId:int}/files/match")]
-    public async Task<IActionResult> Match(int storeId, [FromBody] AgentMatchBody body, CancellationToken ct)
-    {
-        EnsureAi();
-        var (s, err) = await TryResolve(storeId, ct);
-        if (err != null) return err;
-        var (result, _) = await _tools.DispatchAsync("match_files", JsonSerializer.Serialize(body, Camel), s!.StoreId, s.UserId, ct);
-        return Ok(result);
-    }
-
     [HttpGet("stores/{storeId:int}/knowledge")]
     public async Task<IActionResult> Knowledge(int storeId, [FromQuery] string q, [FromQuery] int limit = 8, CancellationToken ct = default)
     {
@@ -118,6 +113,62 @@ public class AgentController : ControllerBase
         if (err != null) return err;
         var hits = await _knowledge.SearchAsync(q ?? "", limit, ct);
         return Ok(new { items = hits });
+    }
+
+    /// <summary>
+    /// Streams a private product file using a short-lived, user/store-bound download ticket.
+    /// The ticket is resumable and does not change the file's public visibility.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("files/{fileId:int}/download")]
+    public async Task<IActionResult> DownloadFile(
+        int fileId,
+        [FromQuery] string? ticket,
+        CancellationToken ct)
+    {
+        EnsureAi();
+        if (!_fileDownloads.TryValidateTicket(ticket, DateTimeOffset.UtcNow, out var grant)
+            || grant.FileId != fileId)
+            return NotFound();
+
+        AgentSession session;
+        try
+        {
+            session = await _session.ResolveForUserAsync(grant.UserId, grant.StoreId, ct);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return NotFound();
+        }
+
+        var file = await _fileDownloads.GetFileAsync(session.StoreId, fileId, ct);
+        if (file == null || !await _fileDownloads.ExistsInStorageAsync(file, ct))
+            return NotFound();
+
+        Response.Headers["Cache-Control"] = "private, no-store";
+        Response.Headers["Referrer-Policy"] = "no-referrer";
+        Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+        Response.Headers["Accept-Ranges"] = "bytes";
+
+        if (!FileByteRangeParser.TryParse(Request.Headers["Range"].ToString(), file.SizeBytes, out var range))
+        {
+            Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+            Response.Headers["Content-Range"] = $"bytes */{file.SizeBytes}";
+            return new EmptyResult();
+        }
+
+        StorageDownloadHttp.Prepare(Response, file.ContentType, file.FileName, inline: false, contentLength: file.SizeBytes);
+        if (range is null)
+        {
+            await _fileDownloads.StreamAsync(file, Response.Body, ct);
+            return new EmptyResult();
+        }
+
+        Response.StatusCode = StatusCodes.Status206PartialContent;
+        Response.Headers["Content-Range"] = $"bytes {range.Value.Start}-{range.Value.End}/{file.SizeBytes}";
+        Response.ContentLength = range.Value.Length;
+        await _fileDownloads.StreamRangeAsync(file, range.Value.Start, range.Value.Length, Response.Body, ct);
+        return new EmptyResult();
     }
 
     [HttpGet("stores/{storeId:int}/marketplace-docs/{adapter}")]
@@ -297,15 +348,4 @@ public sealed class AgentMarketplaceReadOperationBody
 {
     public string? Operation { get; set; }
     public JsonElement Arguments { get; set; }
-}
-
-public class AgentMatchBody
-{
-    public List<AgentMatchFile> Files { get; set; } = [];
-}
-
-public class AgentMatchFile
-{
-    public string RelativePath { get; set; } = "";
-    public string? FileName { get; set; }
 }

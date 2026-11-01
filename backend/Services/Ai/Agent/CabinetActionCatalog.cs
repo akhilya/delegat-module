@@ -13,6 +13,10 @@ namespace Delegat.Services.Ai.Agent;
 /// </summary>
 public sealed class CabinetActionCatalog
 {
+    private static readonly Regex BinaryFileDownloadRoute = new(
+        @"^/api/.+/download$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public sealed record ActionHit(
         string Method,
         string Path,
@@ -53,6 +57,11 @@ public sealed class CabinetActionCatalog
             var shown = Present(h);
             return shown.Method + " " + shown.Path + "\n" + shown.Note;
         }));
+
+    internal static bool IsSearchableAction(string method, string path) =>
+        PlatformRequestPolicy.IsAllowed(method, path)
+        && !(method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+            && BinaryFileDownloadRoute.IsMatch(PlatformRequestPolicy.NormalizePath(path)));
 
     private static ActionHit Present(ActionHit hit)
     {
@@ -172,7 +181,7 @@ public sealed class CabinetActionCatalog
 
             foreach (var method in httpMethods.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!PlatformRequestPolicy.IsAllowed(method, template))
+                if (!IsSearchableAction(method, template))
                     continue;
                 var path = PlatformRequestPolicy.NormalizePath(template);
                 if (list.Any(h => h.Method.Equals(method, StringComparison.OrdinalIgnoreCase)

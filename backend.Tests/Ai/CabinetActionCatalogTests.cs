@@ -5,6 +5,14 @@ namespace Delegat.Tests;
 public class CabinetActionCatalogTests
 {
     [Fact]
+    public void ProductFileDownload_IsNotDiscoverableAsCabinetAction()
+    {
+        Assert.False(CabinetActionCatalog.IsSearchableAction("GET", "/files/{id}/download"));
+        Assert.False(CabinetActionCatalog.IsSearchableAction("GET", "/store-storage/files/{id}/download"));
+        Assert.True(CabinetActionCatalog.IsSearchableAction("GET", "/products/42/files"));
+    }
+
+    [Fact]
     public void Search_ExportInRussian_FindsExportBatch()
     {
         var catalog = new CabinetActionCatalog();

@@ -78,6 +78,24 @@ public class AgentToolResultTests
         Assert.True(AgentToolResult.IsFailure(new { error = "request_failed", message = "canceled" }, "canceled"));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(124)]
+    public void IsFailure_NonZeroPythonExitCode_IsFailed(int exitCode)
+    {
+        Assert.True(AgentToolResult.IsFailure(
+            new { exitCode, stdout = "partial", stderr = "timeout", error = "timeout" },
+            $"Python run failed (exit {exitCode})"));
+    }
+
+    [Fact]
+    public void IsFailure_ZeroPythonExitCode_IsSuccess()
+    {
+        Assert.False(AgentToolResult.IsFailure(
+            new { exitCode = 0, stdout = "ok", stderr = "", error = (string?)null },
+            "Python run completed (exit 0)"));
+    }
+
     [Fact]
     public void InterpretResponse_ImportPreview_TruncatesItemsKeepsCounts()
     {
@@ -135,6 +153,42 @@ public class AgentToolResultTests
         Assert.Equal(409, doc.RootElement.GetProperty("important").GetProperty("status").GetInt32());
         Assert.Equal("product_limit_reached", doc.RootElement.GetProperty("important").GetProperty("error").GetString());
         Assert.True(doc.RootElement.GetProperty("preview").GetString()!.Length > 0);
+    }
+
+    [Fact]
+    public void TruncateForModel_PreservesNonZeroPythonExitCode()
+    {
+        var huge = JsonSerializer.Serialize(new
+        {
+            exitCode = 124,
+            error = "timeout",
+            stdout = new string('x', AgentToolResult.MaxModelResultChars + 1000),
+        });
+
+        using var doc = JsonDocument.Parse(AgentToolResult.TruncateForModel(huge));
+
+        Assert.Equal(124, doc.RootElement.GetProperty("important").GetProperty("exitCode").GetInt32());
+        Assert.Equal("timeout", doc.RootElement.GetProperty("important").GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_PreservesAttachmentPaginationMetadata()
+    {
+        var huge = JsonSerializer.Serialize(new
+        {
+            fileName = "records.txt",
+            nextStartOffset = 12_000,
+            totalCharacters = 50_000,
+            truncated = true,
+            text = new string('x', AgentToolResult.MaxModelResultChars + 1000),
+        });
+
+        using var doc = JsonDocument.Parse(AgentToolResult.TruncateForModel(huge));
+        var important = doc.RootElement.GetProperty("important");
+
+        Assert.Equal(12_000, important.GetProperty("nextStartOffset").GetInt32());
+        Assert.Equal(50_000, important.GetProperty("totalCharacters").GetInt32());
+        Assert.True(important.GetProperty("truncated").GetBoolean());
     }
 
     [Fact]

@@ -30,6 +30,8 @@ public class AgentChatAttachmentTests
         ]);
         Assert.Contains("already stored", msg, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("id=9", msg, StringComparison.Ordinal);
+        Assert.Contains("read_chat_attachment", msg, StringComparison.Ordinal);
+        Assert.Contains("Never search server paths", msg, StringComparison.Ordinal);
         Assert.DoesNotContain("client_upload", msg, StringComparison.Ordinal);
         Assert.DoesNotContain("Match those names to products", msg, StringComparison.Ordinal);
     }

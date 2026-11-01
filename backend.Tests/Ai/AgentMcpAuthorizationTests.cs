@@ -41,6 +41,8 @@ public class AgentMcpAuthorizationTests
         Assert.Contains("memory_search", json, StringComparison.Ordinal);
         Assert.DoesNotContain("memory_save", json, StringComparison.Ordinal);
         Assert.DoesNotContain("memory_delete", json, StringComparison.Ordinal);
+        Assert.Contains("create_file_download_link", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("read_chat_attachment", json, StringComparison.Ordinal);
     }
 
     private static async Task<AgentMcpController> CreateControllerAsync(

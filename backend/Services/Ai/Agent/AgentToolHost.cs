@@ -26,6 +26,8 @@ public sealed class AgentToolHost
     private readonly ILogger<AgentToolHost> _logger;
     private readonly IMcpToolGateway? _mcp;
     private readonly IPublicDocsClient? _publicDocs;
+    private readonly AgentFileDownloadService? _fileDownloads;
+    private readonly ChatAttachmentReadService? _chatAttachments;
 
     public AgentToolHost(
         CatalogSearchService catalog,
@@ -39,7 +41,9 @@ public sealed class AgentToolHost
         IMcpToolGateway? mcp = null,
         IPublicDocsClient? publicDocs = null,
         CabinetActionCatalog? actions = null,
-        AiMemoryService? memory = null)
+        AiMemoryService? memory = null,
+        AgentFileDownloadService? fileDownloads = null,
+        ChatAttachmentReadService? chatAttachments = null)
     {
         _catalog = catalog;
         _sql = sql;
@@ -53,6 +57,8 @@ public sealed class AgentToolHost
         _mcp = mcp;
         _publicDocs = publicDocs;
         _actions = actions ?? new CabinetActionCatalog();
+        _fileDownloads = fileDownloads;
+        _chatAttachments = chatAttachments;
     }
 
     public async Task<(object result, string summary)> DispatchAsync(
@@ -61,7 +67,9 @@ public sealed class AgentToolHost
         int storeId,
         int userId,
         CancellationToken ct,
-        bool allowConnectedMcp = false)
+        bool allowConnectedMcp = false,
+        bool allowChatAttachments = false,
+        string? chatSessionId = null)
     {
         var perms = new HashSet<string>(
             await _permissions.GetEffectivePermissionsAsync(userId, ct),
@@ -99,12 +107,14 @@ public sealed class AgentToolHost
                     "memory_save" => await MemorySaveAsync(inputJson, storeId, userId, ct),
                     "memory_delete" => await MemoryDeleteAsync(inputJson, storeId, userId, ct),
                     "get_doc" => await GetDocAsync(inputJson, ct),
+                    "read_chat_attachment" => await ReadChatAttachmentAsync(
+                        inputJson, storeId, userId, perms, allowChatAttachments, chatSessionId, ct),
                     "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
                     "search_actions" => SearchActions(inputJson),
                     "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
                     "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
                     "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
-                    "match_files" => await MatchFilesAsync(inputJson, storeId, ct),
+                    "create_file_download_link" => await CreateFileDownloadLinkAsync(inputJson, storeId, userId, ct),
                     "navigate_to" => NavigateTo(inputJson),
                     "ask_form" => AskForm(inputJson),
                     _ => ((object)new { error = $"Unknown tool: {toolName}" }, $"Unknown tool: {toolName}"),
@@ -256,25 +266,109 @@ public sealed class AgentToolHost
         return await _platform.ExecuteAsync(storeId, userId, method, path, body, perms, ct);
     }
 
-    private async Task<(object, string)> MatchFilesAsync(string json, int storeId, CancellationToken ct)
+    private async Task<(object, string)> ReadChatAttachmentAsync(
+        string json,
+        int storeId,
+        int userId,
+        IReadOnlySet<string> permissions,
+        bool allowChatAttachments,
+        string? chatSessionId,
+        CancellationToken ct)
+    {
+        if (!allowChatAttachments)
+            return (new { error = "chat_attachments_unavailable" }, "Chat attachments are not available on this surface");
+        if (string.IsNullOrWhiteSpace(chatSessionId))
+            return (new { error = "chat_session_required" }, "A chat session is required to read staged attachments");
+        if (!permissions.Contains(Permissions.AiUse, StringComparer.OrdinalIgnoreCase))
+            return (new { error = "ai_use_required" }, "AI assistant permission is required to read chat attachments");
+        if (_chatAttachments == null)
+            return (new { error = "chat_attachment_reader_unavailable" }, "Chat attachment reading is unavailable");
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var root = doc.RootElement;
+        var attachmentId = root.TryGetProperty("attachmentId", out var idElement)
+            && idElement.TryGetInt32(out var parsedId)
+            ? parsedId
+            : 0;
+        var sheetName = root.TryGetProperty("sheetName", out var sheetElement)
+            && sheetElement.ValueKind == JsonValueKind.String
+            ? sheetElement.GetString()
+            : null;
+        var startRow = root.TryGetProperty("startRow", out var startElement)
+            && startElement.TryGetInt32(out var parsedStart)
+            ? parsedStart
+            : 1;
+        var rowLimit = root.TryGetProperty("rowLimit", out var limitElement)
+            && limitElement.TryGetInt32(out var parsedLimit)
+            ? parsedLimit
+            : 50;
+        var startColumn = root.TryGetProperty("startColumn", out var columnElement)
+            && columnElement.TryGetInt32(out var parsedColumn)
+            ? parsedColumn
+            : 1;
+        var startOffset = root.TryGetProperty("startOffset", out var offsetElement)
+            && offsetElement.TryGetInt32(out var parsedOffset)
+            ? parsedOffset
+            : 0;
+        var maxCharacters = root.TryGetProperty("maxCharacters", out var charactersElement)
+            && charactersElement.TryGetInt32(out var parsedCharacters)
+            ? parsedCharacters
+            : 12_000;
+
+        return await _chatAttachments.ReadAsync(
+            storeId, userId, chatSessionId, attachmentId, sheetName, startRow, rowLimit,
+            startColumn, startOffset, maxCharacters, ct);
+    }
+
+    private async Task<(object, string)> CreateFileDownloadLinkAsync(
+        string json,
+        int storeId,
+        int userId,
+        CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-        if (!doc.RootElement.TryGetProperty("files", out var filesEl) || filesEl.ValueKind != JsonValueKind.Array)
-            return (new { error = "files array required" }, "files required");
+        var fileId = doc.RootElement.TryGetProperty("fileId", out var idElement)
+            && idElement.TryGetInt32(out var parsedId)
+            ? parsedId
+            : 0;
+        if (fileId <= 0)
+            return (new { error = "file_id_required" }, "A valid product file id is required");
+        if (_fileDownloads == null)
+            return (new { error = "file_download_unavailable" }, "Private file downloads are unavailable");
 
-        var inputs = new List<ProductFileMatchInput>();
-        foreach (var f in filesEl.EnumerateArray())
+        try
         {
-            var rel = f.TryGetProperty("relativePath", out var rp) ? rp.GetString() ?? "" : "";
-            var name = f.TryGetProperty("fileName", out var fn) ? fn.GetString() ?? Path.GetFileName(rel) : Path.GetFileName(rel);
-            if (rel.Length == 0) continue;
-            inputs.Add(new ProductFileMatchInput(rel, name));
+            var link = await _fileDownloads.CreateLinkAsync(storeId, userId, fileId, ct);
+            var result = new
+            {
+                fileName = link.FileName,
+                sizeBytes = link.SizeBytes,
+                sha256 = link.Sha256,
+                expiresAt = link.ExpiresAt,
+                downloadUrl = ResolveDownloadUrl(link.DownloadUrl),
+                rangeSupported = true,
+            };
+            return (result, $"Prepared private download link for {link.FileName}");
         }
+        catch (AgentFileDownloadException ex)
+        {
+            return (new { error = ex.Code }, ex.Code);
+        }
+    }
 
-        var products = await _catalog.ListMatchProductsAsync(storeId, ct);
-        var matches = ProductFileMatcher.Match(inputs, products);
-        var hitCount = matches.Count(x => x.ProductId != null);
-        return (new { matches }, $"{hitCount}/{matches.Count} matched");
+    private static string ResolveDownloadUrl(string downloadPath)
+    {
+        var configuredBase = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL")?.Trim();
+        if (Uri.TryCreate(configuredBase, UriKind.Absolute, out var baseUri)
+            && baseUri.Scheme is "http" or "https"
+            && baseUri.AbsolutePath == "/"
+            && string.IsNullOrEmpty(baseUri.Query)
+            && string.IsNullOrEmpty(baseUri.Fragment))
+            return new Uri(baseUri, downloadPath.TrimStart('/')).ToString();
+
+        // Relative URLs avoid trusting the incoming Host header. MCP clients resolve this
+        // against the same API origin used for POST /api/mcp.
+        return downloadPath;
     }
 
     internal static (object, string) NavigateTo(string json)

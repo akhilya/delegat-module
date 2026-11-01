@@ -24,10 +24,13 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - Medusa 0.2.3 downloads the Ozon Delivery packing-label PDF from the shop after assemble (`GET /orders/{id}/label`).
 - Cabinet assistant `search_actions` looks up allowed cabinet HTTP (MVC routes plus operator aliases) so export/import/match do not need a prompt paragraph each, and Tools is not treated as the write catalog.
+- Product files can be downloaded by an agent through a short-lived private HTTP link with filename, size, SHA-256, and Range/resume support; binary bytes never pass through MCP JSON or the model.
+- Cabinet chat can inspect live spreadsheet and text attachments through bounded extraction before building a data-dependent write plan; staged file bytes remain private and are not exposed to MCP.
+- Connected HTTP MCP tools require an exact instance allowlist (`AI_CONNECTED_MCP_TOOL_ALLOWLIST`) in addition to the existing disabled-by-default switch. Remote calls still require a standalone user-confirmed plan.
 - Corner FABs include Documentation. On desktop (`lg+`), while the assistant (or another companion sheet) is open, the buttons sit beside the stack; opening Operations or Docs places that sheet on the right and shifts the assistant left so the panels do not overlap.
 - Cabinet docs sheet fetches Control Plane `/docs` markdown (catalog + articles) through `GET /api/docs/*`; per-page Help when an article exists; the assistant indexes those articles and can `get_doc`. `DOCS_PUBLIC_URL` must be the **public docs origin** (e.g. `https://module.delegat.pro/docs`), not the instance SPA. If `/docs/catalog.json` is still SPA HTML, the catalog is built from `/docs/llms.txt`
 - Cabinet order tabs (overview and connection mailboxes) show a count of stored snapshots on each tab
-- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and external MCP clients: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions, file-name match). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
+- Operator MCP (`POST /api/mcp`) and Agent HTTP (`/api/agent`) for the cabinet assistant and external MCP clients: JWT or `dk_…`, permission `ai.use`. Thin tools (knowledge, catalog search, read-only SQL, optional Python sandbox, allowlisted platform actions). Not Public API v1; not gated by `API_USAGE_ENABLED`. Docs: `docs/api/mcp.md`
 - Cabinet assistant: category and store attributes (list/create), product `attributeValues` merge, `GET /products?categoryId=`, SQL on attribute tables plus `IN (...)` and `description`
 - Cabinet assistant: execution timeline interleaves thinking with each tool step instead of stacking tools above a single merged paragraph
 - Cabinet AI: attach files in chat (not folders). Bytes stay downloadable for 24 hours, then they are purged (names stay on the thread). The assistant decides what to do (including putting them on products) with the usual tools after you confirm a plan
@@ -62,6 +65,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Catalog Connect import, match preview, and apply run as background operations with `x / total` progress on the tool page (survives reload and in-app navigation). Remote catalogs are paged in bulk and unlinked products are queued as pages arrive.
 - Cabinet assistant `ask_form`: a form on the reply. Marketplace keys stay in the browser and POST the same create-connection as Adapters (the model never sees the key). Clarifying questions are a short Questionnaire (up to 5 steps); answers stay on the card and continue the model without a visible chat bubble.
 - Cabinet assistant requires a standalone user-confirmed plan before running Python code or any connected MCP tool; direct calls are blocked server-side, and untrusted instructions in tool output or external metadata are treated as data.
+- Cabinet assistant no longer treats a nonzero Python exit code or timeout as a successful plan step; file-driven write plans require inspected attachment data and validated catalog matches.
 
 ### Changed
 
@@ -127,7 +131,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Catalog (and other) product thumbs load inside the cell spinner; the products table paints as soon as `/products` returns and does not wait for photos to decode
 - Cabinet assistant runs a confirmed plan in the same assistant message (no “Confirmed, proceed” bubble). The plan card shows Done after the steps finish, or Failed when a write was rejected (including the product cap); older threads that stored the split are folded on load
 - Public API and cabinet product create/patch: characteristic `value` accepts JSON numbers, booleans, and arrays and stores them as text (same as the product form strings)
-- Cabinet assistant remaining catalog slots are in the chat context. At the cap it must not trash an existing product to free a slot. A confirmed plan that returns HTTP 4xx/5xx is a failure; if earlier steps already applied, the reply says so (including trash) instead of “nothing changed”. Oversized product cards are slimmed instead of dropped
+- Cabinet assistant remaining catalog slots are in the chat context. At the cap it must not trash an existing product to free a slot. A confirmed plan that returns HTTP 4xx/5xx is a failure; if earlier steps already applied, the reply says so (including trash) instead of “nothing changed”. Oversized product-card JSON now returns `response_too_large` at the 256,000-byte cap and should be narrowed or paged.
 - Cabinet assistant `platform_request` calls the same cabinet JSON API as the SPA (permissions, store, quotas). Secrets, user admin, plugins, and irreversible actions (delete a store, permanent product delete) stay blocked. Product characteristics PATCH replaces `attributeValues` like the product form
 - Python sandbox Compose service starts only when AI is on (profile `ai`). `pnpm dev` follows `AI_ENABLED`; self-host `docker compose --profile ai` when the assistant is enabled
 - Cabinet assistant stays on store work: jokes, recipes, homework, and jailbreak/secret dumps are refused. Operator-enabled MCP tools (Settings → AI) are in scope for the job they describe. Replies, plans, and thoughts stay in catalog language (products, characteristics, connections) and do not name SQL, HTTP, or internal tool ids
@@ -201,6 +205,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Assistant plan confirmation becomes available only after the live turn is saved, then consumes the proposal atomically inside the MySQL retry execution strategy.
 - Assistant plan confirmation errors return a safe rejection reason, refresh the server-owned conversation state, and appear in a localized alert instead of being appended as ordinary chat text.
 - MCP discovery/resource reads require agent permission; workspace-view users cannot write memories or invoke connected MCP tools. Direct Python/connected MCP chat calls require a standalone confirmed plan, and oversized MCP responses are rejected at 256,000 bytes.
+- `platform_request` now stops binary responses before buffering and reports `binary_response_requires_download`; JSON/text responses remain capped at 256,000 bytes. Use the short-lived file-download tool for private file bytes.
 - DeepSeek Anthropic-compatible model discovery uses its `/models` endpoint, and chat requests retain the `/anthropic` base path.
 - Single-connection marketplace actions now open their connection selector instead of offering an ambiguous Quick Run. Product imports validate the 1–200 limit, and schedule time zones are configurable and shown with run times. Radio choices now support arrow-key navigation.
 - Connected MCP tools for the cabinet assistant are disabled by default (`AI_CONNECTED_MCP_ENABLED=true` re-enables tool calls), and their settings section is hidden.
@@ -320,6 +325,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Removed
 
+- Optional `match_files` assistant tool and its Agent HTTP endpoint. Staged chat files can still be attached to a product through the confirmed attachment flow.
 - Pause / Resume on background operations (jobs are running or stopped)
 - Unused `PageHeader` primitive — page titles are the navbar trail
 

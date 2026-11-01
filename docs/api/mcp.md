@@ -8,7 +8,7 @@ Implementation is **stateless JSON-RPC over HTTP** (`POST /api/mcp`). Same tool 
 
 ## Cabinet as MCP client
 
-Settings → AI can store HTTP MCP servers (`aiMcpServers`, optional bearer key). The cabinet assistant lists `tools/list` and calls them as `mcp{id}_{tool}`. That is **not** this operator surface: extra servers do not appear on `POST /api/mcp`. The same page can mint a Public API key and show a single `mcp.json` for `POST /api/mcp`.
+Settings → AI can store HTTP MCP servers (`aiMcpServers`, optional bearer key). The cabinet assistant lists `tools/list` and calls approved tools as `mcp{id}_{tool}`. That is **not** this operator surface: extra servers do not appear on `POST /api/mcp`. The same page can mint a Public API key and show a single `mcp.json` for `POST /api/mcp`.
 
 ## Base URLs
 
@@ -40,7 +40,23 @@ Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_re
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
-Tools: `search_knowledge`, `memory_search`, `memory_save`, `memory_delete`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only while AI is on), `platform_request`, `match_files`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Memory is scoped to the authenticated user and selected store and persists across conversations; MCP memory calls are scoped to the authenticated key owner and selected store. Cabinet chat writes, Python runs, and connected MCP calls require a standalone `propose_plan` and user confirmation. The operator MCP surface does not expose connected HTTP MCP servers; forged connected-tool names are rejected. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+Tools: `search_knowledge`, `memory_search`, `memory_save`, `memory_delete`, `get_doc`, `search_catalog`, `search_actions`, `sql_readonly`, `run_python` (only while AI is on), `platform_request`, `create_file_download_link`, `navigate_to` (open XOR continue buttons on the reply; open urls may include a query string), `ask_form` (connection keys stay in the browser; questions are a short questionnaire on the reply; answers stay on the card, not as a visible chat bubble). Memory is scoped to the authenticated user and selected store and persists across conversations; MCP memory calls are scoped to the authenticated key owner and selected store. Cabinet chat writes, Python runs, and connected MCP calls require a standalone `propose_plan` and user confirmation. The operator MCP surface does not expose connected HTTP MCP servers; forged connected-tool names are rejected. `platform_request` mutations still check permissions. Staged cabinet attachments assign with `POST /products/{id}/files` `{ attachmentIds }` and remain downloadable for 24 hours.
+
+Reading staged attachment contents is a cabinet-chat-only capability; `read_chat_attachment` is intentionally omitted from operator MCP because that surface has no current-chat attachment context. The chat reader returns bounded extracted text or worksheet rows; it never returns the original binary bytes through a model/MCP payload.
+
+### Large private file downloads
+
+`search_actions` deliberately omits binary download routes, including `GET /files/{id}/download`: they are not JSON actions. `platform_request` only returns JSON/text; if a binary route is called directly, its response is stopped before buffering and returns `binary_response_requires_download`. This does not increase the 256,000-byte JSON limit. Oversized JSON/text returns `response_too_large` and a hint to page or narrow the request.
+
+Use `create_file_download_link` with a product `fileId`. The small MCP result contains `fileName`, `sizeBytes`, `sha256`, `expiresAt`, `downloadUrl`, and `rangeSupported`. The service hashes the object as a bounded-memory storage stream, then returns a 10-minute ticket URL for `GET /api/agent/files/{fileId}/download?ticket=…`. Fetch the URL directly over HTTP; do not ask the model to carry file bytes or base64. A relative URL is resolved against the API origin used for `/api/mcp`; set `PUBLIC_BASE_URL` to the public API origin to return an absolute URL.
+
+The ticket is authenticated and bound to the issuing user, store, and file. Each download request rechecks that the user is active, still belongs to the store, still has `ai.use` or `workspace.view`, and that the file still belongs to that store. It does not set `isPublic`, use the public-file route, or create a persisted share/artifact row. The URL is a bearer capability while valid; keep it private. Its short expiry is enforced statelessly, so there is no artifact cleanup job. `Range: bytes=…` (including suffix ranges) is supported for resume; multiple ranges are rejected with `416`. No file bytes pass through MCP JSON or the model.
+
+## Connected HTTP MCP trust policy
+
+Connected HTTP MCP is a separate outbound cabinet-chat integration, not an Operator MCP server. It is disabled unless `AI_CONNECTED_MCP_ENABLED=true`. When enabled, the instance also requires an exact allowlist in `AI_CONNECTED_MCP_TOOL_ALLOWLIST`, for example `2:search_docs;2:fetch_document;3:render_stl`. Each entry is `<Settings MCP server id>:<exact remote tools/list name>`; commas and semicolons separate entries. There are no wildcards. An empty or malformed allowlist exposes no connected tools, and the server checks it again when a call arrives (so hiding a tool from `tools/list` is not the only enforcement).
+
+This is an instance-wide allowlist, not a per-user grant. Connected tools still require `ai.use`; `workspace.view` is insufficient. In cabinet chat every remote call, whether read or write, remains a standalone plan step and waits for explicit user confirmation. The remote server uses the configured server credential, not a credential scoped to the current user. Use a dedicated least-privilege credential and a separate MCP server for each trust boundary; expose only read-only tools by default and allow a write tool only when its effect is intended. Disable the integration when it is not needed. Operator MCP never forwards or exposes connected HTTP MCP tools.
 
 Resources:
 
@@ -54,11 +70,11 @@ Resources:
 | Method | Path | Permission |
 |--------|------|------------|
 | PUT | `/api/agent/stores/{storeId}/products/{productId}/files` | `files.manage` |
+| GET | `/api/agent/files/{fileId}/download?ticket=…` | Short-lived user/store/file-bound ticket |
 | POST | `/api/agent/stores/{storeId}/catalog/search` | `ai.use` |
 | POST | `/api/agent/stores/{storeId}/sql` | `ai.use` |
 | POST | `/api/agent/stores/{storeId}/python` | `ai.use` (denied for view-only) |
 | POST | `/api/agent/stores/{storeId}/platform` | resource perm of the route |
-| POST | `/api/agent/stores/{storeId}/files/match` | `ai.use` |
 | GET | `/api/agent/stores/{storeId}/knowledge` | `ai.use` |
 
 Upload is multipart (`files`). Same quotas as the cabinet (`MAX_FILES`, `MAX_STORAGE_GB`).
@@ -86,11 +102,13 @@ Standard Streamable HTTP entry (`type` is `http`):
 
 Settings → AI mints a key named `MCP` and shows this JSON for the current origin and selected store. Local Vite (`:5173`) is the SPA; the MCP URL uses the API origin (`:5000` when the SPA is on the Vite port).
 
-Pair with a filesystem MCP on the same machine to match a local product-files folder, then `PUT` bytes via Agent HTTP (not through the model).
+Pair with a filesystem MCP on the same machine to read local files, then `PUT` bytes via Agent HTTP (not through the model).
 
 ## `platform_request`
 
 Same cabinet JSON API as the SPA (`/api` prefix optional). Not Public API v1. Permissions, store membership, and quotas are the signed-in user's. Query strings work (`GET /products?searchQuery=&categoryId=&startIndex=&pageSize=`).
+
+Do not use it to download product file bytes; use `create_file_download_link` and then GET the returned URL. Its response capture is bounded to 256,000 bytes for JSON/text, and binary responses are rejected before buffering.
 
 Denied: `/api/v1`, `/api/mcp`, `/api/agent`, `/api/ai` except `GET /api/ai/store-settings` (personal settings: store description, communication style, brevity, emoji; `PUT` stays denied), `/api/auth`, `/api/users`, `/api/plugins`, `/api/api-keys`, connection credential create/update/test, database dump, quota trim, `DELETE /stores/{id}`, permanent product delete.
 

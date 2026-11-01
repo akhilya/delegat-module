@@ -43,7 +43,6 @@ public class AiChatService
     {
         ["platform_request"] = ["product", "mapping"],
         ["run_python"] = ["product"],
-        ["match_files"] = ["product"],
     };
 
     public AiChatService(
@@ -362,6 +361,9 @@ public class AiChatService
                 var toolResults = new List<object>();
                 var shouldBreak = false;
                 var waitForPlan = AgentChatTurnGate.BatchHasProposePlan(toolUses);
+                var attachmentReadInBatch = toolUses.Any(t =>
+                    string.Equals(t.name, "read_chat_attachment", StringComparison.OrdinalIgnoreCase));
+                var deferPlanForAttachmentRead = waitForPlan && attachmentReadInBatch;
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
                     if (AgentChatTurnGate.IsProposePlan(toolName))
@@ -373,6 +375,17 @@ public class AiChatService
                                 type = "tool_result",
                                 tool_use_id = toolId,
                                 content = AgentChatTurnGate.AdditionalPlanDeferred
+                            });
+                            continue;
+                        }
+
+                        if (deferPlanForAttachmentRead)
+                        {
+                            toolResults.Add(new
+                            {
+                                type = "tool_result",
+                                tool_use_id = toolId,
+                                content = "Plan not presented. First read the attached file and use its actual contents; then propose the exact plan by itself.",
                             });
                             continue;
                         }
@@ -420,7 +433,9 @@ public class AiChatService
                         continue;
                     }
 
-                    if (waitForPlan)
+                    if (waitForPlan
+                        && !(deferPlanForAttachmentRead
+                            && string.Equals(toolName, "read_chat_attachment", StringComparison.OrdinalIgnoreCase)))
                     {
                         toolResults.Add(new
                         {
@@ -453,7 +468,10 @@ public class AiChatService
                     try
                     {
                         (result, summary) = await _toolHost.DispatchAsync(
-                            toolName, toolInputJson, storeId, userId, ct, allowConnectedMcp: true);
+                            toolName, toolInputJson, storeId, userId, ct,
+                            allowConnectedMcp: true,
+                            allowChatAttachments: true,
+                            chatSessionId: sessionId);
                     }
                     catch (Exception ex)
                     {

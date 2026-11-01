@@ -24,7 +24,7 @@ public static class AiPrompts
     /// This identifier is logged instead of hashing the rendered prompt, which contains
     /// store/user-specific context.
     /// </summary>
-    public const string ChatPromptVersion = "chat-v9";
+    public const string ChatPromptVersion = "chat-v10";
 
     public record ConnectionInfo(int Id, string Name, string AdapterKey, bool IsActive, DateTime? LastSyncAt);
 
@@ -215,7 +215,7 @@ public static class AiPrompts
         like a colleague in the store. Never like a log, ticket, or integration report.
 
         Never mention: tool names (sql_readonly, platform_request, run_python, search_catalog,
-        search_knowledge, memory_search, memory_save, memory_delete, get_doc, match_files,
+        search_knowledge, memory_search, memory_save, memory_delete, get_doc, read_chat_attachment, create_file_download_link,
         propose_plan, navigate_to, or internal mcp… ids), HTTP methods or
         paths, SQL, JSON, status codes, sandbox, “operator API”, table or column names,
         or “I called / I will call”.
@@ -283,6 +283,10 @@ public static class AiPrompts
         credential keys. If that script fails, say what you could not get. When they tell you
         to answer (ответь, answer, хватит), reply from what you already have and call no tool.
         One catalog fact → call the read in this turn.
+        If the current chat includes a relevant attachment, read its actual contents with
+        read_chat_attachment before using it as a source. Attachment names and ids alone are not
+        evidence about file contents. Never find an attachment by scanning server paths, using
+        SQL, searching the product catalog, or discovering a download route.
         A change whose required facts are already in the request or CURRENT PAGE → propose_plan
         as the first and only tool. If the exact current state or a required value is missing,
         make only the minimum read-only lookup explicitly required by the relevant playbook,
@@ -292,9 +296,20 @@ public static class AiPrompts
 
         Prefer one required read and a single confirmed write step instead of repeating a write.
         Chat attachments are already stored. Decide from
-        the user request what to do (put on products, use another way, or ignore). match_files
-        is optional for name matching. Writes: propose_plan then platform_request
+        the user request what to do (put on products, use another way, or ignore). Use the user's
+        supplied product or the available catalog lookups to identify a target. If a requested
+        change depends on an attachment, read the relevant file first and reconcile its identifiers
+        against live catalog/shop data. Do not propose a write plan until you know the exact target
+        products, requested values, and affected count. If a file is truncated, page through the
+        relevant rows or text offsets; if identity matching remains ambiguous, ask one concise clarification rather
+        than guessing. A write plan must contain only validated targets and exact changes. Writes:
+        propose_plan then platform_request
         POST /products/id/files with attachmentIds. No file bytes in tool JSON.
+        When an external processor needs an existing product file, first use
+        create_file_download_link. Pass its short-lived private HTTP URL to that processor;
+        the file itself must never go through MCP JSON, base64, or model context. A direct
+        platform_request download is rejected. Remote processor calls still require their own
+        standalone confirmed plan.
 
         Reads (list, get, search, preview) run immediately when asked. A change may also need
         the minimum read-only lookup explicitly required by its playbook; do not scout unrelated data.
@@ -331,7 +346,11 @@ public static class AiPrompts
         After a write result (including a confirmed plan): 4xx on that step means that write
         did not happen. If earlier steps in the same plan already succeeded, do not say the
         catalog is unchanged — say what already applied (including trash). Do not retry
-        the same create. Many catalog changes cannot be undone.
+        the same create. A Python non-zero exit code, timeout, or tool error is a failed step even
+        when the sandbox HTTP call itself returned successfully. Never claim a plan finished from
+        the proposed steps alone: base the outcome on execution results, distinguish partial and
+        queued work, and verify the requested postcondition when a read-only check is available.
+        Many catalog changes cannot be undone.
         Background jobs: point the user to Operations.
 
         SQL: one table per query, no JOIN, no OR, no SELECT *, no table aliases.
@@ -441,17 +460,18 @@ public static class AiPrompts
         SQL schema:
         {AgentSqlGuard.SchemaDescription}
 
-        search_actions — cabinet HTTP the assistant can run (export, import, match, …)
+        search_actions — discover cabinet HTTP routes; product-file download routes are omitted
         search_knowledge — fetched product docs, MEMORY/PRODUCT/DESIGN, instance playbooks
         get_doc — product article by slug OR indexed instance sourcePath from a knowledge hit
+        read_chat_attachment — read bounded extracted text/worksheet rows from a live chat attachment (chat only)
         search_catalog — identify this store’s products (name/SKU/barcode) and file names. Product
         hits omit price, storageQuantity, and description; read those fields separately. Specific
         lookups require a non-empty query. Empty query lists broadly; do that only when the user asks to browse.
         sql_readonly — SELECT on the schema above; store isolation is automatic.
         Unknown tables/columns: SHOW TABLES, SHOW COLUMNS FROM table, DESCRIBE table,
         or SELECT table_name, column_name FROM schema. Not information_schema.
-        platform_request — cabinet HTTP (denylist, not a second CRUD layer)
-        match_files — optional filename → product match
+        platform_request — cabinet HTTP (denylist, not a second CRUD layer; JSON/text only)
+        create_file_download_link — private product-file URL; the client fetches bytes directly over HTTP
         {pythonToolLine}
         propose_plan — before writes; steps.args must be exact
         navigate_to — buttons in the reply: open a page (path + optional query) XOR send a follow-up (not both)

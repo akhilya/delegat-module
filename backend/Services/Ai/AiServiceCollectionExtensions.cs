@@ -37,6 +37,9 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<ICabinetRequestInvoker, CabinetRequestInvoker>();
         services.AddScoped<AgentPlatformGateway>();
         services.AddScoped<AgentFileUploadService>();
+        services.AddSingleton<AgentFileDownloadTicketService>();
+        services.AddScoped<AgentFileDownloadService>();
+        services.AddScoped<ChatAttachmentReadService>();
         services.AddScoped<PythonSandboxClient>();
         services.AddScoped<AgentToolHost>();
         services.AddScoped<AgentSessionResolver>();

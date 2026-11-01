@@ -39,6 +39,17 @@ public sealed class McpHttpClient
         return await CallOnSessionAsync(snapshot.Session, remote, inputJson, ct);
     }
 
+    public async Task<string?> ResolveMappedRemoteNameAsync(
+        int serverId,
+        string url,
+        string? bearerToken,
+        string llmName,
+        CancellationToken ct)
+    {
+        var snapshot = await GetToolSessionAsync(serverId, url, bearerToken, ct);
+        return snapshot.RemoteNamesByLlmName.TryGetValue(llmName, out var remote) ? remote : null;
+    }
+
     private async Task<ToolSessionSnapshot> GetToolSessionAsync(
         int serverId, string url, string? bearerToken, CancellationToken ct)
     {

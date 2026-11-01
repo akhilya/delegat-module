@@ -394,7 +394,42 @@ public class MinIOStorageService : IStorageService
             ct);
     }
 
+    public async Task StreamRangeToAsync(
+        string path,
+        long offset,
+        long length,
+        Stream outputStream,
+        CancellationToken ct = default)
+    {
+        if (offset < 0 || length < 0)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        if (length == 0)
+            return;
+
+        await EnsureBucketExistsAsync(ct);
+        var end = checked(offset + length - 1);
+        using var response = await OpenObjectGetAsync(path, offset, end, ct);
+        if (response.StatusCode != HttpStatusCode.PartialContent)
+        {
+            response.EnsureSuccessStatusCode();
+            throw new HttpRequestException("Storage did not honor the requested byte range.");
+        }
+
+        if (response.Content.Headers.ContentLength is long contentLength && contentLength != length)
+            throw new HttpRequestException("Storage returned a different byte-range length than requested.");
+
+        await using var source = await response.Content.ReadAsStreamAsync(ct);
+        await StorageRangeCopy.CopyExactlyAsync(source, outputStream, length, ct);
+    }
+
     private async Task<HttpResponseMessage> OpenObjectGetAsync(string path, long offset, CancellationToken ct)
+        => await OpenObjectGetAsync(path, offset, null, ct);
+
+    private async Task<HttpResponseMessage> OpenObjectGetAsync(
+        string path,
+        long offset,
+        long? endOffset,
+        CancellationToken ct)
     {
         HttpRequestException? last = null;
         for (var attempt = 1; attempt <= 3; attempt++)
@@ -410,8 +445,8 @@ public class MinIOStorageService : IStorageService
                     VersionPolicy = HttpVersionPolicy.RequestVersionExact
                 };
                 // Range is not part of the presigned signature; MinIO accepts it on GET.
-                if (offset > 0)
-                    request.Headers.Range = new RangeHeaderValue(offset, null);
+                if (offset > 0 || endOffset.HasValue)
+                    request.Headers.Range = new RangeHeaderValue(offset, endOffset);
                 var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 return response;
             }

@@ -241,6 +241,26 @@ public class AgentToolHostTests
     {
         Assert.Contains(AgentToolCatalog.Build(), t => t.name == "ask_form");
         Assert.Contains(AgentToolCatalog.Build(), t => t.name == "search_actions");
+        Assert.Contains(AgentToolCatalog.Build(), t => t.name == "read_chat_attachment");
+        Assert.Contains(AgentToolCatalog.Build(), t => t.name == "create_file_download_link");
+        Assert.DoesNotContain(AgentToolCatalog.Build(), t => t.name == "match_files");
+    }
+
+    [Fact]
+    public async Task ReadChatAttachment_IsOnlyEnabledForCabinetChatTurns()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var host = CreateHost(db);
+
+        var (mcpResult, _) = await host.DispatchAsync(
+            "read_chat_attachment", """{"attachmentId":71}""", 1, 1, default);
+        var (chatResult, _) = await host.DispatchAsync(
+            "read_chat_attachment", """{"attachmentId":71}""", 1, 1, default,
+            allowChatAttachments: true,
+            chatSessionId: "chat-session");
+
+        Assert.Contains("chat_attachments_unavailable", JsonSerializer.Serialize(mcpResult), StringComparison.Ordinal);
+        Assert.Contains("chat_attachment_reader_unavailable", JsonSerializer.Serialize(chatResult), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -323,24 +343,6 @@ public class AgentToolHostTests
         var (result, _) = await host.DispatchAsync("search_catalog", """{"query":"SKU-HELLO"}""", store.Id, 1, default);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal(1, json.RootElement.GetProperty("products").GetArrayLength());
-    }
-
-    [Fact]
-    public async Task MatchFiles_MapsSkuFilename()
-    {
-        await using var db = TestDbFactory.CreateDb();
-        var data = new TestDataBuilder(db);
-        var store = data.AddStore();
-        var product = data.AddProduct(store.Id, "Hello soap", sku: "SKU-HELLO");
-        await data.SaveAsync();
-        var host = CreateHost(db);
-
-        var (result, _) = await host.DispatchAsync("match_files",
-            """{"files":[{"relativePath":"photos/SKU-HELLO.jpg","fileName":"SKU-HELLO.jpg"}]}""",
-            store.Id, 1, default);
-        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
-        var match = json.RootElement.GetProperty("matches")[0];
-        Assert.Equal(product.Id, match.GetProperty("ProductId").GetInt32());
     }
 
     [Fact]
@@ -521,6 +523,36 @@ public class AgentToolHostTests
     }
 
     [Fact]
+    public async Task RunPython_NonZeroExitRemainsAFailedResult()
+    {
+        await SandboxEnv.WaitAsync();
+        var previous = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
+        Environment.SetEnvironmentVariable("SANDBOX_URL", "http://sandbox.test");
+        Environment.SetEnvironmentVariable("AI_ENABLED", "true");
+        var handler = new CaptureHandler("""{"exitCode":124,"stdout":"partial","stderr":"timeout","error":"timeout"}""");
+        try
+        {
+            await using var db = TestDbFactory.CreateDb();
+            var host = CreateHost(db, new CapturingFactory(handler));
+            var (result, summary) = await host.DispatchAsync(
+                "run_python", """{"code":"print('never finishes')"}""", 1, 1, default);
+
+            Assert.True(AgentToolResult.IsFailure(result, summary));
+            Assert.Contains("failed", summary, StringComparison.OrdinalIgnoreCase);
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+            Assert.Equal(124, json.RootElement.GetProperty("exitCode").GetInt32());
+            Assert.Equal("timeout", json.RootElement.GetProperty("error").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SANDBOX_URL", previous);
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
+            SandboxEnv.Release();
+        }
+    }
+
+    [Fact]
     public async Task GetDoc_ReturnsArticleBody()
     {
         await using var db = TestDbFactory.CreateDb();
@@ -669,7 +701,8 @@ public class AgentToolHostTests
         ICabinetRequestInvoker? invoker = null,
         IPermissionService? permissions = null,
         IMcpToolGateway? mcp = null,
-        IPublicDocsClient? publicDocs = null)
+        IPublicDocsClient? publicDocs = null,
+        ChatAttachmentReadService? chatAttachments = null)
     {
         storage ??= new FakeStorage();
         var catalog = new CatalogSearchService(db);
@@ -690,7 +723,8 @@ public class AgentToolHostTests
             db,
             NullLogger<AgentToolHost>.Instance,
             mcp,
-            publicDocs);
+            publicDocs,
+            chatAttachments: chatAttachments);
     }
 
     private sealed class FakeMcpGateway : IMcpToolGateway
@@ -763,7 +797,7 @@ public class AgentToolHostTests
         public void InvalidateUserAccess(int userId) { }
     }
 
-    private sealed class CaptureHandler : HttpMessageHandler
+    private sealed class CaptureHandler(string responseJson = """{"exitCode":0,"stdout":"ping\n","stderr":""}""") : HttpMessageHandler
     {
         public HttpRequestMessage? Last { get; private set; }
         public long? ContentLength { get; private set; }
@@ -775,7 +809,7 @@ public class AgentToolHostTests
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    """{"exitCode":0,"stdout":"ping\n","stderr":""}""",
+                    responseJson,
                     Encoding.UTF8,
                     "application/json"),
             });

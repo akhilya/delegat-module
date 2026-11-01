@@ -190,8 +190,21 @@ public sealed class PythonSandboxClient
                     return (new { error = payload.Error ?? resp.ReasonPhrase, stdout = payload.Stdout, stderr = payload.Stderr },
                         "sandbox HTTP " + (int)resp.StatusCode);
 
-                return (new { stdout = payload.Stdout, stderr = payload.Stderr, exitCode = payload.ExitCode },
-                    $"exit {payload.ExitCode}");
+                var failed = payload.ExitCode != 0 || !string.IsNullOrWhiteSpace(payload.Error);
+                var error = failed
+                    ? payload.Error ?? $"python_exit_{payload.ExitCode}"
+                    : null;
+                var result = new
+                {
+                    stdout = payload.Stdout,
+                    stderr = payload.Stderr,
+                    exitCode = payload.ExitCode,
+                    error,
+                };
+                var summary = failed
+                    ? $"Python run failed (exit {payload.ExitCode})"
+                    : "Python run completed (exit 0)";
+                return (result, summary);
             }
             catch (HttpRequestException ex) when (i < urls.Count - 1)
             {

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
+using Delegat.Models;
 
 namespace Delegat.Services.Ai.Agent;
 
@@ -51,6 +53,21 @@ public sealed class AgentSessionResolver
 
         var user = await _currentUser.GetUserAsync(ct)
             ?? throw new UnauthorizedAccessException("unauthorized");
+        return await ResolveForUserAsync(user, userId, storeId, ct);
+    }
+
+    public async Task<AgentSession> ResolveForUserAsync(int userId, int storeId, CancellationToken ct)
+    {
+        var user = await _db.Users
+            .Include(candidate => candidate.memberships)
+            .FirstOrDefaultAsync(candidate => candidate.Id == userId && candidate.isActive, ct);
+        return await ResolveForUserAsync(user, userId, storeId, ct);
+    }
+
+    private async Task<AgentSession> ResolveForUserAsync(User? user, int userId, int storeId, CancellationToken ct)
+    {
+        if (user == null || user.Id != userId || !user.isActive)
+            throw new UnauthorizedAccessException("unauthorized");
 
         var member = user.isAdmin || (user.memberships?.Any(s => s.Id == storeId) ?? false);
         if (!member)

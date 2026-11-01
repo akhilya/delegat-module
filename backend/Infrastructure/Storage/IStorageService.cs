@@ -90,6 +90,61 @@ public interface IStorageService
     Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default);
 
     /// <summary>
+    /// Stream an exact byte range without buffering the full object. Implementations should
+    /// override this when their storage provider supports native ranged reads.
+    /// </summary>
+    async Task StreamRangeToAsync(
+        string path,
+        long offset,
+        long length,
+        Stream outputStream,
+        CancellationToken ct = default)
+    {
+        if (offset < 0 || length < 0)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        if (length == 0)
+            return;
+
+        await using var input = await GetStreamAsync(path, ct)
+            ?? throw new FileNotFoundException("Stored file was not found", path);
+        if (input.CanSeek)
+        {
+            if (offset > input.Length)
+                throw new EndOfStreamException("Requested byte range starts past the end of the file");
+            input.Seek(offset, SeekOrigin.Begin);
+        }
+        else
+        {
+            await SkipAsync(input, offset, ct);
+        }
+
+        var buffer = new byte[81920];
+        var remaining = length;
+        while (remaining > 0)
+        {
+            var read = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), ct);
+            if (read == 0)
+                throw new EndOfStreamException("Stored file ended before the requested byte range was complete");
+            await outputStream.WriteAsync(buffer.AsMemory(0, read), ct);
+            remaining -= read;
+        }
+
+        static async Task SkipAsync(Stream stream, long bytes, CancellationToken cancellationToken)
+        {
+            var skipBuffer = new byte[81920];
+            while (bytes > 0)
+            {
+                var read = await stream.ReadAsync(
+                    skipBuffer.AsMemory(0, (int)Math.Min(skipBuffer.Length, bytes)),
+                    cancellationToken);
+                if (read == 0)
+                    throw new EndOfStreamException("Requested byte range starts past the end of the file");
+                bytes -= read;
+            }
+        }
+    }
+
+    /// <summary>
     /// Generate a presigned (temporary) URL for a file (uses internal endpoint)
     /// </summary>
     Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600);

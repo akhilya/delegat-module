@@ -73,12 +73,4 @@ public sealed class CatalogSearchService
         return (new { products = items, files, query = q }, summary);
     }
 
-    public async Task<IReadOnlyList<ProductFileMatchProduct>> ListMatchProductsAsync(
-        int storeId, CancellationToken ct)
-    {
-        return await _db.products.AsNoTracking()
-            .Where(p => p.storeId == storeId && p.deletedAt == null)
-            .Select(p => new ProductFileMatchProduct(p.Id, p.sku, p.barcode, p.name))
-            .ToListAsync(ct);
-    }
 }
