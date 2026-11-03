@@ -45,7 +45,6 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AgentSessionResolver>();
         services.AddHostedService<KnowledgeIndexHostedService>();
         services.AddHostedService<ChatAttachmentCleanupHostedService>();
-        services.AddScoped<GraphMutationService>();
         services.AddScoped<MappingIntelligenceService>();
         services.AddScoped<AiOperationService>();
         services.AddScoped<GenerativeMappingService>();

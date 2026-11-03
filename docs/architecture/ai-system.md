@@ -89,7 +89,7 @@ A cabinet turn is hosted by `AiLiveTurnHub` (process memory, one running turn pe
 
 ## Mapping and errors
 
-`GraphMutationService` remains a **domain** service. Mapping-suggest and explain-error are prompt skills on the same model, not a second tool catalog. Keep `POST /api/ai/mapping-suggest/{id}` and `POST /api/ai/explain-error`.
+`GraphMutationService` remains a **domain** service. It is registered with the core marketplace mapping services regardless of `AI_ENABLED`; ordinary category reads and graph edits must not depend on assistant registration. Only the optional `GenerativeMappingService` requires AI. Mapping-suggest and explain-error are prompt skills on the same model, not a second tool catalog. Keep `POST /api/ai/mapping-suggest/{id}` and `POST /api/ai/explain-error`.
 
 ## Undo
 

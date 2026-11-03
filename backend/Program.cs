@@ -319,15 +319,10 @@ var aiEnabled = FeatureFlags.IsAiEnabled();
 if (aiEnabled)
     builder.Services.AddAiAssistant();
 
-// Sync services (MappingService resolves GenerativeMappingService optionally)
-builder.Services.AddScoped<MappingService>(sp =>
-{
-    var generative = aiEnabled ? sp.GetService<GenerativeMappingService>() : null;
-    return new MappingService(
-        sp.GetRequiredService<DataContext>(),
-        sp,
-        generative);
-});
+// Core mapping services remain available when the AI assistant is disabled.
+builder.Services.AddMarketplaceMappings(aiEnabled);
+
+// Sync services
 builder.Services.AddScoped<CategoryImportService>();
 builder.Services.AddScoped<CategoryImportQueueService>();
 builder.Services.AddScoped<ProductSyncService>();
@@ -354,7 +349,6 @@ builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
 builder.Services.AddScoped<Delegat.Services.ScheduledTasks.IScheduledTaskAction,
     Delegat.Services.ScheduledTasks.ComparePricesScheduledTaskAction>();
 builder.Services.AddScoped<MarketplaceCommerceService>();
-builder.Services.AddScoped<ProductMappingSelectionService>();
 builder.Services.AddScoped<MarketplaceOrderSnapshotService>();
 builder.Services.AddScoped<MarketplaceOrderSyncService>();
 builder.Services.AddSingleton(TimeProvider.System);

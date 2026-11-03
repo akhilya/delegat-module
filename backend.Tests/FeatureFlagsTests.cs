@@ -207,11 +207,13 @@ public class FeatureFlagsTests
         application.Controllers.Add(MakeController(typeof(AgentController)));
         application.Controllers.Add(MakeController(typeof(AgentMcpController)));
         application.Controllers.Add(MakeController(typeof(ProductController)));
+        application.Controllers.Add(MakeController(typeof(CategoryMappingController)));
 
         new AiControllersConvention(aiEnabled: false).Apply(application);
 
-        Assert.Single(application.Controllers);
-        Assert.Equal(nameof(ProductController), application.Controllers[0].ControllerType.Name);
+        Assert.Equal(2, application.Controllers.Count);
+        Assert.Contains(application.Controllers, c => c.ControllerType.AsType() == typeof(ProductController));
+        Assert.Contains(application.Controllers, c => c.ControllerType.AsType() == typeof(CategoryMappingController));
     }
 
     [Fact]
