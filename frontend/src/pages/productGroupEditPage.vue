@@ -851,7 +851,7 @@ export default {
           </DialogDescription>
         </DialogHeader>
 
-        <div class="space-y-3 px-6 py-5">
+        <div class="shrink-0 space-y-3 px-6 py-5">
           <div class="flex gap-2">
             <NavSearchField
               v-model="productSearchQuery"
@@ -871,7 +871,7 @@ export default {
           </div>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-hidden px-6 pb-4">
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4">
           <div v-if="isSearchingProducts" class="flex h-full items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <Spinner size="xl" />
             {{ $t("pages.productGroupEditPage.addProductsDialog.searching") }}
@@ -889,7 +889,7 @@ export default {
             </template>
           </EmptyState>
 
-          <InsetGroup v-else scrollable class="h-full">
+          <InsetGroup v-else scrollable>
             <InsetGroupItem as="div" @click="toggleSelectAllVisible(!allVisibleProductsSelected)">
               <template #leading>
                 <span @click.stop>
