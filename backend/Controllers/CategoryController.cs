@@ -55,11 +55,15 @@ public class CategoryController : ControllerBase
         if (selectedStoreId == null)
             throw ApiException.BadRequest(code: "store_not_selected");
 
-        var categoryRepo = _unitOfWork.Repository<Category>();
-
-        var categories = await categoryRepo.FindAllAsync(
-            c => c.storeId == selectedStoreId.Value,
-            query => query.Include(c => c.attributes));
+        var categories = await _context.categories.AsNoTracking()
+            .Where(c => c.storeId == selectedStoreId.Value)
+            .OrderBy(c => c.name)
+            .Select(c => new Category.CategoryDTO
+            {
+                id = c.Id, name = c.name, description = c.description,
+                hasSizes = c.hasSizes, createdAt = c.createdAt,
+                attributesCount = c.attributes.Count,
+            }).ToListAsync();
 
         // Count products per category with a single GROUP BY query instead of loading all products
         var productCounts = await _context.products
@@ -68,13 +72,9 @@ public class CategoryController : ControllerBase
             .Select(g => new { CategoryId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.CategoryId!.Value, g => g.Count);
 
-        var result = categories
-            .OrderBy(c => c.name)
-            .Select(c =>
+        var result = categories.Select(dto =>
             {
-                var dto = ((IMapToDTO<Category.CategoryDTO>)c).MapToDTO(_serviceProvider);
-                dto.productsCount = productCounts.GetValueOrDefault(c.Id, 0);
-                dto.attributesCount = c.attributes?.Count ?? 0;
+                dto.productsCount = productCounts.GetValueOrDefault(dto.id, 0);
                 return dto;
             })
             .ToList();
@@ -110,6 +110,27 @@ public class CategoryController : ControllerBase
         dto.productsCount = productsCount;
 
         return Ok(dto);
+    }
+
+    /// <summary>Retrieves category-editor metadata without loading any attribute dictionaries.</summary>
+    [HttpGet("/categories/{categoryId}/summary")]
+    public async Task<IActionResult> GetCategorySummary(int categoryId)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+
+        var category = await _context.categories.AsNoTracking()
+            .Where(c => c.Id == categoryId && c.storeId == storeId.Value)
+            .Select(c => new Category.EditorSummaryDTO
+            {
+                id = c.Id, name = c.name, description = c.description, hasSizes = c.hasSizes,
+            }).SingleOrDefaultAsync();
+        if (category == null)
+            throw ApiException.NotFound(code: "category_not_found");
+
+        category.attributes = await CategoryAttributeSummaries(categoryId).ToListAsync();
+        return Ok(category);
     }
 
     /// <summary>
@@ -231,6 +252,47 @@ public class CategoryController : ControllerBase
         return Ok(new { next = "/categories" });
     }
 
+    /// <summary>Deletes selected empty categories atomically. Never deletes or moves active products.</summary>
+    [HttpPost("/categories/bulk-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkDeleteCategories([FromBody] Category.BulkDeleteForm input)
+    {
+        if (input.categoryIds == null || input.categoryIds.Length == 0 ||
+            input.categoryIds.Length > 1000 || input.categoryIds.Any(id => id <= 0))
+            throw ApiException.BadRequest(code: "categories_selection_invalid");
+        var ids = input.categoryIds.Distinct().ToArray();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var categories = await _context.categories
+            .Where(c => c.storeId == storeId.Value && ids.Contains(c.Id)).ToListAsync();
+        if (categories.Count != ids.Length)
+            throw ApiException.NotFound(code: "category_not_found");
+        var activeCount = await _context.products.CountAsync(p => p.storeId == storeId.Value &&
+            p.categoryId != null && ids.Contains(p.categoryId.Value));
+        if (activeCount > 0)
+            throw new ApiException(data: new { productCount = activeCount }, code: "category_has_products");
+
+        // Trashed products stay in the trash; detach their optional category FK in the same save.
+        var trashed = await _context.products.IgnoreQueryFilters()
+            .Where(p => p.storeId == storeId.Value && p.deletedAt != null &&
+                p.categoryId != null && ids.Contains(p.categoryId.Value)).ToListAsync();
+        foreach (var product in trashed) product.categoryId = null;
+
+        // Select keys only: category dictionaries may be very large, even for empty categories.
+        var values = await _context.productAttributeValues.AsNoTracking()
+            .Where(v => ids.Contains(v.attribute.categoryId))
+            .Select(v => new ProductAttributeValue { Id = v.Id }).ToListAsync();
+        var attributes = await _context.categoryAttributes.AsNoTracking()
+            .Where(a => ids.Contains(a.categoryId))
+            .Select(a => new CategoryAttribute { Id = a.Id }).ToListAsync();
+        _context.productAttributeValues.RemoveRange(values);
+        _context.categoryAttributes.RemoveRange(attributes);
+        _context.categories.RemoveRange(categories);
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { deletedCount = categories.Count });
+    }
+
     // Category Attributes endpoints
 
     /// <summary>
@@ -262,6 +324,30 @@ public class CategoryController : ControllerBase
 
         return Ok(result);
     }
+
+    /// <summary>Retrieves lightweight attribute rows, excluding dictionary and validation payloads.</summary>
+    [HttpGet("/categories/{categoryId}/attributes/summary")]
+    public async Task<IActionResult> GetCategoryAttributeSummaries(int categoryId)
+    {
+        await RequireAttributeCategoryAsync(categoryId);
+        return Ok(await CategoryAttributeSummaries(categoryId).ToListAsync());
+    }
+
+    /// <summary>Loads one complete definition only when its editor needs it.</summary>
+    [HttpGet("/categories/{categoryId}/attributes/{attributeId:int}")]
+    public async Task<IActionResult> GetCategoryAttribute(int categoryId, int attributeId)
+    {
+        await RequireAttributeCategoryAsync(categoryId);
+        var attribute = await _unitOfWork.Repository<CategoryAttribute>()
+            .FindAsync(a => a.Id == attributeId && a.categoryId == categoryId);
+        if (attribute == null)
+            throw ApiException.NotFound(code: "attribute_not_found");
+        return Ok(((IMapToDTO<CategoryAttribute.AttributeDTO>)attribute).MapToDTO(_serviceProvider));
+    }
+
+    private IQueryable<AttributeDefinitionSummary> CategoryAttributeSummaries(int categoryId) =>
+        _context.categoryAttributes.AsNoTracking().Where(a => a.categoryId == categoryId)
+            .OrderBy(a => a.sortOrder).ThenBy(a => a.Id).Select(AttributeDefinitionSummary.FromCategory);
 
     /// <summary>
     /// Creates a new attribute for a category.
@@ -462,6 +548,60 @@ public class CategoryController : ControllerBase
         await _unitOfWork.SaveChangesAsync();
 
         return Ok(new { success = true });
+    }
+
+    /// <summary>Updates selected definitions atomically without changing other settings or values.</summary>
+    [HttpPatch("/categories/{categoryId}/attributes/bulk")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkUpdateAttributes(int categoryId, [FromBody] AttributeBulkUpdateForm input)
+    {
+        var ids = input.GetValidatedIds();
+        input.ValidateChanges();
+        await RequireAttributeCategoryAsync(categoryId);
+        var repo = _unitOfWork.Repository<CategoryAttribute>();
+        var attributes = await repo.FindAllAsync(
+            a => a.categoryId == categoryId && ids.Contains(a.Id), query => query.AsTracking());
+        if (attributes.Count != ids.Length)
+            throw ApiException.NotFound(code: "attribute_not_found");
+
+        foreach (var attribute in attributes)
+        {
+            input.ApplyTo(attribute);
+        }
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { updatedCount = attributes.Count });
+    }
+
+    /// <summary>Deletes selected definitions and their product values in one save.</summary>
+    [HttpPost("/categories/{categoryId}/attributes/bulk-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkDeleteAttributes(int categoryId, [FromBody] AttributeBulkSelectionForm input)
+    {
+        var ids = input.GetValidatedIds();
+        await RequireAttributeCategoryAsync(categoryId);
+        var repo = _unitOfWork.Repository<CategoryAttribute>();
+        var attributes = await repo.FindAllAsync(
+            a => a.categoryId == categoryId && ids.Contains(a.Id),
+            query => query.Include(a => a.values));
+        if (attributes.Count != ids.Length)
+            throw ApiException.NotFound(code: "attribute_not_found");
+
+        var values = attributes.SelectMany(a => a.values).ToList();
+        _unitOfWork.Repository<ProductAttributeValue>().DeleteRange(values);
+        repo.DeleteRange(attributes);
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { deletedCount = attributes.Count, deletedValuesCount = values.Count });
+    }
+
+    private async Task RequireAttributeCategoryAsync(int categoryId)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var category = await _unitOfWork.Repository<Category>()
+            .FindAsync(c => c.Id == categoryId && c.storeId == storeId.Value);
+        if (category == null)
+            throw ApiException.NotFound(code: "category_not_found");
     }
 
     private async Task SyncAttributeGroupIconAsync(int categoryId, string? group, string? groupIcon)

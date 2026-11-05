@@ -1,6 +1,7 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
+import FilterMenuGroup from "@/components/FilterMenuGroup.vue";
 import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import OrderDetailSheet from "@/components/orders/OrderDetailSheet.vue";
 import OrderAssemblyRow from "@/components/orders/OrderAssemblyRow.vue";
@@ -10,13 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import {
   Collapsible,
@@ -83,7 +77,8 @@ const DEFAULT_PAGE_SIZE = 50;
 export default {
   components: {
     AppPageChrome,
-    NavSearchField,
+    PageListToolbar,
+    FilterMenuGroup,
     AdapterIcon,
     OrderDetailSheet,
     OrderAssemblyRow,
@@ -92,11 +87,6 @@ export default {
     Button,
     Spinner,
     EmptyState,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
     InsetGroup,
     InsetGroupItem,
     Collapsible,
@@ -935,8 +925,12 @@ export default {
 
 <template>
   <AppPageChrome :has-nav-center="orderConnections.length > 0">
-    <template v-if="orderConnections.length > 0" #nav-center>
-      <Tabs :model-value="overviewTab" @update:model-value="onOverviewTab">
+    <template v-if="orderConnections.length > 0" #nav-tabs>
+      <Tabs
+        class="mr-auto"
+        :model-value="overviewTab"
+        @update:model-value="onOverviewTab"
+      >
         <TabsList>
           <TabsTrigger
             v-for="tab in ORDER_OVERVIEW_TABS"
@@ -953,36 +947,29 @@ export default {
         </TabsList>
       </Tabs>
     </template>
-    <div
-      v-if="orderConnections.length > 0"
-      class="mb-3 flex shrink-0 flex-wrap items-center gap-2"
-    >
-      <NavSearchField
+    <template v-if="orderConnections.length > 0" #nav-center>
+      <PageListToolbar
         v-model="searchQuery"
-        class="min-w-0 flex-1 sm:max-w-sm"
         :placeholder="$t('pages.ordersPage.searchPlaceholder')"
+        :active-filter-count="channel !== CHANNEL_ALL ? 1 : 0"
         @submit="applySearch"
-      />
-      <Select :model-value="channel" @update:model-value="onChannelChange">
-        <SelectTrigger class="h-9 w-full sm:w-40">
-          <SelectValue :placeholder="$t('pages.ordersPage.channelAll')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem :value="CHANNEL_ALL">
-            {{ $t("pages.ordersPage.channelAll") }}
-          </SelectItem>
-          <SelectItem value="fbs">
-            {{ $t("pages.ordersPage.channel.fbs") }}
-          </SelectItem>
-          <SelectItem value="fbo">
-            {{ $t("pages.ordersPage.channel.fbo") }}
-          </SelectItem>
-          <SelectItem value="shop">
-            {{ $t("pages.ordersPage.channel.shop") }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
+        @reset="onChannelChange(CHANNEL_ALL)"
+      >
+        <template #filters>
+          <FilterMenuGroup
+            :model-value="channel"
+            :label="$t('pages.ordersPage.columnChannel')"
+            :options="[
+              { value: CHANNEL_ALL, label: $t('pages.ordersPage.channelAll') },
+              { value: 'fbs', label: $t('pages.ordersPage.channel.fbs') },
+              { value: 'fbo', label: $t('pages.ordersPage.channel.fbo') },
+              { value: 'shop', label: $t('pages.ordersPage.channel.shop') },
+            ]"
+            @update:model-value="onChannelChange"
+          />
+        </template>
+      </PageListToolbar>
+    </template>
 
     <EmptyState
       v-if="bootstrapping || (isLoading && groups.length === 0)"

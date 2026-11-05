@@ -89,7 +89,7 @@ import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { mapPool } from "@/lib/runPool";
-import { confirm } from "@/composables/useConfirm";
+import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
@@ -773,32 +773,33 @@ export default {
 
     // Save product (manual save only)
     async function saveProduct(showSuccessToast = true) {
-      // First validate the main form
-      const formValid = await form.validate();
-      if (!formValid.valid) {
-        return false;
-      }
-
-      syncCategoryAttributesCacheFromForm();
-
+      if (isSubmitting.value) return false;
       isSubmitting.value = true;
-
-      const values = form.values;
-      const input = {
-        ...values.product,
-        ...(selectedCategoryId.value != null
-          ? { categoryId: Number(selectedCategoryId.value) }
-          : {}),
-        attributeValues: categoryAttributeCacheToValues(
-          allCategoryAttributeValues.value,
-        ),
-        storeAttributeValues: formRecordToAttributeValues(
-          values.storeAttributes,
-          "storeAttributeId",
-        ),
-      };
-
       try {
+        // First validate the main form
+        const formValid = await form.validate();
+        if (!formValid.valid) {
+          displaySonnerError(t("pages.productEditPage.toast.validationFailed"));
+          return false;
+        }
+
+        syncCategoryAttributesCacheFromForm();
+
+        const values = form.values;
+        const input = {
+          ...values.product,
+          ...(selectedCategoryId.value != null
+            ? { categoryId: Number(selectedCategoryId.value) }
+            : {}),
+          attributeValues: categoryAttributeCacheToValues(
+            allCategoryAttributeValues.value,
+          ),
+          storeAttributeValues: formRecordToAttributeValues(
+            values.storeAttributes,
+            "storeAttributeId",
+          ),
+        };
+
         let updateOk = false;
         await store.dispatch("updateProduct", {
           productId: productId.value,
@@ -1300,6 +1301,54 @@ export default {
       else if (e.key === "ArrowLeft") prevImage();
     }
 
+    async function handleSaveHotkey(event) {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        !(event.code === "KeyS" || event.key?.toLowerCase() === "s")
+      )
+        return;
+      event.preventDefault();
+      if (
+        event.repeat ||
+        isSubmitting.value ||
+        isProductLoading.value ||
+        isInitialLoad.value ||
+        !productSKU.value ||
+        !canManageCatalog.value ||
+        lightboxIndex.value != null ||
+        isConfirmOverlayActive()
+      )
+        return;
+      if (
+        document.querySelector(
+          '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"]',
+        ) ||
+        (event.target instanceof Element &&
+          event.target.closest('[data-slot="sheet-content"]'))
+      )
+        return;
+
+      // Reka number fields commit on blur; restore focus after committing the draft.
+      if (
+        event.target instanceof HTMLInputElement &&
+        event.target.getAttribute("role") === "spinbutton"
+      ) {
+        event.target.blur();
+        event.target.focus({ preventScroll: true });
+      }
+      await nextTick();
+      if (isSubmitting.value) return;
+      if (!hasUnsavedChanges.value) {
+        displaySonnerSuccess(t("pages.productEditPage.saveDisabled.noChanges"));
+        return;
+      }
+      await saveProduct(true);
+    }
+
     function onBeforeUnload(e) {
       if (hasUnsavedChanges.value) {
         e.preventDefault();
@@ -1316,6 +1365,7 @@ export default {
 
     onMounted(async () => {
       window.addEventListener("keydown", handleLightboxKeydown);
+      window.addEventListener("keydown", handleSaveHotkey);
       window.addEventListener("beforeunload", onBeforeUnload);
       try {
         const { loadMe } = await import("@/main");
@@ -1327,6 +1377,7 @@ export default {
     });
     onUnmounted(() => {
       window.removeEventListener("keydown", handleLightboxKeydown);
+      window.removeEventListener("keydown", handleSaveHotkey);
       window.removeEventListener("beforeunload", onBeforeUnload);
       store.commit("aiChat/clearPageContext");
       clearTimeout(skuCopiedTimer);
@@ -2399,6 +2450,7 @@ export default {
                         <Button
                           type="submit"
                           form="product-edit-form"
+                          aria-keyshortcuts="Control+s Meta+s"
                           :disabled="isSaveDisabled"
                         >
                           <Spinner v-if="isSubmitting" class="mr-2" />

@@ -7,8 +7,10 @@ export const AI_CANCEL_PLAN =
   "Cancelling the proposed plan - do NOT execute it. The plan was never executed. Confirm the cancellation only.";
 
 export function toolResultFailed(result, summary) {
-  if (typeof summary === "string" && /HTTP\s+[45]\d\d/i.test(summary)) return true;
+  if (typeof summary === "string" && /HTTP\s+[45]\d\d/i.test(summary))
+    return true;
   if (!result || typeof result !== "object") return false;
+  if (Number.isInteger(result.exitCode) && result.exitCode !== 0) return true;
   if (typeof result.status === "string") {
     const s = result.status.toLowerCase();
     return s === "failed" || s === "cancelled";
@@ -67,7 +69,9 @@ function readAttachments(parsed) {
       const relativePath = String(a.relativePath || a.fileName || "");
       const row = {
         relativePath,
-        fileName: String(a.fileName || relativePath.split("/").pop() || relativePath),
+        fileName: String(
+          a.fileName || relativePath.split("/").pop() || relativePath,
+        ),
         size: Number(a.size) || 0,
       };
       const id = Number(a.id) || 0;
@@ -79,7 +83,14 @@ function readAttachments(parsed) {
 /** Parse persisted toolCallsJson — tool-call array or UI context / assistant-turn envelope. */
 export function parsePersistedMessageMeta(toolCallsJson) {
   if (!toolCallsJson) {
-    return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null, requestError: null };
+    return {
+      toolCalls: [],
+      contextCard: null,
+      attachments: [],
+      timeline: [],
+      plan: null,
+      requestError: null,
+    };
   }
   try {
     const parsed = JSON.parse(toolCallsJson);
@@ -146,7 +157,13 @@ export function parsePersistedMessageMeta(toolCallsJson) {
   } catch {
     /* ignore corrupt payload */
   }
-  return { toolCalls: [], contextCard: null, attachments: [], timeline: [], plan: null };
+  return {
+    toolCalls: [],
+    contextCard: null,
+    attachments: [],
+    timeline: [],
+    plan: null,
+  };
 }
 
 export function mapStoredMessage(m) {
@@ -220,7 +237,12 @@ export function serializeToolCallsJson(m) {
   }));
   const formReplies = readFormReplies(m.formReplies);
   const hasFormReplies = Object.keys(formReplies).length > 0;
-  if (m.plan || m.requestError || hasFormReplies || m.timeline?.some((item) => item.type === "tool")) {
+  if (
+    m.plan ||
+    m.requestError ||
+    hasFormReplies ||
+    m.timeline?.some((item) => item.type === "tool")
+  ) {
     return JSON.stringify({
       _ui: "assistantTurn",
       tools,
@@ -235,7 +257,9 @@ export function serializeToolCallsJson(m) {
       planSuperseded: m.planSuperseded || undefined,
       planExecuted: m.planExecuted || undefined,
       planFailed: m.planFailed || undefined,
-      planExecStart: Number.isInteger(m.planExecStart) ? m.planExecStart : undefined,
+      planExecStart: Number.isInteger(m.planExecStart)
+        ? m.planExecStart
+        : undefined,
       requestError: m.requestError || undefined,
       ...(hasFormReplies ? { formReplies } : {}),
     });
@@ -273,7 +297,10 @@ export function applyFormReplies(messages) {
     for (let j = i - 1; j >= 0; j--) {
       if (next[j].role !== "assistant") continue;
       next[j].formReplies[formId] = {
-        answers: reply.answers && typeof reply.answers === "object" ? reply.answers : {},
+        answers:
+          reply.answers && typeof reply.answers === "object"
+            ? reply.answers
+            : {},
       };
       break;
     }
@@ -284,7 +311,9 @@ export function applyFormReplies(messages) {
 function mergePlanExecution(planMsg, execMsg) {
   const proposal = Array.isArray(planMsg.timeline) ? planMsg.timeline : [];
   const execution = Array.isArray(execMsg.timeline) ? execMsg.timeline : [];
-  const content = [planMsg.content, execMsg.content].filter(Boolean).join("\n\n");
+  const content = [planMsg.content, execMsg.content]
+    .filter(Boolean)
+    .join("\n\n");
   return {
     ...planMsg,
     content,

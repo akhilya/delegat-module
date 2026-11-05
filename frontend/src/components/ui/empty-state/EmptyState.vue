@@ -65,7 +65,7 @@ const frameClass = computed(() =>
       <EmptyMedia
         v-if="slots.icon"
         variant="icon"
-        :class="props.size === 'sm' ? 'size-10 [&_svg]:size-5' : undefined"
+        :class="props.size === 'sm' ? 'size-6 [&_svg]:size-5' : undefined"
       >
         <slot name="icon" />
       </EmptyMedia>

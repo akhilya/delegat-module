@@ -63,6 +63,9 @@ describe("locale message catalogs", () => {
 
   it("localizes migrated API error codes in both supported languages", () => {
     const codes = [
+      "categories_selection_invalid",
+      "attributes_selection_invalid",
+      "attributes_changes_required",
       "category_name_taken",
       "category_has_products",
       "attribute_name_taken",

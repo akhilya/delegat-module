@@ -34,4 +34,24 @@ public class AgentAccessTests
         Assert.True(AgentAccess.CanMutate(perms, Permissions.CatalogManage));
         Assert.False(AgentAccess.CanMutate(perms, Permissions.OrdersManage));
     }
+
+    [Theory]
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, true, true, true)]
+    [InlineData(true, true, true, true)]
+    public void Viewer_AgentAndPythonAccessDependOnEffectiveGrants(
+        bool workspaceView, bool aiUse, bool canUseAgent, bool canRunPython)
+    {
+        var permissions = AppRoles.RolePermissions[AppRoles.Viewer]
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Permissions.AiUse, permissions);
+        Assert.DoesNotContain(Permissions.WorkspaceView, permissions);
+        if (workspaceView) permissions.Add(Permissions.WorkspaceView);
+        if (aiUse) permissions.Add(Permissions.AiUse);
+
+        Assert.Equal(canUseAgent, AgentAccess.CanUseAgent(permissions));
+        Assert.Equal(canRunPython, AgentAccess.CanRunPython(permissions));
+        Assert.Equal(workspaceView && !aiUse, AgentAccess.IsReadOnly(permissions));
+    }
 }

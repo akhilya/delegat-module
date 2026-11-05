@@ -1,27 +1,34 @@
 <script>
-import { Spinner } from "@/components/ui/spinner";
-// NavigationBar - Page-level toolbar. Below lg, search/tabs sit on a second
-// row so the title and actions stay usable on a phone.
+// Page-level toolbar: available panel width decides whether search stacks.
+import { ref } from "vue";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import FabGroup from "@/components/FabGroup.vue";
 import { CircleHelp } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { pageHelpSlug } from "@/lib/docsHelp";
+import { useResizeObserver } from "@vueuse/core";
 
 import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
 import { normalizeAppVersion, resolveDisplayVersion } from "@/lib/appVersion";
 
-
 export default {
+  emits: ["resize"],
+  setup(props, { emit }) {
+    const navbarElement = ref(null);
+    useResizeObserver(navbarElement, (entries) => {
+      const entry = entries[0];
+      if (entry) emit("resize", entry.target.getBoundingClientRect().height);
+    });
+    return { navbarElement };
+  },
   props: {
     /** When true, render the center slot (search/tabs). Do not infer from $slots alone. */
     hasCenter: { type: Boolean, default: false },
   },
   components: {
-    Spinner,
     SidebarTrigger,
     UserAccountMenu,
     FabGroup,
@@ -31,7 +38,6 @@ export default {
   data() {
     return {
       me: undefined,
-      isLoading: false,
       platformVersion: null,
       appVersion: import.meta.env.VITE_APP_VERSION || null,
     };
@@ -41,10 +47,7 @@ export default {
       return resolveDisplayVersion(this.platformVersion, this.appVersion);
     },
     pageHelpSlug() {
-      return pageHelpSlug(
-        this.$route.path,
-        this.$store.state.docs?.catalog,
-      );
+      return pageHelpSlug(this.$route.path, this.$store.state.docs?.catalog);
     },
   },
   methods: {
@@ -57,7 +60,6 @@ export default {
     },
   },
   async mounted() {
-    this.isLoading = true;
     await this.getMe({
       onSuccess: (response) => {
         this.me = response.data.value;
@@ -66,8 +68,6 @@ export default {
         displaySonnerError(error);
       },
     });
-
-    this.isLoading = false;
 
     http
       .get("/health")
@@ -81,86 +81,145 @@ export default {
 
 <template>
   <div
+    ref="navbarElement"
     data-slot="app-navbar"
-    class="min-h-[var(--app-navbar-row)] min-w-0 w-full shrink-0 overflow-hidden bg-background"
+    class="app-navbar-shell min-h-[var(--app-navbar-row)] min-w-0 w-full shrink-0 bg-background"
   >
-    <template v-if="!isLoading">
-        <div
-          :class="
-            hasCenter
-              ? 'grid w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[var(--app-navbar-row)_auto] lg:h-[var(--app-navbar-row)] lg:grid-cols-[minmax(0,1fr)_minmax(0,min(32rem,42vw))_minmax(0,1fr)] lg:grid-rows-[var(--app-navbar-row)] lg:items-center lg:gap-x-3'
-              : 'flex h-[var(--app-navbar-row)] items-center gap-2'
-          "
-        >
-          <div
-            :class="
-              hasCenter
-                ? 'col-start-1 row-start-1 flex h-[var(--app-navbar-row)] min-w-0 items-center gap-1.5'
-                : 'flex min-w-0 flex-1 items-center gap-1.5'
-            "
-          >
-            <div class="md:hidden shrink-0">
-              <SidebarTrigger />
-            </div>
-            <div v-if="$slots.left" class="min-w-0 flex-1">
-              <slot name="left" />
-            </div>
-          </div>
-
-          <div
-            v-if="hasCenter"
-            class="col-span-2 row-start-2 flex min-w-0 w-full items-center pb-2.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:w-full lg:min-w-0 lg:max-w-full lg:justify-self-stretch lg:pb-0"
-          >
-            <div
-              class="flex min-w-0 w-full items-center justify-start lg:justify-center lg:[&_[data-slot=nav-search]]:w-full lg:[&_[data-slot=nav-search]]:min-w-0 lg:[&_[data-slot=nav-search]]:max-w-64"
-            >
-              <slot name="center" />
-            </div>
-          </div>
-
-          <div
-            :class="
-              hasCenter
-                ? 'col-start-2 row-start-1 flex h-[var(--app-navbar-row)] shrink-0 items-center justify-end gap-0.5 lg:col-start-3 lg:justify-self-end'
-                : 'ml-auto flex shrink-0 items-center gap-0.5'
-            "
-          >
-            <div
-              v-if="$slots.right"
-              class="mr-1 hidden shrink-0 items-center gap-2 md:flex"
-            >
-              <slot name="right" />
-            </div>
-            <Button
-              v-if="pageHelpSlug"
-              variant="ghost"
-              class="size-9 shrink-0 gap-1.5 p-0 xl:h-9 xl:w-auto xl:px-3"
-              :title="$t('components.docsSheet.needHelp')"
-              :aria-label="$t('components.docsSheet.needHelp')"
-              @click="openPageHelp"
-            >
-              <CircleHelp class="size-4" />
-              <span class="hidden xl:inline">{{
-                $t("components.docsSheet.needHelp")
-              }}</span>
-            </Button>
-            <FabGroup
-              placement="navbar"
-              :ai-enabled="me?.aiEnabled === true"
-            />
-            <UserAccountMenu
-              variant="navbar"
-              :user-name="me?.userName"
-              :version="displayVersion"
-            />
-          </div>
+    <div class="app-navbar-grid" :class="{ 'has-center': hasCenter }">
+      <div
+        data-slot="navbar-title"
+        class="app-navbar-title flex min-w-0 items-center gap-1.5"
+      >
+        <div class="md:hidden shrink-0">
+          <SidebarTrigger />
         </div>
-    </template>
-
-    <template v-else>
-      <div class="flex h-full items-center justify-center">
-        <Spinner />
+        <div v-if="$slots.left" class="min-w-0 flex-1">
+          <slot name="left" />
+        </div>
       </div>
-    </template>
+
+      <div
+        v-show="hasCenter"
+        data-slot="navbar-tools"
+        class="app-navbar-tools min-w-0 w-full"
+      >
+        <slot name="center" />
+      </div>
+
+      <div
+        data-slot="navbar-actions"
+        class="app-navbar-actions flex shrink-0 items-center justify-end gap-0.5"
+      >
+        <div
+          v-if="$slots.right"
+          class="mr-1 hidden shrink-0 items-center gap-2 md:flex"
+        >
+          <slot name="right" />
+        </div>
+        <Button
+          v-if="pageHelpSlug"
+          variant="ghost"
+          class="navbar-help size-9 shrink-0 gap-1.5 p-0"
+          :title="$t('components.docsSheet.needHelp')"
+          :aria-label="$t('components.docsSheet.needHelp')"
+          @click="openPageHelp"
+        >
+          <CircleHelp class="size-4" />
+          <span class="navbar-help-label hidden">{{
+            $t("components.docsSheet.needHelp")
+          }}</span>
+        </Button>
+        <FabGroup placement="navbar" :ai-enabled="me?.aiEnabled === true" />
+        <UserAccountMenu
+          variant="navbar"
+          :user-name="me?.userName"
+          :version="displayVersion"
+        />
+      </div>
+    </div>
+    <div
+      v-if="$slots.tabs"
+      data-slot="navbar-tabs"
+      class="min-w-0 overflow-x-auto pb-2.5"
+    >
+      <div class="flex w-max min-w-full items-center justify-center gap-2">
+        <slot name="tabs" />
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.app-navbar-shell {
+  container-type: inline-size;
+}
+
+.app-navbar-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+.app-navbar-title {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: var(--app-navbar-row);
+}
+
+.app-navbar-actions {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: var(--app-navbar-row);
+}
+
+.app-navbar-tools {
+  display: flex;
+  justify-content: safe center;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding-bottom: 0.625rem;
+}
+
+.app-navbar-tools :deep([data-slot="tabs"]) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.app-navbar-tools :deep([data-slot="page-list-toolbar"]) {
+  margin-inline: auto;
+}
+
+/* Available panel width, not viewport width: a resized sidebar also matters. */
+@container (min-width: 64rem) {
+  .app-navbar-grid.has-center {
+    grid-template-columns: minmax(0, 1fr) minmax(0, min(40rem, 50%)) minmax(
+        0,
+        1fr
+      );
+  }
+
+  .has-center .app-navbar-tools {
+    grid-column: 2;
+    grid-row: 1;
+    padding-bottom: 0;
+  }
+
+  .has-center .app-navbar-actions {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+
+@container (min-width: 88rem) {
+  .navbar-help {
+    width: auto;
+    padding-inline: 0.75rem;
+  }
+
+  .navbar-help-label {
+    display: inline;
+  }
+}
+</style>

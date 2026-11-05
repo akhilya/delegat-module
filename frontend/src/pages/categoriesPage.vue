@@ -6,17 +6,10 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import {
-  Plus,
-  FolderOpen,
-  Trash2,
-} from "lucide-vue-next";
+import { Plus, FolderOpen, Trash2 } from "lucide-vue-next";
 import { PAGE_PRODUCTS } from "@/router";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
@@ -30,6 +23,21 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import ListSelectAllRow from "@/components/lists/ListSelectAllRow.vue";
+import ListBulkActions from "@/components/lists/ListBulkActions.vue";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { http } from "@/main";
+import { canAct, PERMS } from "@/lib/permissions";
+import { getCachedMe } from "@/lib/meCache";
 
 export default {
   components: {
@@ -43,7 +51,6 @@ export default {
     InsetGroup,
     InsetGroupItem,
     Plus,
-    FolderOpen,
     Trash2,
     Dialog,
     DialogContent,
@@ -53,11 +60,22 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    ConfirmDialog
+    ConfirmDialog,
+    ListSelectAllRow,
+    ListBulkActions,
+    Checkbox,
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogCancel,
   },
   data() {
     return {
       categories: [],
+      emptyListIcon: FolderOpen,
       isLoading: false,
       isCreating: false,
       isDeleting: false,
@@ -65,9 +83,24 @@ export default {
       newCategoryDescription: "",
       showCreateDialog: false,
       categoryToDelete: null,
+      selectedIds: [],
+      showBulkDeleteDialog: false,
       FIELD_LIMITS,
       PAGE_PRODUCTS,
     };
+  },
+  computed: {
+    canManageCatalog() {
+      return canAct(getCachedMe(), PERMS.CatalogManage);
+    },
+    selectionState() {
+      return this.categories.length > 0 &&
+        this.selectedIds.length === this.categories.length
+        ? true
+        : this.selectedIds.length
+          ? "indeterminate"
+          : false;
+    },
   },
   methods: {
     ...mapActions(["getAllCategories", "createCategory", "deleteCategory"]),
@@ -132,12 +165,16 @@ export default {
     },
 
     async handleDeleteCategory(categoryId) {
+      if (this.isDeleting) return;
       this.isDeleting = true;
       await this.deleteCategory({
         id: categoryId,
         onSuccess: () => {
           displaySonnerSuccess(this.$t("pages.categoriesPage.deleted"));
-          this.fetchCategories();
+          this.categories = this.categories.filter(
+            (category) => category.id !== categoryId,
+          );
+          this.selectedIds = this.selectedIds.filter((id) => id !== categoryId);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -149,6 +186,56 @@ export default {
 
     openCategory(categoryId) {
       this.$router.push(`/categories/${categoryId}/edit`);
+    },
+
+    toggleCategory(categoryId, checked) {
+      if (this.isDeleting) return;
+      this.selectedIds =
+        checked === true
+          ? [...new Set([...this.selectedIds, categoryId])]
+          : this.selectedIds.filter((id) => id !== categoryId);
+    },
+
+    selectAllCategories(checked) {
+      if (!this.isDeleting)
+        this.selectedIds =
+          checked === true
+            ? this.categories.map((category) => category.id)
+            : [];
+    },
+
+    async handleBulkDelete() {
+      if (
+        !this.canManageCatalog ||
+        this.isDeleting ||
+        !this.selectedIds.length ||
+        this.selectedIds.length > 1000
+      )
+        return;
+      const categoryIds = [...this.selectedIds];
+      this.isDeleting = true;
+      try {
+        await http.post(
+          "/categories/bulk-delete",
+          { categoryIds },
+          { cache: false },
+        );
+        const deleted = new Set(categoryIds);
+        this.categories = this.categories.filter(
+          (category) => !deleted.has(category.id),
+        );
+        this.selectedIds = this.selectedIds.filter((id) => !deleted.has(id));
+        this.showBulkDeleteDialog = false;
+        displaySonnerSuccess(
+          this.$t("pages.categoriesPage.deletedCount", {
+            count: categoryIds.length,
+          }),
+        );
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.isDeleting = false;
+      }
     },
   },
   mounted() {
@@ -173,7 +260,9 @@ export default {
             class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
           >
             <DialogHeader variant="bar">
-              <DialogTitle>{{ $t("pages.categoriesPage.newCategoryTitle") }}</DialogTitle>
+              <DialogTitle>{{
+                $t("pages.categoriesPage.newCategoryTitle")
+              }}</DialogTitle>
               <DialogDescription>
                 {{ $t("pages.categoriesPage.newCategoryDescription") }}
               </DialogDescription>
@@ -184,7 +273,10 @@ export default {
               @submit.prevent="handleCreateCategory"
             >
               <FieldGroup class="gap-5">
-                <SettingsFormField :label="$t('common.name')" label-for="new-category-name">
+                <SettingsFormField
+                  :label="$t('common.name')"
+                  label-for="new-category-name"
+                >
                   <Input
                     id="new-category-name"
                     v-model="newCategoryName"
@@ -192,11 +284,16 @@ export default {
                     :maxlength="FIELD_LIMITS.categoryName"
                   />
                 </SettingsFormField>
-                <SettingsFormField :label="$t('common.description')" label-for="new-category-description">
+                <SettingsFormField
+                  :label="$t('common.description')"
+                  label-for="new-category-description"
+                >
                   <Input
                     id="new-category-description"
                     v-model="newCategoryDescription"
-                    :placeholder="$t('pages.categoriesPage.descriptionPlaceholder')"
+                    :placeholder="
+                      $t('pages.categoriesPage.descriptionPlaceholder')
+                    "
                     :maxlength="FIELD_LIMITS.categoryDescription"
                   />
                 </SettingsFormField>
@@ -204,9 +301,15 @@ export default {
             </form>
             <DialogFooter variant="bar">
               <DialogClose as-child>
-                <Button type="button" variant="outline">{{ $t("common.cancel") }}</Button>
+                <Button type="button" variant="outline">{{
+                  $t("common.cancel")
+                }}</Button>
               </DialogClose>
-              <Button type="submit" form="new-category-form" :disabled="isCreating">
+              <Button
+                type="submit"
+                form="new-category-form"
+                :disabled="isCreating"
+              >
                 <Spinner v-if="isCreating" class="mr-2" />
                 {{ $t("common.create") }}
               </Button>
@@ -218,7 +321,7 @@ export default {
       <PageSection
         :loading="isLoading"
         :empty="categories.length === 0"
-        :empty-icon="FolderOpen"
+        :empty-icon="emptyListIcon"
         :empty-title="$t('pages.categoriesPage.emptyTitle')"
         :empty-description="$t('pages.categoriesPage.emptyDescription')"
       >
@@ -230,14 +333,31 @@ export default {
         </template>
 
         <InsetGroup>
+          <ListSelectAllRow
+            v-if="canManageCatalog"
+            :model-value="selectionState"
+            :disabled="isDeleting"
+            @update:model-value="selectAllCategories"
+          />
           <InsetGroupItem
             v-for="category in categories"
             :key="category.id"
             show-chevron
             @click="openCategory(category.id)"
           >
+            <template v-if="canManageCatalog" #leading>
+              <span @click.stop
+                ><Checkbox
+                  :model-value="selectedIds.includes(category.id)"
+                  :disabled="isDeleting"
+                  :aria-label="category.name"
+                  @update:model-value="toggleCategory(category.id, $event)"
+              /></span>
+            </template>
             <p class="truncate">{{ category.name }}</p>
-            <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+            <p
+              class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+            >
               <template v-if="category.description">
                 {{ category.description }}
                 ·
@@ -249,10 +369,14 @@ export default {
                 })
               }}
             </p>
-            <template #trailing>
+            <template v-if="canManageCatalog" #trailing>
               <ConfirmDialog
                 :title="$t('pages.categoriesPage.deleteTitle')"
-                :description="$t('pages.categoriesPage.deleteDescription', { name: category.name })"
+                :description="
+                  $t('pages.categoriesPage.deleteDescription', {
+                    name: category.name,
+                  })
+                "
                 :confirm-label="$t('common.delete')"
                 :loading="isDeleting"
                 @confirm="handleDeleteCategory(category.id)"
@@ -260,6 +384,8 @@ export default {
                 <template #trigger>
                   <Button
                     variant="ghost"
+                    reveal-on-row-hover
+                    :disabled="isDeleting"
                     size="icon"
                     class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     :aria-label="$t('common.delete')"
@@ -272,7 +398,57 @@ export default {
             </template>
           </InsetGroupItem>
         </InsetGroup>
+        <ListBulkActions
+          v-if="canManageCatalog"
+          class="mt-3"
+          :count="selectedIds.length"
+          :busy="isDeleting"
+          :disabled="selectedIds.length > 1000"
+          @clear="selectedIds = []"
+          @delete="showBulkDeleteDialog = true"
+        />
+        <p
+          v-if="selectedIds.length > 1000"
+          role="alert"
+          class="mt-2 px-1 text-xs text-destructive"
+        >
+          {{ $t("components.listSelection.limit", { count: 1000 }) }}
+        </p>
       </PageSection>
+
+      <AlertDialog
+        :open="showBulkDeleteDialog"
+        @update:open="!isDeleting && (showBulkDeleteDialog = $event)"
+      >
+        <AlertDialogContent
+          @escape-key-down="isDeleting && $event.preventDefault()"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>{{
+              $t("pages.categoriesPage.bulkDeleteTitle")
+            }}</AlertDialogTitle>
+            <AlertDialogDescription>{{
+              $t("pages.categoriesPage.bulkDeleteDescription", {
+                count: selectedIds.length,
+              })
+            }}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel :disabled="isDeleting">{{
+              $t("common.cancel")
+            }}</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              size="lg"
+              :disabled="isDeleting"
+              @click="handleBulkDelete"
+              ><Spinner v-if="isDeleting" class="mr-2" />{{
+                $t("common.delete")
+              }}</Button
+            >
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   </AppPageChrome>
 </template>

@@ -6,6 +6,34 @@ import {
 } from "./planOperations.js";
 
 describe("plan background operations", () => {
+  it("never reports missing or unavailable operations as successful completion", () => {
+    for (const row of [
+      undefined,
+      { status: "missing" },
+      { status: "unknown" },
+    ]) {
+      const result = summarizePlanOperations(["a"], { a: row });
+      assert.equal(result.complete, false);
+      assert.equal(result.unknown, true);
+    }
+  });
+  it("distinguishes partial results from total failure", () => {
+    assert.equal(
+      summarizePlanOperations(["a", "b"], {
+        a: { status: "completed" },
+        b: { status: "failed" },
+      }).partial,
+      true,
+    );
+    assert.equal(
+      summarizePlanOperations(["a"], { a: { status: "failed" } }).partial,
+      false,
+    );
+    assert.equal(
+      summarizePlanOperations(["a"], { a: { status: "partial" } }).partial,
+      true,
+    );
+  });
   it("extracts unique operation ids from structured or serialized results", () => {
     assert.deepEqual(
       operationIdsFromToolCalls([

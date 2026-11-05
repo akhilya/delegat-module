@@ -70,7 +70,6 @@ export default {
     TableHeader,
     TableRow,
     Switch,
-    Cable,
     Pencil,
     Plus,
     Save,
@@ -235,6 +234,7 @@ export default {
     onMounted(load);
 
     return {
+      emptyListIcon: Cable,
       servers,
       isLoading,
       isDialogOpen,
@@ -277,7 +277,7 @@ export default {
       class="!flex-none"
       :loading="isLoading"
       :empty="!isLoading && servers.length === 0"
-      :empty-icon="Cable"
+      :empty-icon="emptyListIcon"
       :empty-title="$t('pages.aiModelsPage.emptyMcpTitle')"
       :empty-description="$t('pages.aiModelsPage.emptyMcpDescription')"
     >
@@ -338,6 +338,7 @@ export default {
                   <Button
                     variant="ghost"
                     size="icon"
+                    reveal-on-row-hover
                     class="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     @click="deleteServer(row)"
                   >

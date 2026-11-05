@@ -184,6 +184,7 @@ export default {
 
     <div
       v-for="(row, index) in localMappings"
+      data-row-actions
       :key="index"
       class="flex items-center gap-1"
     >
@@ -209,6 +210,7 @@ export default {
       <Button
         variant="ghost"
         size="icon"
+        reveal-on-row-hover
         class="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
         @click="removeRow(index)"
       >

@@ -77,6 +77,7 @@ import { formatMoney } from "@/lib/currency";
 import { displayFieldValue } from "@/lib/fieldDiff";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
+import { parseServerUtc } from "@/utils/dateTime";
 import { t } from "@/i18n";
 import {
   EXPORT_MODE_FULL,
@@ -1363,10 +1364,10 @@ export default {
 
     formatDate(date) {
       if (!date) return "-";
-      const d = new Date(date);
-      if (Number.isNaN(d.getTime())) return "-";
+      const d = parseServerUtc(date);
+      if (!d) return "-";
       const now = new Date();
-      const diffMs = now - d;
+      const diffMs = Math.max(0, now - d);
       const diffMins = Math.floor(diffMs / 60000);
 
       if (diffMins < 1) return t("productMarketplaceIntegrations.justNow");
@@ -1598,10 +1599,7 @@ export default {
           $t("productMarketplaceIntegrations.linkedSection")
         }}</InsetGroupLabel>
         <InsetGroup>
-          <template
-            v-for="conn in linkedConnections"
-            :key="conn.connectionId"
-          >
+          <template v-for="conn in linkedConnections" :key="conn.connectionId">
             <ContextMenu>
               <ContextMenuTrigger as-child>
                 <InsetGroupItem
@@ -1635,10 +1633,7 @@ export default {
                   </p>
                   <template #trailing>
                     <div class="flex items-center gap-1">
-                      <span
-                        class="text-sm"
-                        :class="headerStatus(conn).color"
-                      >
+                      <span class="text-sm" :class="headerStatus(conn).color">
                         {{ headerStatus(conn).label }}
                       </span>
                       <Button
@@ -1664,7 +1659,9 @@ export default {
                         />
                       </Button>
                       <ProductAdapterConnectionMenu
-                        v-if="canManageAdapters || getMarketplaceProductUrl(conn)"
+                        v-if="
+                          canManageAdapters || getMarketplaceProductUrl(conn)
+                        "
                         :connection="conn"
                         :selected-mapping-id="
                           mappingSelections[conn.connectionId]
@@ -1815,10 +1812,7 @@ export default {
                   <Spinner class="text-primary" />
                 </div>
                 <template #leading>
-                  <AdapterIcon
-                    :adapter-key="conn.adapterKey"
-                    class="size-5"
-                  />
+                  <AdapterIcon :adapter-key="conn.adapterKey" class="size-5" />
                 </template>
                 <p class="truncate">{{ conn.adapterName }}</p>
                 <p

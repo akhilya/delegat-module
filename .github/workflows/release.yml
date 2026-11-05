@@ -28,6 +28,9 @@ jobs:
       - name: Validate project documentation standards
         run: npm run check:docs
 
+      - name: Validate AI production configuration
+        run: npm run check:ai-production
+
       - name: Read version from VERSION file
         id: version
         run: |

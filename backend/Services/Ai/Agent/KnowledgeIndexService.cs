@@ -2,6 +2,8 @@ using Delegat.Infrastructure.Storage;
 using Delegat.Models.Ai;
 using Delegat.Services.Docs;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
+using System.Text.Json;
 
 namespace Delegat.Services.Ai.Agent;
 
@@ -14,30 +16,97 @@ public sealed class KnowledgeIndexService
     private readonly ILogger<KnowledgeIndexService> _logger;
     private readonly IWebHostEnvironment? _env;
     private readonly IPublicDocsClient? _publicDocs;
+    private readonly IKnowledgeEmbeddingClient? _embeddings;
+    private readonly KnowledgeIndexSnapshotCache _snapshots;
 
     public KnowledgeIndexService(
         DataContext db,
         IStorageService storage,
         ILogger<KnowledgeIndexService> logger,
         IWebHostEnvironment? env = null,
-        IPublicDocsClient? publicDocs = null)
+        IPublicDocsClient? publicDocs = null,
+        IKnowledgeEmbeddingClient? embeddings = null,
+        KnowledgeIndexSnapshotCache? snapshots = null)
     {
         _db = db;
         _storage = storage;
         _logger = logger;
         _env = env;
         _publicDocs = publicDocs;
+        _embeddings = embeddings;
+        _snapshots = snapshots ?? new KnowledgeIndexSnapshotCache();
     }
 
     public async Task<IReadOnlyList<KnowledgeChunk>> SearchAsync(string query, int take, CancellationToken ct)
     {
-        var stored = await _db.aiKnowledgeChunks.AsNoTracking()
-            .Where(c => c.storeId == null)
-            .ToListAsync(ct);
-        var chunks = stored.Select(c => new KnowledgeChunk(c.sourcePath, c.title, c.body)).ToList();
+        if (string.IsNullOrWhiteSpace(query)) return [];
+        if (_embeddings?.IsEnabled != true)
+        {
+            // Do not transfer/materialize persisted vectors for ordinary lexical reads.
+            var textChunks = await _db.aiKnowledgeChunks.AsNoTracking()
+                .Where(c => c.storeId == null)
+                .Select(c => new KnowledgeChunk(c.sourcePath, c.title, c.body))
+                .ToListAsync(ct);
+            if (textChunks.Count == 0) textChunks = LoadFromDisk().ToList();
+            return KnowledgeSearch.Search(textChunks, query, take);
+        }
+        var snapshot = await _snapshots.GetAsync(_embeddings.ModelId,
+            token => _db.aiKnowledgeChunks.AsNoTracking()
+                .Where(c => c.storeId == null).ToListAsync(token), ct);
+        var chunks = snapshot.Chunks;
         if (chunks.Count == 0)
-            chunks = LoadFromDisk().ToList();
-        return KnowledgeSearch.Search(chunks, query, take);
+            chunks = LoadFromDisk();
+        if (!snapshot.Vectors.Any(v => v != null))
+            return KnowledgeSearch.Search(chunks, query, take);
+
+        try
+        {
+            using var queryTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            queryTimeout.CancelAfter(TimeSpan.FromSeconds(3));
+            var queryVectors = await _embeddings.EmbedAsync(
+                [KnowledgeEmbeddingInputs.Query(query, _embeddings.ModelId)], queryTimeout.Token);
+            return KnowledgeSearch.Hybrid(chunks, query, snapshot.Vectors, queryVectors.Single(), take);
+        }
+        // HttpClient reports its own timeout as OperationCanceledException too.
+        // Fall back for provider timeouts, but preserve the caller's cancellation.
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Knowledge vector search unavailable: {Type}", ex.GetType().Name);
+            return KnowledgeSearch.Search(chunks, query, take);
+        }
+    }
+
+    public async Task UpdateEmbeddingsAsync(CancellationToken ct = default)
+    {
+        if (_embeddings?.IsEnabled != true) return;
+        var pending = await _db.aiKnowledgeChunks
+            .Where(c => c.storeId == null && (c.embeddingModel != _embeddings.ModelId
+                || c.embeddingJson == null))
+            .OrderBy(c => c.Id).ToListAsync(ct);
+        foreach (var batch in pending.Chunk(8))
+        {
+            try
+            {
+                var vectors = await _embeddings.EmbedAsync(
+                    batch.Select(c => KnowledgeEmbeddingInputs.Document(
+                        c.title, c.body, _embeddings.ModelId)).ToArray(), ct);
+                if (vectors.Count != batch.Length || vectors.Any(v => v.Length == 0))
+                    throw new InvalidOperationException("Invalid knowledge embedding batch");
+                for (var i = 0; i < batch.Length; i++)
+                {
+                    batch[i].embeddingJson = JsonSerializer.Serialize(vectors[i]);
+                    batch[i].embeddingModel = _embeddings.ModelId;
+                }
+                await _db.SaveChangesAsync(ct);
+                _snapshots.Invalidate();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                _logger.LogWarning("Knowledge embedding stopped; lexical search remains available: {Type}",
+                    ex.GetType().Name);
+                return;
+            }
+        }
     }
 
     public async Task<KnowledgeChunk?> ReadSourceAsync(string path, string locale, CancellationToken ct)
@@ -45,11 +114,11 @@ public sealed class KnowledgeIndexService
         var keys = SourceKeys(path, locale);
         var stored = await _db.aiKnowledgeChunks.AsNoTracking()
             .Where(c => c.storeId == null)
-            .ToListAsync(ct);
-        var hits = stored
-            .Where(c => keys.Any(k => PathsEqual(c.sourcePath, k)))
             .OrderBy(c => c.Id)
             .Select(c => new KnowledgeChunk(c.sourcePath, c.title, c.body))
+            .ToListAsync(ct);
+        var hits = stored
+            .Where(c => keys.Any(k => PathsEqual(c.SourcePath, k)))
             .ToList();
         if (hits.Count == 0)
         {
@@ -61,7 +130,25 @@ public sealed class KnowledgeIndexService
         if (hits.Count == 0)
             return null;
 
-        var body = string.Join("\n\n", hits.Select(h => h.Body).Where(b => !string.IsNullOrWhiteSpace(b)));
+        var markdown = new StringBuilder();
+        for (var i = 0; i < hits.Count; i++)
+        {
+            var chunk = hits[i];
+            if (markdown.Length > 0) markdown.Append("\n\n");
+            if (i == 0 || !string.Equals(chunk.Title, hits[i - 1].Title, StringComparison.Ordinal))
+            {
+                // The opening block retains its original H1 (or has no heading).
+                // Other section headings are stored only in the chunk title.
+                var openingBlock = i == 0 && (chunk.Body.TrimStart().StartsWith("# ", StringComparison.Ordinal)
+                    || chunk.Title == Path.GetFileName(chunk.SourcePath));
+                if (!openingBlock)
+                    markdown.Append("## ").Append(chunk.Title).Append("\n\n");
+            }
+            // Equal adjacent titles do not prove that two rows are continuations:
+            // separate sections may share a title. Keep their existing separator.
+            markdown.Append(chunk.Body);
+        }
+        var body = markdown.ToString();
         if (body.Length > 32_000)
             body = body[..32_000];
         return new KnowledgeChunk(hits[0].SourcePath, hits[0].Title, body);
@@ -97,6 +184,7 @@ public sealed class KnowledgeIndexService
 
     public async Task ReindexAsync(CancellationToken ct = default)
     {
+        var existing = await _db.aiKnowledgeChunks.Where(c => c.storeId == null).ToListAsync(ct);
         var files = EnumerateCanonFiles().ToList();
         var rows = new List<AiKnowledgeChunk>();
         foreach (var file in files)
@@ -132,7 +220,18 @@ public sealed class KnowledgeIndexService
             }
         }
 
-        await AppendProductDocsAsync(rows, ct);
+        await AppendProductDocsAsync(rows, existing, ct);
+
+        var reusable = existing.Where(c => c.embeddingJson != null && c.embeddingModel != null)
+            .ToLookup(c => (c.sourcePath, c.title, c.body));
+        foreach (var row in rows)
+        {
+            if (row.embeddingJson != null) continue;
+            var old = reusable[(row.sourcePath, row.title, row.body)].FirstOrDefault();
+            if (old == null) continue;
+            row.embeddingModel = old.embeddingModel;
+            row.embeddingJson = old.embeddingJson;
+        }
 
         if (rows.Count == 0)
         {
@@ -140,10 +239,10 @@ public sealed class KnowledgeIndexService
             return;
         }
 
-        var existing = _db.aiKnowledgeChunks.Where(c => c.storeId == null);
         _db.aiKnowledgeChunks.RemoveRange(existing);
         _db.aiKnowledgeChunks.AddRange(rows);
         await _db.SaveChangesAsync(ct);
+        _snapshots.Invalidate();
         _logger.LogInformation("Knowledge index: {Count} chunks from {Files} files", rows.Count, files.Count);
     }
 
@@ -195,7 +294,7 @@ public sealed class KnowledgeIndexService
                     foreach (var path in Directory.EnumerateFiles(docs, "*.md", SearchOption.AllDirectories))
                     {
                         var rel = "docs/" + Path.GetRelativePath(docs, path).Replace('\\', '/');
-                        if (IsOperatorPlan(rel)) continue;
+                        if (IsHistoricalOrEvaluationDoc(rel)) continue;
                         yield return (rel, path);
                     }
                 }
@@ -233,12 +332,24 @@ public sealed class KnowledgeIndexService
                || ext.Equals(".txt", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsOperatorPlan(string relPath) =>
-        relPath.Replace('\\', '/').StartsWith("docs/plans/", StringComparison.OrdinalIgnoreCase);
-
-    private async Task AppendProductDocsAsync(List<AiKnowledgeChunk> rows, CancellationToken ct)
+    private static bool IsHistoricalOrEvaluationDoc(string relPath)
     {
-        if (_publicDocs == null) return;
+        var path = relPath.Replace('\\', '/');
+        return path.StartsWith("docs/plans/", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("docs/security/SECURITY_AUDIT.md", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("docs/security/SECURITY_AUDIT_REPORT.md", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("docs/architecture/ai-agent-audit.md", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("docs/ai/assistant-quality-evaluation.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task AppendProductDocsAsync(
+        List<AiKnowledgeChunk> rows, IReadOnlyList<AiKnowledgeChunk> existing, CancellationToken ct)
+    {
+        if (_publicDocs == null)
+        {
+            PreserveExisting("product-docs/", rows, existing);
+            return;
+        }
 
         foreach (var locale in new[] { "ru", "en" })
         {
@@ -250,6 +361,7 @@ public sealed class KnowledgeIndexService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Product docs catalog {Locale} skipped", locale);
+                PreserveExisting($"product-docs/{locale}/", rows, existing);
                 continue;
             }
 
@@ -260,6 +372,9 @@ public sealed class KnowledgeIndexService
                 {
                     var slug = item.Slug ?? "";
                     if (!seen.Add(slug)) continue;
+                    var rel = string.IsNullOrEmpty(slug)
+                        ? $"product-docs/{locale}/index.md"
+                        : $"product-docs/{locale}/{slug}.md";
 
                     DocsPage page;
                     try
@@ -269,12 +384,10 @@ public sealed class KnowledgeIndexService
                     catch (Exception ex)
                     {
                         _logger.LogDebug(ex, "Skip product doc {Locale} {Slug}", locale, slug);
+                        PreserveExisting(rel, rows, existing, exact: true);
                         continue;
                     }
 
-                    var rel = string.IsNullOrEmpty(slug)
-                        ? $"product-docs/{locale}/index.md"
-                        : $"product-docs/{locale}/{slug}.md";
                     foreach (var chunk in KnowledgeChunker.Chunk(rel, page.Markdown))
                     {
                         rows.Add(new AiKnowledgeChunk
@@ -288,6 +401,28 @@ public sealed class KnowledgeIndexService
                     }
                 }
             }
+        }
+    }
+
+    private static void PreserveExisting(
+        string path, List<AiKnowledgeChunk> rows, IReadOnlyList<AiKnowledgeChunk> existing, bool exact = false)
+    {
+        foreach (var old in existing.Where(c => exact
+            ? c.sourcePath.Equals(path, StringComparison.OrdinalIgnoreCase)
+            : c.sourcePath.StartsWith(path, StringComparison.OrdinalIgnoreCase)))
+        {
+            // These rows are deleted during reindexing; insert copies so a transient
+            // upstream failure does not erase the last successfully indexed docs.
+            rows.Add(new AiKnowledgeChunk
+            {
+                sourcePath = old.sourcePath,
+                title = old.title,
+                body = old.body,
+                embeddingModel = old.embeddingModel,
+                embeddingJson = old.embeddingJson,
+                storeId = old.storeId,
+                createdAt = old.createdAt,
+            });
         }
     }
 }
@@ -318,4 +453,26 @@ public sealed class KnowledgeIndexHostedService : IHostedService
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+public sealed class KnowledgeEmbeddingHostedService(
+    IServiceScopeFactory scopes,
+    ILogger<KnowledgeEmbeddingHostedService> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            if (!scope.ServiceProvider.GetRequiredService<IKnowledgeEmbeddingClient>().IsEnabled)
+                return;
+            await scope.ServiceProvider.GetRequiredService<KnowledgeIndexService>()
+                .UpdateEmbeddingsAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Knowledge embedding unavailable: {Type}", ex.GetType().Name);
+        }
+    }
 }

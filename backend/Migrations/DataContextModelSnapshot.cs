@@ -206,6 +206,13 @@ namespace Delegat.Migrations
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("embeddingJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("embeddingModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
                     b.Property<string>("sourcePath")
                         .IsRequired()
                         .HasMaxLength(400)

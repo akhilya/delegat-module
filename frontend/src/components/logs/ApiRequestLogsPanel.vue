@@ -1,5 +1,5 @@
 <script>
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
 import {
   Table,
   TableBody,
@@ -9,7 +9,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  LogToolbar,
   LogListPanel,
   LogRefreshButton,
   LogDateCell,
@@ -44,14 +43,13 @@ export default {
   name: "ApiRequestLogsPanel",
   emits: ["loading"],
   components: {
-    NavSearchField,
+    PageListToolbar,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
-    LogToolbar,
     LogListPanel,
     LogRefreshButton,
     LogDateCell,
@@ -69,6 +67,7 @@ export default {
     apiKeys: { type: Array, default: () => [] },
     /** When true, fetch on mount (e.g. panel already visible) */
     autoLoad: { type: Boolean, default: false },
+    toolbarVisible: { type: Boolean, default: true },
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
@@ -101,6 +100,11 @@ export default {
     };
   },
   computed: {
+    activeFilterCount() {
+      return ["apiKeyId", "method", "statusClass"].filter(
+        (key) => this.filters[key] !== LOG_FILTER_ALL,
+      ).length;
+    },
     keyOptions() {
       return (this.apiKeys || []).map((k) => ({
         value: String(k.id),
@@ -251,6 +255,12 @@ export default {
       this.filters[key] = value;
       this.refresh();
     },
+    resetFilters() {
+      for (const key of ["apiKeyId", "method", "statusClass"]) {
+        this.filters[key] = LOG_FILTER_ALL;
+      }
+      this.refresh();
+    },
 
     async openDetail(row) {
       this.detailOpen = true;
@@ -336,41 +346,40 @@ export default {
 
 <template>
   <div class="flex flex-col gap-3">
-    <LogToolbar class="shrink-0">
-      <LogFilterSelect
-        :model-value="filters.apiKeyId"
-        :all-value="LOG_FILTER_ALL"
-        :all-label="$t('pages.apiPage.logs.allKeys')"
-        :placeholder="$t('pages.apiPage.logs.filterKey')"
-        :options="keyOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-44"
-        @update:model-value="(v) => setFilter('apiKeyId', v)"
-      />
+    <PageListToolbar
+      v-if="toolbarVisible"
+      v-model="filters.q"
+      :placeholder="$t('pages.apiPage.logs.searchPlaceholder')"
+      :active-filter-count="activeFilterCount"
+      @submit="refresh"
+      @reset="resetFilters"
+    >
+      <template #filters>
+        <LogFilterSelect
+          :model-value="filters.apiKeyId"
+          :all-value="LOG_FILTER_ALL"
+          :all-label="$t('pages.apiPage.logs.allKeys')"
+          :placeholder="$t('pages.apiPage.logs.filterKey')"
+          :options="keyOptions"
+          @update:model-value="(v) => setFilter('apiKeyId', v)"
+        />
 
-      <LogHttpMethodFilter
-        :model-value="filters.method"
-        :all-value="LOG_FILTER_ALL"
-        trigger-class="h-9 w-full min-w-0 sm:w-28"
-        @update:model-value="(v) => setFilter('method', v)"
-      />
+        <LogHttpMethodFilter
+          :model-value="filters.method"
+          :all-value="LOG_FILTER_ALL"
+          @update:model-value="(v) => setFilter('method', v)"
+        />
 
-      <LogHttpStatusFilter
-        :model-value="filters.statusClass"
-        :all-value="LOG_FILTER_ALL"
-        trigger-class="h-9 w-full min-w-0 sm:w-28"
-        @update:model-value="(v) => setFilter('statusClass', v)"
-      />
-
-      <NavSearchField
-        v-model="filters.q"
-        class="w-full min-w-0 sm:max-w-[14rem]"
-        :placeholder="$t('pages.apiPage.logs.searchPlaceholder')"
-        @submit="refresh"
-      />
-      <template #actions>
-        <LogRefreshButton :loading="isLoading" @click="refresh" />
+        <LogHttpStatusFilter
+          :model-value="filters.statusClass"
+          :all-value="LOG_FILTER_ALL"
+          @update:model-value="(v) => setFilter('statusClass', v)"
+        />
       </template>
-    </LogToolbar>
+      <template #actions>
+        <LogRefreshButton compact :loading="isLoading" @click="refresh" />
+      </template>
+    </PageListToolbar>
 
     <LogListPanel
       class="mb-0"

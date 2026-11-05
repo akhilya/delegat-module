@@ -50,7 +50,7 @@ const selectedStore = computed(() =>
         :model-value="selectedStoreId != null ? String(selectedStoreId) : ''"
         @update:model-value="emit('select-store', Number($event))"
       >
-        <SelectTrigger class="h-9 w-full rounded-md border-sidebar-border bg-card shadow-none">
+        <SelectTrigger class="h-9 w-full border-sidebar-border bg-card shadow-none">
           <SelectValue :placeholder="t('components.appSidebarStoreSwitcher.storePlaceholder')">
             <span
               v-if="selectedStore"

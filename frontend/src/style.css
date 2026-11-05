@@ -35,9 +35,6 @@
   /* Sidebar inset m-2 on both ends (md+). Viewport-locked panes (product group,
      gallery, files tab) subtract this plus --page-scroll-end. */
   --app-inset-y: 1rem;
-  --app-fill-pane-height: calc(
-    100svh - var(--app-navbar-height) - var(--app-inset-y) - var(--page-scroll-end)
-  );
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -104,6 +101,14 @@
   --duration-drawer-out: 210ms;
 }
 
+/* Resolve on each page so its measured navbar height also updates fill panes. */
+:root,
+[data-slot="app-page"] {
+  --app-fill-pane-height: calc(
+    100svh - var(--app-navbar-height) - var(--app-inset-y) - var(--page-scroll-end)
+  );
+}
+
 /* Region wait and route enter: spinner, first paint, and page swap.
    Opacity only. No slide, no stagger. */
 @keyframes page-region-in {
@@ -119,8 +124,82 @@
   animation: page-region-in var(--duration-overlay) var(--ease-out-quart) both;
 }
 
+/* One shared outline per table, on the existing scroll owner rather than a new
+   wrapper. Page-scrolling frames clip corners without becoming scroll ancestors,
+   so sticky headers still follow the page. */
+:where(
+  [data-slot="table-container"],
+  [data-slot="table-scroll"],
+  [data-slot="table-frame"]
+):not([data-table-outline="none"]):has([data-slot="table"]) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+[data-slot="table-frame"]:not([data-table-outline="none"]):has([data-slot="table"]) {
+  clip-path: inset(0 round var(--radius));
+}
+
+/* Log frames can contain the default Table scroller. Do not draw two outlines. */
+:is([data-slot="table-frame"], [data-slot="table-scroll"])
+  [data-slot="table-container"] {
+  border: 0;
+  border-radius: 0;
+}
+
+/* Table edges are shared, including sticky headers and locally padded cells. */
+[data-slot="table"] > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child {
+  padding-inline-start: 1.5rem;
+}
+
+[data-slot="table"] > :is(thead, tbody, tfoot) > tr > :is(th, td):last-child {
+  padding-inline-end: 1.5rem;
+}
+
+/* Selection gets its own centered track; never steal its padding for density. */
+[data-slot="table"] > :is(thead, tbody) > tr > :is(th, td):first-child:has([data-slot="checkbox"]) {
+  width: 5rem;
+  min-width: 5rem;
+  padding-inline: 1rem;
+  text-align: center;
+}
+
+[data-slot="table"]:has(> thead > tr > th:first-child [data-slot="checkbox"]) > colgroup > col:first-child {
+  width: 5rem;
+}
+
+@media (pointer: coarse) {
+  [data-slot="checkbox"] {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
 button {
   cursor: pointer;
+}
+
+/* Shared row actions: keep their space, reveal instantly, and retain keyboard/touch access. */
+@media (hover: hover) and (pointer: fine) {
+  :is(
+    [data-slot="inset-group-item"],
+    [data-slot="table-row"],
+    [data-row-actions]
+  ) [data-row-hover-action] {
+    opacity: 0;
+    pointer-events: none;
+    transition-property:
+      color, background-color, border-color, box-shadow, transform;
+  }
+
+  :is(
+    [data-slot="inset-group-item"],
+    [data-slot="table-row"],
+    [data-row-actions]
+  ):is(:hover, :focus-within) [data-row-hover-action] {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* Touch devices: guarantee a 44px-min tap target on the dense desktop UI without
@@ -367,6 +446,7 @@ button {
   --radius-xs: calc(var(--radius) * 0.25);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
+  --radius-control: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
@@ -501,27 +581,95 @@ input[type="number"] {
 /* Scrollbars are platform-wide in @layer base (6px, theme tokens).
    `.thin-scrollbar` remains a call-site marker; `no-scrollbar` still hides. */
 
-/* Sonner (vue-sonner): Catalog Workbench tokens — flat border surface, no soft float shadow.
-   Mount via `@/components/ui/sonner` (not raw vue-sonner Toaster). Radius stays compact (--radius-md). */
+/* Shared Sonner notifications: compact system banner on an opaque token surface.
+   Use the themed wrapper; preserve Sonner's swipe, stacking and reduced-motion behavior. */
 [data-sonner-toaster] {
   z-index: var(--z-toast) !important;
   font-family: var(--font-display);
 }
 
-[data-sonner-toast][data-styled="true"] {
-  box-shadow: none;
+/* Stay to the left of the moving desktop companion cluster: 48px button + 16px gap. */
+@media (min-width: 1024px) {
+  .toaster[data-y-position="bottom"][data-x-position="right"] {
+    right: calc(var(--companion-fab-right) + 4rem);
+    transition: right var(--duration-overlay) var(--ease-out-quart);
+  }
 }
 
-[data-sonner-toast]:focus-visible {
+.toaster [data-sonner-toast][data-styled="true"] {
+  padding: 14px 44px 14px 16px;
+  gap: 10px;
+  min-height: 56px;
+  box-shadow: 0 2px 6px oklch(0 0 0 / 0.06), 0 8px 20px oklch(0 0 0 / 0.1);
+}
+
+.toaster [data-sonner-toast]:focus-visible {
   box-shadow: 0 0 0 2px var(--ring);
 }
 
-[data-sonner-toast][data-styled="true"] [data-description] {
+.toaster [data-sonner-toast][data-styled="true"] [data-content] {
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-title] {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-description] {
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--muted-foreground);
 }
 
-[data-sonner-toaster][data-sonner-theme="dark"] [data-description] {
+.toaster [data-sonner-toast][data-styled="true"] [data-icon] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-icon] svg {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.toaster [data-type="error"] [data-icon] { color: var(--destructive); }
+.toaster [data-type="success"] [data-icon] { color: var(--success); }
+.toaster [data-type="warning"] [data-icon] { color: var(--warning); }
+
+.toaster [data-sonner-toast][data-styled="true"] [data-close-button] {
+  inset: 8px 8px auto auto;
+  transform: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--muted-foreground);
+}
+
+.toaster [data-sonner-toast][data-styled="true"]:hover [data-close-button]:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-close-button] svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-close-button]:focus-visible,
+.toaster [data-sonner-toast][data-styled="true"] [data-button]:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.toaster [data-sonner-toast][data-styled="true"] [data-button] {
+  border-radius: var(--radius-sm);
+  min-height: 28px;
 }
 
 /* Apple menu material — dropdown / context / select / popover. Not page chrome. */

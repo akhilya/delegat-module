@@ -9,7 +9,6 @@ const props = defineProps({
   allLabel: { type: String, default: "" },
   placeholder: { type: String, default: "" },
   errorsLabel: { type: String, default: "" },
-  triggerClass: { type: String, default: "h-9 w-full min-w-0 sm:w-36" },
 });
 
 defineEmits(["update:modelValue"]);
@@ -38,7 +37,6 @@ const resolvedPlaceholder = computed(
     :all-label="resolvedAllLabel"
     :placeholder="resolvedPlaceholder"
     :options="options"
-    :trigger-class="triggerClass"
     @update:model-value="$emit('update:modelValue', $event)"
   />
 </template>

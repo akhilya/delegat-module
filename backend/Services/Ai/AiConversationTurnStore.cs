@@ -377,7 +377,8 @@ public static class AiConversationTurnStore
             ["timeline"] = mergedTimeline,
             ["plan"] = plan.DeepClone(),
             ["planConfirmed"] = true,
-            ["planExecuted"] = true,
+            // EOF, cancellation, or a generic chat done event is not a plan outcome.
+            ["planExecuted"] = incoming["planExecuted"]?.GetValue<bool>() == true,
             ["planExecStart"] = proposalTimeline.Count,
         };
         foreach (var metadataKey in new[]
@@ -388,6 +389,8 @@ public static class AiConversationTurnStore
         }
         if (IncomingPlanFailed(incoming))
             merged["planFailed"] = true;
+        if (incoming["requestError"] is { } requestError)
+            merged["requestError"] = requestError.DeepClone();
         if (existing["planCancelled"] is JsonValue cancelled
             && cancelled.TryGetValue<bool>(out var cancelledFlag)
             && cancelledFlag)

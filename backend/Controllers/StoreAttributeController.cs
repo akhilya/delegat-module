@@ -50,6 +50,20 @@ public class StoreAttributeController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Retrieves list-only metadata without selecting dictionary or validation columns.</summary>
+    [HttpGet("/store-attributes/summary")]
+    public async Task<IActionResult> GetStoreAttributeSummaries()
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var attributes = await _unitOfWork.Repository<StoreAttribute>().Query()
+            .Where(a => a.storeId == storeId.Value)
+            .OrderBy(a => a.sortOrder).ThenBy(a => a.Id)
+            .Select(AttributeDefinitionSummary.FromStore).ToListAsync();
+        return Ok(attributes);
+    }
+
     [HttpGet]
     [Route("/store-attributes/{attributeId}")]
     public async Task<IActionResult> GetStoreAttribute(int attributeId)
@@ -179,6 +193,53 @@ public class StoreAttributeController : ControllerBase
         await attrRepo.DeleteAsync(attribute);
 
         return Ok(new { success = true, deletedValuesCount = attribute.values.Count });
+    }
+
+    /// <summary>Updates selected definitions atomically, preserving unspecified settings.</summary>
+    [HttpPatch("/store-attributes/bulk")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkUpdateAttributes([FromBody] AttributeBulkUpdateForm input)
+    {
+        var ids = input.GetValidatedIds();
+        input.ValidateChanges();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var repo = _unitOfWork.Repository<StoreAttribute>();
+        var attributes = await repo.FindAllAsync(
+            a => a.storeId == storeId.Value && ids.Contains(a.Id), query => query.AsTracking());
+        if (attributes.Count != ids.Length)
+            throw ApiException.NotFound(code: "store_attribute_not_found");
+
+        foreach (var attribute in attributes)
+        {
+            input.ApplyTo(attribute);
+        }
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { updatedCount = attributes.Count });
+    }
+
+    /// <summary>Deletes selected definitions and their product values in one save.</summary>
+    [HttpPost("/store-attributes/bulk-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkDeleteAttributes([FromBody] AttributeBulkSelectionForm input)
+    {
+        var ids = input.GetValidatedIds();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var repo = _unitOfWork.Repository<StoreAttribute>();
+        var attributes = await repo.FindAllAsync(
+            a => a.storeId == storeId.Value && ids.Contains(a.Id),
+            query => query.Include(a => a.values));
+        if (attributes.Count != ids.Length)
+            throw ApiException.NotFound(code: "store_attribute_not_found");
+
+        var values = attributes.SelectMany(a => a.values).ToList();
+        _unitOfWork.Repository<StoreProductAttributeValue>().DeleteRange(values);
+        repo.DeleteRange(attributes);
+        await _unitOfWork.SaveChangesAsync();
+        return Ok(new { deletedCount = attributes.Count, deletedValuesCount = values.Count });
     }
 
     [HttpPost]

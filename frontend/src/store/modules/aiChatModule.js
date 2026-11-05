@@ -17,6 +17,8 @@ import {
   finalizeTurnTools,
 } from "@/lib/ai/persist";
 import { applyStagedIds, attachmentMetaList } from "@/lib/ai/attachments";
+import { readSseEvents } from "@/lib/ai/sse";
+import { canConfirmPlan, reconcilePlanMessages } from "@/lib/ai/planState";
 
 function newSessionId() {
   return randomUuid();
@@ -157,104 +159,92 @@ function buildHistory(messages) {
 }
 
 // Shared SSE consumer for /ai/chat and /ai/execute-plan
-async function consumeSse(response, commit) {
-  if (!response.body) throw new Error("No response body");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split("\n\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event = JSON.parse(line.slice(6));
-        switch (event.type) {
-          case "text":
-            commit("updateLastAssistantMessage", {
-              delta: event.data?.delta ?? "",
-              textBlock: event.data?.delta ?? "",
-            });
-            break;
-          case "tool":
-            if (event.data?.status === "running") {
-              commit("updateLastAssistantMessage", {
-                toolCall: {
-                  id: event.data.id,
-                  name: event.data.name,
-                  status: "running",
-                  input: event.data.input || "",
-                },
-              });
-            } else {
-              commit("updateToolCall", {
-                id: event.data?.id,
-                name: event.data?.name,
-                status: "done",
-                summary: event.data?.summary,
-                result: event.data?.result,
-              });
-              let parsedResult = event.data?.result;
-              if (typeof parsedResult === "string") {
-                try {
-                  parsedResult = JSON.parse(parsedResult);
-                } catch {
-                  parsedResult = null;
-                }
-              }
-              const failed = toolResultFailed(
-                parsedResult,
-                event.data?.summary,
-              );
-              const effects = event.data?.effects || [];
-              if (!failed) {
-                if (effects.includes("mapping"))
-                  commit("triggerMappingRefresh");
-                if (effects.includes("product"))
-                  commit("triggerProductRefresh");
-              }
+async function consumeSse(response, commit, { execution = false } = {}) {
+  let completed = false;
+  for await (const event of readSseEvents(response)) {
+    switch (event.type) {
+      case "text":
+        commit("updateLastAssistantMessage", {
+          delta: event.data?.delta ?? "",
+          textBlock: event.data?.delta ?? "",
+        });
+        break;
+      case "tool":
+        if (event.data?.status === "running") {
+          commit("updateLastAssistantMessage", {
+            toolCall: {
+              id: event.data.id,
+              name: event.data.name,
+              status: "running",
+              input: event.data.input || "",
+            },
+          });
+        } else {
+          commit("updateToolCall", {
+            id: event.data?.id,
+            name: event.data?.name,
+            status: "done",
+            summary: event.data?.summary,
+            result: event.data?.result,
+          });
+          let parsedResult = event.data?.result;
+          if (typeof parsedResult === "string") {
+            try {
+              parsedResult = JSON.parse(parsedResult);
+            } catch {
+              parsedResult = null;
             }
-            break;
-          case "plan":
-            commit("updateLastAssistantMessage", { plan: event.data });
-            break;
-          case "done": {
-            commit("finalizeRunningTools");
-            const patch = {
-              done: true,
-              modelName: event.data?.modelName,
-            };
-            if (typeof event.data?.ok === "boolean")
-              patch.planFailed = !event.data.ok;
-            commit("updateLastAssistantMessage", patch);
-            break;
           }
-          case "error":
-            commit("finalizeRunningTools");
-            if (event.data?.code) {
-              commit("setLastAssistantRequestError", {
-                code: event.data.code,
-                status: Number.isInteger(event.data.status) ? event.data.status : null,
-                reason: "",
-              });
-            } else {
-              commit("updateLastAssistantMessage", {
-                delta: `\n\n${event.data?.message}`,
-              });
-            }
-            break;
+          const failed = toolResultFailed(parsedResult, event.data?.summary);
+          const effects = event.data?.effects || [];
+          if (!failed) {
+            if (effects.includes("mapping")) commit("triggerMappingRefresh");
+            if (effects.includes("product")) commit("triggerProductRefresh");
+          }
         }
-      } catch {
-        // ignore parse errors
+        break;
+      case "plan":
+        commit("updateLastAssistantMessage", { plan: event.data });
+        break;
+      case "done": {
+        completed = !execution || typeof event.data?.ok === "boolean";
+        commit("finalizeRunningTools");
+        const patch = {
+          done: true,
+          modelName: event.data?.modelName,
+        };
+        if (typeof event.data?.ok === "boolean") {
+          patch.planFailed = !event.data.ok;
+          patch.planExecuted = true;
+        }
+        commit("updateLastAssistantMessage", patch);
+        break;
       }
+      case "error":
+        commit("finalizeRunningTools");
+        commit("setLastAssistantRequestError", {
+          code: event.data?.code || "",
+          status: Number.isInteger(event.data?.status)
+            ? event.data.status
+            : null,
+          reason: "",
+        });
+        break;
     }
   }
+  if (!completed) throw new Error("AI stream ended without a terminal result");
+}
+
+function turnCommit(state, commit) {
+  const sessionId = state.sessionId;
+  const messageId = state.messages.at(-1)?.id;
+  return (type, payload) => {
+    if (
+      state.sessionId === sessionId &&
+      state.messages.at(-1)?.id === messageId
+    )
+      commit(type, payload);
+  };
 }
 
 export default {
@@ -336,6 +326,7 @@ export default {
         dbId,
         resume,
         planFailed,
+        planExecuted,
         requestError,
       },
     ) {
@@ -349,6 +340,7 @@ export default {
       if (dbId !== undefined) last.dbId = dbId;
       if (planFailed === true) last.planFailed = true;
       if (planFailed === false) last.planFailed = false;
+      if (planExecuted === true && last.planConfirmed) last.planExecuted = true;
       if (requestError !== undefined) last.requestError = requestError;
 
       if (!last.apiBlocks) last.apiBlocks = [];
@@ -383,13 +375,28 @@ export default {
       if (plan) last.plan = plan;
       if (done) {
         last.done = true;
-        if (last.planConfirmed && !last.planCancelled) last.planExecuted = true;
       }
     },
     finalizeRunningTools(state) {
       const last = state.messages[state.messages.length - 1];
       if (!last) return;
       finalizeTurnTools(last);
+    },
+    resetPlanExecution(state) {
+      const last = state.messages.at(-1);
+      if (!Number.isInteger(last?.planExecStart)) return;
+      last.timeline = (last.timeline || []).slice(0, last.planExecStart);
+      last.toolCalls = last.timeline
+        .filter((item) => item.type === "tool" && item.tool)
+        .map((item) => item.tool);
+      last.content = last.timeline
+        .filter((item) => item.type === "text")
+        .map((item) => item.text)
+        .join("");
+      last.apiBlocks = [];
+      last.planConfirmationError = null;
+      last.planFailed = false;
+      last.done = false;
     },
     updateToolCall(state, { id, name, status, summary, result }) {
       const last = state.messages[state.messages.length - 1];
@@ -514,10 +521,10 @@ export default {
         },
       };
     },
-    setLastPlanCancelled(state) {
+    setPlanCancelled(state, proposalId) {
       const planMsg = [...state.messages]
         .reverse()
-        .find((m) => m.plan && !m.planConfirmed && !m.planSuperseded);
+        .find((m) => m.plan?.proposalId === proposalId && canConfirmPlan(m));
       if (planMsg) planMsg.planCancelled = true;
     },
     supersedePendingPlans(state) {
@@ -536,7 +543,9 @@ export default {
     async loadLastConversation({ commit, dispatch }) {
       try {
         const { http } = await import("@/main");
-        const res = await http.get("/ai/conversations/latest");
+        const res = await http.get("/ai/conversations/latest", {
+          cache: false,
+        });
         const data = res.data;
         if (!data) return;
 
@@ -570,11 +579,18 @@ export default {
         const { http } = await import("@/main");
         const res = await http.get(
           `/ai/conversations/${encodeURIComponent(sessionId)}`,
+          { cache: false },
         );
         const data = res.data;
         if (!data || state.sessionId !== sessionId) return;
         if (data.title) commit("setConversationTitle", data.title);
-        commit("setMessages", hydrateConversation(data.messages || []));
+        commit(
+          "setMessages",
+          reconcilePlanMessages(
+            state.messages,
+            hydrateConversation(data.messages || []),
+          ),
+        );
       } catch {
         /* silent */
       }
@@ -584,6 +600,7 @@ export default {
       if (!state.sessionId) return;
       const sessionId = state.sessionId;
       const last = state.messages.at(-1);
+      if (last?.planExecuted) return;
       if (last?.role === "assistant" && last.done && !last.plan) return;
 
       userStopped = false;
@@ -596,6 +613,7 @@ export default {
           `/api/ai/chat/stream?sessionId=${encodeURIComponent(sessionId)}`,
           { method: "GET", headers: { "X-CSRF": "1" }, signal },
         );
+        if (state.sessionId !== sessionId) return;
         if (response.status === 404) {
           await dispatch("reloadConversationMessages");
           return;
@@ -606,14 +624,16 @@ export default {
         if (current?.role === "assistant") {
           if (current.done && !current.plan) return;
           if (current.plan && current.planConfirmed && !current.planExecuted) {
-            commit("updateLastAssistantMessage", { resume: true });
+            commit("resetPlanExecution");
           } else if (!current.plan) {
             commit("replaceLastAssistant", emptyAssistantMessage());
           }
         } else {
           commit("addMessage", emptyAssistantMessage());
         }
-        await consumeSse(response, commit);
+        await consumeSse(response, turnCommit(state, commit), {
+          execution: !!current?.planConfirmed && !current?.planExecuted,
+        });
         if (state.sessionId === sessionId) {
           if (userStopped) commit("updateLastAssistantMessage", { done: true });
           await dispatch("reloadConversationMessages");
@@ -626,7 +646,17 @@ export default {
           }
         } else {
           await dispatch("reloadConversationMessages");
-          commit("setLastAssistantRequestError", requestErrorDetails(err));
+          const planMessage = state.messages.at(-1);
+          if (state.sessionId !== sessionId) return;
+          if (planMessage?.planConfirmed && !planMessage.planExecuted) {
+            commit("setPlanConfirmationError", {
+              proposalId: planMessage.plan.proposalId,
+              error: { stage: "execution", ...requestErrorDetails(err) },
+            });
+            commit("updateLastAssistantMessage", { done: true });
+          } else if (!planMessage?.planExecuted) {
+            commit("setLastAssistantRequestError", requestErrorDetails(err));
+          }
         }
       } finally {
         abortController = null;
@@ -703,6 +733,7 @@ export default {
       abortController = new AbortController();
 
       const history = buildHistory(state.messages);
+      const streamCommit = turnCommit(state, commit);
 
       try {
         const response = await fetchWithAuth("/api/ai/chat", {
@@ -720,7 +751,7 @@ export default {
         });
 
         if (!response.ok) throw await responseError(response);
-        await consumeSse(response, commit);
+        await consumeSse(response, streamCommit);
         if (state.sessionId === activeSessionId) {
           if (userStopped) commit("updateLastAssistantMessage", { done: true });
           await dispatch("reloadConversationMessages");
@@ -735,6 +766,7 @@ export default {
           }
         } else {
           await dispatch("reloadConversationMessages");
+          if (state.sessionId !== activeSessionId) return;
           commit("setLastAssistantRequestError", requestErrorDetails(err));
         }
       } finally {
@@ -762,17 +794,18 @@ export default {
       }
     },
 
-    async confirmPlan({ state, commit, dispatch }) {
-      const planMsg = [...state.messages].reverse().find((m) => isOpenPlan(m));
+    async confirmPlan({ state, commit, dispatch }, selectedProposalId) {
+      const planMsg = state.messages.find(
+        (m) => m.plan?.proposalId === selectedProposalId,
+      );
       const steps = planMsg?.plan?.steps || [];
       const proposalId = planMsg?.plan?.proposalId;
       const executable =
         proposalId && steps.length > 0 && steps.every((s) => s.tool && s.args);
 
       if (
-        !planMsg ||
-        planMsg.planConfirming ||
-        planMsg.planConfirmationError ||
+        !canConfirmPlan(planMsg) ||
+        state.messages.at(-1) !== planMsg ||
         state.isLoading
       )
         return;
@@ -805,8 +838,11 @@ export default {
           throw await responseError(response);
         }
         responseAccepted = true;
+        if (state.sessionId !== activeSessionId) return;
         commit("setPlanConfirmed", proposalId);
-        await consumeSse(response, commit);
+        await consumeSse(response, turnCommit(state, commit), {
+          execution: true,
+        });
         if (state.sessionId === activeSessionId) {
           if (userStopped) commit("updateLastAssistantMessage", { done: true });
           await dispatch("reloadConversationMessages");
@@ -815,11 +851,18 @@ export default {
         if (state.sessionId !== activeSessionId) return;
         if (err.name === "AbortError") {
           await dispatch("reloadConversationMessages");
+          if (state.sessionId !== activeSessionId) return;
           if (userStopped) {
             commit("updateLastAssistantMessage", { done: true });
           }
         } else {
           await dispatch("reloadConversationMessages");
+          if (state.sessionId !== activeSessionId) return;
+          if (
+            state.messages.find((m) => m.plan?.proposalId === proposalId)
+              ?.planExecuted
+          )
+            return;
           commit("setPlanConfirmationError", {
             proposalId,
             error: {
@@ -827,6 +870,7 @@ export default {
               ...requestErrorDetails(err),
             },
           });
+          commit("updateLastAssistantMessage", { done: true });
         }
       } finally {
         abortController = null;
@@ -893,7 +937,10 @@ export default {
       if (state.isLoading) await dispatch("stopGeneration");
       try {
         const { http } = await import("@/main");
-        const res = await http.get(`/ai/conversations/${sessionId}`);
+        const res = await http.get(
+          `/ai/conversations/${encodeURIComponent(sessionId)}`,
+          { cache: false },
+        );
         const data = res.data;
         if (!data) return;
         commit("setSessionId", data.sessionId);
@@ -955,9 +1002,16 @@ export default {
       }
     },
 
-    cancelPlan({ commit, dispatch }) {
-      commit("setLastPlanCancelled");
-      dispatch("syncHistory");
+    cancelPlan({ state, commit, dispatch }, proposalId) {
+      if (
+        state.isLoading ||
+        !state.messages.some(
+          (m) => m.plan?.proposalId === proposalId && canConfirmPlan(m),
+        )
+      )
+        return;
+      commit("setPlanCancelled", proposalId);
+      return dispatch("syncHistory");
     },
   },
 };

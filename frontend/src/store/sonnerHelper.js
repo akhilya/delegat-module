@@ -1,6 +1,5 @@
 import { toast } from "vue-sonner";
 import { getLocale, t } from "@/i18n";
-import { formatAdapterError } from "@/lib/adapterErrorText";
 import { getApiErrorText } from "@/lib/apiErrorText";
 
 /** Stable API error code from an Axios error or payload. */
@@ -56,70 +55,18 @@ export function displaySonnerError(error) {
   if (status === 409 || status === 429) return;
   if (status === 403 && apiErrorCode(error) === "cabinet_view_only") return;
 
-  const payload = error?.response?.data;
-  if (!payload) {
-    toast.error(t("errors.generic"));
+  if (status >= 500) {
+    toast.error(t("notifications.serverError"), {
+      id: "api-server-error",
+      description: t("notifications.tryLater"),
+    });
     return;
   }
 
-  const title = resolveApiErrorMessage(payload);
-  const description = formatErrorDetails(payload);
-  toast.error(title, description ? { description } : undefined);
-}
-
-function formatErrorDetails(payload) {
-  const details =
-    payload.detail ||
-    payload.details ||
-    payload.data ||
-    payload.errors ||
-    payload.error?.details;
-
-  if (!details) return null;
-
-  if (typeof details === "string") return truncateDetails(details);
-
-  if (Array.isArray(details)) {
-    return truncateDetails(details.map(String).join("\n"));
-  }
-
-  if (typeof details === "object") {
-    // Prefer not to dump code params as description when they are i18n params
-    if (payload.code && !payload.detail && !payload.errors) {
-      const keys = Object.keys(details);
-      const looksLikeParams = keys.every(
-        (k) => typeof details[k] === "string" || typeof details[k] === "number",
-      );
-      if (looksLikeParams && keys.length <= 4) return null;
-    }
-    // Field errors that are stable API codes (set on the form) — skip toast dump
-    if (details === payload.errors && payload.code) {
-      const values = Object.values(details).flat();
-      const looksLikeCodes =
-        values.length > 0 &&
-        values.every(
-          (v) => typeof v === "string" && /^[a-z][a-z0-9_]*$/.test(v),
-        );
-      if (looksLikeCodes) return null;
-    }
-    if (details.response || details.body || details.statusCode) {
-      const human = formatAdapterError(details);
-      if (human) return truncateDetails(human);
-    }
-    try {
-      return truncateDetails(JSON.stringify(details, null, 2));
-    } catch {
-      return t("errors.detailsUnreadable");
-    }
-  }
-
-  return truncateDetails(String(details));
-}
-
-function truncateDetails(value) {
-  const text = value.trim();
-  if (text.length <= 1200) return text;
-  return `${text.slice(0, 1200)}...`;
+  // Codes carry user-facing meaning; raw details belong in logs or field errors.
+  toast.error(
+    resolveApiErrorMessage(error?.response?.data, "notifications.failed"),
+  );
 }
 
 /**

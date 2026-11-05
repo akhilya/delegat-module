@@ -84,7 +84,7 @@ public sealed class CabinetActionCatalog
     [
         new("POST", "/marketplace/connections/{id}/products/export-batch", true,
             "Local catalog → this shop (Medusa/Woo/OpenCart/Ozon/…). Body: productIds, allMatching, or where (@withGallery and the other CATALOG WHERE templates, or a sql_readonly WHERE). HTTP 200 pending = Operations. Not GET /tools, not import.",
-            "export выгрузка выгрузить shop магазин medusa catalog products photos фото без фото where allMatching export-batch export-bulk"),
+            "export выгрузка выгрузить shop магазин marketplace маркетплейс medusa catalog products товары карточки listings refresh update обновить отправить повторно photos фото без фото where allMatching export-batch export-bulk"),
         new("POST", "/marketplace/connections/{id}/products/export-bulk", true,
             "Same as export-batch but waits in-request. Small named sets only.",
             "export-bulk выгрузка"),
@@ -108,7 +108,7 @@ public sealed class CabinetActionCatalog
             "цены price цены bulk массовое повышение наценка +500 рублей priceDelta allMatching wait ozon wildberries yandex яндекс вб озон"),
         new("POST", "/tools/export-all-prices/run", true,
             "Push local catalog prices to a shop. Body: { connectionId }. Omit connectionId = every active connection that can export prices (Ozon, Wildberries, Yandex, …). After a catalog price change. HTTP 200 = Operations.",
-            "обновить цены маркетплейс export-all-prices выгрузить цены ozon wildberries yandexmarket яндекс вб озон"),
+            "обновить цены маркетплейс магазин shop export-all-prices выгрузить цены ozon wildberries yandexmarket яндекс вб озон"),
         new("GET", "/tools", false,
             "Job-tool catalog (export all prices, scrape). Not product export to a shop.",
             "tools инструменты цены prices jobs"),
@@ -218,19 +218,32 @@ public sealed class CabinetActionCatalog
 
     private static int Score(ActionHit hit, IReadOnlyList<string> tokens)
     {
-        var hay = $"{hit.Method} {hit.Path} {hit.Note} {hit.Keywords}".ToLowerInvariant();
+        // Search the action name and curated aliases, not the body/usage notes: a long
+        // note can mention unrelated actions and drown out the actual route.
+        // Route parameters such as {id} are not evidence of what an action does.
+        var pathWords = Tokens(Regex.Replace(hit.Path, @"\{[^}]+\}", ""));
+        var keywordWords = Tokens(hit.Keywords);
         var score = 0;
         foreach (var t in tokens)
         {
-            if (t.Length < 2) continue;
-            if (hit.Path.Contains(t, StringComparison.OrdinalIgnoreCase))
+            if (pathWords.Contains(t))
                 score += 5;
-            else if (hay.Contains(t, StringComparison.Ordinal))
+            else if (keywordWords.Contains(t))
+                score += 3;
+            else if (pathWords.Any(word => RelatedWord(t, word)))
+                score += 3;
+            else if (keywordWords.Any(word => RelatedWord(t, word)))
                 score += 2;
         }
 
         return score;
     }
+
+    private static bool RelatedWord(string query, string word) =>
+        Math.Min(query.Length, word.Length) >= 5
+        && (query.StartsWith(word, StringComparison.Ordinal)
+            || word.StartsWith(query, StringComparison.Ordinal)
+            || query.AsSpan(0, 5).SequenceEqual(word.AsSpan(0, 5)));
 
     private static List<string> Tokens(string? query) =>
         string.IsNullOrWhiteSpace(query)

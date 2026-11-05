@@ -47,6 +47,7 @@ docs/             — Documentation
 - [Platform capabilities](docs/platform/capabilities.md) — what an instance can do
 - [SaaS architecture](docs/architecture/saas-architecture.md) — per-instance infra, quotas, provisioner draft
 - [Public API v1](docs/api/public-v1.md) — partner API (`/api/v1`, Swagger at `/swagger`)
+- [Assistant production rollout](docs/ai/production-rollout.md) — ship the assistant fixes and optionally enable local hybrid knowledge search
 - [Full docs index](docs/README.md)
 - [Project instructions](.github/copilot-instructions.md) — canonical docs, precedence, and maintenance rules
 

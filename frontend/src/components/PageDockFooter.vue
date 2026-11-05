@@ -2,7 +2,7 @@
 /**
  * Catalog / mailbox pagination bar. Stays under the last row when the
  * table fits; teleports to #page-footer-dock when the page scroller overflows.
- * Hairline top border only — no ring, no rounding.
+ * No separator: the rounded table outline already supplies the boundary.
  */
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { shouldPinPageFooter } from "@/lib/pageDockFooter";
@@ -24,7 +24,8 @@ function updatePinned() {
   }
   const leftoverBelowFooter = pinned.value
     ? 0
-    : scroller.getBoundingClientRect().bottom - footer.getBoundingClientRect().bottom;
+    : scroller.getBoundingClientRect().bottom -
+      footer.getBoundingClientRect().bottom;
   pinned.value = shouldPinPageFooter({
     scrollHeight: scroller.scrollHeight,
     clientHeight: scroller.clientHeight,
@@ -66,7 +67,7 @@ onBeforeUnmount(() => {
       :class="pinned ? 'adaptive-padding' : ''"
     >
       <div
-        class="flex items-center justify-between gap-3 border-t bg-background py-2 text-sm"
+        class="flex items-center justify-between gap-3 bg-background py-2 text-sm"
       >
         <slot />
       </div>

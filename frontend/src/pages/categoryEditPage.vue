@@ -30,24 +30,13 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import AttributeDefinitionList from "@/components/products/AttributeDefinitionList.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   Save,
   Plus,
   Trash2,
-  GripVertical,
   Settings2,
   Download,
   Upload,
@@ -57,7 +46,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import AttributeGroupIconPicker from "@/components/products/AttributeGroupIconPicker.vue";
 import { suggestedGroupIcon } from "@/lib/attributeGroupIcon";
 import { setPageTitle } from "@/router";
-import draggable from "vuedraggable";
 import {
   ATTRIBUTE_GROUP_OPTIONS,
   ATTRIBUTE_GROUP_VALUES,
@@ -109,23 +97,13 @@ export default {
     DialogTitle,
     DialogFooter,
     DialogClose,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+    AttributeDefinitionList,
     Save,
     Plus,
     Trash2,
-    GripVertical,
     Settings2,
     Download,
     Upload,
-    draggable,
     SearchableSelect,
     EmptyState,
     AttributeGroupIconPicker,
@@ -139,7 +117,8 @@ export default {
       isLoading: false,
       isSaving: false,
       isAddingAttribute: false,
-      isDeletingAttribute: false,
+      isLoadingAttribute: false,
+      attributeLoadVersion: 0,
       isReordering: false,
       FIELD_LIMITS,
       showAttributeDialog: false,
@@ -238,9 +217,9 @@ export default {
       "getCategory",
       "updateCategory",
       "getCategoryAttributes",
+      "getCategoryAttribute",
       "createAttribute",
       "updateAttribute",
-      "deleteAttribute",
       "reorderAttributes",
     ]),
 
@@ -260,6 +239,7 @@ export default {
       this.isLoading = true;
       await this.getCategory({
         id: this.categoryId,
+        summary: true,
         onSuccess: (response) => {
           this.category = response.data.value;
           setPageTitle(this.category.name);
@@ -270,6 +250,17 @@ export default {
         },
       });
       this.isLoading = false;
+    },
+
+    async refreshAttributes() {
+      await this.getCategoryAttributes({
+        categoryId: this.categoryId,
+        summary: true,
+        onSuccess: (response) => {
+          this.attributes = response.data.value || [];
+        },
+        onError: displaySonnerError,
+      });
     },
 
     async handleSaveCategory() {
@@ -366,6 +357,8 @@ export default {
     },
 
     openAddAttributeDialog() {
+      this.attributeLoadVersion++;
+      this.isLoadingAttribute = false;
       this.editingAttribute = null;
       this.customGroupMode = false;
       this.attributeOptionsJson = null;
@@ -394,7 +387,31 @@ export default {
       this.showAttributeDialog = true;
     },
 
-    openEditAttributeDialog(attribute) {
+    async openEditAttributeDialog(attribute) {
+      const version = ++this.attributeLoadVersion;
+      this.editingAttribute = attribute;
+      this.isLoadingAttribute = true;
+      this.showAttributeDialog = true;
+      try {
+        await this.getCategoryAttribute({
+          categoryId: this.categoryId,
+          attributeId: attribute.id,
+          onSuccess: (response) => {
+            if (version === this.attributeLoadVersion && this.showAttributeDialog)
+              this.fillAttributeDialog(response.data.value);
+          },
+          onError: (error) => {
+            if (version !== this.attributeLoadVersion || !this.showAttributeDialog) return;
+            displaySonnerError(error);
+            this.showAttributeDialog = false;
+          },
+        });
+      } finally {
+        if (version === this.attributeLoadVersion) this.isLoadingAttribute = false;
+      }
+    },
+
+    fillAttributeDialog(attribute) {
       this.resetAttributeDialogOptionsState();
       this.editingAttribute = attribute;
       this.attributeOptionsJson = null;
@@ -536,6 +553,7 @@ export default {
     },
 
     async handleSaveAttribute() {
+      if (this.isLoadingAttribute || this.isAddingAttribute) return;
       const nameIssue = fieldLimitIssue(
         this.attributeForm.name,
         FIELD_LIMITS.attributeName,
@@ -640,7 +658,7 @@ export default {
           onSuccess: () => {
             displaySonnerSuccess(this.$t("pages.categoryEditPage.attrUpdated"));
             this.showAttributeDialog = false;
-            this.fetchCategory();
+            this.refreshAttributes();
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -653,7 +671,7 @@ export default {
           onSuccess: () => {
             displaySonnerSuccess(this.$t("pages.categoryEditPage.attrAdded"));
             this.showAttributeDialog = false;
-            this.fetchCategory();
+            this.refreshAttributes();
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -662,22 +680,6 @@ export default {
       }
 
       this.isAddingAttribute = false;
-    },
-
-    async handleDeleteAttribute(attributeId) {
-      this.isDeletingAttribute = true;
-      await this.deleteAttribute({
-        categoryId: this.categoryId,
-        attributeId,
-        onSuccess: () => {
-          displaySonnerSuccess(this.$t("pages.categoryEditPage.attrDeleted"));
-          this.fetchCategory();
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      this.isDeletingAttribute = false;
     },
 
     async handleReorder() {
@@ -1074,97 +1076,15 @@ export default {
               {{ $t("pages.categoryEditPage.addAttribute") }}
             </Button>
           </EmptyState>
-          <InsetGroup v-else>
-            <draggable
-              v-model="attributes"
-              item-key="id"
-              handle=".drag-handle"
-              ghost-class="opacity-50"
-              class="flex flex-col gap-0.5"
-              tag="div"
-              @end="handleReorder"
-            >
-              <template #item="{ element: attribute }">
-                <div>
-                  <InsetGroupItem
-                    as="div"
-                    @click="openEditAttributeDialog(attribute)"
-                  >
-                    <template #leading>
-                      <span
-                        class="drag-handle pointer-events-auto flex size-8 cursor-grab items-center justify-center active:cursor-grabbing"
-                        @click.stop
-                      >
-                        <GripVertical class="size-4 text-muted-foreground/70" />
-                      </span>
-                    </template>
-                    <p class="truncate">
-                      {{ attribute.name }}
-                      <span
-                        v-if="attribute.isRequired"
-                        class="text-destructive"
-                        :title="$t('pages.categoryEditPage.requiredFieldTitle')"
-                      >*</span>
-                      <span
-                        v-if="attribute.isUnique"
-                        class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-                        :title="$t('pages.categoryEditPage.uniqueFieldTitle')"
-                      >{{ $t("pages.categoryEditPage.uniqueBadge") }}</span>
-                    </p>
-                    <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
-                      {{ attributeRowSubtitle(attribute) }}
-                    </p>
-                    <template #trailing>
-                      <AlertDialog>
-                        <AlertDialogTrigger as-child>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            :aria-label="$t('common.delete')"
-                            @click.stop
-                          >
-                            <Trash2 class="size-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{{
-                              $t("pages.categoryEditPage.deleteAttributeTitle")
-                            }}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {{
-                                $t(
-                                  "pages.categoryEditPage.deleteAttributeDescription",
-                                  { name: attribute.name },
-                                )
-                              }}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{{
-                              $t("common.cancel")
-                            }}</AlertDialogCancel>
-                            <AlertDialogAction
-                              variant="destructive"
-                              :disabled="isDeletingAttribute"
-                              @click="handleDeleteAttribute(attribute.id)"
-                            >
-                              <Spinner
-                                v-if="isDeletingAttribute"
-                                class="mr-2"
-                              />
-                              {{ $t("common.delete") }}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </template>
-                  </InsetGroupItem>
-                </div>
-              </template>
-            </draggable>
-          </InsetGroup>
+          <AttributeDefinitionList
+            v-else
+            v-model="attributes"
+            :endpoint="`/categories/${categoryId}/attributes`"
+            :caption="attributeRowSubtitle"
+            :disabled="isReordering"
+            @open="openEditAttributeDialog"
+            @reorder="handleReorder"
+          />
         </SettingsFormSection>
       </div>
     </PageSection>
@@ -1188,7 +1108,13 @@ export default {
           </DialogDescription>
         </DialogHeader>
 
-        <div class="flex-1 overflow-y-auto px-6 py-5">
+        <div
+          v-if="isLoadingAttribute"
+          class="flex min-h-48 items-center justify-center px-6 py-5"
+        >
+          <Spinner size="xl" :aria-label="$t('common.loading')" />
+        </div>
+        <div v-else class="flex-1 overflow-y-auto px-6 py-5">
           <SettingsFormSection
             class="!max-w-none"
             :title="$t('pages.categoryEditPage.basicSection')"
@@ -1643,7 +1569,7 @@ export default {
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
-          <Button @click="handleSaveAttribute" :disabled="isAddingAttribute">
+          <Button @click="handleSaveAttribute" :disabled="isAddingAttribute || isLoadingAttribute">
             <Spinner v-if="isAddingAttribute" class="mr-2" />
             {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>

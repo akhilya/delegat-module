@@ -36,6 +36,8 @@ The key owner must have `api.access` (to possess a key) and `ai.use`. Underlying
 
 Read-only demo (`workspace.view` only): search, SQL, knowledge, GET `platform_request`. No Python, uploads, memory writes, connected MCP calls, or cabinet writes. The tool list omits Python and memory write tools; the host still enforces the restriction if a client sends a hidden or forged tool name.
 
+The role template and the effective grants are different: see [Viewer and effective assistant permissions](../architecture/authentication.md#read-only-demo-workspace). Enabling a helper or confirming a plan does not grant `ai.use`.
+
 ## MCP tools
 
 `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
@@ -53,6 +55,8 @@ Reading staged attachment contents is a cabinet-chat-only capability; `read_chat
 Use `create_file_download_link` with a product `fileId`. The small MCP result contains `fileName`, `sizeBytes`, `sha256`, `expiresAt`, `downloadUrl`, and `rangeSupported`. The service hashes the object as a bounded-memory storage stream, then returns a 10-minute ticket URL for `GET /api/agent/files/{fileId}/download?ticket=…`. Fetch the URL directly over HTTP; do not ask the model to carry file bytes or base64. A relative URL is resolved against the API origin used for `/api/mcp`; set `PUBLIC_BASE_URL` to the public API origin to return an absolute URL.
 
 The ticket is authenticated and bound to the issuing user, store, and file. Each download request rechecks that the user is active, still belongs to the store, still has `ai.use` or `workspace.view`, and that the file still belongs to that store. It does not set `isPublic`, use the public-file route, or create a persisted share/artifact row. The URL is a bearer capability while valid; keep it private. Its short expiry is enforced statelessly, so there is no artifact cleanup job. `Range: bytes=…` (including suffix ranges) is supported for resume; multiple ranges are rejected with `416`. No file bytes pass through MCP JSON or the model.
+
+The download ticket is **not single-use**: the same URL may be used for multiple full or single-range requests before its original expiry, provided the issuing user's access and the file/store checks still pass on each request. A download neither consumes the ticket nor extends its lifetime. Removing access can therefore block a later request even before expiry. This is separate from the 24-hour retention of staged chat attachments.
 
 ## Connected HTTP MCP trust policy
 

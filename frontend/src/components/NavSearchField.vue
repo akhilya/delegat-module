@@ -30,7 +30,7 @@ function onEnter(event) {
     data-slot="nav-search"
     :class="
       cn(
-        'flex h-9 items-center rounded-md border border-input bg-transparent pl-3 shadow-xs outline-none transition-[box-shadow,border-color] has-[:focus-visible]:border-ring dark:bg-input/30',
+        'flex h-9 items-center rounded-control border border-input bg-transparent pl-3 shadow-xs outline-none transition-[box-shadow,border-color] has-[:focus-visible]:border-ring dark:bg-input/30',
         hasTrailing ? 'pr-1' : 'pr-3',
         'w-full min-w-0',
         props.disabled && 'pointer-events-none opacity-50',

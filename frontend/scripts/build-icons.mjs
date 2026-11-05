@@ -125,7 +125,7 @@ const MAP = {
   Puzzle: "Plugin2Filled",
   RefreshCw: "Refresh1Filled",
   Ruler: "RulerFilled",
-  Save: "SaveFilled",
+  Save: "CheckFilled",
   ScrollText: "ScrollableListFilled",
   SearchCheck: "SearchFilled",
   SearchIcon: "SearchFilled",

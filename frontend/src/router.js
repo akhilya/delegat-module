@@ -37,7 +37,6 @@ const CatalogConnectPage = () => import("./pages/tools/CatalogConnectPage.vue");
 const CatalogScrapePage = () => import("./pages/tools/CatalogScrapePage.vue");
 const PublicApiTryPage = () => import("./pages/tools/PublicApiTryPage.vue");
 const ToolJobPage = () => import("./pages/tools/ToolJobPage.vue");
-const ScheduledTasksPage = () => import("./pages/tools/ScheduledTasksPage.vue");
 const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
 const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
@@ -374,7 +373,11 @@ export const routes = [
   },
   {
     path: PAGE_SCHEDULED_TASKS,
-    component: ScheduledTasksPage,
+    redirect: (to) => ({
+      path: PAGE_TOOLS,
+      query: { ...to.query, tab: "schedules" },
+      hash: to.hash,
+    }),
     meta: {
       titleKey: "routes.scheduledTasks",
       permissions: [PERMS.MarketplaceManage],

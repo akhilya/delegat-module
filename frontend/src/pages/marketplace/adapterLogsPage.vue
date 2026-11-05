@@ -1,5 +1,6 @@
 <script>
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
+import SettingsNavbarTools from "@/components/SettingsNavbarTools.vue";
 import {
   Table,
   TableBody,
@@ -9,7 +10,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  LogToolbar,
   LogListPanel,
   LogRefreshButton,
   LogDateCell,
@@ -42,14 +42,14 @@ import { ScrollText } from "lucide-vue-next";
 
 export default {
   components: {
-    NavSearchField,
+    PageListToolbar,
+    SettingsNavbarTools,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
-    LogToolbar,
     LogListPanel,
     LogRefreshButton,
     LogDateCell,
@@ -62,12 +62,11 @@ export default {
     AdapterLogDetailSheet,
     LogSelectCheckbox,
     LogSortHeader,
-    ScrollText,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
     loadMemberships();
-    return { storeTimezone: timezone, LOG_FILTER_ALL };
+    return { storeTimezone: timezone, LOG_FILTER_ALL, ScrollText };
   },
   data() {
     return {
@@ -96,6 +95,11 @@ export default {
     };
   },
   computed: {
+    activeFilterCount() {
+      return ["connectionId", "adapterKey", "method", "statusClass"].filter(
+        (key) => this.filters[key] !== LOG_FILTER_ALL,
+      ).length;
+    },
     connectionOptions() {
       return (this.connections || []).map((c) => ({
         value: String(c.id),
@@ -115,20 +119,34 @@ export default {
       return this.items.map((r) => r.id ?? r.Id).filter((id) => id != null);
     },
     allPageSelected() {
-      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+      return (
+        this.pageIds.length > 0 &&
+        this.pageIds.every((id) => this.selectedIds.includes(id))
+      );
     },
     somePageSelected() {
-      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+      return (
+        !this.allPageSelected &&
+        this.pageIds.some((id) => this.selectedIds.includes(id))
+      );
     },
     detailMeta() {
       if (!this.detail) return [];
       return [
-        { label: this.$t("marketplace.adapterLogsPage.dateTime"), value: this.formatLogDate(this.detail.createdAt) },
+        {
+          label: this.$t("marketplace.adapterLogsPage.dateTime"),
+          value: this.formatLogDate(this.detail.createdAt),
+        },
         {
           label: this.$t("marketplace.adapterLogsPage.duration"),
-          value: this.$t("components.logs.durationMs", { ms: this.detail.durationMs }),
+          value: this.$t("components.logs.durationMs", {
+            ms: this.detail.durationMs,
+          }),
         },
-        { label: this.$t("marketplace.adapterLogsPage.adapter"), value: this.detail.adapterKey },
+        {
+          label: this.$t("marketplace.adapterLogsPage.adapter"),
+          value: this.detail.adapterKey,
+        },
         {
           label: this.$t("marketplace.adapterLogsPage.connection"),
           value: this.connectionLabel(this.detail.connectionId),
@@ -161,7 +179,8 @@ export default {
 
     toggleSelect(id, checked) {
       if (checked === true) {
-        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+        if (!this.selectedIds.includes(id))
+          this.selectedIds = [...this.selectedIds, id];
       } else {
         this.selectedIds = this.selectedIds.filter((x) => x !== id);
       }
@@ -192,10 +211,12 @@ export default {
     buildParams() {
       const f = this.filters;
       return {
-        connectionId: f.connectionId === LOG_FILTER_ALL ? undefined : f.connectionId,
+        connectionId:
+          f.connectionId === LOG_FILTER_ALL ? undefined : f.connectionId,
         adapterKey: f.adapterKey === LOG_FILTER_ALL ? undefined : f.adapterKey,
         method: f.method === LOG_FILTER_ALL ? undefined : f.method,
-        statusClass: f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
+        statusClass:
+          f.statusClass === LOG_FILTER_ALL ? undefined : f.statusClass,
         q: f.q || undefined,
         sortBy: this.sortBy,
         sortDir: this.sortDir,
@@ -244,6 +265,17 @@ export default {
       this.filters[key] = value;
       this.refresh();
     },
+    resetFilters() {
+      for (const key of [
+        "connectionId",
+        "adapterKey",
+        "method",
+        "statusClass",
+      ]) {
+        this.filters[key] = LOG_FILTER_ALL;
+      }
+      this.refresh();
+    },
 
     async openDetail(row) {
       this.detailOpen = true;
@@ -276,14 +308,17 @@ export default {
       if (this.selectedIds.length === 0) return;
       this.downloading = true;
       try {
-        const details = await mapPool(this.selectedIds, (id) =>
-          new Promise((resolve) => {
-            this.getAdapterHttpLogDetail({
-              id,
-              onSuccess: (response) => resolve(extractResponseData(response, null)),
-              onError: () => resolve(null),
-            });
-          }),
+        const details = await mapPool(
+          this.selectedIds,
+          (id) =>
+            new Promise((resolve) => {
+              this.getAdapterHttpLogDetail({
+                id,
+                onSuccess: (response) =>
+                  resolve(extractResponseData(response, null)),
+                onError: () => resolve(null),
+              });
+            }),
         );
         downloadJsonFile(details, stampFilename("logs-adapter"));
       } catch (error) {
@@ -332,51 +367,50 @@ export default {
 
 <template>
   <div class="flex flex-col pb-4">
-    <LogToolbar class="mb-3 shrink-0">
-      <LogFilterSelect
-        :model-value="filters.connectionId"
-        :all-value="LOG_FILTER_ALL"
-        :all-label="$t('marketplace.adapterLogsPage.allConnections')"
-        :placeholder="$t('marketplace.adapterLogsPage.connection')"
-        :options="connectionOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-44"
-        @update:model-value="(v) => setFilter('connectionId', v)"
-      />
-
-      <LogFilterSelect
-        :model-value="filters.adapterKey"
-        :all-value="LOG_FILTER_ALL"
-        :all-label="$t('marketplace.adapterLogsPage.allAdapters')"
-        :placeholder="$t('marketplace.adapterLogsPage.adapter')"
-        :options="adapterKeyOptions"
-        trigger-class="h-9 w-full min-w-0 sm:w-36"
-        @update:model-value="(v) => setFilter('adapterKey', v)"
-      />
-
-      <LogHttpMethodFilter
-        :model-value="filters.method"
-        :all-value="LOG_FILTER_ALL"
-        trigger-class="h-9 w-full min-w-0 sm:w-28"
-        @update:model-value="(v) => setFilter('method', v)"
-      />
-
-      <LogHttpStatusFilter
-        :model-value="filters.statusClass"
-        :all-value="LOG_FILTER_ALL"
-        trigger-class="h-9 w-full min-w-0 sm:w-28"
-        @update:model-value="(v) => setFilter('statusClass', v)"
-      />
-
-      <NavSearchField
+    <SettingsNavbarTools>
+      <PageListToolbar
         v-model="filters.q"
-        class="w-full min-w-0 sm:max-w-[14rem]"
         :placeholder="$t('marketplace.adapterLogsPage.searchByPath')"
+        :active-filter-count="activeFilterCount"
         @submit="refresh"
-      />
-      <template #actions>
-        <LogRefreshButton :loading="isLoading" @click="refresh" />
-      </template>
-    </LogToolbar>
+        @reset="resetFilters"
+      >
+        <template #filters>
+          <LogFilterSelect
+            :model-value="filters.connectionId"
+            :all-value="LOG_FILTER_ALL"
+            :all-label="$t('marketplace.adapterLogsPage.allConnections')"
+            :placeholder="$t('marketplace.adapterLogsPage.connection')"
+            :options="connectionOptions"
+            @update:model-value="(v) => setFilter('connectionId', v)"
+          />
+
+          <LogFilterSelect
+            :model-value="filters.adapterKey"
+            :all-value="LOG_FILTER_ALL"
+            :all-label="$t('marketplace.adapterLogsPage.allAdapters')"
+            :placeholder="$t('marketplace.adapterLogsPage.adapter')"
+            :options="adapterKeyOptions"
+            @update:model-value="(v) => setFilter('adapterKey', v)"
+          />
+
+          <LogHttpMethodFilter
+            :model-value="filters.method"
+            :all-value="LOG_FILTER_ALL"
+            @update:model-value="(v) => setFilter('method', v)"
+          />
+
+          <LogHttpStatusFilter
+            :model-value="filters.statusClass"
+            :all-value="LOG_FILTER_ALL"
+            @update:model-value="(v) => setFilter('statusClass', v)"
+          />
+        </template>
+        <template #actions>
+          <LogRefreshButton compact :loading="isLoading" @click="refresh" />
+        </template>
+      </PageListToolbar>
+    </SettingsNavbarTools>
 
     <LogListPanel
       :loading="isLoading && items.length === 0"
@@ -398,7 +432,9 @@ export default {
       @clear-selection="clearSelection"
     >
       <Table :contain="false" class="w-full">
-        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+        <TableHeader
+          class="sticky top-0 z-10 bg-background [&_th]:bg-background"
+        >
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10">
               <LogSelectCheckbox
@@ -486,7 +522,9 @@ export default {
                 {{ row.adapterKey }}
               </div>
             </TableCell>
-            <TableCell class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums">
+            <TableCell
+              class="overflow-hidden text-right text-sm text-muted-foreground tabular-nums"
+            >
               {{ $t("components.logs.durationMs", { ms: row.durationMs }) }}
             </TableCell>
             <TableCell class="overflow-hidden text-right">

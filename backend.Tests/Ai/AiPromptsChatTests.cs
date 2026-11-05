@@ -8,9 +8,23 @@ namespace Delegat.Tests;
 public class AiPromptsChatTests
 {
     [Fact]
-    public void ChatPromptVersion_IsBumpedForCatalogResultCompletenessPolicy()
+    public void ChatPromptVersion_IsBumpedForGroundedDocumentationAnswers()
     {
-        Assert.Equal("chat-v11", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v14", AiPrompts.ChatPromptVersion);
+    }
+
+    [Fact]
+    public void ChatSystem_PreservesDocumentationScopeAndDoesNotInferAbsence()
+    {
+        var prompt = NormalizeWhitespace(Prompt());
+        Assert.Contains("Preserve each source's scope, conditions, and exceptions", prompt,
+            StringComparison.Ordinal);
+        Assert.Contains("A missing search hit, a short article, or a disabled tool is not proof",
+            prompt, StringComparison.Ordinal);
+        Assert.Contains("Separate documented rules from this instance's current configuration",
+            prompt, StringComparison.Ordinal);
+        Assert.Contains("A fallback is another attempt, not a guarantee of success", prompt,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -355,6 +369,48 @@ public class AiPromptsChatTests
         Assert.DoesNotContain("priceDelta", prompt, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Обнови все товары на озоне, у которых статус скоро скроем")]
+    [InlineData("Всем товарам ТН ВЭД указан в маппинге. Ничего больше настраивать не надо, эти 49 товаров нужно просто обновить на Озоне")]
+    [InlineData("Код уже проставлен в сопоставлении категории, обнови эти карточки в магазине")]
+    [InlineData("Обнови 17 товаров на Wildberries из отчёта: штрихкод уже передаётся из схемы")]
+    [InlineData("Refresh the product listings in the shop; the existing mapping already supplies the brand")]
+    public void ChatSystem_ExportOnlyDoesNotBecomeMappingRepair(string request)
+    {
+        var prompt = Prompt(turnText: request);
+        Assert.Contains("product_links", prompt, StringComparison.Ordinal);
+        Assert.Contains("/products/export-batch", prompt, StringComparison.Ordinal);
+        Assert.Contains("use saved mappings and local product data as-is", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("=== FIELD MAPPING ===", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("graph/connect", prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not paste a long list of product names", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_ExportOnlyOnMappingPageUsesPageAsContextNotAsNewTask()
+    {
+        var prompt = Prompt(page: new AiPageContext { Page = "fieldMapping", MappingId = 9, ConnectionId = 3 },
+            turnText: "Обнови карточки на маркетплейсе, схема уже настроена");
+        Assert.Contains("Page: Field mapping editor", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("=== FIELD MAPPING ===", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Finish wiring: GET", prompt, StringComparison.Ordinal);
+        Assert.Contains("/products/export-batch", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_ExplicitMappingEditAndExportKeepsBothPlaybooks()
+    {
+        var prompt = Prompt(turnText: "Исправь маппинг и выгрузи карточки на Озон");
+        Assert.Contains("=== FIELD MAPPING ===", prompt, StringComparison.Ordinal);
+        Assert.Contains("/products/export-batch", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatSystem_MappingOnlyStillUsesMappingPlaybook()
+    {
+        Assert.Contains("=== FIELD MAPPING ===", Prompt(turnText: "Доделай маппинг полей"), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ChatSystem_CatalogConnectMatch_UsesPreviewThenApply()
     {
@@ -516,6 +572,12 @@ public class AiPromptsChatTests
             Assert.Contains("Do not pretend a check ran", prompt, StringComparison.Ordinal);
             Assert.Contains("do not resume an earlier catalog write", prompt, StringComparison.Ordinal);
             Assert.Contains("calculation helper: off", prompt, StringComparison.Ordinal);
+            Assert.Contains("Only when asked to run the helper or check its availability here", prompt,
+                StringComparison.Ordinal);
+            Assert.Contains("Questions about documented capabilities, permissions, or other configurations",
+                prompt, StringComparison.Ordinal);
+            Assert.Contains("do not substitute this instance's availability for the documented rule", prompt,
+                StringComparison.Ordinal);
             Assert.DoesNotContain("then a catalog read", prompt, StringComparison.Ordinal);
         }
         finally

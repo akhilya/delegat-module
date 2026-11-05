@@ -28,20 +28,17 @@ import { getCachedMe } from "@/lib/meCache";
 import { canAct, PERMS } from "@/lib/permissions";
 import { toast } from "vue-sonner";
 import { Button } from "@/components/ui/button";
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
 import {
-  Search,
   ChevronLeft,
   ChevronsLeft,
   ChevronRight,
   ChevronsRight,
-  ChevronDown,
   Pencil,
   Trash2,
   X,
   Download,
   Upload,
-  Check,
   FileSpreadsheet,
   Undo2,
   RefreshCw,
@@ -55,11 +52,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -86,10 +78,11 @@ import {
 } from "@/components/ui/tooltip";
 import { PAGE_PRODUCT_EDIT, setPageTitle } from "@/router";
 import {
-  MENU_ITEM_CHECK,
-  MENU_ITEM_INDICATOR,
-  MENU_SEPARATOR,
-} from "@/lib/menuSurface";
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   PRODUCTS_LIST_NS,
   PRODUCTS_TRASH_NS,
@@ -117,20 +110,17 @@ export default {
     BulkAdapterDialog,
     ImportExcelDialog,
     ProductTransferDialog,
-    NavSearchField,
+    PageListToolbar,
     Button,
-    Search,
     ChevronLeft,
     ChevronsLeft,
     ChevronRight,
     ChevronsRight,
-    ChevronDown,
     Pencil,
     Trash2,
     X,
     Download,
     Upload,
-    Check,
     FileSpreadsheet,
     Undo2,
     RefreshCw,
@@ -151,9 +141,10 @@ export default {
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -716,9 +707,6 @@ export default {
           : null,
       categoryFilterOpen: false,
       categoryMenuQuery: "",
-      MENU_ITEM_CHECK,
-      MENU_ITEM_INDICATOR,
-      MENU_SEPARATOR,
 
       // Multi-column sorting (restore from query)
       sortColumns: parseSortFromQuery(this.$route.query),
@@ -1017,106 +1005,64 @@ export default {
       <TooltipProvider :delay-duration="400">
         <Tooltip>
           <TooltipTrigger as-child>
-            <NavSearchField
-              v-model="searchQuery"
-              class="w-full min-w-0 lg:!w-full lg:!max-w-none lg:!min-w-0"
-              :placeholder="$t('common.search')"
-              @submit="fetchProducts"
-            >
-              <template #trailing>
-                <Popover v-model:open="categoryFilterOpen">
-                  <PopoverTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      type="button"
-                      class="h-7 max-w-[8rem] min-w-0 cursor-pointer gap-0.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                      :class="
-                        filterCategoryId != null
-                          ? 'bg-muted text-foreground shadow-none'
-                          : ''
-                      "
-                      :aria-label="categoryFilterLabel"
-                    >
-                      <span class="min-w-0 truncate">{{
-                        categoryFilterLabel
-                      }}</span>
-                      <ChevronDown class="size-3.5 shrink-0 opacity-60" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    class="flex w-56 max-w-[min(14rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"
+            <div class="w-full min-w-0">
+              <PageListToolbar
+                v-model="searchQuery"
+                v-model:filters-open="categoryFilterOpen"
+                :placeholder="$t('common.search')"
+                :active-filter-count="filterCategoryId != null ? 1 : 0"
+                @submit="fetchProducts"
+                @reset="selectCategoryFilter(null)"
+              >
+                <template #filters>
+                  <DropdownMenuLabel
+                    class="truncate"
+                    :title="categoryFilterLabel"
                   >
-                    <div v-if="showCategoryMenuSearch" class="border-b p-1.5">
-                      <div class="relative">
-                        <Search
-                          class="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                          v-model="categoryMenuQuery"
-                          type="search"
-                          class="h-7 pl-7 text-sm"
-                          :placeholder="$t('common.search')"
-                          @click.stop
-                        />
-                      </div>
-                    </div>
-                    <div class="max-h-64 overflow-y-auto p-1">
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
-                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
-                        @click="selectCategoryFilter(null)"
-                      >
-                        <span class="min-w-0 flex-1 truncate text-left">{{
-                          $t("pages.productsPage.filters.allCategories")
-                        }}</span>
-                        <Check
-                          v-if="filterCategoryId == null"
-                          :class="MENU_ITEM_CHECK + ' text-foreground'"
-                        />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
-                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
-                        @click="selectCategoryFilter(-1)"
-                      >
-                        <span class="min-w-0 flex-1 truncate text-left">{{
-                          $t("pages.productsPage.filters.noCategory")
-                        }}</span>
-                        <Check
-                          v-if="filterCategoryId === -1"
-                          :class="MENU_ITEM_CHECK + ' text-foreground'"
-                        />
-                      </Button>
-                      <div :class="MENU_SEPARATOR" />
-                      <Button
-                        v-for="cat in filteredMenuCategories"
-                        :key="cat.id"
-                        variant="ghost"
-                        type="button"
-                        class="h-8 min-h-0 w-full justify-start rounded-md px-2 py-0 text-left text-sm font-normal hover:bg-accent"
-                        :class="MENU_ITEM_INDICATOR + ' h-8 w-full py-0'"
-                        :title="cat.name"
-                        @click="selectCategoryFilter(cat.id)"
-                      >
-                        <span class="min-w-0 flex-1 truncate text-left">{{
-                          cat.name
-                        }}</span>
-                        <Check
-                          v-if="filterCategoryId === cat.id"
-                          :class="MENU_ITEM_CHECK + ' text-foreground'"
-                        />
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </template>
-            </NavSearchField>
+                    {{ categoryFilterLabel }}
+                  </DropdownMenuLabel>
+                  <Input
+                    v-if="showCategoryMenuSearch"
+                    v-model="categoryMenuQuery"
+                    type="search"
+                    :placeholder="$t('common.search')"
+                    :aria-label="$t('common.search')"
+                    @keydown.stop
+                  />
+                  <DropdownMenuRadioGroup
+                    :model-value="
+                      filterCategoryId == null
+                        ? '__all__'
+                        : String(filterCategoryId)
+                    "
+                    @update:model-value="
+                      selectCategoryFilter(
+                        $event === '__all__' ? null : Number($event),
+                      )
+                    "
+                  >
+                    <DropdownMenuRadioItem value="__all__">{{
+                      $t("pages.productsPage.filters.allCategories")
+                    }}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="-1">{{
+                      $t("pages.productsPage.filters.noCategory")
+                    }}</DropdownMenuRadioItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioItem
+                      v-for="cat in filteredMenuCategories"
+                      :key="cat.id"
+                      :value="String(cat.id)"
+                      :text-value="cat.name"
+                      :title="cat.name"
+                    >
+                      <span class="min-w-0 flex-1 truncate">{{
+                        cat.name
+                      }}</span>
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </template>
+              </PageListToolbar>
+            </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" class="max-w-xs text-left">
             {{ $t("pages.productsPage.searchHint") }}

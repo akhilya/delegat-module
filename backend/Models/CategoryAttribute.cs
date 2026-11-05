@@ -8,7 +8,7 @@ namespace Delegat.Models;
 /// <summary>
 /// Represents an attribute definition within a product category (e.g., "Color", "Material").
 /// </summary>
-public class CategoryAttribute : IEntity, IMapToDTO<CategoryAttribute.AttributeDTO>, IAddable<CategoryAttribute.AddForm>, IUpdateable<CategoryAttribute.UpdateForm>
+public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDTO<CategoryAttribute.AttributeDTO>, IAddable<CategoryAttribute.AddForm>, IUpdateable<CategoryAttribute.UpdateForm>
 {
     /// <summary>
     /// Unique attribute identifier.

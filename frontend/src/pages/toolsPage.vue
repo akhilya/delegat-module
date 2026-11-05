@@ -1,5 +1,8 @@
 <script>
 import AppPageChrome from "@/components/AppPageChrome.vue";
+import { defineAsyncComponent } from "vue";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PAGE_TOOLS } from "@/router";
 import {
   InsetGroup,
   InsetGroupItem,
@@ -44,6 +47,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const ICONS = { Cable, Search, Wand2, Play, DollarSign, Tag };
+const ScheduledTasksPanel = defineAsyncComponent(
+  () => import("@/components/tools/ScheduledTasksPanel.vue"),
+);
 
 const SECTION_LABEL_KEYS = {
   catalog: "pages.toolsPage.sectionCatalog",
@@ -55,6 +61,10 @@ const SECTION_LABEL_KEYS = {
 export default {
   components: {
     AppPageChrome,
+    ScheduledTasksPanel,
+    Tabs,
+    TabsList,
+    TabsTrigger,
     InsetGroup,
     InsetGroupItem,
     InsetGroupLabel,
@@ -89,6 +99,11 @@ export default {
     };
   },
   computed: {
+    activeTab() {
+      return this.canManageMarketplace && this.$route.query.tab === "schedules"
+        ? "schedules"
+        : "tools";
+    },
     canManageMarketplace() {
       return hasPermission(getCachedMe(), PERMS.MarketplaceManage);
     },
@@ -108,6 +123,13 @@ export default {
     await this.loadTools();
   },
   methods: {
+    changeTab(value) {
+      const query = { ...this.$route.query };
+      if (value === "schedules" && this.canManageMarketplace)
+        query.tab = "schedules";
+      else delete query.tab;
+      this.$router.replace({ path: PAGE_TOOLS, query });
+    },
     toolTitle,
     toolDescription,
     toolHref,
@@ -219,139 +241,157 @@ export default {
 
 <template>
   <AppPageChrome>
-    <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
-    <EmptyState
-      v-else-if="tools.length === 0"
-      :title="$t('pages.toolsPage.emptyTitle')"
-      :description="$t('pages.toolsPage.emptyDescription')"
-    >
-      <template #icon>
-        <Wand2 />
-      </template>
-    </EmptyState>
-    <div v-else class="page-region-in flex w-full max-w-xl flex-col">
-      <p class="mb-6 text-sm text-muted-foreground">
-        {{ $t("pages.toolsPage.description") }}
-      </p>
-      <div class="flex flex-col gap-8">
-        <section v-for="section in catalogSections" :key="section.id">
-          <InsetGroupLabel>{{ sectionLabel(section) }}</InsetGroupLabel>
-          <div class="flex flex-col gap-2">
-            <template v-for="block in sectionBlocks(section)" :key="block.key">
-              <InsetGroup v-if="block.type === 'list'">
-                <InsetGroupItem
-                  v-for="entry in block.tools"
-                  :key="entry.id"
-                  :as="RouterLink"
-                  :to="toolHref(entry)"
-                  show-chevron
-                >
-                  <template #leading>
-                    <AdapterIcon
-                      v-if="entry.adapterKey"
-                      :adapter-key="entry.adapterKey"
-                      class="size-4"
-                    />
-                    <component :is="iconFor(entry)" v-else class="size-4" />
-                  </template>
-                  <p class="truncate">{{ toolTitle(entry, $t) }}</p>
-                  <p
-                    class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+    <template v-if="canManageMarketplace" #nav-center>
+      <Tabs :model-value="activeTab" @update:model-value="changeTab">
+        <TabsList>
+          <TabsTrigger value="tools">{{ $t("routes.tools") }}</TabsTrigger>
+          <TabsTrigger value="schedules">{{
+            $t("routes.scheduledTasks")
+          }}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </template>
+    <KeepAlive>
+      <ScheduledTasksPanel v-if="activeTab === 'schedules'" />
+    </KeepAlive>
+    <div v-show="activeTab === 'tools'" class="flex min-h-0 flex-1 flex-col">
+      <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
+      <EmptyState
+        v-else-if="tools.length === 0"
+        :title="$t('pages.toolsPage.emptyTitle')"
+        :description="$t('pages.toolsPage.emptyDescription')"
+      >
+        <template #icon>
+          <Wand2 />
+        </template>
+      </EmptyState>
+      <div v-else class="page-region-in flex w-full max-w-xl flex-col">
+        <p class="mb-6 text-sm text-muted-foreground">
+          {{ $t("pages.toolsPage.description") }}
+        </p>
+        <div class="flex flex-col gap-8">
+          <section v-for="section in catalogSections" :key="section.id">
+            <InsetGroupLabel>{{ sectionLabel(section) }}</InsetGroupLabel>
+            <div class="flex flex-col gap-2">
+              <template
+                v-for="block in sectionBlocks(section)"
+                :key="block.key"
+              >
+                <InsetGroup v-if="block.type === 'list'">
+                  <InsetGroupItem
+                    v-for="entry in block.tools"
+                    :key="entry.id"
+                    :as="RouterLink"
+                    :to="toolHref(entry)"
+                    show-chevron
                   >
-                    {{ toolDescription(entry, $t) }}
-                  </p>
-                  <template v-if="rowCaptions(entry).length" #trailing>
-                    <span class="flex max-w-36 flex-col items-end gap-0.5">
-                      <span
-                        v-for="caption in rowCaptions(entry)"
-                        :key="caption.key"
-                        class="truncate text-xs font-normal"
-                        :class="caption.className"
-                      >
-                        {{ caption.text }}
+                    <template #leading>
+                      <AdapterIcon
+                        v-if="entry.adapterKey"
+                        :adapter-key="entry.adapterKey"
+                        class="size-4"
+                      />
+                      <component :is="iconFor(entry)" v-else class="size-4" />
+                    </template>
+                    <p class="truncate">{{ toolTitle(entry, $t) }}</p>
+                    <p
+                      class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+                    >
+                      {{ toolDescription(entry, $t) }}
+                    </p>
+                    <template v-if="rowCaptions(entry).length" #trailing>
+                      <span class="flex max-w-36 flex-col items-end gap-0.5">
+                        <span
+                          v-for="caption in rowCaptions(entry)"
+                          :key="caption.key"
+                          class="truncate text-xs font-normal"
+                          :class="caption.className"
+                        >
+                          {{ caption.text }}
+                        </span>
                       </span>
-                    </span>
-                  </template>
-                </InsetGroupItem>
-              </InsetGroup>
-              <InsetGroup v-else>
-                <InsetGroupItem
-                  :as="RouterLink"
-                  :to="toolHref(block.entry)"
-                  show-chevron
-                >
-                  <template #leading>
-                    <AdapterIcon
-                      v-if="block.entry.adapterKey"
-                      :adapter-key="block.entry.adapterKey"
-                      class="size-4"
-                    />
-                    <component
-                      :is="iconFor(block.entry)"
-                      v-else
-                      class="size-4"
-                    />
-                  </template>
-                  <p class="truncate">{{ toolTitle(block.entry, $t) }}</p>
-                  <p
-                    class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+                    </template>
+                  </InsetGroupItem>
+                </InsetGroup>
+                <InsetGroup v-else>
+                  <InsetGroupItem
+                    :as="RouterLink"
+                    :to="toolHref(block.entry)"
+                    show-chevron
                   >
-                    {{ toolDescription(block.entry, $t) }}
-                  </p>
-                  <template v-if="rowCaptions(block.entry).length" #trailing>
-                    <span class="flex max-w-36 flex-col items-end gap-0.5">
-                      <span
-                        v-for="caption in rowCaptions(block.entry)"
-                        :key="caption.key"
-                        class="truncate text-xs font-normal"
-                        :class="caption.className"
-                      >
-                        {{ caption.text }}
+                    <template #leading>
+                      <AdapterIcon
+                        v-if="block.entry.adapterKey"
+                        :adapter-key="block.entry.adapterKey"
+                        class="size-4"
+                      />
+                      <component
+                        :is="iconFor(block.entry)"
+                        v-else
+                        class="size-4"
+                      />
+                    </template>
+                    <p class="truncate">{{ toolTitle(block.entry, $t) }}</p>
+                    <p
+                      class="text-muted-foreground mt-0.5 line-clamp-2 text-xs font-normal"
+                    >
+                      {{ toolDescription(block.entry, $t) }}
+                    </p>
+                    <template v-if="rowCaptions(block.entry).length" #trailing>
+                      <span class="flex max-w-36 flex-col items-end gap-0.5">
+                        <span
+                          v-for="caption in rowCaptions(block.entry)"
+                          :key="caption.key"
+                          class="truncate text-xs font-normal"
+                          :class="caption.className"
+                        >
+                          {{ caption.text }}
+                        </span>
                       </span>
-                    </span>
-                  </template>
-                </InsetGroupItem>
-                <InsetGroupItem
-                  :disabled="!canQuickRun(block.entry) || runningId != null"
-                  :aria-label="runAria(block.entry)"
-                  :class="
-                    block.entry.destructive ? 'text-destructive' : undefined
-                  "
-                  @click="openQuickRun(block.entry)"
-                >
-                  <template #leading>
-                    <Spinner v-if="runningId === block.entry.id" />
-                    <Play v-else class="size-4" />
-                  </template>
-                  {{ $t("pages.toolsPage.quickRun") }}
-                </InsetGroupItem>
-              </InsetGroup>
-            </template>
-          </div>
-        </section>
+                    </template>
+                  </InsetGroupItem>
+                  <InsetGroupItem
+                    :disabled="!canQuickRun(block.entry) || runningId != null"
+                    :aria-label="runAria(block.entry)"
+                    :class="
+                      block.entry.destructive ? 'text-destructive' : undefined
+                    "
+                    @click="openQuickRun(block.entry)"
+                  >
+                    <template #leading>
+                      <Spinner v-if="runningId === block.entry.id" />
+                      <Play v-else class="size-4" />
+                    </template>
+                    {{ $t("pages.toolsPage.quickRun") }}
+                  </InsetGroupItem>
+                </InsetGroup>
+              </template>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
 
-    <AlertDialog v-model:open="confirmOpen">
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ confirmTitle }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ confirmDescription }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
-          <AlertDialogAction
-            :variant="confirmEntry?.destructive ? 'destructive' : 'default'"
-            :disabled="runningId != null"
-            @click="confirmQuickRun"
-          >
-            <Spinner v-if="runningId" class="mr-2" />
-            {{ $t("pages.toolsPage.quickRunConfirm") }}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog v-model:open="confirmOpen">
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{{ confirmTitle }}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {{ confirmDescription }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
+            <AlertDialogAction
+              :variant="confirmEntry?.destructive ? 'destructive' : 'default'"
+              :disabled="runningId != null"
+              @click="confirmQuickRun"
+            >
+              <Spinner v-if="runningId" class="mr-2" />
+              {{ $t("pages.toolsPage.quickRunConfirm") }}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   </AppPageChrome>
 </template>

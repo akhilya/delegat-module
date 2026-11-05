@@ -577,7 +577,8 @@ export default {
               </TableCell>
               <TableCell class="px-2 align-top">
                 <div
-                  class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  data-row-hover-action
+                  class="flex items-center justify-end gap-1"
                 >
                   <Button
                     variant="ghost"

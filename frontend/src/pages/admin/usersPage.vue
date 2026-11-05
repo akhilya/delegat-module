@@ -767,6 +767,7 @@ export default {
                         type="button"
                         variant="ghost"
                         size="icon"
+                        reveal-on-row-hover
                         class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         :disabled="revokingTokenId === token.id"
                         :title="$t('pages.usersPage.invite.revokeAction')"

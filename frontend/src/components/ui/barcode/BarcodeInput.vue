@@ -100,7 +100,9 @@ export default {
           margin: 0,
           width: 1,
         });
-      } catch {}
+      } catch {
+        // Invalid preview data must not interrupt editing the barcode value.
+      }
     }
 
     function renderLargeBarcode() {
@@ -113,7 +115,9 @@ export default {
           margin: 8,
           fontSize: 16,
         });
-      } catch {}
+      } catch {
+        // A failed large preview must not interrupt the form.
+      }
     }
 
     // Re-render when value changes
@@ -224,7 +228,7 @@ export default {
         <PopoverTrigger as-child>
           <button
             type="button"
-            class="flex h-9 shrink-0 cursor-pointer items-center rounded-md border border-input bg-background px-1.5 transition-colors hover:border-foreground/30"
+            class="flex h-9 shrink-0 cursor-pointer items-center rounded-control border border-input bg-background px-1.5 transition-colors hover:border-foreground/30"
             :title="t('barcodeCell.clickToEnlarge')"
           >
             <svg ref="svgRef" class="h-6 block"></svg>

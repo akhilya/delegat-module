@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { canConfirmPlan, reconcilePlanMessages } from "./planState.js";
+import { readSseEvents } from "./sse.js";
 import {
   apiHistoryFromBlocks,
   appendAssistantApiBlock,
@@ -17,6 +19,117 @@ import {
   toolResultFailed,
   finalizeTurnTools,
 } from "./persist.js";
+
+describe("plan reconciliation", () => {
+  const pending = {
+    id: 2,
+    dbId: 2,
+    role: "assistant",
+    done: true,
+    plan: { proposalId: "p1" },
+  };
+  it("never reopens an accepted or completed proposal after a stale read", () => {
+    for (const planExecuted of [false, true]) {
+      const local = {
+        ...pending,
+        planConfirmed: true,
+        planExecuted,
+        content: "Execution",
+      };
+      const [merged] = reconcilePlanMessages([local], [pending]);
+      assert.equal(merged.planConfirmed, true);
+      assert.equal(merged.planExecuted, planExecuted);
+      assert.equal(merged.content, "Execution");
+      assert.equal(canConfirmPlan(merged), false);
+    }
+  });
+  it("accepts an authoritative completed result and clears a transient error", () => {
+    const [merged] = reconcilePlanMessages(
+      [
+        {
+          ...pending,
+          planConfirmed: true,
+          planConfirmationError: { stage: "execution" },
+        },
+      ],
+      [{ ...pending, planConfirmed: true, planExecuted: true }],
+    );
+    assert.equal(merged.planExecuted, true);
+    assert.equal(merged.planConfirmationError, null);
+  });
+  it("preserves unknown confirmation and cancelled/superseded decisions", () => {
+    for (const patch of [
+      { planConfirmationError: { stage: "confirmation" } },
+      { planCancelled: true },
+      { planSuperseded: true },
+    ]) {
+      const [merged] = reconcilePlanMessages(
+        [{ ...pending, ...patch }],
+        [pending],
+      );
+      assert.equal(canConfirmPlan(merged), false);
+    }
+  });
+  it("does not transfer execution state to a different proposal", () => {
+    const next = { ...pending, plan: { proposalId: "p2" } };
+    const [merged] = reconcilePlanMessages(
+      [{ ...pending, planConfirmed: true }],
+      [next],
+    );
+    assert.equal(canConfirmPlan(merged), true);
+    assert.equal(merged.planConfirmed, undefined);
+  });
+  it("requires a completed proposal and rejects failed/executed/confirming plans", () => {
+    assert.equal(canConfirmPlan(pending), true);
+    for (const patch of [
+      { done: false },
+      { planExecuted: true },
+      { planFailed: true },
+      { planConfirming: true },
+    ])
+      assert.equal(canConfirmPlan({ ...pending, ...patch }), false);
+  });
+});
+
+describe("AI SSE decoding", () => {
+  async function decode(text, chunkSize) {
+    const bytes = new TextEncoder().encode(text);
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          for (let i = 0; i < bytes.length; i += chunkSize)
+            controller.enqueue(bytes.slice(i, i + chunkSize));
+          controller.close();
+        },
+      }),
+    );
+    const events = [];
+    for await (const event of readSseEvents(response)) events.push(event);
+    return events;
+  }
+  it("keeps UTF-8 and CRLF records across single-byte chunks", async () => {
+    const event = { type: "text", data: { delta: "Готово" } };
+    assert.deepEqual(
+      await decode(
+        `: keepalive\r\n\r\ndata: ${JSON.stringify(event)}\r\n\r\n`,
+        1,
+      ),
+      [event],
+    );
+  });
+  it("handles multiline data, malformed frames, and a final record without a delimiter", async () => {
+    assert.deepEqual(
+      await decode(
+        'data: invalid\n\ndata: {"type":"done",\ndata: "data":{"ok":false}}',
+        3,
+      ),
+      [{ type: "done", data: { ok: false } }],
+    );
+  });
+  it("does not invent a result from a truncated record", async () => {
+    assert.deepEqual(await decode('data: {"type":"done","data":', 2), []);
+  });
+});
 
 describe("AI provider chat history", () => {
   it("keeps each assistant tool round immediately followed by its results", () => {
@@ -464,6 +577,10 @@ describe("plan execution persist", () => {
 });
 
 describe("toolResultFailed", () => {
+  it("does not count a nonzero Python exit as a successful partial step", () => {
+    assert.equal(toolResultFailed({ exitCode: 1 }), true);
+    assert.equal(toolResultFailed({ exitCode: 0 }), false);
+  });
   it("treats cabinet quota bodies without an error field as failed", () => {
     assert.equal(
       toolResultFailed(

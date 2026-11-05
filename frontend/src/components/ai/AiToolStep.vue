@@ -109,7 +109,8 @@ const expandable = computed(
         </p>
         <div
           v-if="sql?.rows?.length"
-          class="max-h-32 overflow-auto rounded-md bg-muted/60"
+          data-slot="table-frame"
+          class="max-h-32 overflow-auto bg-muted/60"
         >
           <Table
             :contain="false"

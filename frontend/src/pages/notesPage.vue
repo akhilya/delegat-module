@@ -2,21 +2,14 @@
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
-import NavSearchField from "@/components/NavSearchField.vue";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import PageListToolbar from "@/components/PageListToolbar.vue";
+import FilterMenuGroup from "@/components/FilterMenuGroup.vue";
 import {
   NotebookPen,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  X,
 } from "lucide-vue-next";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
@@ -40,12 +33,8 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    NavSearchField,
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    PageListToolbar,
+    FilterMenuGroup,
     InsetGroup,
     InsetGroupItem,
     NotebookPen,
@@ -53,7 +42,6 @@ export default {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    X,
     NoteDetailSheet,
   },
   setup() {
@@ -98,6 +86,23 @@ export default {
         },
       ];
     },
+    authorOptions() {
+      return [
+        { value: AUTHOR_ALL, label: this.$t("pages.notesPage.authorAll") },
+        ...(this.hasUnknownAuthor
+          ? [
+              {
+                value: AUTHOR_UNKNOWN,
+                label: this.$t("pages.notesPage.authorUnknown"),
+              },
+            ]
+          : []),
+        ...this.authors.map((author) => ({
+          value: String(author.id),
+          label: author.userName || `#${author.id}`,
+        })),
+      ];
+    },
     sortOptions() {
       return [
         {
@@ -140,6 +145,13 @@ export default {
         this.authorFilter !== AUTHOR_ALL ||
         this.sortBy !== "createdAt" ||
         this.sortDesc !== true,
+      );
+    },
+    activeFilterCount() {
+      return (
+        Number(this.importanceFilter !== IMPORTANCE_ALL) +
+        Number(this.authorFilter !== AUTHOR_ALL) +
+        Number(this.sortSelectValue !== "createdAt:desc")
       );
     },
     pageFrom() {
@@ -203,7 +215,6 @@ export default {
     },
 
     clearFilters() {
-      this.searchQuery = "";
       this.importanceFilter = IMPORTANCE_ALL;
       this.authorFilter = AUTHOR_ALL;
       this.sortBy = "createdAt";
@@ -324,97 +335,53 @@ export default {
 <template>
   <AppPageChrome fill-viewport>
     <template #nav-center>
-      <NavSearchField
+      <PageListToolbar
         v-model="searchQuery"
         :placeholder="$t('pages.notesPage.searchPlaceholder')"
+        :active-filter-count="activeFilterCount"
         @submit="applySearch"
-      />
+        @reset="clearFilters"
+      >
+        <template #filters>
+          <FilterMenuGroup
+            :model-value="importanceFilter"
+            :label="$t('pages.notesPage.columnImportance')"
+            :options="[
+              {
+                value: IMPORTANCE_ALL,
+                label: $t('pages.notesPage.importanceAll'),
+              },
+              ...importanceOptions,
+            ]"
+            @update:model-value="
+              (v) => {
+                importanceFilter = v;
+                onFilterChange();
+              }
+            "
+          />
+          <FilterMenuGroup
+            :model-value="authorFilter"
+            :label="$t('pages.notesPage.columnAuthor')"
+            :options="authorOptions"
+            @update:model-value="
+              (v) => {
+                authorFilter = v;
+                onFilterChange();
+              }
+            "
+          />
+          <FilterMenuGroup
+            :model-value="sortSelectValue"
+            :label="$t('pages.notesPage.sortLabel')"
+            :options="sortOptions"
+            @update:model-value="applySort"
+          />
+        </template>
+      </PageListToolbar>
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col">
-      <div class="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <Select
-          :model-value="importanceFilter"
-          @update:model-value="
-            (v) => {
-              importanceFilter = v;
-              onFilterChange();
-            }
-          "
-        >
-          <SelectTrigger class="h-9 w-full sm:w-44">
-            <SelectValue :placeholder="$t('pages.notesPage.importanceAll')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem :value="IMPORTANCE_ALL">
-              {{ $t("pages.notesPage.importanceAll") }}
-            </SelectItem>
-            <SelectItem
-              v-for="opt in importanceOptions"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          :model-value="authorFilter"
-          @update:model-value="
-            (v) => {
-              authorFilter = v;
-              onFilterChange();
-            }
-          "
-        >
-          <SelectTrigger class="h-9 w-full sm:w-44">
-            <SelectValue :placeholder="$t('pages.notesPage.authorAll')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem :value="AUTHOR_ALL">
-              {{ $t("pages.notesPage.authorAll") }}
-            </SelectItem>
-            <SelectItem v-if="hasUnknownAuthor" :value="AUTHOR_UNKNOWN">
-              {{ $t("pages.notesPage.authorUnknown") }}
-            </SelectItem>
-            <SelectItem
-              v-for="author in authors"
-              :key="author.id"
-              :value="String(author.id)"
-            >
-              {{ author.userName || `#${author.id}` }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select :model-value="sortSelectValue" @update:model-value="applySort">
-          <SelectTrigger class="h-9 w-full sm:w-52">
-            <SelectValue :placeholder="$t('pages.notesPage.sortLabel')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="opt in sortOptions"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Button
-          v-if="hasActiveFilters"
-          variant="ghost"
-          size="sm"
-          class="h-9"
-          @click="clearFilters"
-        >
-          <X class="size-4" />
-          {{ $t("pages.notesPage.clearFilters") }}
-        </Button>
-      </div>
-
       <PageSection
         class="flex min-h-0 flex-1 flex-col !mb-0"
         :loading="isLoading"

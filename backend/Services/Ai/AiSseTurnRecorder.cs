@@ -31,6 +31,7 @@ public static class AiSseTurnRecorder
         int? requestErrorStatus = null;
         var planFailed = false;
         var turnEnded = false;
+        var planExecuted = false;
 
         foreach (var payload in SsePayloads(chunks))
         {
@@ -95,8 +96,11 @@ public static class AiSseTurnRecorder
                             if (data.TryGetProperty("modelName", out var modelEl))
                                 modelName = modelEl.GetString();
                             if (data.TryGetProperty("ok", out var okEl)
-                                && okEl.ValueKind == JsonValueKind.False)
-                                planFailed = true;
+                                && okEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                            {
+                                planExecuted = true;
+                                planFailed |= okEl.ValueKind == JsonValueKind.False;
+                            }
                         }
                         break;
                 }
@@ -107,7 +111,7 @@ public static class AiSseTurnRecorder
             MarkInterruptedTools(tools);
 
         string? toolCallsJson = null;
-        if (plan != null || tools.Count > 0 || requestErrorCode != null)
+        if (plan != null || tools.Count > 0 || requestErrorCode != null || planExecuted)
         {
             var envelope = new Dictionary<string, object?>
             {
@@ -126,6 +130,8 @@ public static class AiSseTurnRecorder
             }
             if (planFailed && plan == null)
                 envelope["planFailed"] = true;
+            if (planExecuted && plan == null)
+                envelope["planExecuted"] = true;
             toolCallsJson = JsonSerializer.Serialize(envelope, JsonOpts);
         }
 

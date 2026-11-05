@@ -42,6 +42,7 @@ const usesDivButtonRole = computed(
 const showHover = computed(() => !props.disabled && !props.selected);
 
 function onRowKeydown(event) {
+  if (event.target !== event.currentTarget) return;
   if (!usesDivButtonRole.value || props.disabled) return;
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();

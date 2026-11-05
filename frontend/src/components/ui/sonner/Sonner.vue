@@ -1,7 +1,14 @@
 <script setup>
 import { computed } from "vue";
 import { Toaster as Sonner } from "vue-sonner";
+import { AlertCircle, AlertTriangle, CheckCircle, X } from "lucide-vue-next";
+import { useI18n } from "vue-i18n";
+import { Spinner } from "@/components/ui/spinner";
 import { isDark } from "@/theme";
+import { useCompanionSheets } from "@/composables/useCompanionSheets";
+
+const { t } = useI18n();
+const { fabRight } = useCompanionSheets();
 
 const props = defineProps({
   invert: { type: Boolean, required: false },
@@ -10,10 +17,10 @@ const props = defineProps({
   hotkey: { type: Array, required: false },
   richColors: { type: Boolean, required: false, default: false },
   expand: { type: Boolean, required: false },
-  duration: { type: Number, required: false },
-  gap: { type: Number, required: false },
-  visibleToasts: { type: Number, required: false },
-  closeButton: { type: Boolean, required: false },
+  duration: { type: Number, required: false, default: 5000 },
+  gap: { type: Number, required: false, default: 8 },
+  visibleToasts: { type: Number, required: false, default: 3 },
+  closeButton: { type: Boolean, required: false, default: true },
   toastOptions: { type: Object, required: false },
   class: { type: String, required: false },
   style: { type: Object, required: false },
@@ -32,8 +39,8 @@ const resolvedTheme = computed(() => {
 });
 
 const toasterStyle = computed(() => ({
-  // Catalog Workbench: flat surface + shared radius (slightly tighter than cards is fine)
-  "--border-radius": "var(--radius-md)",
+  "--companion-fab-right": `${fabRight.value}px`,
+  "--border-radius": "var(--radius)",
   "--normal-bg": "var(--popover)",
   "--normal-text": "var(--popover-foreground)",
   "--normal-border": "var(--border)",
@@ -48,6 +55,19 @@ const toasterStyle = computed(() => ({
   "--warning-text": "var(--warning-foreground)",
   ...(props.style || {}),
 }));
+
+const resolvedIcons = computed(() => ({
+  success: CheckCircle,
+  error: AlertCircle,
+  warning: AlertTriangle,
+  close: X,
+  ...props.icons,
+}));
+
+const resolvedToastOptions = computed(() => ({
+  closeButtonAriaLabel: t("common.close"),
+  ...props.toastOptions,
+}));
 </script>
 
 <template>
@@ -57,5 +77,10 @@ const toasterStyle = computed(() => ({
     :theme="resolvedTheme"
     :rich-colors="props.richColors"
     :style="toasterStyle"
-  />
+    :icons="resolvedIcons"
+    :toast-options="resolvedToastOptions"
+    :container-aria-label="props.containerAriaLabel || t('notifications.label')"
+  >
+    <template #loading-icon><Spinner /></template>
+  </Sonner>
 </template>

@@ -208,7 +208,8 @@ const hostedAiUsageText = computed(() => {
   const status = hostedAiStatus.value;
   if (!status?.configured || !status?.entitled) return "";
   if (status.usageUnavailable) return t("ai.hostedUsageUnavailable");
-  const used = (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
+  const used =
+    (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
   return t("ai.hostedUsage", {
     used: formatTokenCount(used),
     quota: formatTokenCount(status.quotaTokens),
@@ -303,11 +304,11 @@ function onOpenAutoFocus(event) {
 function stopGeneration() {
   store.dispatch("aiChat/stopGeneration");
 }
-function confirmPlan() {
-  store.dispatch("aiChat/confirmPlan");
+function confirmPlan(proposalId) {
+  store.dispatch("aiChat/confirmPlan", proposalId);
 }
-function cancelPlan() {
-  store.dispatch("aiChat/cancelPlan");
+function cancelPlan(proposalId) {
+  store.dispatch("aiChat/cancelPlan", proposalId);
 }
 
 const copiedId = ref(null);
@@ -353,7 +354,7 @@ async function loadConversations() {
   convListLoading.value = true;
   try {
     const { http } = await import("@/main");
-    const res = await http.get("/ai/conversations");
+    const res = await http.get("/ai/conversations", { cache: false });
     conversations.value = res.data || [];
   } catch {
     conversations.value = [];
@@ -563,7 +564,9 @@ watch(isLoading, (loading, wasLoading) => {
 });
 
 function formatTokenCount(value) {
-  return new Intl.NumberFormat(locale.value).format(Math.max(0, Number(value) || 0));
+  return new Intl.NumberFormat(locale.value).format(
+    Math.max(0, Number(value) || 0),
+  );
 }
 
 function onPanelWidth(w) {
@@ -578,6 +581,14 @@ function messageTimeline(msg) {
 
 function hasPlanExec(msg) {
   return Number.isInteger(msg.planExecStart);
+}
+
+function planExecutionTools(msg) {
+  if (!hasPlanExec(msg)) return [];
+  return messageTimeline(msg)
+    .slice(msg.planExecStart)
+    .filter((item) => item.type === "tool" && item.tool)
+    .map((item) => item.tool);
 }
 
 function turnLayout(msg) {
@@ -601,7 +612,11 @@ function executionPart(msg) {
 
 function replyText(msg) {
   const layout = turnLayout(msg);
-  return hasPlanExec(msg) ? layout.execution.reply : layout.proposal.reply;
+  return hasPlanExec(msg)
+    ? layout.execution.reply
+    : msg.plan
+      ? ""
+      : layout.proposal.reply;
 }
 
 function chatForms(msg) {
@@ -795,6 +810,7 @@ function isLatestTurn(msg) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      reveal-on-row-hover
                       class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       :title="t('ai.deleteConversationTooltip')"
                       :aria-label="t('ai.deleteConversationTooltip')"
@@ -892,7 +908,7 @@ function isLatestTurn(msg) {
                   />
 
                   <MarkdownProse
-                    v-if="hasPlanExec(msg) && proposalView(msg).reply"
+                    v-if="msg.plan && proposalView(msg).reply"
                     density="compact"
                     :html="renderAiMarkdown(proposalView(msg).reply)"
                     class="min-w-0 w-full wrap-break-word"
@@ -945,7 +961,7 @@ function isLatestTurn(msg) {
                         msg.planConfirmationError?.stage === 'confirmation' &&
                         !msg.planConfirmed
                       "
-                      :tool-calls="msg.toolCalls"
+                      :tool-calls="planExecutionTools(msg)"
                       :ready="msg.done && !isLoading"
                       @confirm="confirmPlan"
                       @cancel="cancelPlan"
@@ -1153,7 +1169,9 @@ function isLatestTurn(msg) {
                     :value="String(m.id)"
                     class="text-xs"
                   >
-                    {{ m.isPlatformHosted ? t("ai.platformModelName") : m.name }}
+                    {{
+                      m.isPlatformHosted ? t("ai.platformModelName") : m.name
+                    }}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1197,7 +1215,11 @@ function isLatestTurn(msg) {
         <p
           v-if="showHostedAiUsage"
           class="px-1 text-[11px] leading-4 tabular-nums"
-          :class="hostedAiStatus.usageUnavailable ? 'text-warning-foreground' : 'text-muted-foreground'"
+          :class="
+            hostedAiStatus.usageUnavailable
+              ? 'text-warning-foreground'
+              : 'text-muted-foreground'
+          "
           aria-live="polite"
         >
           {{ hostedAiUsageText }}

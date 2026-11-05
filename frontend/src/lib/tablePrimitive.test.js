@@ -38,10 +38,7 @@ const assemblyPage = readFileSync(
   new URL("../pages/orders/OrdersAssemblyPage.vue", import.meta.url),
   "utf8",
 );
-const appShell = readFileSync(
-  new URL("../app.vue", import.meta.url),
-  "utf8",
-);
+const appShell = readFileSync(new URL("../app.vue", import.meta.url), "utf8");
 const dockFooter = readFileSync(
   new URL("../components/PageDockFooter.vue", import.meta.url),
   "utf8",
@@ -54,8 +51,9 @@ const navigationBar = readFileSync(
   new URL("../components/navigationBar.vue", import.meta.url),
   "utf8",
 );
+const style = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 
-describe("flush table primitive", () => {
+describe("rounded table primitive", () => {
   it("keeps contain=false so sticky headers and row-height refs still bind to <table>", () => {
     assert.match(table, /contain:\s*\{\s*type:\s*Boolean,\s*default:\s*true/);
     assert.match(table, /defineExpose\(\{\s*\$el:\s*rootEl\s*\}\)/);
@@ -69,7 +67,37 @@ describe("flush table primitive", () => {
     assert.match(cell, /v-bind="\$attrs"/);
   });
 
-  it("keeps catalog tables flush with a pinned footer when the page fills the inset", () => {
+  it("outlines existing table owners once without introducing a sticky-breaking scroll wrapper", () => {
+    assert.match(style, /\[data-slot="table-container"\]/);
+    assert.match(style, /\[data-slot="table-scroll"\]/);
+    assert.match(style, /\[data-slot="table-frame"\]/);
+    assert.match(style, /border: 1px solid var\(--border\)/);
+    assert.match(style, /border-radius: var\(--radius\)/);
+    assert.match(style, /clip-path: inset\(0 round var\(--radius\)\)/);
+    assert.match(
+      style,
+      /\[data-slot="table-container"\]\s*\{\s*border: 0;\s*border-radius: 0;/,
+    );
+    assert.match(frame, /data-slot="table-frame"/);
+    assert.match(style, /:not\(\[data-table-outline="none"\]\)/);
+    assert.match(style, /padding-inline-start: 1\.5rem/);
+    assert.match(style, /padding-inline-end: 1\.5rem/);
+    for (const path of [
+      "products/ProductFileManager.vue",
+      "ai/AiToolStep.vue",
+    ]) {
+      const source = readFileSync(
+        new URL(`../components/${path}`, import.meta.url),
+        "utf8",
+      );
+      assert.match(source, /data-slot="table-frame"/);
+      if (path.startsWith("products/")) {
+        assert.match(source, /data-table-outline="none"/);
+      }
+    }
+  });
+
+  it("keeps table footers outside the outline and pinned when the page fills the inset", () => {
     assert.doesNotMatch(frame, /rounded/);
     assert.doesNotMatch(frame, /ring-/);
     assert.match(frame, /fill:\s*\{\s*type:\s*Boolean/);
@@ -97,9 +125,13 @@ describe("flush table primitive", () => {
     assert.doesNotMatch(assemblyPage, /fill-viewport/);
     assert.doesNotMatch(assemblyPage, /overflow-y-auto/);
     assert.match(dockFooter, /adaptive-padding/);
-    assert.match(dockFooter, /border-t/);
+    assert.doesNotMatch(dockFooter, /border-t/);
+    assert.doesNotMatch(frame, /border-t/);
     assert.doesNotMatch(dockFooter, /text-muted-foreground/);
-    assert.match(buttonVariants, /outline:\s*"border bg-background text-foreground/);
+    assert.match(
+      buttonVariants,
+      /outline:\s*"border bg-background text-foreground/,
+    );
     assert.match(buttonVariants, /ghost:\s*"text-foreground hover:bg-accent/);
     assert.match(dockFooter, /:disabled="!pinned"/);
     assert.match(dockFooter, /shouldPinPageFooter/);
@@ -109,9 +141,36 @@ describe("flush table primitive", () => {
     assert.match(productsPage, /class="flex min-h-0 w-full flex-1 flex-col"/);
   });
 
+  it("does not duplicate the rounded bottom border in manual table action footers", () => {
+    const body = readFileSync(
+      new URL("../components/ui/table/TableBody.vue", import.meta.url),
+      "utf8",
+    );
+    assert.match(body, /\[&_tr:last-child>td\]:border-b-0/);
+    for (const source of [
+      frame,
+      connectionPage,
+      readFileSync(
+        new URL(
+          "../components/products/ProductFileManager.vue",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ]) {
+      const footers = [
+        ...source.matchAll(
+          /<div\b[^>]*data-slot="table-actions-footer"[^>]*>/g,
+        ),
+      ];
+      assert.ok(footers.length > 0);
+      for (const [footer] of footers) assert.doesNotMatch(footer, /border-t/);
+    }
+  });
+
   it("sticks catalog headers inside the table scroller and mailbox headers to the page scroller", () => {
     assert.match(productsTable, /\[&_th\]:sticky \[&_th\]:top-0/);
-    assert.match(productsTable, /bg-background \[\&_th\]:sticky/);
+    assert.match(productsTable, /bg-background \[&_th\]:sticky/);
     assert.doesNotMatch(productsTable, /bg-card/);
     assert.match(productsTable, /data-slot="table-scroll"/);
     assert.doesNotMatch(productsTable, /\[data-slot="page-scroll"\]/);
@@ -119,7 +178,7 @@ describe("flush table primitive", () => {
     assert.match(ordersPage, /:contain="false"/);
     assert.match(ordersPage, /\[&_td\]:border-b/);
     assert.match(
-      frame,
+      frame.replace(/\s+/g, " "),
       /fill \? 'min-h-0 flex-1 overflow-auto' : dockFooter \? 'min-w-0' : 'overflow-x-auto'/,
     );
     assert.doesNotMatch(navigationBar, /sticky top-0 left-0 z-30/);
@@ -128,8 +187,8 @@ describe("flush table primitive", () => {
     assert.match(chrome, /#left/);
     assert.doesNotMatch(chrome, /<Breadcrumbs[\s\S]*mb-4/);
     assert.doesNotMatch(productsPage, /bg-primary-foreground/);
-    assert.match(productsPage, /NavSearchField/);
-    assert.match(productsPage, /MENU_ITEM_INDICATOR/);
+    assert.match(productsPage, /PageListToolbar/);
+    assert.match(productsPage, /DropdownMenuRadioItem/);
     assert.doesNotMatch(productsPage, /break-words/);
   });
 
@@ -143,7 +202,7 @@ describe("flush table primitive", () => {
     assert.doesNotMatch(connectionPage, /class="overflow-x-auto"/);
     assert.match(
       connectionPage,
-      /bg-background \[&_th\]:sticky \[&_th\]:top-0/,
+      /bg-background[^"\n]*\[&_th\]:sticky \[&_th\]:top-0/,
     );
     assert.doesNotMatch(connectionPage, /bg-card/);
     assert.doesNotMatch(connectionPage, /bg-muted\/30/);

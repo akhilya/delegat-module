@@ -53,4 +53,40 @@ public class ProposePlanReaderTests
     [InlineData("{\"steps\":[{\"tool\":\"platform_request\",\"description\":\"Update\",\"args\":{}}]}")]
     public void InvalidPlanCannotBePresented(string json) =>
         Assert.False(ProposePlanReader.Read(json).HasContent);
+
+    [Theory]
+    [InlineData("[1194,1239,1344]", 3, true)]
+    [InlineData("[1194,1239,1344]", 50, false)]
+    [InlineData("[1194,1194,1344]", 3, false)]
+    [InlineData("[]", 0, false)]
+    public void NamedExportRequiresUniqueIdsAndConsistentCount(string productIds, int count, bool expected)
+    {
+        var json = """
+            {"summary":"Export to Ozon","affectedCount":__COUNT__,"steps":[{"description":"Export selected products","tool":"platform_request","args":{"method":"POST","path":"/marketplace/connections/3/products/export-batch","body":{"productIds":__IDS__}}}]}
+            """.Replace("__COUNT__", count.ToString()).Replace("__IDS__", productIds);
+        Assert.Equal(expected, ProposePlanReader.Read(json).HasContent);
+    }
+
+    [Theory]
+    [InlineData(1, 1, true)]
+    [InlineData(17, 17, true)]
+    [InlineData(49, 49, true)]
+    [InlineData(49, 50, false)]
+    public void NamedExportCountIsDerivedFromArgumentsNotAFixedBatchSize(int idsCount, int count, bool expected)
+    {
+        var ids = string.Join(",", Enumerable.Range(1000, idsCount));
+        var json = """
+            {"summary":"Export selected products","affectedCount":__COUNT__,"steps":[{"description":"Export selected products","tool":"platform_request","args":{"method":"POST","path":"/marketplace/connections/12/products/export-batch","body":{"productIds":[__IDS__]}}}]}
+            """.Replace("__COUNT__", count.ToString()).Replace("__IDS__", ids);
+        Assert.Equal(expected, ProposePlanReader.Read(json).HasContent);
+    }
+
+    [Fact]
+    public void NamedExportCannotAlsoSelectTheWholeCatalog()
+    {
+        var plan = ProposePlanReader.Read("""
+            {"summary":"Export to Ozon","affectedCount":2,"steps":[{"description":"Export selected products","tool":"platform_request","args":{"method":"POST","path":"/marketplace/connections/3/products/export-batch","body":{"productIds":[1194,1239],"allMatching":true}}}]}
+            """);
+        Assert.False(plan.HasContent);
+    }
 }

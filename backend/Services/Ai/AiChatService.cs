@@ -397,7 +397,7 @@ public class AiChatService
                             {
                                 type = "tool_result",
                                 tool_use_id = toolId,
-                                content = "Plan not presented: provide a nonempty summary and at least one step. Every step needs a tool other than propose_plan, a nonempty description in the store language, and an args object with exact arguments. Call propose_plan again by itself."
+                                content = "Plan not presented: provide a nonempty summary and at least one step. Every step needs a tool other than propose_plan, a nonempty description in the store language, and an args object with exact arguments. For a named export, productIds must be nonempty, unique, and not combined with allMatching/where; affectedCount, if provided, must match the number of unique ids. Call propose_plan again by itself."
                             });
                             continue;
                         }

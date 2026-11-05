@@ -100,7 +100,6 @@ import {
   RoundFilled,
   Rows3Filled,
   RulerFilled,
-  SaveFilled,
   ScrollableListFilled,
   SearchFilled,
   SelectorVerticalFilled,
@@ -257,7 +256,7 @@ export const Puzzle = createMingCuteIcon(Plugin2Filled, "Puzzle");
 export const RefreshCw = createMingCuteIcon(Refresh1Filled, "RefreshCw");
 export const Rows3 = createMingCuteIcon(Rows3Filled, "Rows3");
 export const Ruler = createMingCuteIcon(RulerFilled, "Ruler");
-export const Save = createMingCuteIcon(SaveFilled, "Save");
+export const Save = createMingCuteIcon(CheckFilled, "Save");
 export const ScrollText = createMingCuteIcon(ScrollableListFilled, "ScrollText");
 export const Search = createMingCuteIcon(SearchRegular, "Search");
 export const SearchCheck = createMingCuteIcon(SearchFilled, "SearchCheck");

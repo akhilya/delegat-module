@@ -687,6 +687,7 @@ export default {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                reveal-on-row-hover
                                 class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 :aria-label="$t('common.delete')"
                               >

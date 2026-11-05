@@ -147,7 +147,7 @@ public sealed class AgentToolHost
         var q = doc.RootElement.TryGetProperty("query", out var qe) ? qe.GetString() ?? "" : "";
         var take = doc.RootElement.TryGetProperty("limit", out var le) && le.TryGetInt32(out var n) ? n : 12;
         var hits = await _knowledge.SearchAsync(q, take, ct);
-        return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = h.Body.Length > 900 ? h.Body[..900] : h.Body }) },
+        return (new { items = hits.Select(h => new { h.SourcePath, h.Title, snippet = KnowledgeSearch.Snippet(h, q) }) },
             $"{hits.Count} knowledge hits");
     }
 

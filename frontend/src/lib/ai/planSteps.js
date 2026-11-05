@@ -1,5 +1,14 @@
 /** First steps stay visible. The rest sit behind a disclosure. */
 export const PLAN_STEP_PREVIEW = 3;
+export const PLAN_DESCRIPTION_PREVIEW = 110;
+
+export function planStepDescriptionNeedsCollapse(step) {
+  return typeof step?.description === "string" && step.description.length > 180;
+}
+
+export function planStepPreview(step) {
+  return `${step.description.slice(0, PLAN_DESCRIPTION_PREVIEW).trimEnd()}…`;
+}
 
 export function planStepList(plan) {
   const steps = plan?.steps;

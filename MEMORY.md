@@ -22,10 +22,13 @@ This is a **short decision log**, not an implementation diary or a duplicate pro
 ## Design and implementation references
 
 - Apply [`DESIGN.md`](DESIGN.md) for visual decisions; use existing shared components and tokens rather than introducing local variants.
+- List tools use `PageListToolbar` and standard shadcn-vue filter menus; settings children use `SettingsNavbarTools`. Navbar/content gutters match. Adapter primary tabs stay in the navbar; in-page tools stay left-aligned. See Navigation in [`DESIGN.md`](DESIGN.md).
+- Tools and schedules share `/tools` (Schedules: `?tab=schedules`); the former schedule URL redirects. Schedule UI remains gated by `marketplace.manage`. See [Tools capabilities](docs/platform/capabilities.md#tools).
 - Current instance capabilities and proposed roadmap are in [`docs/platform/capabilities.md`](docs/platform/capabilities.md); verify roadmap claims against code and tests.
 - Current AI architecture, prompt/tool contract, and operator API live in [`docs/architecture/ai-system.md`](docs/architecture/ai-system.md), [`docs/architecture/ai-assistant.md`](docs/architecture/ai-assistant.md), and [`docs/api/mcp.md`](docs/api/mcp.md).
 - Product-file bytes stay outside MCP/model JSON: the download tool issues a 10-minute private Agent HTTP ticket with store/user checks. Cabinet chat reads staged attachments through bounded extraction, not server-path searches; a nonzero Python exit is a failed plan step. Connected HTTP MCP remains a separate opt-in surface and requires an exact instance tool allowlist; [`docs/api/mcp.md`](docs/api/mcp.md) owns the contract.
 - AI performance traces use an optional, manual Sentry core SDK integration; `SENTRY_DSN` is unset by default, and no request or model content is exported. See [`docs/ai/operator-playbook.md`](docs/ai/operator-playbook.md).
+- Knowledge hybrid retrieval is an explicit deployment option; lexical remains the default/fallback. Production preparation covers instance-local Ollama, not a shared cross-instance embedding service, which is explicitly deferred. See [`the rollout runbook`](docs/ai/production-rollout.md).
 - Authentication details live in [`docs/architecture/authentication.md`](docs/architecture/authentication.md).
 - Dated designs under `docs/plans/` are historical records, not instructions to reimplement. Check [`docs/plans/README.md`](docs/plans/README.md) for their status.
 - Security audit files are dated snapshots; revalidate claims against current code before treating them as findings.

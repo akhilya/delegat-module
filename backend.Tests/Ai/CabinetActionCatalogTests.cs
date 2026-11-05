@@ -83,4 +83,37 @@ public class CabinetActionCatalogTests
             && h.Note.Contains("priceDelta", StringComparison.Ordinal));
         Assert.Contains(hits, h => h.Path.Contains("export-all-prices/run", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData("обновить карточки в магазине")]
+    [InlineData("refresh product listings in shop")]
+    [InlineData("update product listings on marketplace")]
+    [InlineData("повторно отправить товары на маркетплейс")]
+    public void Search_RefreshListings_OffersBatchExportFirst(string query)
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search(query, limit: 1));
+        Assert.Equal("/marketplace/connections/{id}/products/export-batch", hit.Path);
+    }
+
+    [Fact]
+    public void Search_UpdatePrices_DoesNotBecomeProductExport()
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search("обновить цены в магазине", limit: 1));
+        Assert.Equal("/tools/export-all-prices/run", hit.Path);
+    }
+
+    [Fact]
+    public void Search_MappingEdit_DoesNotBecomeProductExport()
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search("доделать маппинг связать основные параметры", limit: 1));
+        Assert.Equal("/marketplace/connections/{id}/mappings/{mappingId}/graph/connect", hit.Path);
+    }
+
+    [Fact]
+    public void Search_DoesNotTreatGenericRouteIdsOrUsageNotesAsActionNames()
+    {
+        var catalog = new CabinetActionCatalog();
+        Assert.Empty(catalog.Search("id"));
+        Assert.Empty(catalog.Search("pending"));
+    }
 }

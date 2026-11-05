@@ -851,6 +851,7 @@ function resolvePreview(fieldKey, raw) {
               <div class="min-w-0">
                 <div
                   v-if="f.isCustom && type === 'adapterFields'"
+                  data-row-actions
                   class="flex items-center gap-1"
                 >
                   <Input
@@ -865,6 +866,7 @@ function resolvePreview(fieldKey, raw) {
                     type="button"
                     variant="ghost"
                     size="icon"
+                    reveal-on-row-hover
                     class="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                     :aria-label="t('marketplace.graph.removeCustomField')"
                     @click="removeCustomAdapterField(f.fieldKey)"
@@ -1023,6 +1025,7 @@ function resolvePreview(fieldKey, raw) {
           </p>
           <div
             v-for="(pin, idx) in llmFieldPins"
+            data-row-actions
             :key="pin.id"
             class="flex items-center gap-1"
           >
@@ -1040,6 +1043,7 @@ function resolvePreview(fieldKey, raw) {
             <Button
               variant="ghost"
               size="icon"
+              reveal-on-row-hover
               class="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
               @click="removeFieldPin(idx)"
             >

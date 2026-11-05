@@ -1,11 +1,16 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch, Transition } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import AppPageChrome from "@/components/AppPageChrome.vue";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { loadMe } from "@/main";
 import { getCachedMe, ME_UPDATED_EVENT } from "@/lib/meCache";
-import { PAGE_ADMIN_API, PAGE_SETTINGS_USER } from "@/router";
+import {
+  PAGE_ADMIN_API,
+  PAGE_ADMIN_ERROR_LOGS,
+  PAGE_ADAPTER_LOGS,
+  PAGE_SETTINGS_USER,
+} from "@/router";
 import { t } from "@/i18n";
 import { canAccessPath, fallbackPathForUser } from "@/lib/routeAccess";
 import { cn } from "@/lib/utils";
@@ -20,6 +25,9 @@ const nestedEnter = ref(false);
 const isApiPage = computed(() => route.path === PAGE_ADMIN_API);
 
 const apiTab = computed(() => (route.query.tab === "logs" ? "logs" : "keys"));
+const hasListTools = computed(() =>
+  [PAGE_ADMIN_ERROR_LOGS, PAGE_ADAPTER_LOGS].includes(route.path),
+);
 
 function onApiTabChange(value) {
   const query = { ...route.query };
@@ -63,7 +71,9 @@ onMounted(async () => {
   });
   try {
     me.value = await loadMe();
-  } catch {}
+  } catch {
+    // The cached identity remains available if this refresh fails.
+  }
 });
 
 onUnmounted(() => {
@@ -75,11 +85,15 @@ onUnmounted(() => {
   <!-- Fill-height routes use meta.fillHeight; chrome owns Page + Nav + Breadcrumbs. -->
   <AppPageChrome
     :fill-viewport="fillHeight"
-    :has-nav-center="isApiPage"
+    :has-nav-center="isApiPage || hasListTools"
     :content-class="cn(fillHeight && 'min-h-0 overflow-hidden')"
   >
-    <template v-if="isApiPage" #nav-center>
-      <Tabs :model-value="apiTab" @update:model-value="onApiTabChange">
+    <template #nav-center>
+      <Tabs
+        v-if="isApiPage"
+        :model-value="apiTab"
+        @update:model-value="onApiTabChange"
+      >
         <TabsList>
           <TabsTrigger value="keys">{{
             t("pages.apiPage.tabKeys")
@@ -89,9 +103,12 @@ onUnmounted(() => {
           }}</TabsTrigger>
         </TabsList>
       </Tabs>
+      <div v-else id="settings-navbar-tools" class="w-full min-w-0" />
     </template>
     <RouterView v-slot="{ Component, route: childRoute }">
-      <Transition :enter-active-class="nestedEnter ? 'page-region-in' : undefined">
+      <Transition
+        :enter-active-class="nestedEnter ? 'page-region-in' : undefined"
+      >
         <component :is="Component" :key="childRoute.path" />
       </Transition>
     </RouterView>

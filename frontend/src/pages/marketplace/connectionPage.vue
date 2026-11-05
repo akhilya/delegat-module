@@ -4,7 +4,7 @@ import AiErrorExplainer from "@/components/ai/AiErrorExplainer.vue";
 import DeleteCategoryMappingDialog from "@/components/marketplace/DeleteCategoryMappingDialog.vue";
 import PublishProductsWizard from "@/components/marketplace/PublishProductsWizard.vue";
 import AppPageChrome from "@/components/AppPageChrome.vue";
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
 import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -155,7 +155,7 @@ export default {
     DeleteCategoryMappingDialog,
     PublishProductsWizard,
     AppPageChrome,
-    NavSearchField,
+    PageListToolbar,
     PageSection,
     Button,
     Input,
@@ -317,7 +317,6 @@ export default {
       // === Products tab state ===
       products: [],
       productsListUnsupported: false,
-      productsListUnsupportedMessage: "",
       localExportReason: null, // "no_mappings" | null
       selectedItems: [],
       lastSelectedExternalId: null,
@@ -1658,7 +1657,6 @@ export default {
 
       this.isLoadingProducts = true;
       this.productsListUnsupported = false;
-      this.productsListUnsupportedMessage = "";
 
       // Skip the request when the adapter cannot list remote products.
       if (this.capabilities?.capabilities?.importAllProducts === false) {
@@ -1668,9 +1666,6 @@ export default {
         this.hasMoreProducts = false;
         this.nextCursor = null;
         this.productsListUnsupported = true;
-        this.productsListUnsupportedMessage = this.$t(
-          "marketplace.connectionPage.products.fetchUnsupportedTitle",
-        );
         this.isLoadingProducts = false;
         return;
       }
@@ -1689,11 +1684,6 @@ export default {
             this.hasMoreProducts = false;
             this.nextCursor = null;
             this.productsListUnsupported = true;
-            this.productsListUnsupportedMessage =
-              data.message ||
-              this.$t(
-                "marketplace.connectionPage.products.fetchUnsupportedTitle",
-              );
             return;
           }
           this.products = data.items || [];
@@ -1719,7 +1709,6 @@ export default {
             this.hasMoreProducts = false;
             this.nextCursor = null;
             this.productsListUnsupported = true;
-            this.productsListUnsupportedMessage = message;
             return;
           }
           displaySonnerError(error);
@@ -4373,55 +4362,49 @@ export default {
             value="products"
             class="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden data-[state=inactive]:hidden"
           >
-            <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <div class="flex shrink-0 flex-wrap items-center gap-3">
               <Tabs
                 :model-value="productsViewMode"
-                class="w-auto shrink-0 gap-0"
+                class="min-w-0 max-w-full overflow-x-auto gap-0"
                 @update:model-value="switchProductsView"
               >
                 <TabsList>
-                  <TabsTrigger value="external">
-                    {{
-                      $t("marketplace.connectionPage.products.adapterProducts")
-                    }}
-                  </TabsTrigger>
-                  <TabsTrigger value="local">
-                    {{
-                      $t("marketplace.connectionPage.products.localForExport")
-                    }}
-                  </TabsTrigger>
+                  <TabsTrigger value="external">{{
+                    $t("marketplace.connectionPage.products.adapterProducts")
+                  }}</TabsTrigger>
+                  <TabsTrigger value="local">{{
+                    $t("marketplace.connectionPage.products.localForExport")
+                  }}</TabsTrigger>
                 </TabsList>
               </Tabs>
-              <div class="min-w-0 min-h-9 flex-1 min-w-[12rem]">
-                <NavSearchField
-                  v-if="productsViewMode === 'external'"
-                  v-model="searchQuery"
-                  :placeholder="
-                    $t(
-                      'marketplace.connectionPage.products.searchBySkuPlaceholder',
-                    )
-                  "
-                />
-                <NavSearchField
-                  v-else
-                  v-model="localSearchQuery"
-                  :placeholder="
-                    $t(
-                      'marketplace.connectionPage.products.searchByNameOrSkuPlaceholder',
-                    )
-                  "
-                />
-              </div>
-              <div
-                v-if="productsViewMode === 'local'"
-                class="text-sm text-muted-foreground whitespace-nowrap"
-              >
-                {{
-                  $t("marketplace.connectionPage.products.foundCount", {
-                    count: localTotalCount,
-                  })
-                }}
-              </div>
+              <PageListToolbar
+                v-if="productsViewMode === 'external'"
+                v-model="searchQuery"
+                :placeholder="
+                  $t(
+                    'marketplace.connectionPage.products.searchBySkuPlaceholder',
+                  )
+                "
+              />
+              <PageListToolbar
+                v-else
+                v-model="localSearchQuery"
+                :placeholder="
+                  $t(
+                    'marketplace.connectionPage.products.searchByNameOrSkuPlaceholder',
+                  )
+                "
+              />
+            </div>
+            <div
+              v-if="productsViewMode === 'local'"
+              class="shrink-0 text-sm text-muted-foreground"
+            >
+              {{
+                $t("marketplace.connectionPage.products.foundCount", {
+                  count: localTotalCount,
+                })
+              }}
             </div>
 
             <div class="flex min-h-0 flex-1 flex-col">
@@ -4439,7 +4422,6 @@ export default {
                   v-else-if="productsListUnsupported"
                   class="flex-1 py-12"
                   :title="
-                    productsListUnsupportedMessage ||
                     $t(
                       'marketplace.connectionPage.products.fetchUnsupportedTitle',
                     )
@@ -4480,13 +4462,28 @@ export default {
                   >
                     <Table
                       :contain="false"
-                      class="w-full border-separate border-spacing-0"
+                      :aria-label="
+                        $t(
+                          'marketplace.connectionPage.products.adapterProducts',
+                        )
+                      "
+                      class="w-full min-w-[78rem] table-fixed border-separate border-spacing-0"
                     >
+                      <colgroup>
+                        <col class="w-12" />
+                        <col />
+                        <col class="w-36" />
+                        <col class="w-40" />
+                        <col class="w-36" />
+                        <col class="w-28" />
+                        <col class="w-48" />
+                        <col class="w-36" />
+                      </colgroup>
                       <TableHeader
-                        class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
+                        class="bg-background [&_th]:h-12 [&_th]:px-4 [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
                       >
                         <TableRow class="bg-background hover:bg-transparent">
-                          <TableHead class="w-10">
+                          <TableHead>
                             <Checkbox
                               :model-value="allSelected"
                               :indeterminate="someSelected"
@@ -4494,33 +4491,31 @@ export default {
                             />
                           </TableHead>
                           <TableHead>{{ $t("common.name") }}</TableHead>
-                          <TableHead class="w-36">{{
+                          <TableHead>{{
                             $t(
                               "marketplace.connectionPage.products.externalIdHeader",
                             )
                           }}</TableHead>
-                          <TableHead class="w-36">{{
+                          <TableHead>{{
                             $t(
                               "marketplace.connectionPage.products.localSkuHeader",
                             )
                           }}</TableHead>
-                          <TableHead class="w-24 text-right">{{
+                          <TableHead class="text-right">{{
                             $t("marketplace.connectionPage.fields.price")
                           }}</TableHead>
-                          <TableHead class="w-24 text-right">{{
+                          <TableHead class="text-right">{{
                             $t(
                               "marketplace.connectionPage.fields.storageQuantity",
                             )
                           }}</TableHead>
-                          <TableHead class="w-28">{{
-                            $t("common.status")
-                          }}</TableHead>
-                          <TableHead class="w-28">{{
-                            $t("common.actions")
-                          }}</TableHead>
+                          <TableHead>{{ $t("common.status") }}</TableHead>
+                          <TableHead>{{ $t("common.actions") }}</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody class="[&_td]:border-b">
+                      <TableBody
+                        class="[&_tr]:h-16 [&_td]:border-b [&_td]:px-4 [&_td]:py-3.5 [&_tr:last-child_td]:border-b-0"
+                      >
                         <TableRow
                           v-for="product in filteredProducts"
                           :key="product.externalId"
@@ -4537,20 +4532,26 @@ export default {
                               "
                             />
                           </TableCell>
-                          <TableCell class="max-w-0">
+                          <TableCell class="whitespace-normal">
                             <RouterLink
                               v-if="product.localProductId"
                               :to="`/products/${product.localProductId}/edit`"
-                              class="block truncate font-medium text-foreground underline-offset-2 hover:underline"
+                              :title="product.name"
+                              class="line-clamp-2 break-words font-medium leading-5 text-foreground underline-offset-2 hover:underline"
                               @click.stop
                               >{{ product.name }}</RouterLink
                             >
-                            <div v-else class="truncate font-medium">
+                            <div
+                              v-else
+                              :title="product.name"
+                              class="line-clamp-2 break-words font-medium leading-5"
+                            >
                               {{ product.name }}
                             </div>
                             <div
                               v-if="product.sku"
-                              class="text-xs text-muted-foreground"
+                              :title="product.sku"
+                              class="mt-1 truncate text-xs text-muted-foreground"
                             >
                               SKU: {{ product.sku }}
                             </div>
@@ -4565,24 +4566,28 @@ export default {
                               "
                               target="_blank"
                               rel="noopener"
-                              class="font-mono text-sm text-foreground hover:underline underline-offset-2"
+                              :title="product.externalId"
+                              class="block truncate font-mono text-sm text-foreground hover:underline underline-offset-2"
                               >{{ product.externalId }}</a
                             >
                             <code
                               v-else
-                              class="font-mono text-sm text-muted-foreground"
+                              :title="product.externalId"
+                              class="block truncate font-mono text-sm text-muted-foreground"
                               >{{ product.externalId }}</code
                             >
                           </TableCell>
                           <TableCell>
                             <div
                               v-if="product.isLinked"
-                              class="flex items-center gap-1.5"
+                              class="flex min-w-0 items-center gap-1.5"
                             >
-                              <Link2 class="size-3 text-success" />
-                              <code class="text-sm">{{
-                                product.localProductSku
-                              }}</code>
+                              <Link2 class="size-3 shrink-0 text-success" />
+                              <code
+                                :title="product.localProductSku"
+                                class="truncate text-sm"
+                                >{{ product.localProductSku }}</code
+                              >
                             </div>
                             <span v-else class="text-muted-foreground">-</span>
                           </TableCell>
@@ -4635,15 +4640,18 @@ export default {
                               :variant="
                                 productStatusMap[product.externalId]?.variant
                               "
-                              :class="
-                                productStatusMap[product.externalId]?.class
-                              "
+                              :class="[
+                                'max-w-full whitespace-normal justify-start text-left',
+                                productStatusMap[product.externalId]?.class,
+                              ]"
                             >
                               <component
                                 :is="productStatusMap[product.externalId]?.icon"
-                                class="size-3 mr-1"
+                                class="size-3 shrink-0"
                               />
-                              {{ productStatusMap[product.externalId]?.label }}
+                              <span class="min-w-0 break-words">{{
+                                productStatusMap[product.externalId]?.label
+                              }}</span>
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -4653,7 +4661,7 @@ export default {
                             >
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon-sm"
                                 @click="handleImportSingle(product)"
                                 :disabled="importingLinkId === product.linkId"
                                 :title="
@@ -4674,7 +4682,7 @@ export default {
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon-sm"
                                 @click="handleExportSingle(product)"
                                 :disabled="
                                   exportingLinkId === product.linkId ||
@@ -4699,7 +4707,7 @@ export default {
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon-sm"
                                 class="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 @click="handleUnlinkProduct(product)"
                                 :disabled="unlinkingLinkId === product.linkId"
@@ -4746,7 +4754,8 @@ export default {
                   <!-- Bulk actions bar -->
                   <div
                     v-if="hasAnySelected"
-                    class="bg-background flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+                    data-slot="table-actions-footer"
+                    class="bg-background flex shrink-0 flex-wrap items-center gap-2 px-3 py-2"
                   >
                     <span class="text-sm font-medium">
                       {{
@@ -4957,13 +4966,24 @@ export default {
                   >
                     <Table
                       :contain="false"
-                      class="w-full border-separate border-spacing-0"
+                      :aria-label="
+                        $t('marketplace.connectionPage.products.localForExport')
+                      "
+                      class="w-full min-w-[64rem] table-fixed border-separate border-spacing-0"
                     >
+                      <colgroup>
+                        <col class="w-12" />
+                        <col />
+                        <col class="w-44" />
+                        <col class="w-36" />
+                        <col class="w-28" />
+                        <col class="w-56" />
+                      </colgroup>
                       <TableHeader
-                        class="bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
+                        class="bg-background [&_th]:h-12 [&_th]:px-4 [&_th]:sticky [&_th]:top-0 [&_th]:z-[var(--z-sticky)] [&_th]:bg-background [&_th]:border-b"
                       >
                         <TableRow class="bg-background hover:bg-transparent">
-                          <TableHead class="w-10">
+                          <TableHead>
                             <Checkbox
                               :model-value="allLocalSelected"
                               :indeterminate="someLocalSelected"
@@ -4971,11 +4991,11 @@ export default {
                             />
                           </TableHead>
                           <TableHead>{{ $t("common.name") }}</TableHead>
-                          <TableHead class="w-36">SKU</TableHead>
-                          <TableHead class="w-24 text-right">{{
+                          <TableHead>SKU</TableHead>
+                          <TableHead class="text-right">{{
                             $t("marketplace.connectionPage.fields.price")
                           }}</TableHead>
-                          <TableHead class="w-24 text-right">{{
+                          <TableHead class="text-right">{{
                             $t(
                               "marketplace.connectionPage.fields.storageQuantity",
                             )
@@ -4987,7 +5007,9 @@ export default {
                           }}</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody class="[&_td]:border-b">
+                      <TableBody
+                        class="[&_tr]:h-16 [&_td]:border-b [&_td]:px-4 [&_td]:py-3.5 [&_tr:last-child_td]:border-b-0"
+                      >
                         <TableRow
                           v-for="product in localProducts"
                           :key="product.id"
@@ -5004,15 +5026,17 @@ export default {
                               "
                             />
                           </TableCell>
-                          <TableCell class="max-w-0">
+                          <TableCell class="whitespace-normal">
                             <RouterLink
                               :to="`/products/${product.id}/edit`"
-                              class="block truncate font-medium text-foreground underline-offset-2 hover:underline"
+                              :title="product.name"
+                              class="line-clamp-2 break-words font-medium leading-5 text-foreground underline-offset-2 hover:underline"
                               >{{ product.name }}</RouterLink
                             >
                           </TableCell>
-                          <TableCell class="max-w-0">
+                          <TableCell>
                             <span
+                              :title="product.sku"
                               class="block truncate font-mono text-sm text-muted-foreground"
                               >{{ product.sku }}</span
                             >
@@ -5024,9 +5048,11 @@ export default {
                             {{ product.storageQuantity ?? "-" }}
                           </TableCell>
                           <TableCell>
-                            <span class="text-sm text-muted-foreground">{{
-                              product.categoryName || "-"
-                            }}</span>
+                            <span
+                              :title="product.categoryName"
+                              class="line-clamp-2 whitespace-normal break-words text-sm text-muted-foreground"
+                              >{{ product.categoryName || "-" }}</span
+                            >
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -5034,7 +5060,8 @@ export default {
                   </div>
 
                   <div
-                    class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-background px-3 py-2"
+                    data-slot="table-actions-footer"
+                    class="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-background px-3 py-2"
                   >
                     <div class="flex min-w-0 flex-wrap items-center gap-4">
                       <div class="flex items-center gap-2">

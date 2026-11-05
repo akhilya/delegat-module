@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useStore } from "vuex";
-import { Check, ChevronDown, X } from "lucide-vue-next";
+import { AlertTriangle, Check, ChevronDown, Loader2, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -12,8 +12,9 @@ import { InsetGroup } from "@/components/ui/inset-group";
 import {
   PLAN_STEP_PREVIEW,
   planHiddenStepCount,
-  planHasContent,
-  planStepPresentation,
+  planStepList,
+  planStepDescriptionNeedsCollapse,
+  planStepPreview,
   planStepsNeedCollapse,
 } from "@/lib/ai/planSteps";
 import { useI18n } from "vue-i18n";
@@ -22,6 +23,7 @@ import {
   operationIdsFromToolCalls,
   summarizePlanOperations,
 } from "@/lib/ai/planOperations";
+import { toolResultFailed } from "@/lib/ai/persist";
 
 const props = defineProps({
   plan: { type: Object, required: true },
@@ -36,125 +38,170 @@ const props = defineProps({
   ready: { type: Boolean, default: true },
 });
 defineEmits(["confirm", "cancel"]);
-
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const store = useStore();
 const expanded = ref(false);
-const productDetailsExpanded = ref(false);
+const expandedDescriptions = ref({});
 const operationStatuses = ref({});
-let pollTimer = null;
-let pollStopped = false;
+let pollTimer;
+let pollGeneration = 0;
+let pollController;
 
-const stepPresentation = computed(() => planStepPresentation(props.plan));
-const steps = computed(() => stepPresentation.value.otherSteps);
-const productChanges = computed(() => stepPresentation.value.productChanges);
-const productChangeDetails = computed(() =>
-  productChanges.value.filter((change) => change.description.trim()),
-);
-const bulkPriceChanges = computed(() =>
-  productChanges.value.filter((change) => change.kind === "bulk-price"),
-);
-const individualProductChangeCount = computed(
-  () =>
-    productChanges.value.filter((change) => change.kind === "product").length,
-);
-const productDetailsNeedCollapse = computed(
-  () =>
-    productChangeDetails.value.length > 1 || bulkPriceChanges.value.length > 0,
-);
+// The displayed order is the execution order, including interleaved catalog writes.
+const steps = computed(() => planStepList(props.plan));
 const needsCollapse = computed(() => planStepsNeedCollapse(steps.value.length));
-const hiddenCount = computed(() => planHiddenStepCount(steps.value.length));
-const head = computed(() =>
-  needsCollapse.value ? steps.value.slice(0, PLAN_STEP_PREVIEW) : steps.value,
-);
-const rest = computed(() =>
-  needsCollapse.value ? steps.value.slice(PLAN_STEP_PREVIEW) : [],
+const visibleSteps = computed(() =>
+  expanded.value ? steps.value : steps.value.slice(0, PLAN_STEP_PREVIEW),
 );
 const operationIds = computed(() => operationIdsFromToolCalls(props.toolCalls));
 const operationSummary = computed(() =>
   summarizePlanOperations(operationIds.value, operationStatuses.value),
 );
 
-function formatPriceDelta(value) {
-  const amount = new Intl.NumberFormat(locale.value, {
-    maximumFractionDigits: 2,
-  }).format(Math.abs(value));
-  if (value > 0) return `+${amount}`;
-  if (value < 0) return `−${amount}`;
-  return amount;
-}
-
-async function pollOperations() {
-  if (pollStopped || !operationIds.value.length) return;
+async function pollOperations(generation, ids, signal) {
   await Promise.all(
-    operationIds.value.map(async (id) => {
+    ids.map(async (id) => {
       try {
         const response = await fetchWithAuth(
           `/api/operations/${encodeURIComponent(id)}/status`,
+          { signal },
         );
-        if (response.status === 404) {
-          operationStatuses.value[id] = { status: "missing" };
-        } else if (response.ok) {
-          operationStatuses.value[id] = await response.json();
-        }
+        const status =
+          response.status === 404
+            ? { status: "missing" }
+            : response.ok
+              ? await response.json()
+              : { status: "unknown" };
+        if (generation === pollGeneration && !signal.aborted)
+          operationStatuses.value[id] = status;
       } catch {
-        // Retry transient failures while this card remains mounted.
+        if (generation === pollGeneration && !signal.aborted)
+          operationStatuses.value[id] = { status: "unknown" };
       }
     }),
   );
-  if (!pollStopped && operationSummary.value.tracking) {
-    pollTimer = setTimeout(pollOperations, 2500);
-  }
+  if (
+    generation === pollGeneration &&
+    !signal.aborted &&
+    operationSummary.value.tracking
+  )
+    pollTimer = setTimeout(() => pollOperations(generation, ids, signal), 2500);
 }
-
 watch(
-  () => operationIds.value.join("|"),
+  () => `${props.plan.proposalId}:${operationIds.value.join("|")}`,
   () => {
     clearTimeout(pollTimer);
-    pollStopped = false;
+    pollController?.abort();
+    const generation = ++pollGeneration;
     operationStatuses.value = {};
-    if (operationIds.value.length) pollOperations();
+    pollController = new AbortController();
+    if (operationIds.value.length)
+      pollOperations(
+        generation,
+        [...operationIds.value],
+        pollController.signal,
+      );
   },
   { immediate: true },
 );
-
 onBeforeUnmount(() => {
-  pollStopped = true;
+  ++pollGeneration;
+  pollController?.abort();
   clearTimeout(pollTimer);
 });
-
-function openOperations() {
-  store.dispatch("operations/openPanel");
-}
 
 const pending = computed(
   () =>
     !props.confirmed &&
     !props.cancelled &&
     !props.superseded &&
+    !props.executed &&
+    !props.failed &&
     !props.confirmationBlocked,
 );
-
-const statusLabel = computed(() => {
-  if (props.confirmationBlocked) return t("ai.planConfirmationUnavailable");
-  if (operationSummary.value.active && operationIds.value.length)
-    return t("ai.planBackgroundRunning");
-  if (operationSummary.value.failed) return t("ai.planFailed");
-  if (props.superseded) return t("ai.planSuperseded");
-  if (props.cancelled) return t("ai.planCancelled");
-  if (props.failed) return t("ai.planFailed");
-  if (props.executed) return t("ai.planExecuted");
-  return t("ai.planExecuting");
+const unknown = computed(
+  () =>
+    operationSummary.value.unknown ||
+    (props.confirmed && !props.executed && props.ready),
+);
+const partial = computed(
+  () =>
+    operationSummary.value.partial ||
+    (props.failed &&
+      props.toolCalls.some(
+        (tool) =>
+          tool.result != null && !toolResultFailed(tool.result, tool.summary),
+      )),
+);
+const status = computed(() => {
+  if (props.cancelled) return "planCancelled";
+  if (props.superseded) return "planSuperseded";
+  if (props.confirming) return "planConfirming";
+  if (props.confirmationBlocked) return "planConfirmationUnavailable";
+  if (operationSummary.value.active) return "planBackgroundRunning";
+  if (partial.value) return "planPartial";
+  if (props.failed || operationSummary.value.failed) return "planFailed";
+  if (unknown.value) return "planOutcomeUnknown";
+  if (props.executed) return "planExecuted";
+  if (props.confirmed) return "planExecuting";
+  return "planAwaitingConfirmation";
 });
+const busy = computed(() =>
+  ["planConfirming", "planExecuting", "planBackgroundRunning"].includes(
+    status.value,
+  ),
+);
+const warning = computed(() =>
+  ["planPartial", "planOutcomeUnknown", "planConfirmationUnavailable"].includes(
+    status.value,
+  ),
+);
 </script>
 
 <template>
-  <InsetGroup class="w-full gap-0">
-    <div class="px-3 pt-2.5 pb-2">
-      <p class="text-xs text-muted-foreground">{{ t("ai.planTitle") }}</p>
+  <InsetGroup class="w-full min-w-0 gap-0" data-testid="ai-plan">
+    <div class="px-3 pt-3 pb-2">
+      <div
+        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground"
+      >
+        <span>{{ t("ai.planTitle") }}</span>
+        <span
+          role="status"
+          class="inline-flex items-center gap-1.5"
+          :class="
+            status === 'planFailed'
+              ? 'text-destructive'
+              : warning
+                ? 'text-warning-foreground'
+                : ''
+          "
+        >
+          <Loader2
+            v-if="busy"
+            class="size-3.5 motion-safe:animate-spin"
+            aria-hidden="true"
+          />
+          <Check
+            v-else-if="status === 'planExecuted'"
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          <AlertTriangle
+            v-else-if="warning || status === 'planFailed'"
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          <X
+            v-else-if="cancelled || superseded"
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          {{ t(`ai.${status}`) }}
+        </span>
+      </div>
       <p
-        v-if="planHasContent(plan) && plan.summary"
-        class="mt-0.5 text-[15px] font-medium leading-snug tracking-tight"
+        v-if="plan.summary"
+        class="mt-2 text-sm font-medium leading-snug break-words"
       >
         {{ plan.summary }}
       </p>
@@ -162,144 +209,83 @@ const statusLabel = computed(() => {
         v-if="plan.affectedCount"
         class="mt-1 text-xs tabular-nums text-muted-foreground"
       >
-        {{ t("ai.planAffected") }}
-        <span class="text-foreground">{{ plan.affectedCount }}</span>
+        {{ t("ai.planAffected") }} {{ plan.affectedCount }}
       </p>
     </div>
 
-    <div v-if="productChanges.length" class="mx-1 border-t border-border/70">
-      <div class="flex items-center justify-between gap-3 px-2 py-2">
-        <span class="text-sm font-medium">{{
-          t("ai.planProductChanges")
-        }}</span>
-        <span
-          v-if="individualProductChangeCount > 1"
-          class="shrink-0 text-xs tabular-nums text-muted-foreground"
-        >
-          {{
-            t("ai.planProductChangeCount", {
-              count: individualProductChangeCount,
-            })
-          }}
-        </span>
-      </div>
-
-      <div
-        v-for="(change, i) in bulkPriceChanges"
-        :key="'price-' + i"
-        class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-2 pb-2 text-sm"
-      >
-        <span>{{ t("ai.planPriceDelta") }}</span>
-        <span class="text-right font-medium tabular-nums">
-          {{ formatPriceDelta(change.priceDelta) }}
-        </span>
-        <span
-          v-if="
-            change.targetCount !== null &&
-            (!plan.affectedCount || change.targetCount !== plan.affectedCount)
-          "
-          class="col-span-2 text-xs text-muted-foreground"
-        >
-          {{ t("ai.planProductTargets", { count: change.targetCount }) }}
-        </span>
-      </div>
-
-      <ol
-        v-if="productChangeDetails.length && !productDetailsNeedCollapse"
-        class="border-t border-border/70"
-      >
-        <li class="px-2 py-2 text-sm leading-snug">
-          {{ productChangeDetails[0].description }}
-        </li>
-      </ol>
-
-      <Collapsible
-        v-else-if="productChangeDetails.length"
-        v-model:open="productDetailsExpanded"
-      >
-        <CollapsibleContent>
-          <ol class="border-t border-border/70">
-            <li
-              v-for="(change, i) in productChangeDetails"
-              :key="'product-detail-' + i"
-              class="border-b border-border/70 px-2 py-2 text-sm leading-snug last:border-b-0"
-            >
-              {{ change.description }}
-            </li>
-          </ol>
-        </CollapsibleContent>
-        <CollapsibleTrigger
-          class="flex min-h-9 w-full items-center gap-2 border-t border-border/70 px-2 py-2 text-left text-xs font-medium text-muted-foreground outline-none transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:[&_svg]:rotate-180"
-        >
-          <ChevronDown
-            class="size-3.5 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
-          />
-          <span>
-            {{
-              productDetailsExpanded
-                ? t("ai.planProductDetailsHide")
-                : t("ai.planProductDetails", {
-                    count: productChangeDetails.length,
-                  })
-            }}
-          </span>
-        </CollapsibleTrigger>
-      </Collapsible>
-    </div>
-
-    <ol v-if="steps.length" class="mx-1">
+    <ol v-if="steps.length" class="mx-3 border-t border-border/70 py-1">
       <li
-        v-for="(step, i) in head"
-        :key="'head-' + i"
-        class="flex items-start gap-2.5 border-t border-border/70 px-2 py-2"
+        v-for="(step, i) in visibleSteps"
+        :key="i"
+        class="flex items-start gap-2.5 py-2"
       >
         <span
-          class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium tabular-nums text-muted-foreground"
+          class="w-4 shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground"
+          aria-hidden="true"
+          >{{ i + 1 }}.</span
         >
-          {{ i + 1 }}
-        </span>
-        <p class="min-w-0 text-sm leading-snug">{{ step.description }}</p>
+        <Collapsible
+          v-if="planStepDescriptionNeedsCollapse(step)"
+          v-model:open="expandedDescriptions[i]"
+          class="min-w-0 grow"
+        >
+          <CollapsibleTrigger
+            class="flex min-h-8 w-full items-start justify-between gap-2 rounded-sm text-left text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:[&_svg]:rotate-180"
+          >
+            <span class="min-w-0 break-words">{{
+              expandedDescriptions[i]
+                ? t("ai.planStepDetails")
+                : planStepPreview(step)
+            }}</span>
+            <ChevronDown
+              class="mt-1 size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent
+            class="pb-1 text-sm leading-relaxed break-words"
+            >{{ step.description }}</CollapsibleContent
+          >
+        </Collapsible>
+        <p v-else class="min-w-0 text-sm leading-relaxed break-words">
+          {{ step.description }}
+        </p>
       </li>
     </ol>
+    <Button
+      v-if="needsCollapse"
+      variant="ghost"
+      size="sm"
+      class="mx-2 mb-1 justify-start text-muted-foreground"
+      :aria-expanded="expanded"
+      @click="expanded = !expanded"
+    >
+      <ChevronDown
+        class="size-3.5"
+        :class="expanded && 'rotate-180'"
+        aria-hidden="true"
+      />
+      {{
+        expanded
+          ? t("ai.planShowLess")
+          : t("ai.planShowMore", { n: planHiddenStepCount(steps.length) })
+      }}
+    </Button>
 
-    <Collapsible v-if="needsCollapse" v-model:open="expanded">
-      <CollapsibleContent>
-        <ol class="mx-1">
-          <li
-            v-for="(step, i) in rest"
-            :key="'rest-' + i"
-            class="flex items-start gap-2.5 border-t border-border/70 px-2 py-2"
-          >
-            <span
-              class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium tabular-nums text-muted-foreground"
-            >
-              {{ PLAN_STEP_PREVIEW + i + 1 }}
-            </span>
-            <p class="min-w-0 text-sm leading-snug">{{ step.description }}</p>
-          </li>
-        </ol>
-      </CollapsibleContent>
-      <CollapsibleTrigger
-        class="mx-1 flex w-[calc(100%-0.5rem)] items-center gap-2.5 border-t border-border/70 px-2 py-2 text-left text-xs font-medium text-muted-foreground outline-none transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:[&_svg]:rotate-180"
-      >
-        <ChevronDown
-          class="size-3.5 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
-        />
-        <span>
-          {{
-            expanded
-              ? t("ai.planShowLess")
-              : t("ai.planShowMore", { n: hiddenCount })
-          }}
-        </span>
-      </CollapsibleTrigger>
-    </Collapsible>
-
-    <div v-if="pending" class="flex flex-col gap-1 px-2 pt-1 pb-2">
+    <p
+      v-if="status === 'planOutcomeUnknown'"
+      class="px-3 pb-3 text-xs leading-relaxed text-muted-foreground"
+    >
+      {{ t("ai.planOutcomeUnknownHint") }}
+    </p>
+    <div
+      v-if="pending"
+      class="flex flex-wrap items-center gap-2 px-3 pt-1 pb-3"
+    >
       <Button
-        class="h-9 w-full"
+        size="sm"
         :disabled="!ready || confirming"
-        @click="$emit('confirm')"
+        @click="$emit('confirm', plan.proposalId)"
       >
         {{
           confirming
@@ -311,55 +297,29 @@ const statusLabel = computed(() => {
       </Button>
       <Button
         variant="ghost"
-        class="h-9 w-full text-muted-foreground"
-        :disabled="confirming"
-        @click="$emit('cancel')"
-      >
-        {{ t("common.cancel") }}
-      </Button>
-    </div>
-    <div
-      v-else
-      class="flex items-center gap-2 border-t border-border/70 px-3 py-2.5 text-xs text-muted-foreground"
-    >
-      <Check
-        v-if="confirmed && !cancelled && !failed && !operationSummary.failed"
-        class="size-3.5"
-      />
-      <X
-        v-else
-        class="size-3.5"
-        :class="
-          (confirmationBlocked || failed || operationSummary.failed) &&
-          'text-destructive'
-        "
-      />
-      <span
-        :class="
-          (confirmationBlocked || failed || operationSummary.failed) &&
-          'text-destructive'
-        "
-        >{{ statusLabel }}</span
+        size="sm"
+        class="text-muted-foreground"
+        :disabled="!ready || confirming"
+        @click="$emit('cancel', plan.proposalId)"
+        >{{ t("common.cancel") }}</Button
       >
     </div>
     <div
       v-if="operationIds.length"
-      class="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground"
+      class="mx-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 py-2 text-xs text-muted-foreground"
     >
-      <span v-if="operationSummary.progress" class="tabular-nums">
-        {{ t("ai.planBackgroundProgress", operationSummary.progress) }}
-      </span>
+      <span v-if="operationSummary.progress" class="tabular-nums">{{
+        t("ai.planBackgroundProgress", operationSummary.progress)
+      }}</span>
       <span v-else>{{
         t("ai.planBackgroundCount", { count: operationIds.length })
       }}</span>
       <Button
         variant="ghost"
         size="sm"
-        class="h-7 px-2"
-        @click="openOperations"
+        @click="store.dispatch('operations/openPanel')"
+        >{{ t("ai.planOpenOperations") }}</Button
       >
-        {{ t("ai.planOpenOperations") }}
-      </Button>
     </div>
   </InsetGroup>
 </template>

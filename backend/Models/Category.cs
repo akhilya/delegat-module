@@ -229,6 +229,22 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
         public int attributesCount { get; set; }
     }
 
+    /// <summary>Explicit category selection for an all-or-nothing cabinet delete.</summary>
+    public sealed class BulkDeleteForm
+    {
+        public int[] categoryIds { get; set; } = [];
+    }
+
+    /// <summary>Category form metadata with lightweight attribute rows, not product-entry dictionaries.</summary>
+    public sealed class EditorSummaryDTO
+    {
+        public int id { get; set; }
+        public string name { get; set; } = "";
+        public string? description { get; set; }
+        public bool hasSizes { get; set; }
+        public List<AttributeDefinitionSummary> attributes { get; set; } = [];
+    }
+
     /// <summary>
     /// Detailed category DTO including attributes list.
     /// </summary>
