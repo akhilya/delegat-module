@@ -116,6 +116,7 @@ const MAP = {
   PackagePlus: "PackageFilled",
   Paintbrush: "PaintBrushFilled",
   Palette: "PaletteFilled",
+  Paperclip: "AttachmentFilled",
   PanelLeft: "LayoutLeftbarOpenFilled",
   Pause: "PauseFilled",
   Pencil: "PencilFilled",

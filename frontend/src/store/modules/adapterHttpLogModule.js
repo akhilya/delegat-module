@@ -1,4 +1,3 @@
-import { useAxios } from "@vueuse/integrations/useAxios";
 import { http } from "@/main";
 
 function buildQuery(params = {}) {
@@ -13,26 +12,28 @@ function buildQuery(params = {}) {
 
 export default {
   actions: {
-    async getAdapterHttpLogs(ctx, { params = {}, onSuccess, onError }) {
-      return await useAxios(
-        `/adapter-http-logs${buildQuery(params)}`,
-        { method: "GET", cache: false },
-        http,
-        { immediate: true, abortPrevious: true },
-      )
-        .then((response) => onSuccess?.(response))
-        .catch((error) => onError?.(error));
+    async getAdapterHttpLogs(ctx, { params = {}, signal, onSuccess, onError }) {
+      try {
+        const response = await http.get(
+          `/adapter-http-logs${buildQuery(params)}`,
+          { cache: false, signal },
+        );
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
+      }
     },
 
-    async getAdapterHttpLogDetail(ctx, { id, onSuccess, onError }) {
-      return await useAxios(
-        `/adapter-http-logs/${id}`,
-        { method: "GET", cache: false },
-        http,
-        { immediate: true, abortPrevious: true },
-      )
-        .then((response) => onSuccess?.(response))
-        .catch((error) => onError?.(error));
+    async getAdapterHttpLogDetail(ctx, { id, signal, onSuccess, onError }) {
+      try {
+        const response = await http.get(`/adapter-http-logs/${id}`, {
+          cache: false,
+          signal,
+        });
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
+      }
     },
 
     async deleteAdapterHttpLogs(ctx, { ids, onSuccess, onError }) {

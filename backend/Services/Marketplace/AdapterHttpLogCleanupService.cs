@@ -5,7 +5,7 @@ namespace Delegat.Services.Marketplace;
 /// </summary>
 public sealed class AdapterHttpLogCleanupService : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
+    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AdapterHttpLogCleanupService> _logger;
 

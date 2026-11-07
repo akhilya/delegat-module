@@ -146,7 +146,25 @@ public static class AiConversationTurnStore
            && turn["plan"] is JsonObject
            && turn["planExecuted"] is JsonValue executed
            && executed.TryGetValue<bool>(out var flag)
-            && flag;
+           && flag;
+
+    public static async Task AppendAssistantAsync(DataContext db, string sessionId, int storeId, int userId,
+        AiSseTurnSnapshot snapshot, CancellationToken ct)
+    {
+        if (!snapshot.HasAssistantPayload) return;
+        var conversation = await EnsureConversationAsync(db, sessionId, storeId, userId, ct);
+        db.aiConversationMessages.Add(new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = snapshot.Content,
+            toolCallsJson = snapshot.ToolCallsJson,
+            createdAt = DateTime.UtcNow,
+        });
+        conversation.messageCount++;
+        conversation.lastMessageAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
 
     public static string ComputeStepsHash(JsonNode steps) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(steps.ToJsonString(PlanJsonOptions))));
@@ -154,6 +172,8 @@ public static class AiConversationTurnStore
     /// <summary>Client history sync may update display data, but cannot mint or rewrite a server plan.</summary>
     public static string? PreserveServerPlan(string? storedJson, string? incomingJson)
     {
+        // Stale history sync must not erase a server-owned stop or partial reply.
+        if (HasStoppedTurn(storedJson)) return storedJson;
         var stored = ReadTurn(storedJson);
         if (stored?["plan"] is not JsonObject storedPlan)
         {
@@ -177,6 +197,10 @@ public static class AiConversationTurnStore
         }
         return incoming.ToJsonString(PlanJsonOptions);
     }
+
+    internal static bool HasStoppedTurn(string? json) =>
+        ReadTurn(json)?["turnStopped"] is JsonValue value
+        && value.TryGetValue<bool>(out var stopped) && stopped;
 
     private static void RemoveServerPlanFlags(JsonObject turn)
     {
@@ -261,6 +285,8 @@ public static class AiConversationTurnStore
             return Rejected("plan_cancelled");
         if (turn["planConfirmed"]?.GetValue<bool>() == true || HasExecutedPlan(last.toolCallsJson))
             return Rejected("already_processed");
+        if (turn["turnStopped"]?.GetValue<bool>() == true)
+            return Rejected("plan_cancelled");
         if (!string.Equals(plan["proposalId"]?.GetValue<string>(), proposalId, StringComparison.Ordinal))
             return Rejected("proposal_mismatch");
         if (plan["steps"] is not JsonArray plannedSteps
@@ -391,6 +417,8 @@ public static class AiConversationTurnStore
             merged["planFailed"] = true;
         if (incoming["requestError"] is { } requestError)
             merged["requestError"] = requestError.DeepClone();
+        if (incoming["turnStopped"]?.GetValue<bool>() == true)
+            merged["turnStopped"] = true;
         if (existing["planCancelled"] is JsonValue cancelled
             && cancelled.TryGetValue<bool>(out var cancelledFlag)
             && cancelledFlag)

@@ -11,6 +11,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Product groups support confirmed merging into an explicitly selected target group. Products, ordering, and compatible adapter links are preserved; conflicting marketplace group links block the entire merge without changes. No export is started by merging.
+
+- Bulk edit includes a permission-gated Mappings tab, using the same category-mapping picker as bulk adapter actions. Assigning mappings keeps unsaved product fields and attributes intact and does not start export.
+- Catalog bulk adapter actions can assign category mappings to selected products without exporting. Choose one compatible mapping per local category; products without mappings are explicitly counted and skipped.
+- Assistant chat accepts drag-and-drop file attachments using the same drop target as the file manager. Files stay in the draft until sent; folder drops show a localized hint.
 - Product editing supports Ctrl+S (Cmd+S on macOS), including while typing in fields, with save notifications and protection against duplicate submissions. Browser page saving is suppressed for this shortcut.
 - Categories support confirmed bulk deletion with store-scoped, all-or-nothing validation. Categories containing active products block the whole selection; trashed products remain in the trash.
 - Category and global attribute lists share multi-selection, bulk required/unique/visibility editing, and confirmed deletion. Bulk changes preserve other definition settings and product values; deletion removes the selected definitions and their values atomically.
@@ -72,6 +77,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Assistant attachment picking uses a paperclip icon. The model selector is hidden when only one enabled model is available.
 - AI Model IDs use the shared badge component. Desktop toast notifications stay to the left of the companion buttons and follow their position when sheets open; mobile placement is unchanged.
 - Checkboxes have larger click/touch targets, and table selection columns and outer cells have more breathing room, including headers. Form corners now match the existing buttons; file tables no longer duplicate their parent's outline.
 - Form controls share one consistent corner radius. Empty states use bare icons and shorter copy; the unavailable page keeps only a heading, recovery hint, and retry action.
@@ -225,6 +231,22 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
 ### Fixed
+
+- Exporting from the product editor now saves pending product and image-order changes first, waits for an in-progress save, and stops if saving fails. Full, price, stock, and recreate exports refresh available mappings after saving rather than using stale category data.
+
+- Adapter HTTP logs retain request/response details for 24 hours and at most 5,000 recent records, while keeping searchable summaries for seven days. New payloads are smaller, cleanup runs every ten minutes, and detail previews/downloads avoid loading unnecessary full bodies. The cabinet explains when detailed data is no longer available.
+- Adapter log pagination no longer stops before the last page. New searches and detail selections cancel preceding requests and ignore late responses, preventing stale results, spurious errors, and incorrect loading states.
+
+- Assistant action discovery now prioritizes concrete product fields and translated aliases, including native bulk barcode generation. Plans prefer supported server/bulk operations instead of unnecessary Python preparation; repeated equivalent scalar writes are returned for replanning before confirmation, while distinct values and dependent changes remain separate.
+
+- Barcode assignments now reject duplicates across products and variants within a store, including trash, for cabinet/API edits, imports, transfers, and bulk updates. Concurrent writes are serialized; bulk generation avoids occupied codes. Existing duplicates are not automatically rewritten.
+
+- Assistant catalog pagination no longer stops after a gateway-trimmed terminal page. Python guidance now states the actual list cap and SQL limits. Result review withholds provisional tables until it chooses an answer or correction, and no longer announces task completion merely because a script exited successfully.
+
+- Assistant plan results now receive a separate review grounded in actual execution output. Failed calculations can propose a corrected plan for fresh confirmation, without automatic retries or overwriting the failed plan. New proposals discard speculative result text; failed steps no longer imply that nothing changed.
+- Python instructions now describe the actual SDK methods, result shapes, and pagination instead of leaving the assistant to guess requests-style helpers that do not exist.
+
+- Assistant work remains running when navigating to history, another conversation, or a new chat. History refreshes live activity, and returning to a running conversation reconnects immediately. Explicit Stop is shown on the reply and saved across reloads, including empty replies and interrupted plans, without marking unfinished tools successful.
 
 - Dark mode is applied before first paint, preventing a white flash on reload. Adapter product sync timestamps without a timezone suffix are parsed as UTC, fixing incorrect relative update times in local timezones.
 

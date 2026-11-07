@@ -112,9 +112,15 @@ Pair with a filesystem MCP on the same machine to read local files, then `PUT` b
 
 ## `platform_request`
 
+Action discovery (`search_actions`) ranks concrete DTO fields and translated field/capability aliases above generic verbs, returning canonical request semantics and nested bulk field names. Search the specific operation and scope, such as regenerating local product barcodes rather than just updating products. Native bulk actions should be preferred only when they preserve the requested semantics; an unrelated hit does not establish support.
+
+For native barcode generation, `PATCH /products/bulk` accepts `{ productIds, wait: true, updates: { generateBarcodes: true } }` to fill missing product barcodes. Adding `updates.barcode: ""` clears existing values first and regenerates all selected products in the same request, with server-side uniqueness checks across products and variants including trash. A nonempty common `updates.barcode` cannot be assigned to several products. Different externally specified barcode values require individual product updates, not random regeneration. Use exact IDs for an established selection; do not replace them with `allMatching`. Bulk results report counts and can partially apply; queued execution must be tracked in Operations.
+
 Same cabinet JSON API as the SPA (`/api` prefix optional). Not Public API v1. Permissions, store membership, and quotas are the signed-in user's. Query strings work (`GET /products?searchQuery=&categoryId=&startIndex=&pageSize=`).
 
 Do not use it to download product file bytes; use `create_file_download_link` and then GET the returned URL. Its response capture is bounded to 256,000 bytes for JSON/text, and binary responses are rejected before buffering.
+
+The agent gateway caps top-level `items` lists to 12 and reports removed page items in `itemsTruncated`; `totalCount` is unchanged. If a capped response has a boolean `lastPage`, it becomes `false` even when the cabinet's original page was terminal. For offset-based lists, advance `startIndex` by the number actually received, not the requested page size, and check the accumulated unique count against `totalCount`. This prevents a trimmed terminal page from masquerading as a complete list. Byte limits remain enforced.
 
 Denied: `/api/v1`, `/api/mcp`, `/api/agent`, `/api/ai` except `GET /api/ai/store-settings` (personal settings: store description, communication style, brevity, emoji; `PUT` stays denied), `/api/auth`, `/api/users`, `/api/plugins`, `/api/api-keys`, connection credential create/update/test, database dump, quota trim, `DELETE /stores/{id}`, permanent product delete.
 
@@ -130,6 +136,12 @@ Mass catalog export: `POST /marketplace/connections/{id}/products/export-batch` 
 Raise every catalog price: `PATCH /products/bulk` `{ allMatching: true, wait: true, updates: { priceDelta: 500 } }`, then `POST /tools/export-all-prices/run` `{ connectionId }` per shop.
 
 ## Python SDK (sandbox)
+
+SQL defaults to `LIMIT 50` and clamps explicit limits to 200. For a complete product projection use `ORDER BY id LIMIT 200 OFFSET n`, advancing by the received row count until a short page, or verify with `COUNT(*)`. A successful SELECT without pagination does not establish full-catalog coverage. Full platform scans must also reject duplicate/repeated pages, an empty page before `totalCount`, and exhausted page budgets rather than claiming completeness.
+
+The preloaded `client` is `DelegatClient`, not a requests session. Use `client.platform(method, path, body=None)` for cabinet JSON or `client.sql(sql)` for allowlisted read-only SQL (`rows`, not `items`). There are no `client.get`, `client.request`, or `client.post` aliases. `GET /products?startIndex=0&pageSize=100` returns `items`, `totalCount`, and `lastPage`; advance by the received item count until `lastPage`, checking errors and inconsistent/incomplete pages instead of reporting zero matches. Do not write from Python. Other public helpers are `search_catalog`, `search_knowledge`, `match_files`, `marketplace_doc`, `shop_request`, `shop_operations`, and `shop_read`. The model-facing contract is `PythonSdkContract.Instructions`, checked against `sandbox/python/delegat_sdk.py` by SDK tests.
+
+Cabinet chat reviews actual Python stdout/stderr/exit code after execution. Failed or partial output is not a verified computation result. A supported corrected script is a new plan requiring fresh confirmation, not an automatic retry. This review belongs to cabinet chat; operator MCP/Agent HTTP calls retain their direct tool-result contract.
 
 The sidecar receives `DELEGAT_BASE_URL`, `DELEGAT_TOKEN`, `DELEGAT_STORE_ID`, and `shops`. By default, `shops` retains the legacy connection credentials/hosts/auth metadata. For stores selected by `MARKETPLACE_BROKER_SANDBOX_STORES`, broker-capable connections contain metadata only and seller reads use `client.shop_request` (GET) or the adapter's discovered named operations (`client.shop_operations` / `client.shop_read`). Unsupported connections remain marked `access=legacy`. `docs.platform` is read with `client.marketplace_doc` instead of fetching documentation URLs. It never receives `MYSQL_*`. `from delegat_sdk import client` is prepended, and `shops` is already loaded. Legacy output values are redacted; broker responses redact credentials server-side. Compose caps the container at half a CPU and 512 MiB (no extra swap); jobs are one-at-a-time and BLAS is single-threaded so a script cannot pin the host.
 

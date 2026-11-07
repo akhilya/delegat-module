@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import BulkProductMappingFields from "@/components/products/BulkProductMappingFields.vue";
 import {
   Dialog,
   DialogClose,
@@ -33,13 +34,15 @@ import {
   Package,
   AlertTriangle,
   Link2,
+  GitBranch,
 } from "lucide-vue-next";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   selectedProducts: { type: Array, default: () => [] },
 });
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "saved"]);
+const mappingFields = ref(null);
 
 const ALL_ACTIONS = [
   {
@@ -99,6 +102,15 @@ const ALL_ACTIONS = [
     getEndpoint: (connId) => `/marketplace/connections/${connId}/prices/import`,
     getBody: (_productIds, linkIds) => ({ linkIds }),
   },
+  {
+    key: "assignMapping",
+    label: t("products.bulkAdapterDialog.actions.assignMapping.label"),
+    description: t(
+      "products.bulkAdapterDialog.actions.assignMapping.description",
+    ),
+    needsLinks: false,
+    icon: GitBranch,
+  },
 ];
 
 const connections = ref([]);
@@ -115,16 +127,24 @@ const resolvedLinked = ref([]);
 const resolvedUnlinked = ref([]);
 
 const isRunning = ref(false);
+let capabilitiesRequest = 0;
+let linksRequest = 0;
 
-const selectedProductIds = computed(() =>
-  props.selectedProducts.map((p) => p.id),
-);
+const selectedProductIds = computed(() => [
+  ...new Set(props.selectedProducts.map((p) => p.id)),
+]);
 const selectedCount = computed(() => selectedProductIds.value.length);
 
 const availableActions = computed(() => {
-  if (!capabilities.value) return [];
-  return ALL_ACTIONS.filter((a) => capabilities.value[a.capabilityKey]);
+  if (!selectedConnectionId.value) return [];
+  return ALL_ACTIONS.filter(
+    (a) => !a.capabilityKey || capabilities.value?.[a.capabilityKey],
+  );
 });
+
+const isMappingAction = computed(
+  () => selectedAction.value?.key === "assignMapping",
+);
 
 const showLinkStatus = computed(
   () => !!selectedAction.value?.needsLinks && !!selectedConnectionId.value,
@@ -140,6 +160,10 @@ const showNoneLinkedWarning = computed(
 watch(
   () => props.modelValue,
   async (open) => {
+    ++capabilitiesRequest;
+    ++linksRequest;
+    isLoadingCapabilities.value = false;
+    isResolving.value = false;
     if (!open) return;
     selectedConnectionId.value = null;
     capabilities.value = null;
@@ -148,9 +172,14 @@ watch(
     resolvedUnlinked.value = [];
     await loadConnections();
   },
+  { immediate: true },
 );
 
 watch(selectedConnectionId, async (connId) => {
+  ++capabilitiesRequest;
+  ++linksRequest;
+  isResolving.value = false;
+  isLoadingCapabilities.value = false;
   capabilities.value = null;
   selectedAction.value = null;
   resolvedLinked.value = [];
@@ -159,7 +188,9 @@ watch(selectedConnectionId, async (connId) => {
   await loadCapabilities(connId);
 });
 
-watch(selectedAction, async (action) => {
+watch([selectedAction, selectedProductIds], async ([action]) => {
+  ++linksRequest;
+  isResolving.value = false;
   resolvedLinked.value = [];
   resolvedUnlinked.value = [];
   if (!action?.needsLinks || !selectedConnectionId.value) return;
@@ -179,6 +210,7 @@ async function loadConnections() {
 }
 
 async function loadCapabilities(connectionId) {
+  const request = ++capabilitiesRequest;
   isLoadingCapabilities.value = true;
   try {
     const res = await http.get(
@@ -188,18 +220,22 @@ async function loadCapabilities(connectionId) {
       },
     );
     const full = res.data?.value ?? res.data;
+    if (request !== capabilitiesRequest) return;
     capabilities.value = full?.capabilities ?? full;
     if (availableActions.value.length > 0) {
       selectedAction.value = availableActions.value[0];
     }
   } catch (e) {
+    if (request !== capabilitiesRequest) return;
     displaySonnerError(e);
+    selectedAction.value = availableActions.value[0] ?? null;
   } finally {
-    isLoadingCapabilities.value = false;
+    if (request === capabilitiesRequest) isLoadingCapabilities.value = false;
   }
 }
 
 async function resolveLinks(connectionId) {
+  const request = ++linksRequest;
   isResolving.value = true;
   try {
     const res = await http.post(
@@ -208,19 +244,27 @@ async function resolveLinks(connectionId) {
       { cache: false },
     );
     const data = res.data?.value ?? res.data;
+    if (request !== linksRequest) return;
     resolvedLinked.value = data.linked ?? [];
     resolvedUnlinked.value = data.unlinked ?? [];
   } catch (e) {
+    if (request !== linksRequest) return;
     displaySonnerError(e);
   } finally {
-    isResolving.value = false;
+    if (request === linksRequest) isResolving.value = false;
   }
 }
 
 const canRun = computed(() => {
-  if (!selectedConnectionId.value || !selectedAction.value) return false;
+  if (
+    !selectedConnectionId.value ||
+    !selectedAction.value ||
+    !selectedCount.value
+  )
+    return false;
   if (isRunning.value || isResolving.value || isLoadingCapabilities.value)
     return false;
+  if (isMappingAction.value) return !!mappingFields.value?.canSave;
   if (selectedAction.value.needsLinks && resolvedLinked.value.length === 0)
     return false;
   return true;
@@ -231,6 +275,16 @@ async function run() {
   isRunning.value = true;
   try {
     const action = selectedAction.value;
+    if (isMappingAction.value) {
+      const count = await mappingFields.value.save();
+      if (count === null) return;
+      displaySonnerSuccess(
+        t("products.bulkAdapterDialog.mappingsSaved", { count }),
+      );
+      emit("saved");
+      emit("update:modelValue", false);
+      return;
+    }
     const linkIds = resolvedLinked.value.map((l) => l.linkId);
     const body = action.getBody(selectedProductIds.value, linkIds);
     const res = await http.post(
@@ -264,10 +318,16 @@ function actionRowClass(action) {
 </script>
 
 <template>
-  <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
+  <Dialog
+    :open="modelValue"
+    @update:open="!isRunning && emit('update:modelValue', $event)"
+  >
     <DialogContent
       size="2xl"
       class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
+      :show-close="!isRunning"
+      @escape-key-down="isRunning && $event.preventDefault()"
+      @interact-outside="isRunning && $event.preventDefault()"
     >
       <DialogHeader variant="bar">
         <DialogTitle>
@@ -302,7 +362,7 @@ function actionRowClass(action) {
           >
             <Select
               v-model="selectedConnectionId"
-              :disabled="isLoadingConnections"
+              :disabled="isLoadingConnections || isRunning"
             >
               <SelectTrigger
                 id="bulk-adapter-connection"
@@ -357,6 +417,7 @@ function actionRowClass(action) {
                 type="button"
                 role="option"
                 :aria-selected="selectedAction?.key === action.key"
+                :disabled="isRunning"
                 :class="actionRowClass(action)"
                 @click="selectedAction = action"
               >
@@ -375,6 +436,15 @@ function actionRowClass(action) {
               </Button>
             </div>
           </SettingsFormField>
+
+          <BulkProductMappingFields
+            v-if="isMappingAction"
+            ref="mappingFields"
+            :product-ids="selectedProductIds"
+            :connection-id="selectedConnectionId"
+            :active="modelValue"
+            :disabled="isRunning"
+          />
         </FieldGroup>
 
         <div
@@ -426,8 +496,13 @@ function actionRowClass(action) {
             {{ t("common.cancel") }}
           </Button>
         </DialogClose>
-        <Button type="button" :disabled="!canRun" @click="run">
-          <Spinner v-if="isRunning" class="mr-2" />
+        <Button
+          type="button"
+          :disabled="!canRun"
+          :aria-busy="isRunning"
+          @click="run"
+        >
+          <Spinner v-if="isRunning" aria-hidden="true" class="mr-2" />
           {{
             selectedAction?.label ?? t("products.bulkAdapterDialog.runButton")
           }}

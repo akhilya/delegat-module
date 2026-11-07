@@ -100,6 +100,7 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 400 | `order_status_failed` / `order_label_failed` / `promotion_update_failed` | Marketplace rejected the order status, label download, or promotion product update |
 | 404 | `order_not_found` / `promotion_not_found` | Live marketplace order or promotion id was not found |
 | 400 | `invalid_barcode` | Barcode is not a valid EAN-8 / EAN-13 |
+| 409 | `barcode_already_used` | Barcode is already assigned to a product or variant in this store, including trash |
 | 400 | `import_nothing_queued` | Import-products skipped every item (unmapped categories, blank ids) |
 | 409 | `conflict` | Quota / uniqueness / state conflict |
 | 409 | `sku_already_used` / `store_attribute_key_used` / `category_has_products` / `product_limit_reached` | Named uniqueness or state conflict |
@@ -150,6 +151,8 @@ Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is t
 | DELETE | `/{productId}/variants/{variantId}` | Delete a size variant |
 
 Respects product quotas (`409 product_limit_reached` when exceeded). Duplicate SKU → `409 sku_already_used`.
+
+Non-empty barcodes share one namespace across all products and variants in a store, including a product and its own variants. Trashed products and their variants retain their barcodes until cleared or permanently deleted. A duplicate assignment returns `409 barcode_already_used`; concurrent writes are serialized during validation and persistence. Empty/whitespace-only barcodes are stored as null; variant codes are trimmed. Different stores may use the same barcode. This rule applies to cabinet writes, partner API writes, imports, transfers, and generated barcodes. Existing duplicates are not automatically modified; operators must resolve them explicitly.
 
 ### Categories (`/stores/{storeId}/categories`)
 

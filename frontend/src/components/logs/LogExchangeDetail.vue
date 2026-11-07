@@ -48,35 +48,47 @@ const labels = computed(() => ({
 const requestBody = computed(() => props.detail?.[props.requestBodyKey]);
 const responseBody = computed(() => props.detail?.[props.responseBodyKey]);
 const requestHeaders = computed(() => props.detail?.[props.requestHeadersKey]);
-const responseHeaders = computed(() => props.detail?.[props.responseHeadersKey]);
+const responseHeaders = computed(
+  () => props.detail?.[props.responseHeadersKey],
+);
 const errorMessage = computed(() => props.detail?.[props.errorKey]);
 const useJson = computed(() => props.jsonBodies || props.showHeaders);
+const detailsAvailable = computed(
+  () =>
+    props.detail?.detailsAvailable ?? props.detail?.DetailsAvailable ?? true,
+);
 
 const requestBodyTruncated = computed(
   () =>
     !!(
-      props.detail?.requestBodyTruncated ??
-      props.detail?.RequestBodyTruncated
+      props.detail?.requestBodyTruncated ?? props.detail?.RequestBodyTruncated
     ),
 );
 const responseBodyTruncated = computed(
   () =>
     !!(
-      props.detail?.responseBodyTruncated ??
-      props.detail?.ResponseBodyTruncated
+      props.detail?.responseBodyTruncated ?? props.detail?.ResponseBodyTruncated
     ),
 );
 
-const detailId = computed(
-  () => props.detail?.id ?? props.detail?.Id ?? null,
-);
+const detailId = computed(() => props.detail?.id ?? props.detail?.Id ?? null);
 
 const requestDownloadUrl = computed(() => {
-  if (!props.bodyDownloadBaseUrl || detailId.value == null) return "";
+  if (
+    !detailsAvailable.value ||
+    !props.bodyDownloadBaseUrl ||
+    detailId.value == null
+  )
+    return "";
   return `${props.bodyDownloadBaseUrl}/${detailId.value}/request-body`;
 });
 const responseDownloadUrl = computed(() => {
-  if (!props.bodyDownloadBaseUrl || detailId.value == null) return "";
+  if (
+    !detailsAvailable.value ||
+    !props.bodyDownloadBaseUrl ||
+    detailId.value == null
+  )
+    return "";
   return `${props.bodyDownloadBaseUrl}/${detailId.value}/response-body`;
 });
 </script>
@@ -96,18 +108,30 @@ const responseDownloadUrl = computed(() => {
 
     <Tabs
       v-if="detail"
+      :key="detailId"
       default-value="overview"
       class="flex min-h-0 flex-1 flex-col"
     >
       <div class="shrink-0 border-b border-border px-6 py-2">
         <TabsList class="grid h-9 w-full grid-cols-3">
           <TabsTrigger value="overview">{{ labels.overview }}</TabsTrigger>
-          <TabsTrigger value="request">{{ labels.request }}</TabsTrigger>
-          <TabsTrigger value="response">{{ labels.response }}</TabsTrigger>
+          <TabsTrigger value="request" :disabled="!detailsAvailable">{{
+            labels.request
+          }}</TabsTrigger>
+          <TabsTrigger value="response" :disabled="!detailsAvailable">{{
+            labels.response
+          }}</TabsTrigger>
         </TabsList>
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <p
+          v-if="!detailsAvailable"
+          class="mb-4 text-sm text-muted-foreground"
+          role="status"
+        >
+          {{ t("components.logs.detailsUnavailable") }}
+        </p>
         <TabsContent value="overview" class="mt-0 space-y-5">
           <div>
             <InsetGroupLabel>{{ t("common.details") }}</InsetGroupLabel>

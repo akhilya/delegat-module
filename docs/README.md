@@ -23,6 +23,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 
 - [Capabilities and roadmap](platform/capabilities.md) — feature overview; roadmap items are proposals and require verification
 - [Releasing](platform/releasing.md) — `VERSION`, `CHANGELOG.md`, SemVer, release process
+- [Adapter HTTP log operations](operations/adapter-http-logs.md) — retention policy, performance/root-cause review, deployment verification, and safe space reclamation
 - [SaaS distribution architecture](architecture/saas-architecture.md) — **technical draft**; provisioning and Control Plane product decisions are maintained in the sibling repo
 - [Platform Link](platform/platform-link.md) — instance client notes; Control Plane contract is maintained in the sibling repo
 - [Control Plane stub](architecture/control-plane.md) — pointer only

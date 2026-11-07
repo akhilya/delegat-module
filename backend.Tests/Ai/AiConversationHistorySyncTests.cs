@@ -13,6 +13,23 @@ namespace Delegat.Tests;
 public class AiConversationHistorySyncTests
 {
     [Fact]
+    public async Task StaleSyncCannotEraseAStoppedReplyOrItsPartialText()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conv = await AiConversationTurnStore.EnsureConversationAsync(db, "stopped-sync", 1, 2, CancellationToken.None);
+        var message = new AiConversationMessage { conversationId = conv.Id, role = "assistant", content = "Partial work",
+            toolCallsJson = """{"_ui":"assistantTurn","turnStopped":true,"tools":[],"timeline":[]}""" };
+        db.aiConversationMessages.Add(message);
+        await db.SaveChangesAsync();
+        var controller = new AiConversationController(db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 }, null!, null!);
+        await controller.SaveMessages(new SaveMessagesRequest { SessionId = conv.sessionId, Messages = [
+            new SaveMessageItem { DbId = message.Id, Role = "assistant", Content = "Older text", ToolCallsJson = """{"_ui":"assistantTurn","tools":[]}""" },
+        ] }, CancellationToken.None);
+        Assert.Equal("Partial work", message.content);
+        Assert.True(AiConversationTurnStore.HasStoppedTurn(message.toolCallsJson));
+    }
+
+    [Fact]
     public async Task SaveMessages_UpdatesUserMetadata_WhenLiveTurnAlreadyInsertedMatchingText()
     {
         await using var db = TestDbFactory.CreateDb();

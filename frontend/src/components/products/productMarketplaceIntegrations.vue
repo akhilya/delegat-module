@@ -141,6 +141,7 @@ export default {
       type: Number,
       required: true,
     },
+    beforeExport: { type: Function, default: null },
   },
   setup() {
     const { storeBaseCurrency, loadMemberships } = useSelectedStore();
@@ -152,6 +153,7 @@ export default {
     return {
       connections: null, // All connections with status info
       isLoading: false,
+      exportPreparation: null,
       isExportingAll: false,
       isExportingPricesAll: false,
       isExportingStocksAll: false,
@@ -313,10 +315,14 @@ export default {
     formatAdapterError,
 
     async fetchData() {
+      const targetProductId = this.productId;
+      let loaded = false;
       this.isLoading = true;
       await this.getAvailableConnectionsForProduct({
         productId: this.productId,
         onSuccess: (response) => {
+          if (this.productId !== targetProductId) return;
+          loaded = true;
           this.connections = extractResponseData(response, {});
           // Initialize mapping selections from saved values or auto-select single mappings
           const selections = {};
@@ -334,6 +340,36 @@ export default {
         },
       });
       this.isLoading = false;
+      return loaded && this.productId === targetProductId;
+    },
+
+    async prepareExport() {
+      if (!this.beforeExport) return true;
+      if (this.exportPreparation) return this.exportPreparation;
+      const targetProductId = this.productId;
+      this.exportPreparation = (async () => {
+        try {
+          if ((await this.beforeExport()) !== true || this.productId !== targetProductId)
+            return false;
+          // Saving may have changed the category and its available mappings.
+          return await this.fetchData();
+        } catch (error) {
+          displaySonnerError(error);
+          return false;
+        }
+      })();
+      try {
+        return await this.exportPreparation;
+      } finally {
+        this.exportPreparation = null;
+      }
+    },
+
+    currentExportConnection(conn) {
+      if (!this.beforeExport) return conn;
+      return this.connections?.allConnections?.find(
+        (current) => current.connectionId === conn?.connectionId,
+      );
     },
 
     async handleMappingChange(conn, mappingId) {
@@ -394,6 +430,8 @@ export default {
 
     // Export to all marketplaces that have category mapping
     async handleExportToAll() {
+      if (!(await this.prepareExport())) return;
+      if (this.isExportingAll) return;
       const allExportable = this.connectionsWithMapping;
       if (allExportable.length === 0) {
         displaySonnerSuccess(
@@ -489,6 +527,8 @@ export default {
     },
 
     async handleExportPricesToAll() {
+      if (!(await this.prepareExport())) return;
+      if (this.isExportingPricesAll) return;
       const targets = this.linkedForPriceExport;
       if (targets.length === 0) {
         displaySonnerError(
@@ -538,6 +578,8 @@ export default {
     },
 
     async handleExportStocksToAll() {
+      if (!(await this.prepareExport())) return;
+      if (this.isExportingStocksAll) return;
       const targets = this.linkedForStockExport;
       if (targets.length === 0) {
         displaySonnerError(
@@ -949,6 +991,13 @@ export default {
 
     // Export to a specific marketplace
     async handleExportToConnection(conn) {
+      if (!(await this.prepareExport())) return;
+      conn = this.currentExportConnection(conn);
+      if (!conn) return;
+      if (this.beforeExport && !conn.hasMapping) {
+        displaySonnerError(t("productMarketplaceIntegrations.chooseMappingBeforeExport"));
+        return;
+      }
       if (conn.mappingMissing) {
         displaySonnerError(
           t("productMarketplaceIntegrations.mappingDeletedError"),
@@ -1034,6 +1083,8 @@ export default {
     },
 
     async handleExportPricesToConnection(conn) {
+      if (!(await this.prepareExport())) return;
+      conn = this.currentExportConnection(conn);
       if (!conn?.linkId || !conn.canExportPrices) {
         displaySonnerError(
           t("productMarketplaceIntegrations.noLinkedForPriceExport"),
@@ -1073,6 +1124,8 @@ export default {
     },
 
     async handleExportStocksToConnection(conn) {
+      if (!(await this.prepareExport())) return;
+      conn = this.currentExportConnection(conn);
       if (!conn?.linkId || !conn.canExportStocks) {
         displaySonnerError(
           t("productMarketplaceIntegrations.noLinkedForStockExport"),
@@ -1118,7 +1171,12 @@ export default {
     },
 
     async submitRecreate() {
-      if (!this.recreateConn || !this.recreateNewSku.trim()) return;
+      if (this.isRecreating || !this.recreateConn || !this.recreateNewSku.trim()) return;
+      if (!(await this.prepareExport())) return;
+      if (this.isRecreating) return;
+      const current = this.currentExportConnection(this.recreateConn);
+      if (!current?.linkId) return;
+      this.recreateConn = current;
       this.isRecreating = true;
       await this.recreateProductOnMarketplace({
         linkId: this.recreateConn.linkId,

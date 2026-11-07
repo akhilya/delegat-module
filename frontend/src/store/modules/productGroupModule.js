@@ -3,6 +3,14 @@ import { http } from "@/main";
 
 export default {
   actions: {
+    async mergeProductGroups(ctx, { targetGroupId, sourceGroupIds, onSuccess, onError }) {
+      try {
+        const response = await http.post(`/productgroups/${targetGroupId}/merge`, { sourceGroupIds });
+        onSuccess?.(response);
+      } catch (error) {
+        onError?.(error);
+      }
+    },
     // Product Groups CRUD
 
     /**

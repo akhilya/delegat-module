@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
+import BulkProductMappingFields from "@/components/products/BulkProductMappingFields.vue";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MultiSelectDropdown } from "@/components/ui/multi-select";
@@ -103,15 +104,17 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  connections: { type: Array, default: () => [] },
+  canManageAdapters: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["update:modelValue", "saved"]);
+const emit = defineEmits(["update:modelValue", "saved", "mappings-saved"]);
 
 const store = useStore();
 
 const isOpen = computed({
   get: () => props.modelValue,
-  set: (value) => emit("update:modelValue", value),
+  set: (value) => { if (!isSubmitting.value) emit("update:modelValue", value); },
 });
 
 const resolvedProductIds = computed(() => {
@@ -132,6 +135,13 @@ const visibleStoreAttributes = computed(() =>
 
 const activeTab = ref("product");
 const isSubmitting = ref(false);
+const mappingFields = ref(null);
+const mappingsVisited = ref(false);
+const isMappingTab = computed(() => activeTab.value === "mappings" && props.canManageAdapters);
+const canSubmit = computed(() => !isSubmitting.value && selectedCount.value > 0 &&
+  (isMappingTab.value ? !!mappingFields.value?.canSave : hasAnyEnabled.value));
+
+watch(activeTab, (tab) => { if (tab === "mappings") mappingsVisited.value = true; });
 
 const formData = reactive({
   name: "",
@@ -249,6 +259,7 @@ watch(isOpen, (open) => {
   });
 
   activeTab.value = "product";
+  mappingsVisited.value = false;
 });
 
 watch(generateBarcodes, (on) => {
@@ -263,6 +274,24 @@ watch(
 );
 
 async function handleSubmit() {
+  if (isSubmitting.value) return;
+  if (isMappingTab.value) {
+    if (!mappingFields.value?.canSave) return;
+    isSubmitting.value = true;
+    try {
+      const count = await mappingFields.value.save();
+      if (count === null) return;
+      displaySonnerSuccess(t("products.bulkAdapterDialog.mappingsSaved", { count }));
+      emit("mappings-saved");
+      // Mapping changes are independent of draft product fields and attributes.
+      // Keep this editor mounted so those drafts are never silently submitted or lost.
+    } catch (error) {
+      displaySonnerError(error);
+    } finally {
+      isSubmitting.value = false;
+    }
+    return;
+  }
   const productIds = resolvedProductIds.value;
   if (productIds.length === 0) {
     toast.error(t("products.bulkEditDialog.noProductsSelected"));
@@ -352,7 +381,7 @@ async function handleSubmit() {
         const count = payload.updatedCount ?? productIds.length;
         toast.success(t("products.bulkEditDialog.updatedCount", { count }));
       }
-      isOpen.value = false;
+      emit("update:modelValue", false);
       emit("saved");
     },
     onError: (error) => {
@@ -369,6 +398,9 @@ async function handleSubmit() {
     <DialogContent
       size="2xl"
       class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
+      :show-close="!isSubmitting"
+      @escape-key-down="isSubmitting && $event.preventDefault()"
+      @interact-outside="isSubmitting && $event.preventDefault()"
     >
       <DialogHeader variant="bar">
         <DialogTitle>
@@ -380,7 +412,7 @@ async function handleSubmit() {
       </DialogHeader>
 
       <div
-        v-if="!hasSameCategory && selectedCount > 0"
+        v-if="!isMappingTab && !hasSameCategory && selectedCount > 0"
         class="shrink-0 flex items-start gap-2 border-b border-warning/30 bg-warning-muted/40 px-6 py-2.5 text-sm text-warning-foreground"
       >
         <AlertTriangle class="mt-0.5 size-4 shrink-0" />
@@ -391,23 +423,25 @@ async function handleSubmit() {
         v-model="activeTab"
         class="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
-        <div class="shrink-0 border-b border-border px-6 pt-3">
+        <div class="min-w-0 shrink-0 border-b border-border px-6 pt-3">
           <TabsList
-            class="grid w-full"
-            :class="hasSameCategory ? 'grid-cols-3' : 'grid-cols-2'"
+            class="flex w-full justify-start overflow-x-auto"
           >
-            <TabsTrigger value="product">
+            <TabsTrigger value="product" :disabled="isSubmitting">
               {{ t("products.bulkEditDialog.productFieldsTab") }}
             </TabsTrigger>
-            <TabsTrigger v-if="hasSameCategory" value="category">
+            <TabsTrigger v-if="hasSameCategory" value="category" :disabled="isSubmitting">
               {{ t("products.bulkEditDialog.categoryFieldsTab") }}
             </TabsTrigger>
-            <TabsTrigger value="global">
+            <TabsTrigger value="global" :disabled="isSubmitting">
               {{ t("products.bulkEditDialog.globalFieldsTab") }}
+            </TabsTrigger>
+            <TabsTrigger v-if="canManageAdapters" value="mappings" :disabled="isSubmitting">
+              {{ t("products.bulkEditDialog.mappingsTab") }}
             </TabsTrigger>
           </TabsList>
           <p class="pb-3 pt-2 text-xs text-muted-foreground">
-            {{ t("products.bulkEditDialog.enableHint") }}
+            {{ t(isMappingTab ? "products.bulkEditDialog.mappingsHint" : "products.bulkEditDialog.enableHint") }}
           </p>
         </div>
 
@@ -641,6 +675,12 @@ async function handleSubmit() {
             </div>
           </TabsContent>
 
+          <TabsContent v-if="canManageAdapters" value="mappings" force-mount v-show="isMappingTab" class="mt-0">
+            <BulkProductMappingFields v-if="mappingsVisited" ref="mappingFields"
+              :product-ids="resolvedProductIds" :connections="connections" pick-connection
+              :active="isOpen" :disabled="isSubmitting" />
+          </TabsContent>
+
           <TabsContent value="global" class="mt-0">
             <template v-if="visibleStoreAttributes.length > 0">
               <FieldGroup class="gap-0">
@@ -763,11 +803,12 @@ async function handleSubmit() {
         </DialogClose>
         <Button
           type="button"
-          :disabled="!hasAnyEnabled || isSubmitting || selectedCount === 0"
+          :disabled="!canSubmit"
+          :aria-busy="isSubmitting"
           @click="handleSubmit"
         >
-          <Spinner v-if="isSubmitting" class="mr-2" />
-          {{ t("common.save") }}
+          <Spinner v-if="isSubmitting" aria-hidden="true" class="mr-2" />
+          {{ t(isMappingTab ? "products.bulkAdapterDialog.actions.assignMapping.label" : "common.save") }}
         </Button>
       </DialogFooter>
     </DialogContent>

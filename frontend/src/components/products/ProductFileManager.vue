@@ -14,6 +14,7 @@ import { useRoute, useRouter } from "vue-router";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useFileDialog, useDebounceFn } from "@vueuse/core";
 import { Button } from "@/components/ui/button";
+import FileDropOverlay from "@/components/FileDropOverlay.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -2168,17 +2169,10 @@ const selectedFileCount = computed(
       @drop="onAreaDrop"
     >
       <!-- External file drop overlay -->
-      <div
-        v-if="externalDragCounter > 0 && dragItems.length === 0"
-        class="absolute inset-3 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/80 pointer-events-none"
-      >
-        <div class="flex flex-col items-center gap-1 text-muted-foreground">
-          <Upload class="size-8" />
-          <p class="text-sm font-medium">
-            {{ t("products.productFileManager.dropFilesToUpload") }}
-          </p>
-        </div>
-      </div>
+      <FileDropOverlay
+        :active="externalDragCounter > 0 && dragItems.length === 0"
+        :title="t('products.productFileManager.dropFilesToUpload')"
+      />
 
       <EmptyState
         v-if="

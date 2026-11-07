@@ -124,6 +124,37 @@ public class AgentToolResultTests
         Assert.False(AgentToolResult.IsFailure(result, summary));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(12)]
+    [InlineData(13)]
+    [InlineData(60)]
+    [InlineData(217)]
+    public void InterpretResponse_CappedTerminalPagesRemainTraversableUntilEveryRowIsRead(int total)
+    {
+        var received = new List<int>();
+        var start = 0;
+        for (var round = 0; round < 30; round++)
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                items = Enumerable.Range(1, total).Skip(start).Take(100).Select(id => new { id }),
+                totalCount = total,
+                lastPage = start + 100 >= total,
+            });
+            var (result, _) = CabinetRequestInvoker.InterpretResponse(200, Encoding.UTF8.GetBytes(json));
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+            var page = doc.RootElement.GetProperty("items").EnumerateArray().ToList();
+            received.AddRange(page.Select(p => p.GetProperty("id").GetInt32()));
+            start += page.Count;
+            if (doc.RootElement.GetProperty("lastPage").GetBoolean()) break;
+            Assert.NotEmpty(page);
+            Assert.True(start < total);
+        }
+        Assert.Equal(Enumerable.Range(1, total), received);
+        Assert.Equal(total, received.Distinct().Count());
+    }
+
     [Fact]
     public void TruncateForModel_CapsHugeToolResult()
     {
@@ -270,12 +301,14 @@ public class AgentToolResultTests
     public void FormatPlanOutcome_FailedCreate_DoesNotClaimSuccess()
     {
         var ru = AgentToolResult.FormatPlanOutcome(0, 1, ["Product limit reached — nothing was created."], "ru");
-        Assert.Contains("Не получилось", ru, StringComparison.Ordinal);
-        Assert.Contains("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("Не удалось завершить", ru, StringComparison.Ordinal);
+        Assert.DoesNotContain("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("проверьте результат", ru, StringComparison.Ordinal);
         Assert.DoesNotContain("Plan executed", ru, StringComparison.Ordinal);
 
         var en = AgentToolResult.FormatPlanOutcome(0, 1, ["Product limit reached — nothing was created."], "en");
-        Assert.Contains("Nothing was changed", en, StringComparison.Ordinal);
+        Assert.Contains("No steps completed successfully", en, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing was changed", en, StringComparison.Ordinal);
         Assert.DoesNotContain("Plan executed: 1 of 1", en, StringComparison.Ordinal);
     }
 

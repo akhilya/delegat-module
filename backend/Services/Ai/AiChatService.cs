@@ -73,7 +73,8 @@ public class AiChatService
         AiPageContext? pageContext = null,
         string? sessionId = null,
         string? locale = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default,
+        bool planResultReview = false)
     {
         var localeCode = locale ?? ResolveLocale();
         {
@@ -124,7 +125,7 @@ public class AiChatService
             var extraMcp = new List<AiTool>();
             try
             {
-                extraMcp.AddRange(await _mcpTools.ListToolsAsync(ct));
+                if (!planResultReview) extraMcp.AddRange(await _mcpTools.ListToolsAsync(ct));
             }
             catch (Exception ex)
             {
@@ -152,6 +153,7 @@ public class AiChatService
                 turnText: TurnText(userMessages),
                 mappingExperience: mappingExperience,
                 durableMemory: memoryBlock);
+            if (planResultReview) systemPrompt += "\n\n" + AiPrompts.PlanResultFollowup;
 
             var history = AiChatHistoryBudget.Trim(
                 userMessages, AiChatHistoryBudget.GetMaxCharacters());
@@ -176,6 +178,7 @@ public class AiChatService
 
             var tools = AgentToolCatalog.Build();
             tools.AddRange(extraMcp);
+            if (planResultReview) tools = tools.Where(t => t.name == AgentChatTurnGate.ProposePlanTool).ToList();
             var autoContinued = false;
             var answerNow = AgentChatTurnGate.AsksToAnswerNow(TurnText(userMessages));
             var toolRounds = 0;
@@ -184,9 +187,9 @@ public class AiChatService
             var nudgedSilence = false;
 
             // Keep calling tools until the task is closed. A stuck loop still has to end in a sentence.
-            for (var iteration = 0; iteration < AgentChatTurnGate.RunawayToolRounds + 2; iteration++)
+            for (var iteration = 0; iteration < (planResultReview ? 3 : AgentChatTurnGate.RunawayToolRounds + 2); iteration++)
             {
-                var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds);
+                var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds) || (planResultReview && iteration >= 2);
                 List<AiTool>? passTools = speakOnly ? null : tools;
 
                 var request = new AiRequest
@@ -201,7 +204,7 @@ public class AiChatService
                     enable_prompt_cache = true,
                 };
 
-                if (iteration > 0)
+                if (iteration > 0 && !planResultReview)
                     yield return Sse(SseEventType.Text, new { delta = "\n\n" });
 
                 var textBuffer = new StringBuilder();
@@ -240,9 +243,12 @@ public class AiChatService
                                 if (drain.Visible.Length > 0)
                                 {
                                     textBuffer.Append(drain.Visible);
-                                    if (HasVisibleReply(drain.Visible))
-                                        spoke = true;
-                                    yield return Sse(SseEventType.Text, new { delta = drain.Visible });
+                                    if (!planResultReview)
+                                    {
+                                        if (HasVisibleReply(drain.Visible))
+                                            spoke = true;
+                                        yield return Sse(SseEventType.Text, new { delta = drain.Visible });
+                                    }
                                 }
                                 foreach (var invoke in drain.Invokes)
                                     toolUses.Add(($"dsml-{iteration}-{dsmlSeq++}", invoke.Name, invoke.ArgumentsJson));
@@ -303,9 +309,12 @@ public class AiChatService
                 if (dsmlTail.Visible.Length > 0)
                 {
                     textBuffer.Append(dsmlTail.Visible);
-                    if (HasVisibleReply(dsmlTail.Visible))
-                        spoke = true;
-                    yield return Sse(SseEventType.Text, new { delta = dsmlTail.Visible });
+                    if (!planResultReview)
+                    {
+                        if (HasVisibleReply(dsmlTail.Visible))
+                            spoke = true;
+                        yield return Sse(SseEventType.Text, new { delta = dsmlTail.Visible });
+                    }
                 }
                 foreach (var invoke in dsmlTail.Invokes)
                     toolUses.Add(($"dsml-{iteration}-{dsmlSeq++}", invoke.Name, invoke.ArgumentsJson));
@@ -320,7 +329,15 @@ public class AiChatService
                 if (toolUses.Count == 0)
                 {
                     var finalText = textBuffer.ToString();
-                    if (passTools != null && !autoContinued && EndsWithUnfulfilledIntent(finalText))
+                    // Review prose is provisional until the model round ends.
+                    // A table followed by propose_plan must never flash then vanish.
+                    if (planResultReview && HasVisibleReply(finalText))
+                    {
+                        spoke = true;
+                        yield return Sse(SseEventType.Text, new { delta = finalText });
+                        break;
+                    }
+                    if (!planResultReview && passTools != null && !autoContinued && EndsWithUnfulfilledIntent(finalText))
                     {
                         autoContinued = true;
                         messages.Add(new AiMessage { role = "assistant", content = finalText });
@@ -366,6 +383,12 @@ public class AiChatService
                 var deferPlanForAttachmentRead = waitForPlan && attachmentReadInBatch;
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
+                    if (planResultReview && !AgentChatTurnGate.IsProposePlan(toolName))
+                    {
+                        toolResults.Add(new { type = "tool_result", tool_use_id = toolId,
+                            content = "Not run. Execution is already finished. Review the actual results and answer, or propose a corrected plan for fresh user confirmation. No tool may execute during this review." });
+                        continue;
+                    }
                     if (AgentChatTurnGate.IsProposePlan(toolName))
                     {
                         if (sawPlan)
@@ -402,6 +425,13 @@ public class AiChatService
                             continue;
                         }
 
+                        var efficiencyReason = AgentPlanEfficiencyGuard.RejectionReason(planInput.Steps);
+                        if (efficiencyReason != null)
+                        {
+                            toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = efficiencyReason });
+                            continue;
+                        }
+
                         var planCreatedAt = DateTime.UtcNow;
                         var serializedSteps = JsonSerializer.Serialize(planInput.Steps, _jsonOpts);
                         var stepsNode = JsonNode.Parse(serializedSteps)!;
@@ -417,6 +447,8 @@ public class AiChatService
                             stepsHash,
                             createdAtUtc = planCreatedAt,
                             expiresAtUtc = expiresAt,
+                            modelConfigId = modelConfig.Id,
+                            discardDraftText = true,
                             summary = planInput.Summary,
                             steps = planInput.Steps,
                             affectedCount = planInput.AffectedCount,
@@ -473,6 +505,10 @@ public class AiChatService
                             allowChatAttachments: true,
                             chatSessionId: sessionId);
                     }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Agent tool {Tool} threw", toolName);
@@ -504,6 +540,7 @@ public class AiChatService
                 }
             }
 
+            ct.ThrowIfCancellationRequested();
             turnTelemetry.CompleteIfUnset(sawPlan ? "plan_proposed" : "completed");
 
             if (!spoke && !sawPlan)
@@ -702,8 +739,13 @@ public class AiChatService
 
     public async IAsyncEnumerable<string> ExecutePlanStreamAsync(
         List<PlanStepInput> steps, int storeId, int userId, string proposalId,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default,
+        string? sessionId = null, string? locale = null)
     {
+        var localeCode = AiPrompts.NormalizeLocale(locale ?? ResolveLocale());
+        var followup = string.IsNullOrEmpty(sessionId) ? null
+            : await LoadPlanFollowupAsync(sessionId, proposalId, storeId, userId, ct);
+        var outcomes = new List<object>();
         var forbidden = new HashSet<string> { "propose_plan" };
         var ok = 0;
         var queued = 0;
@@ -763,6 +805,9 @@ public class AiChatService
             }
 
             _toolEffects.TryGetValue(tool, out var effects);
+            outcomes.Add(new { step = outcomes.Count + 1, tool, description = step.Description,
+                status = failed ? "failed" : AgentToolResult.IsQueuedJob(JsonSerializer.Deserialize<JsonElement>(resultJson)) ? "queued" : "completed",
+                summary, result = JsonSerializer.Deserialize<JsonElement>(resultJson) });
             yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
             if (failed)
             {
@@ -772,7 +817,7 @@ public class AiChatService
             ok++;
         }
 
-        var text = AgentToolResult.FormatPlanOutcome(ok, steps.Count, errors, ResolveLocale(), queued);
+        var text = AgentToolResult.FormatPlanOutcome(ok, steps.Count, errors, localeCode, queued);
         var audit = await _context.aiAgentAudits
             .Where(a => a.storeId == storeId && a.userId == userId
                 && a.tool == "plan_confirmation"
@@ -790,8 +835,46 @@ public class AiChatService
             if (audit.summary.Length > 500) audit.summary = audit.summary[..500];
             await _context.SaveChangesAsync(CancellationToken.None);
         }
-        yield return Sse(SseEventType.Text, new { delta = text });
-        yield return Sse(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count });
+        // A successful tool exit is not a verified answer to the user's task.
+        // Keep the card's execution status, but let review provide the visible answer.
+        if (followup == null || errors.Count > 0)
+            yield return Sse(SseEventType.Text, new { delta = text });
+        yield return Sse(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count, cancelled });
+        if (cancelled || followup == null) yield break;
+        ct.ThrowIfCancellationRequested();
+        yield return Sse(SseEventType.AssistantStart, new { executionProposalId = proposalId });
+        var review = JsonSerializer.SerializeToElement(new
+        {
+            originalUserRequest = followup.UserRequest,
+            approvedPlan = AgentToolResult.TruncateForModel(followup.Plan.GetRawText()),
+            outcome = new { succeeded = ok, total = steps.Count, queued, failed = errors.Count,
+                skipped = steps.Count - outcomes.Count, results = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(outcomes, _jsonOpts)) },
+        }, _jsonOpts);
+        await foreach (var chunk in StreamChatAsync(
+            [new ChatMessage { role = "user", content = JsonSerializer.SerializeToElement(review.GetRawText()) }], storeId, userId, followup.ModelId,
+            sessionId: sessionId, locale: localeCode, ct: ct, planResultReview: true))
+            yield return chunk;
+    }
+
+    private sealed record PlanFollowup(string UserRequest, JsonElement Plan, int? ModelId);
+
+    private async Task<PlanFollowup?> LoadPlanFollowupAsync(
+        string sessionId, string proposalId, int storeId, int userId, CancellationToken ct)
+    {
+        var conversation = await _context.aiConversations.AsNoTracking()
+            .Include(c => c.messages)
+            .SingleOrDefaultAsync(c => c.sessionId == sessionId && c.storeId == storeId && c.userId == userId, ct);
+        if (conversation == null) return null;
+        var ordered = conversation.messages.OrderBy(m => m.createdAt).ThenBy(m => m.Id).ToList();
+        var last = ordered.LastOrDefault();
+        if (last?.role != "assistant" || string.IsNullOrEmpty(last.toolCallsJson)) return null;
+        using var document = JsonDocument.Parse(last.toolCallsJson);
+        if (!document.RootElement.TryGetProperty("plan", out var plan)
+            || !plan.TryGetProperty("proposalId", out var id) || id.GetString() != proposalId) return null;
+        var request = ordered.LastOrDefault(m => m.role == "user"
+            && m.content != AiConversationTurnStore.ConfirmedPlanUserText)?.content ?? "";
+        int? modelId = plan.TryGetProperty("modelConfigId", out var model) && model.TryGetInt32(out var configId) ? configId : null;
+        return new PlanFollowup(request, plan.Clone(), modelId);
     }
 
     public Task<IReadOnlyList<PlanStepInput>?> ConsumeConfirmedPlanAsync(

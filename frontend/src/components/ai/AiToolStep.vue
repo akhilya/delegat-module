@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { sqlResultParts, stripDisplayEmoji } from "@/lib/ai/display";
 import { useI18n } from "vue-i18n";
+import { toolResultFailed } from "@/lib/ai/persist";
 
 const props = defineProps({
   tool: { type: Object, required: true },
@@ -46,13 +47,20 @@ const ICONS = {
 };
 
 const running = computed(() => props.tool.status === "running");
+const failed = computed(() =>
+  toolResultFailed(props.tool.result, props.tool.summary),
+);
 const icon = computed(() => ICONS[props.tool.name] || Boxes);
 const label = computed(() => {
   const key = `ai.toolNames.${props.tool.name}`;
   const translated = t(key);
   return translated === key ? props.tool.name : translated;
 });
-const summary = computed(() => stripDisplayEmoji(props.tool.summary || ""));
+const summary = computed(() =>
+  props.tool.status === "stopped"
+    ? t("ai.generationStopped")
+    : stripDisplayEmoji(props.tool.summary || ""),
+);
 const sql = computed(() =>
   props.tool.name === "sql_readonly" ? sqlResultParts(props.tool) : null,
 );
@@ -90,7 +98,11 @@ const expandable = computed(
           }}</span>
         </template>
       </span>
-      <AiRunStatus :running="running" />
+      <AiRunStatus
+        :running="running"
+        :stopped="tool.status === 'stopped'"
+        :failed="failed"
+      />
       <ChevronDown
         class="tool-chevron size-3 shrink-0 text-muted-foreground transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)]"
       />
@@ -170,6 +182,10 @@ const expandable = computed(
         }}</span>
       </template>
     </span>
-    <AiRunStatus :running="running" />
+    <AiRunStatus
+      :running="running"
+      :stopped="tool.status === 'stopped'"
+      :failed="failed"
+    />
   </div>
 </template>

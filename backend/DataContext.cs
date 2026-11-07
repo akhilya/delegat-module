@@ -659,16 +659,19 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        TouchMappingGraphs();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        return SaveChangesAsync(acceptAllChangesOnSuccess).GetAwaiter().GetResult();
     }
 
-    public override Task<int> SaveChangesAsync(
+    public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
         TouchMappingGraphs();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        return await Infrastructure.Data.BarcodeUniqueness.SaveAsync(
+            this,
+            accept => base.SaveChangesAsync(accept, cancellationToken),
+            acceptAllChangesOnSuccess,
+            cancellationToken);
     }
 
     /// <summary>

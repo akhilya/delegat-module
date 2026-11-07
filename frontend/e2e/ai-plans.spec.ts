@@ -32,7 +32,10 @@ type Outcome =
 async function fixture(
   page: Page,
   outcome: Outcome = "success",
-  options: { staleHistory?: boolean } = {},
+  options: {
+    staleHistory?: boolean;
+    review?: "success" | "recovery" | "disconnect";
+  } = {},
 ) {
   page.on("pageerror", (error) =>
     console.error("Plan fixture page error:", error.message),
@@ -78,6 +81,21 @@ async function fixture(
           },
         ]
       : [];
+  const reviewPlan = {
+    ...plan,
+    proposalId: "corrected-proposal",
+    summary: "Исправленный расчёт",
+    discardDraftText: true,
+  };
+  const reviewText = "Проверенный результат расчёта: найдено 2 товара.";
+  const reviewSse = () =>
+    !options.review
+      ? ""
+      : sse("assistant_start", { executionProposalId: proposalId }) +
+        (options.review === "recovery"
+          ? sse("plan", reviewPlan)
+          : sse("text", { delta: reviewText })) +
+        (options.review === "disconnect" ? "" : sse("done", {}));
   const conversation = () => ({
     sessionId,
     title: "Проверка плана",
@@ -106,6 +124,25 @@ async function fixture(
           ],
         }),
       },
+      ...(accepted && options.review && options.review !== "disconnect"
+        ? [
+            {
+              dbId: 3,
+              role: "assistant",
+              content: options.review === "recovery" ? "" : reviewText,
+              toolCallsJson: JSON.stringify({
+                _ui: "assistantTurn",
+                executionProposalId: proposalId,
+                plan: options.review === "recovery" ? reviewPlan : null,
+                tools: [],
+                timeline:
+                  options.review === "recovery"
+                    ? []
+                    : [{ type: "text", text: reviewText }],
+              }),
+            },
+          ]
+        : []),
     ],
   });
   await page.addInitScript(() => {
@@ -225,7 +262,8 @@ async function fixture(
           (outcome === "disconnect"
             ? ""
             : sse("text", { delta: "Шаги плана завершены." }) +
-              sse("done", { ok: !["failed", "partial"].includes(outcome) })),
+              sse("done", { ok: !["failed", "partial"].includes(outcome) })) +
+          reviewSse(),
       });
       return;
     } else if (path === "/operations/op-plan/status") {
@@ -318,6 +356,118 @@ test("an explicitly stale server response cannot reopen an executed plan", async
   await expect(
     page.getByRole("button", { name: "Выполнить", exact: true }),
   ).toHaveCount(0);
+});
+
+test("a successful calculation review is separate from the plan and survives reload", async ({
+  page,
+}) => {
+  const state = await fixture(page, "success", { review: "success" });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(
+    page.getByText("Проверенный результат расчёта: найдено 2 товара.", {
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(page.getByTestId("ai-plan").getByRole("status")).toHaveText(
+    "Готово",
+  );
+  await reloadPlan(page);
+  await expect(
+    page.getByText("Проверенный результат расчёта: найдено 2 товара.", {
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  expect(state.executions()).toBe(1);
+});
+
+test("failure keeps the failed plan and offers only a fresh unexecuted recovery plan", async ({
+  page,
+}) => {
+  const state = await fixture(page, "failed", { review: "recovery" });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  const cards = page.getByTestId("ai-plan");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0).getByRole("status")).toHaveText(
+    "Ошибка выполнения",
+  );
+  await expect(cards.nth(1).getByRole("status")).toHaveText(
+    "Ожидает подтверждения",
+  );
+  await expect(
+    page.getByRole("button", { name: "Выполнить", exact: true }),
+  ).toHaveCount(1);
+  await page.evaluate(async (pid) => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store;
+    await store.dispatch("aiChat/confirmPlan", pid);
+  }, proposalId);
+  expect(state.executions()).toBe(1);
+  await reloadPlan(page);
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0).getByRole("status")).toHaveText(
+    "Ошибка выполнения",
+  );
+});
+
+test("replaying an interrupted review does not duplicate the completed execution or review", async ({
+  page,
+}) => {
+  const state = await fixture(page, "success", { review: "disconnect" });
+  await page.route("**/api/ai/chat/stream?**", (route) =>
+    route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        sse("tool", {
+          id: "exec-1",
+          name: "platform_request",
+          status: "running",
+          input: "{}",
+        }) +
+        sse("tool", {
+          id: "exec-1",
+          name: "platform_request",
+          status: "done",
+          result: '{"success":true}',
+        }) +
+        sse("done", { ok: true }) +
+        sse("assistant_start", { executionProposalId: proposalId }) +
+        sse("text", { delta: "Анализ результата восстановлен." }) +
+        sse("done", {}),
+    }),
+  );
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(
+    page.getByText("Анализ результата восстановлен.", { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByText("Проверенный результат расчёта: найдено 2 товара.", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+  expect(state.executions()).toBe(1);
+});
+
+test("proposing a plan removes speculative result text before execution", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.evaluate(() => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store;
+    store.commit("aiChat/updateLastAssistantMessage", {
+      delta: "UNVERIFIED TABLE",
+      textBlock: "UNVERIFIED TABLE",
+    });
+    store.commit("aiChat/updateLastAssistantMessage", {
+      plan: {
+        ...store.state.aiChat.messages.at(-1).plan,
+        discardDraftText: true,
+      },
+    });
+  });
+  await expect(page.getByText(/UNVERIFIED TABLE/)).toHaveCount(0);
+  expect(state.executions()).toBe(0);
 });
 
 for (const [outcome, label] of [

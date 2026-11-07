@@ -18,6 +18,7 @@ import {
   ArrowUpFilled,
   ArrowsLeftFilled,
   ArrowsRightFilled,
+  AttachmentFilled,
   BarcodeFilled,
   BillFilled,
   Book2Filled,
@@ -247,6 +248,7 @@ export const PackagePlus = createMingCuteIcon(PackageFilled, "PackagePlus");
 export const Paintbrush = createMingCuteIcon(PaintBrushFilled, "Paintbrush");
 export const Palette = createMingCuteIcon(PaletteFilled, "Palette");
 export const PanelLeft = createMingCuteIcon(LayoutLeftbarOpenFilled, "PanelLeft");
+export const Paperclip = createMingCuteIcon(AttachmentFilled, "Paperclip");
 export const Pause = createMingCuteIcon(PauseFilled, "Pause");
 export const Pencil = createMingCuteIcon(PencilFilled, "Pencil");
 export const Play = createMingCuteIcon(PlayFilled, "Play");

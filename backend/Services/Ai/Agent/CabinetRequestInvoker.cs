@@ -411,6 +411,10 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             while (items.Count > MaxListItems)
                 items.RemoveAt(items.Count - 1);
             obj["itemsTruncated"] = removed;
+            // The returned prefix is not the last page, even when the upstream
+            // page was terminal. Offset clients advance by the received count.
+            if (obj["lastPage"] is JsonValue lastPage && lastPage.TryGetValue<bool>(out _))
+                obj["lastPage"] = false;
             return Encoding.UTF8.GetBytes(node.ToJsonString());
         }
         catch (JsonException)

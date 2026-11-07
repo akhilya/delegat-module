@@ -276,8 +276,9 @@ public class AgentToolHostTests
         Assert.True(AgentToolResult.IsFailure(result, summary));
         Assert.Contains("nothing was created", summary, StringComparison.OrdinalIgnoreCase);
         var ru = AgentToolResult.FormatPlanOutcome(0, 1, [summary], "ru");
-        Assert.Contains("Не получилось", ru, StringComparison.Ordinal);
-        Assert.Contains("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("Не удалось завершить", ru, StringComparison.Ordinal);
+        Assert.DoesNotContain("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("проверьте результат", ru, StringComparison.Ordinal);
         Assert.DoesNotContain("Plan executed", ru, StringComparison.Ordinal);
         Assert.DoesNotContain("Готово: выполнены все шаги", ru, StringComparison.Ordinal);
     }

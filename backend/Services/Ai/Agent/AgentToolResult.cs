@@ -209,8 +209,8 @@ public static class AgentToolResult
         if (succeeded == 0 && queued == 0)
         {
             return ru
-                ? $"Не получилось ({succeeded} из {total}). В каталоге ничего не изменилось.{queuedNote}\n{list}"
-                : $"Nothing was changed ({succeeded} of {total} steps succeeded).{queuedNote}\n{list}";
+                ? $"Не удалось завершить шаги ({succeeded} из {total}). Ошибка не доказывает, что изменений не было; проверьте результат перед повторным запуском.{queuedNote}\n{list}"
+                : $"No steps completed successfully ({succeeded} of {total}). A failure does not prove that nothing changed; check the outcome before retrying.{queuedNote}\n{list}";
         }
 
         if (queued > 0)

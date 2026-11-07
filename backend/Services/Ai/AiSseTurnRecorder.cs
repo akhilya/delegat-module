@@ -19,6 +19,32 @@ public static class AiSseTurnRecorder
     public static string Format(string type, object data)
         => $"data: {JsonSerializer.Serialize(new { type, data }, JsonOpts)}\n\n";
 
+    /// <summary>A plan outcome and its model review are distinct persisted assistant messages.</summary>
+    public static IReadOnlyList<AiSseTurnSnapshot> FoldTurns(IEnumerable<string> chunks)
+    {
+        var turns = new List<AiSseTurnSnapshot>();
+        var current = new List<string>();
+        foreach (var payload in SsePayloads(chunks))
+        {
+            using var document = ParsePayload(payload);
+            if (document?.RootElement.TryGetProperty("type", out var type) == true
+                && type.GetString() == SseEventType.AssistantStart)
+            {
+                turns.Add(Fold(current));
+                current.Clear();
+            }
+            current.Add("data: " + payload + "\n\n");
+        }
+        turns.Add(Fold(current));
+        return turns;
+    }
+
+    private static JsonDocument? ParsePayload(string payload)
+    {
+        try { return JsonDocument.Parse(payload); }
+        catch (JsonException) { return null; }
+    }
+
     public static AiSseTurnSnapshot Fold(IEnumerable<string> chunks)
     {
         var content = new StringBuilder();
@@ -32,6 +58,8 @@ public static class AiSseTurnRecorder
         var planFailed = false;
         var turnEnded = false;
         var planExecuted = false;
+        var turnStopped = false;
+        string? executionProposalId = null;
 
         foreach (var payload in SsePayloads(chunks))
         {
@@ -49,6 +77,10 @@ public static class AiSseTurnRecorder
 
                 switch (type)
                 {
+                    case SseEventType.AssistantStart:
+                        if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("executionProposalId", out var parent))
+                            executionProposalId = parent.GetString();
+                        break;
                     case SseEventType.Text:
                         if (data.ValueKind == JsonValueKind.Object
                             && data.TryGetProperty("delta", out var deltaEl))
@@ -66,7 +98,14 @@ public static class AiSseTurnRecorder
                         break;
                     case SseEventType.Plan:
                         if (data.ValueKind == JsonValueKind.Object)
+                        {
                             plan = data.Clone();
+                            if (data.TryGetProperty("discardDraftText", out var discard) && discard.ValueKind == JsonValueKind.True)
+                            {
+                                content.Clear();
+                                timeline.RemoveAll(item => item.GetValueOrDefault("type") as string == "text");
+                            }
+                        }
                         break;
                     case SseEventType.Error:
                         turnEnded = true;
@@ -89,6 +128,10 @@ public static class AiSseTurnRecorder
                             AppendText(timeline, piece);
                         }
                         break;
+                    case SseEventType.Stopped:
+                        turnEnded = true;
+                        turnStopped = true;
+                        break;
                     case SseEventType.Done:
                         turnEnded = true;
                         if (data.ValueKind == JsonValueKind.Object)
@@ -101,6 +144,9 @@ public static class AiSseTurnRecorder
                                 planExecuted = true;
                                 planFailed |= okEl.ValueKind == JsonValueKind.False;
                             }
+                            if (data.TryGetProperty("cancelled", out var cancelledEl)
+                                && cancelledEl.ValueKind == JsonValueKind.True)
+                                turnStopped = true;
                         }
                         break;
                 }
@@ -108,10 +154,10 @@ public static class AiSseTurnRecorder
         }
 
         if (turnEnded)
-            MarkInterruptedTools(tools);
+            MarkInterruptedTools(tools, turnStopped);
 
         string? toolCallsJson = null;
-        if (plan != null || tools.Count > 0 || requestErrorCode != null || planExecuted)
+        if (plan != null || tools.Count > 0 || requestErrorCode != null || planExecuted || turnStopped || executionProposalId != null)
         {
             var envelope = new Dictionary<string, object?>
             {
@@ -130,12 +176,16 @@ public static class AiSseTurnRecorder
             }
             if (planFailed && plan == null)
                 envelope["planFailed"] = true;
-            if (planExecuted && plan == null)
+            if (planExecuted && plan == null && !turnStopped)
                 envelope["planExecuted"] = true;
+            if (turnStopped)
+                envelope["turnStopped"] = true;
+            if (executionProposalId != null)
+                envelope["executionProposalId"] = executionProposalId;
             toolCallsJson = JsonSerializer.Serialize(envelope, JsonOpts);
         }
 
-        return new AiSseTurnSnapshot(content.ToString(), toolCallsJson, modelName);
+        return new AiSseTurnSnapshot(content.ToString(), toolCallsJson, modelName) { TurnEnded = turnEnded };
     }
 
     private static void ApplyTool(
@@ -167,6 +217,8 @@ public static class AiSseTurnRecorder
 
         if (data.TryGetProperty("summary", out var summaryEl) && summaryEl.ValueKind == JsonValueKind.String)
             row["summary"] = summaryEl.GetString();
+        if (data.TryGetProperty("status", out var statusEl) && statusEl.ValueKind == JsonValueKind.String)
+            row["status"] = statusEl.GetString();
 
         if (data.TryGetProperty("result", out var resultEl) && resultEl.ValueKind != JsonValueKind.Undefined
             && resultEl.ValueKind != JsonValueKind.Null)
@@ -233,13 +285,15 @@ public static class AiSseTurnRecorder
         return AgentToolResult.IsFailure(result, summary);
     }
 
-    private static void MarkInterruptedTools(List<Dictionary<string, object?>> tools)
+    private static void MarkInterruptedTools(List<Dictionary<string, object?>> tools, bool stopped)
     {
         foreach (var row in tools)
         {
-            if (row.ContainsKey("summary") || row.ContainsKey("result"))
+            var status = row.GetValueOrDefault("status") as string;
+            if (status == "done" || (status != "running" && (row.ContainsKey("summary") || row.ContainsKey("result"))))
                 continue;
             row["summary"] = "interrupted";
+            row["status"] = stopped ? "stopped" : "done";
         }
     }
 
@@ -261,6 +315,7 @@ public static class AiSseTurnRecorder
 
 public readonly record struct AiSseTurnSnapshot(string Content, string? ToolCallsJson, string? ModelName)
 {
+    public bool TurnEnded { get; init; }
     public bool HasAssistantPayload =>
         !string.IsNullOrEmpty(Content) || !string.IsNullOrEmpty(ToolCallsJson);
 }

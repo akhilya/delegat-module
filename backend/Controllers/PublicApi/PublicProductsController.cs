@@ -120,6 +120,7 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Creates a product. Enforces store product quota.</summary>
+    /// <remarks>Non-empty barcodes are unique across products and variants in the store, including trash. A collision returns 409 barcode_already_used.</remarks>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -187,9 +188,10 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Updates a product.</summary>
-    /// <remarks>Partial update. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced.</remarks>
+    /// <remarks>Partial update. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced. Barcode collisions with any product or variant in this store (including trash) return 409 barcode_already_used.</remarks>
     [HttpPatch("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(int storeId, int productId, [FromBody] Product.UpdateForm input, CancellationToken ct)
     {
@@ -304,8 +306,10 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Creates a size variant on a product.</summary>
+    /// <remarks>A barcode already used by any product or variant in this store (including its parent and trash) returns 409 barcode_already_used.</remarks>
     [HttpPost("{productId:int}/variants")]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CreateVariant(
         int storeId,
@@ -338,8 +342,10 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Partially updates a size variant.</summary>
+    /// <remarks>A barcode already used by any other product or variant in this store (including its parent and trash) returns 409 barcode_already_used.</remarks>
     [HttpPatch("{productId:int}/variants/{variantId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateVariant(
         int storeId,

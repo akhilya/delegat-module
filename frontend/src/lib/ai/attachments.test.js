@@ -6,6 +6,8 @@ import {
   attachmentMetaList,
   attachmentPreview,
   filesFromDirectoryInput,
+  filesFromDrop,
+  isFileDrag,
   mergeAttachedFiles,
 } from "./attachments.js";
 
@@ -14,6 +16,29 @@ function fakeFile(name, relativePath, size = 10) {
 }
 
 describe("ai attachments", () => {
+  it("detects file drags without intercepting text or links", () => {
+    assert.equal(isFileDrag({ types: ["Files"] }), true);
+    assert.equal(isFileDrag({ items: [{ kind: "file" }] }), true);
+    assert.equal(isFileDrag({ types: ["text/plain", "text/uri-list"] }), false);
+    assert.equal(isFileDrag(null), false);
+  });
+
+  it("accepts dropped files but skips folders, including mixed drops", () => {
+    const file = fakeFile("catalog.csv", "", 100);
+    const result = filesFromDrop({
+      items: [
+        { kind: "string" },
+        { kind: "file", webkitGetAsEntry: () => ({ isDirectory: true }) },
+        { kind: "file", getAsFile: () => file },
+      ],
+    });
+    assert.deepEqual(result, { files: [file], hasDirectories: true });
+    assert.deepEqual(filesFromDrop({ files: [file] }), {
+      files: [file],
+      hasDirectories: false,
+    });
+  });
+
   it("builds relative paths from a directory FileList and drops parent segments", () => {
     const files = filesFromDirectoryInput([
       fakeFile("SKU-HELLO.jpg", "photos/SKU-HELLO.jpg", 120),

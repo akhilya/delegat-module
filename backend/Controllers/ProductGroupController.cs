@@ -216,6 +216,24 @@ public class ProductGroupController : ControllerBase
 
     #region Group Membership
 
+    /// <summary>Merge local source groups into this group. No marketplace requests are made.</summary>
+    [HttpPost]
+    [Route("/productgroups/{groupId:int}/merge")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> MergeGroups(int groupId, [FromBody] MergeGroupsRequest request,
+        CancellationToken ct = default)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        return Ok(await ProductGroupMerge.MergeAsync(_db, storeId.Value, groupId, request.sourceGroupIds, ct));
+    }
+
+    public sealed class MergeGroupsRequest
+    {
+        public List<int>? sourceGroupIds { get; set; }
+    }
+
     /// <summary>
     /// Add products to a group
     /// </summary>

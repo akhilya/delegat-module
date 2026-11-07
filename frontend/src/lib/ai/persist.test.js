@@ -20,6 +20,116 @@ import {
   finalizeTurnTools,
 } from "./persist.js";
 
+describe("stopped assistant turns", () => {
+  it("round-trips an empty stopped reply and its tool status", () => {
+    const message = {
+      role: "assistant",
+      content: "",
+      turnStopped: true,
+      done: true,
+      timeline: [{ type: "tool", id: "t1" }],
+      toolCalls: [{ id: "t1", name: "run_python", status: "running" }],
+    };
+    finalizeTurnTools(message, { stopped: true });
+    const restored = mapStoredMessage({
+      dbId: 1,
+      role: "assistant",
+      content: "",
+      toolCallsJson: serializeToolCallsJson(message),
+    });
+    assert.equal(restored.turnStopped, true);
+    assert.equal(restored.done, true);
+    assert.equal(restored.toolCalls[0].status, "stopped");
+    assert.equal(restored.timeline[0].tool.status, "stopped");
+  });
+  it("does not lose a local stopped reply to a pre-persistence history read", () => {
+    const user = { dbId: 1, role: "user", content: "Check" };
+    const stopped = {
+      role: "assistant",
+      content: "Partial",
+      turnStopped: true,
+    };
+    for (const rows of [
+      [user],
+      [user, { dbId: 2, role: "assistant", content: "Older partial" }],
+    ]) {
+      const restored = reconcilePlanMessages([user, stopped], rows);
+      assert.equal(restored.at(-1).turnStopped, true);
+      assert.equal(restored.at(-1).content, "Partial");
+    }
+  });
+  it("preserves a persisted stop without marking a later reply stopped", () => {
+    const stopped = {
+      dbId: 2,
+      role: "assistant",
+      turnStopped: true,
+      content: "Partial",
+    };
+    const later = { dbId: 4, role: "assistant", content: "Next reply" };
+    const restored = reconcilePlanMessages(
+      [stopped],
+      [{ ...stopped, turnStopped: false }, later],
+    );
+    assert.equal(restored[0].turnStopped, true);
+    assert.equal(restored[1].turnStopped, undefined);
+    assert.equal(
+      canConfirmPlan({
+        plan: { proposalId: "p1" },
+        done: true,
+        turnStopped: true,
+      }),
+      false,
+    );
+  });
+});
+
+describe("plan result reviews", () => {
+  it("round-trips the parent execution identity without confirming a correction", () => {
+    const restored = mapStoredMessage({
+      dbId: 3,
+      role: "assistant",
+      content: "",
+      toolCallsJson: serializeToolCallsJson({
+        role: "assistant",
+        content: "",
+        executionProposalId: "failed-plan",
+        plan: { proposalId: "corrected-plan" },
+        toolCalls: [],
+        timeline: [],
+      }),
+    });
+    assert.equal(restored.executionProposalId, "failed-plan");
+    assert.equal(restored.plan.proposalId, "corrected-plan");
+    assert.equal(!!restored.planConfirmed, false);
+    assert.equal(canConfirmPlan(restored), true);
+  });
+  it("retains an unpersisted review on stale history without duplicating a saved review", () => {
+    const execution = {
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "p1" },
+      planConfirmed: true,
+      planExecuted: true,
+    };
+    const review = {
+      role: "assistant",
+      executionProposalId: "p1",
+      content: "Partial review",
+      done: false,
+    };
+    const current = [execution, review];
+    assert.deepEqual(
+      reconcilePlanMessages(current, [execution]).at(-1),
+      review,
+    );
+    const saved = { ...review, dbId: 3, done: true, content: "Actual result" };
+    const reconciled = reconcilePlanMessages(current, [execution, saved]);
+    assert.equal(reconciled.length, 2);
+    assert.equal(reconciled[1].content, "Actual result");
+    assert.equal(reconciled[1].done, true);
+  });
+});
+
 describe("plan reconciliation", () => {
   const pending = {
     id: 2,

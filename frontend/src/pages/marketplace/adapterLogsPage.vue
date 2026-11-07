@@ -75,6 +75,11 @@ export default {
       errorCount: 0,
       isLoading: false,
       isDetailLoading: false,
+      logsRequestId: 0,
+      detailRequestId: 0,
+      logsAbortController: null,
+      detailAbortController: null,
+      disposed: false,
       detailOpen: false,
       detail: null,
       connections: [],
@@ -113,7 +118,7 @@ export default {
       return [...keys].sort().map((k) => ({ value: k, label: k }));
     },
     hasMore() {
-      return this.filters.offset + this.items.length < this.total;
+      return this.items.length < this.total;
     },
     pageIds() {
       return this.items.map((r) => r.id ?? r.Id).filter((id) => id != null);
@@ -233,23 +238,40 @@ export default {
     },
 
     async fetchLogs({ append = false } = {}) {
+      if (this.disposed || (append && this.isLoading)) return;
+      const requestId = ++this.logsRequestId;
+      this.logsAbortController?.abort();
+      const controller = new AbortController();
+      this.logsAbortController = controller;
       this.isLoading = true;
       if (!append) {
         this.filters.offset = 0;
         this.clearSelection();
       }
-      await this.getAdapterHttpLogs({
-        params: this.buildParams(),
-        onSuccess: (response) => {
-          const data = extractResponseData(response, {}) || {};
-          const items = data.items || data.Items || [];
-          this.total = data.total ?? data.Total ?? 0;
-          this.errorCount = data.errorCount ?? data.ErrorCount ?? 0;
-          this.items = append ? [...this.items, ...items] : items;
-        },
-        onError: (error) => displaySonnerError(error),
-      });
-      this.isLoading = false;
+      try {
+        await this.getAdapterHttpLogs({
+          params: this.buildParams(),
+          signal: controller.signal,
+          onSuccess: (response) => {
+            if (requestId !== this.logsRequestId || controller.signal.aborted)
+              return;
+            const data = extractResponseData(response, {}) || {};
+            const items = data.items || data.Items || [];
+            this.total = data.total ?? data.Total ?? 0;
+            this.errorCount = data.errorCount ?? data.ErrorCount ?? 0;
+            this.items = append ? [...this.items, ...items] : items;
+          },
+          onError: (error) => {
+            if (requestId === this.logsRequestId && !controller.signal.aborted)
+              displaySonnerError(error);
+          },
+        });
+      } finally {
+        if (requestId === this.logsRequestId) {
+          this.isLoading = false;
+          this.logsAbortController = null;
+        }
+      }
     },
 
     async refresh() {
@@ -257,6 +279,7 @@ export default {
     },
 
     async loadMore() {
+      if (this.isLoading || !this.hasMore) return;
       this.filters.offset = this.items.length;
       await this.fetchLogs({ append: true });
     },
@@ -278,20 +301,36 @@ export default {
     },
 
     async openDetail(row) {
+      if (this.disposed) return;
+      const requestId = ++this.detailRequestId;
+      this.detailAbortController?.abort();
+      const controller = new AbortController();
+      this.detailAbortController = controller;
       this.detailOpen = true;
       this.detail = null;
       this.isDetailLoading = true;
-      await this.getAdapterHttpLogDetail({
-        id: this.rowId(row),
-        onSuccess: (response) => {
-          this.detail = extractResponseData(response, null);
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-          this.detailOpen = false;
-        },
-      });
-      this.isDetailLoading = false;
+      try {
+        await this.getAdapterHttpLogDetail({
+          id: this.rowId(row),
+          signal: controller.signal,
+          onSuccess: (response) => {
+            if (requestId !== this.detailRequestId || controller.signal.aborted)
+              return;
+            this.detail = extractResponseData(response, null);
+          },
+          onError: (error) => {
+            if (requestId !== this.detailRequestId || controller.signal.aborted)
+              return;
+            displaySonnerError(error);
+            this.detailOpen = false;
+          },
+        });
+      } finally {
+        if (requestId === this.detailRequestId) {
+          this.isDetailLoading = false;
+          this.detailAbortController = null;
+        }
+      }
     },
 
     connectionLabel(connectionId) {
@@ -360,7 +399,14 @@ export default {
   },
   async mounted() {
     await this.fetchConnections();
-    await this.fetchLogs();
+    if (!this.disposed) await this.fetchLogs();
+  },
+  beforeUnmount() {
+    this.disposed = true;
+    this.logsRequestId++;
+    this.detailRequestId++;
+    this.logsAbortController?.abort();
+    this.detailAbortController?.abort();
   },
 };
 </script>

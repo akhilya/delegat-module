@@ -21,11 +21,11 @@ export function toolResultFailed(result, summary) {
 }
 
 /** Close tools still spinning when the SSE turn ends without a tool-done event. */
-export function finalizeTurnTools(message) {
+export function finalizeTurnTools(message, { stopped = false } = {}) {
   if (!message?.toolCalls) return message;
   for (const tc of message.toolCalls) {
     if (tc.status === "running") {
-      tc.status = "done";
+      tc.status = stopped ? "stopped" : "done";
       if (!tc.summary) tc.summary = "interrupted";
     }
   }
@@ -125,7 +125,7 @@ export function parsePersistedMessageMeta(toolCallsJson) {
     if (parsed && parsed._ui === "assistantTurn") {
       const toolCalls = (parsed.tools || []).map((tc) => ({
         ...tc,
-        status: "done",
+        status: tc.status || "done",
       }));
       return {
         toolCalls,
@@ -133,6 +133,8 @@ export function parsePersistedMessageMeta(toolCallsJson) {
         attachments: [],
         timeline: hydrateTimeline(parsed.timeline || [], toolCalls),
         plan: parsed.plan || null,
+        turnStopped: !!parsed.turnStopped,
+        executionProposalId: parsed.executionProposalId || null,
         requestError: parsed.requestError || null,
         planConfirmed: !!parsed.planConfirmed,
         planCancelled: !!parsed.planCancelled,
@@ -173,6 +175,8 @@ export function mapStoredMessage(m) {
     attachments,
     timeline: storedTimeline,
     plan,
+    turnStopped,
+    executionProposalId,
     planConfirmed,
     planCancelled,
     planSuperseded,
@@ -197,6 +201,8 @@ export function mapStoredMessage(m) {
     contextCard,
     attachments,
     plan: plan || null,
+    turnStopped: !!turnStopped,
+    executionProposalId,
     planConfirmed: !!planConfirmed,
     planCancelled: !!planCancelled,
     planSuperseded: !!planSuperseded,
@@ -234,10 +240,13 @@ export function serializeToolCallsJson(m) {
     input: tc.input,
     summary: tc.summary,
     result: tc.result,
+    status: tc.status,
   }));
   const formReplies = readFormReplies(m.formReplies);
   const hasFormReplies = Object.keys(formReplies).length > 0;
   if (
+    m.turnStopped ||
+    m.executionProposalId ||
     m.plan ||
     m.requestError ||
     hasFormReplies ||
@@ -252,6 +261,8 @@ export function serializeToolCallsJson(m) {
           : { type: "text", text: item.text },
       ),
       plan: m.plan || null,
+      turnStopped: m.turnStopped || undefined,
+      executionProposalId: m.executionProposalId || undefined,
       planConfirmed: m.planConfirmed || undefined,
       planCancelled: m.planCancelled || undefined,
       planSuperseded: m.planSuperseded || undefined,

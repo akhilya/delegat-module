@@ -270,6 +270,11 @@ Floating lists (dropdown, context menu, select, searchable select, combobox, pop
 - Empty-state icons are bare muted glyphs, not bordered tiles. Use one short title and at most one useful sentence; omit descriptions that only repeat the title or an obvious action.
 - `/unavailable` shows one short heading, one recovery sentence and one retry button. Automatic polling and return navigation remain active without a second status paragraph or speculative technical explanations.
 
+### File drops and assistant attachments
+- The file manager and assistant share `FileDropOverlay`: an inset, neutral dashed target, bare upload icon, short instruction and optional hint, with a quiet opacity transition. The overlay does not intercept pointer events or move focus while dragging.
+- The assistant uses the shared paperclip icon for attachment picking. Individual files can be dropped anywhere in the chat sheet when file permissions, an enabled model and an idle composer allow it. Drops add to the same draft attachment list as the picker; they never upload or send automatically. Folder drops are rejected with a localized hint; text and link drags keep native editing behavior.
+- Hide the assistant model selector when exactly one enabled model is available. Preserve automatic/default model resolution and the no-model state; show the selector for two or more choices.
+
 ### Inset grouped lists
 iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive: `InsetGroup` / `InsetGroupItem` / `InsetGroupLabel` (`frontend/src/components/ui/inset-group`).
 

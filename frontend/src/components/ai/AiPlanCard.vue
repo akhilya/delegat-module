@@ -31,6 +31,7 @@ const props = defineProps({
   cancelled: { type: Boolean, default: false },
   superseded: { type: Boolean, default: false },
   executed: { type: Boolean, default: false },
+  stopped: { type: Boolean, default: false },
   failed: { type: Boolean, default: false },
   confirming: { type: Boolean, default: false },
   confirmationBlocked: { type: Boolean, default: false },
@@ -116,6 +117,7 @@ const pending = computed(
     !props.cancelled &&
     !props.superseded &&
     !props.executed &&
+    !props.stopped &&
     !props.failed &&
     !props.confirmationBlocked,
 );
@@ -134,6 +136,7 @@ const partial = computed(
       )),
 );
 const status = computed(() => {
+  if (props.stopped) return "generationStopped";
   if (props.cancelled) return "planCancelled";
   if (props.superseded) return "planSuperseded";
   if (props.confirming) return "planConfirming";

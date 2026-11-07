@@ -22,7 +22,8 @@ public sealed class CabinetActionCatalog
         string Path,
         bool Write,
         string Note,
-        string Keywords);
+        string Keywords,
+        string Capabilities = "");
 
     private readonly IActionDescriptorCollectionProvider? _actions;
     private readonly Lazy<IReadOnlyList<ActionHit>> _all;
@@ -77,6 +78,10 @@ public sealed class CabinetActionCatalog
         var fields = AssistantBodySchema.AcceptedFields(hit.Method, hit.Path);
         if (!string.IsNullOrEmpty(fields) && !note.Contains("Accepted body fields:", StringComparison.Ordinal))
             note += " Accepted body fields: " + fields + ".";
+        var action = AssistantBodySchema.Match(hit.Method, hit.Path);
+        if (action?.Body.Properties.TryGetValue("updates", out var updates) == true)
+            note += " Accepted updates fields (DTO shape; use the supported semantics above): "
+                + string.Join(", ", updates.Properties.Keys.OrderBy(k => k, StringComparer.Ordinal)) + ".";
         return hit with { Note = note };
     }
 
@@ -104,11 +109,12 @@ public sealed class CabinetActionCatalog
             "Create missing category mappings and copy characteristics after apply.",
             "repair-mappings mapping характеристики"),
         new("PATCH", "/products/bulk", true,
-            "Raise or set catalog prices. Body: allMatching+wait+updates.priceDelta (add ₽ to every card), or productIds+updates.price. Then POST /tools/export-all-prices/run { connectionId } per shop. Not GET …/prices.",
-            "цены price цены bulk массовое повышение наценка +500 рублей priceDelta allMatching wait ozon wildberries yandex яндекс вб озон"),
+            "Built-in bulk catalog editing, including server-generated unique barcodes, common scalar fields, and attribute upserts. Prefer one request for a selected set when supported; no Python preparation for built-in generation. This changes the local catalog only; marketplace export is separate and requires user intent.",
+            "цены price bulk массовое массовый выбранных товары карточки редактирование изменить обновить повышение наценка +500 рублей priceDelta allMatching wait ozon wildberries yandex яндекс вб озон generate regenerate перегенерировать пересоздать сгенерировать заполнить заменить"),
         new("POST", "/tools/export-all-prices/run", true,
             "Push local catalog prices to a shop. Body: { connectionId }. Omit connectionId = every active connection that can export prices (Ozon, Wildberries, Yandex, …). After a catalog price change. HTTP 200 = Operations.",
-            "обновить цены маркетплейс магазин shop export-all-prices выгрузить цены ozon wildberries yandexmarket яндекс вб озон"),
+            "обновить цены маркетплейс магазин shop export-all-prices выгрузить цены ozon wildberries yandexmarket яндекс вб озон",
+            "price prices цена цены"),
         new("GET", "/tools", false,
             "Job-tool catalog (export all prices, scrape). Not product export to a shop.",
             "tools инструменты цены prices jobs"),
@@ -223,10 +229,20 @@ public sealed class CabinetActionCatalog
         // Route parameters such as {id} are not evidence of what an action does.
         var pathWords = Tokens(Regex.Replace(hit.Path, @"\{[^}]+\}", ""));
         var keywordWords = Tokens(hit.Keywords);
+        var fieldWords = AssistantBodySchema.UpdateFields(hit.Method, hit.Path)
+            .SelectMany(field => Tokens(field + " " + FieldAliases.GetValueOrDefault(field)))
+            .Concat(Tokens(hit.Capabilities))
+            .Distinct().ToList();
         var score = 0;
         foreach (var t in tokens)
         {
-            if (pathWords.Contains(t))
+            // Concrete DTO fields and their translations outweigh generic verbs
+            // such as "update", without indexing unrelated prose in usage notes.
+            if (fieldWords.Contains(t))
+                score += 12;
+            else if (fieldWords.Any(word => RelatedWord(t, word)))
+                score += 9;
+            else if (pathWords.Contains(t))
                 score += 5;
             else if (keywordWords.Contains(t))
                 score += 3;
@@ -238,6 +254,20 @@ public sealed class CabinetActionCatalog
 
         return score;
     }
+
+    private static readonly IReadOnlyDictionary<string, string> FieldAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["barcode"] = "barcode barcodes EAN штрихкод штрихкоды штрих код",
+        ["generateBarcodes"] = "regenerate generate barcode barcodes перегенерировать сгенерировать штрихкоды",
+        ["name"] = "name title название наименование",
+        ["description"] = "description описание",
+        ["storageQuantity"] = "stock quantity остаток остатки количество запас",
+        ["price"] = "price цена цены",
+        ["oldPrice"] = "old price старая цена",
+        ["currency"] = "currency валюта",
+        ["attributeValues"] = "attributes characteristics характеристики атрибуты",
+        ["storeAttributeValues"] = "global attributes глобальные характеристики",
+    };
 
     private static bool RelatedWord(string query, string word) =>
         Math.Min(query.Length, word.Length) >= 5

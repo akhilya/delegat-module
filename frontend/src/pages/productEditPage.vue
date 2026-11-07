@@ -771,8 +771,26 @@ export default {
       return result === true;
     }
 
-    // Save product (manual save only)
+    let saveInFlight = null;
     async function saveProduct(showSuccessToast = true) {
+      if (saveInFlight) return saveInFlight;
+      saveInFlight = persistProduct(showSuccessToast);
+      try {
+        return await saveInFlight;
+      } finally {
+        saveInFlight = null;
+      }
+    }
+
+    async function ensureSavedBeforeExport() {
+      await nextTick();
+      if (isProductLoading.value) return false;
+      if (!hasUnsavedChanges.value && !isSubmitting.value) return true;
+      if (!canManageCatalog.value) return false;
+      return saveProduct(false);
+    }
+
+    async function persistProduct(showSuccessToast = true) {
       if (isSubmitting.value) return false;
       isSubmitting.value = true;
       try {
@@ -784,6 +802,14 @@ export default {
         }
 
         syncCategoryAttributesCacheFromForm();
+
+        const draftFingerprint = () => JSON.stringify([
+          form.values,
+          selectedCategoryId.value,
+          allCategoryAttributeValues.value,
+          sortedImages.value.map((image) => image.fileId),
+        ]);
+        const savingDraft = draftFingerprint();
 
         const values = form.values;
         const input = {
@@ -818,6 +844,13 @@ export default {
 
         const imagesOk = await persistImages();
         if (!imagesOk) return false;
+
+        // Do not replace a newer draft with the saved version or export that older version.
+        if (draftFingerprint() !== savingDraft) {
+          hasUnsavedChanges.value = true;
+          displaySonnerError(t("pages.productEditPage.toast.changedDuringSave"));
+          return false;
+        }
 
         await syncProductAfterSave();
         hasUnsavedChanges.value = false;
@@ -1430,6 +1463,7 @@ export default {
       productGroup,
       isLoadingGroup,
       hasUnsavedChanges,
+      ensureSavedBeforeExport,
       goToDuplicate,
       fetchProduct,
       showSkuDialog,
@@ -2338,6 +2372,7 @@ export default {
             <div v-show="tab == 'marketplaces'">
               <ProductMarketplaceIntegrations
                 :productId="productId"
+                :before-export="ensureSavedBeforeExport"
                 @product-updated="fetchProduct"
               />
             </div>

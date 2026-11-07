@@ -66,8 +66,24 @@ function requestErrorDetails(error) {
   };
 }
 
-let abortController = null;
-let userStopped = false;
+let activeStream = null;
+let navigationVersion = 0;
+
+function beginStream(sessionId) {
+  activeStream?.controller.abort();
+  const stream = {
+    sessionId,
+    controller: new AbortController(),
+    stopped: false,
+    started: false,
+  };
+  activeStream = stream;
+  return stream;
+}
+
+function ownsStream(state, stream) {
+  return activeStream === stream && state.sessionId === stream.sessionId;
+}
 
 function isOpenPlan(m) {
   return !!(
@@ -80,6 +96,8 @@ function isOpenPlan(m) {
 }
 
 function planHistoryStatus(m) {
+  if (m.turnStopped)
+    return "stopped by user — some actions may already have applied. Do not resume or repeat without a new explicit confirmation";
   if (m.planConfirmed) return "confirmed by user";
   if (m.planCancelled) return "cancelled by user";
   if (m.planSuperseded)
@@ -111,7 +129,7 @@ function buildHistory(messages) {
       continue;
     }
 
-    if (m.apiBlocks?.length) {
+    if (m.apiBlocks?.length && !m.turnStopped) {
       result.push(...apiHistoryFromBlocks(m.apiBlocks));
 
       if (m.plan) {
@@ -138,10 +156,17 @@ function buildHistory(messages) {
             (tc.input || "").length > 200
               ? tc.input.slice(0, 200) + "..."
               : tc.input || "";
-          return `${tc.name}(${input})${tc.summary ? ` -> ${tc.summary}` : ""}`;
+          const outcome =
+            tc.status === "stopped"
+              ? "interrupted; outcome unknown"
+              : tc.summary;
+          return `${tc.name}(${input})${outcome ? ` -> ${outcome}` : ""}`;
         })
         .join("\n");
-      content = `[ALREADY EXECUTED IN PREVIOUS TURN - DO NOT REPEAT OR IMITATE:\n${toolLines}]\n${content}`;
+      const heading = m.turnStopped
+        ? "PREVIOUS TURN TOOL ATTEMPTS — interrupted calls have unknown outcomes; do not repeat automatically"
+        : "ALREADY EXECUTED IN PREVIOUS TURN - DO NOT REPEAT OR IMITATE";
+      content = `[${heading}:\n${toolLines}]\n${content}`;
     }
 
     if (m.plan) {
@@ -152,6 +177,9 @@ function buildHistory(messages) {
       content += `\n[Plan: "${m.plan.summary || m.plan.description || ""}" | Steps:\n${steps}\n| Status: ${status}]`;
     }
 
+    if (m.turnStopped)
+      content +=
+        "\n[Reply stopped by the user. Partial text and completed actions are not a finished answer. Do not continue the interrupted task without a new user instruction.]";
     result.push({ role: "assistant", content });
   }
 
@@ -163,6 +191,11 @@ async function consumeSse(response, commit, { execution = false } = {}) {
   let completed = false;
   for await (const event of readSseEvents(response)) {
     switch (event.type) {
+      case "assistant_start":
+        completed = false;
+        execution = false;
+        commit("startPlanReview", event.data);
+        break;
       case "text":
         commit("updateLastAssistantMessage", {
           delta: event.data?.delta ?? "",
@@ -207,7 +240,14 @@ async function consumeSse(response, commit, { execution = false } = {}) {
         commit("updateLastAssistantMessage", { plan: event.data });
         break;
       case "done": {
-        completed = !execution || typeof event.data?.ok === "boolean";
+        completed =
+          !execution ||
+          typeof event.data?.ok === "boolean" ||
+          event.data?.cancelled === true;
+        if (event.data?.cancelled === true) {
+          commit("setTurnStopped");
+          break;
+        }
         commit("finalizeRunningTools");
         const patch = {
           done: true,
@@ -220,6 +260,10 @@ async function consumeSse(response, commit, { execution = false } = {}) {
         commit("updateLastAssistantMessage", patch);
         break;
       }
+      case "stopped":
+        completed = true;
+        commit("setTurnStopped");
+        break;
       case "error":
         commit("finalizeRunningTools");
         commit("setLastAssistantRequestError", {
@@ -237,13 +281,17 @@ async function consumeSse(response, commit, { execution = false } = {}) {
 
 function turnCommit(state, commit) {
   const sessionId = state.sessionId;
-  const messageId = state.messages.at(-1)?.id;
+  let messageId = state.messages.at(-1)?.id;
+  const stream = activeStream;
   return (type, payload) => {
     if (
       state.sessionId === sessionId &&
+      activeStream === stream &&
       state.messages.at(-1)?.id === messageId
-    )
+    ) {
       commit(type, payload);
+      if (type === "startPlanReview") messageId = state.messages.at(-1)?.id;
+    }
   };
 }
 
@@ -256,6 +304,7 @@ export default {
     sessionId: newSessionId(),
     conversationTitle: null,
     isLoading: false,
+    isStopping: false,
     pageContext: null,
     panelWidth: parseInt(localStorage.getItem("ai-panel-width") || "400"),
     mappingRefreshToken: 0,
@@ -299,6 +348,29 @@ export default {
         id: prev.id,
         dbId: prev.dbId,
       });
+    },
+    startPlanReview(state, { executionProposalId } = {}) {
+      const last = state.messages.at(-1);
+      if (
+        !executionProposalId ||
+        last?.plan?.proposalId !== executionProposalId
+      )
+        return;
+      state.messages.push({
+        ...emptyAssistantMessage(),
+        id: randomUuid(),
+        executionProposalId,
+      });
+    },
+    preparePlanReplay(state) {
+      const last = state.messages.at(-1);
+      if (!last?.executionProposalId || last.planConfirmed) return;
+      const index = state.messages.findIndex(
+        (m) => m.plan?.proposalId === last.executionProposalId,
+      );
+      if (index < 0) return;
+      state.messages.splice(index + 1);
+      state.messages[index].planExecuted = false;
     },
     setSessionId(state, id) {
       state.sessionId = id;
@@ -372,7 +444,14 @@ export default {
         });
       }
 
-      if (plan) last.plan = plan;
+      if (plan) {
+        last.plan = plan;
+        if (plan.discardDraftText) {
+          last.content = "";
+          last.timeline = last.timeline.filter((item) => item.type !== "text");
+          last.apiBlocks = [];
+        }
+      }
       if (done) {
         last.done = true;
       }
@@ -381,6 +460,19 @@ export default {
       const last = state.messages[state.messages.length - 1];
       if (!last) return;
       finalizeTurnTools(last);
+    },
+    setStopping(state, value) {
+      state.isStopping = value;
+    },
+    setTurnStopped(state) {
+      const last = state.messages.at(-1);
+      if (!last || last.role !== "assistant") return;
+      last.turnStopped = true;
+      last.done = true;
+      last.planConfirming = false;
+      last.planConfirmationError = null;
+      last.requestError = null;
+      finalizeTurnTools(last, { stopped: true });
     },
     resetPlanExecution(state) {
       const last = state.messages.at(-1);
@@ -535,26 +627,43 @@ export default {
   },
 
   actions: {
-    async startNewConversation({ state, commit, dispatch }) {
-      if (state.isLoading) await dispatch("stopGeneration");
+    async startNewConversation({ commit, dispatch }) {
+      ++navigationVersion;
+      await dispatch("detachLiveStream");
       commit("clearMessages");
     },
 
-    async loadLastConversation({ commit, dispatch }) {
+    detachLiveStream({ commit }) {
+      const previous = activeStream;
+      activeStream = null;
+      previous?.controller.abort();
+      commit("setLoading", false);
+      commit("setStopping", false);
+    },
+
+    async loadLastConversation({ state, commit, dispatch }) {
+      if (state.messages.length || state.isLoading) return;
+      const version = navigationVersion;
       try {
         const { http } = await import("@/main");
         const res = await http.get("/ai/conversations/latest", {
           cache: false,
         });
         const data = res.data;
-        if (!data) return;
+        if (
+          !data ||
+          version !== navigationVersion ||
+          state.messages.length ||
+          state.isLoading
+        )
+          return;
 
         commit("setSessionId", data.sessionId);
         if (data.title) commit("setConversationTitle", data.title);
 
         const messages = hydrateConversation(data.messages || []);
         commit("setMessages", messages);
-        await dispatch("maybeAttachLiveStream", data);
+        dispatch("maybeAttachLiveStream", data);
       } catch {
         /* silent */
       }
@@ -562,19 +671,14 @@ export default {
 
     maybeAttachLiveStream({ dispatch, state }, data) {
       if (!data?.generating) return;
-      const last = state.messages.at(-1);
-      if (
-        last?.role === "assistant" &&
-        last.done &&
-        !(last.plan && last.planConfirmed && !last.planExecuted)
-      )
-        return;
+      if (activeStream?.sessionId === state.sessionId) return;
       return dispatch("attachLiveStream");
     },
 
     async reloadConversationMessages({ state, commit }) {
       if (!state.sessionId) return;
       const sessionId = state.sessionId;
+      const streamAtRead = activeStream;
       try {
         const { http } = await import("@/main");
         const res = await http.get(
@@ -582,7 +686,12 @@ export default {
           { cache: false },
         );
         const data = res.data;
-        if (!data || state.sessionId !== sessionId) return;
+        if (
+          !data ||
+          state.sessionId !== sessionId ||
+          activeStream !== streamAtRead
+        )
+          return;
         if (data.title) commit("setConversationTitle", data.title);
         commit(
           "setMessages",
@@ -601,28 +710,36 @@ export default {
       const sessionId = state.sessionId;
       const last = state.messages.at(-1);
       if (last?.planExecuted) return;
-      if (last?.role === "assistant" && last.done && !last.plan) return;
-
-      userStopped = false;
+      const stream = beginStream(sessionId);
+      stream.started = true;
       commit("setLoading", true);
-      abortController = new AbortController();
-      const { signal } = abortController;
+      const { signal } = stream.controller;
 
       try {
         const response = await fetchWithAuth(
           `/api/ai/chat/stream?sessionId=${encodeURIComponent(sessionId)}`,
           { method: "GET", headers: { "X-CSRF": "1" }, signal },
         );
-        if (state.sessionId !== sessionId) return;
+        if (!ownsStream(state, stream)) return;
         if (response.status === 404) {
           await dispatch("reloadConversationMessages");
+          if (
+            ownsStream(state, stream) &&
+            state.messages.at(-1)?.executionProposalId &&
+            !state.messages.at(-1)?.done
+          )
+            commit("setLastAssistantRequestError", {
+              code: "",
+              status: null,
+              reason: "",
+            });
           return;
         }
         if (!response.ok) throw await responseError(response);
 
+        commit("preparePlanReplay");
         const current = state.messages.at(-1);
         if (current?.role === "assistant") {
-          if (current.done && !current.plan) return;
           if (current.plan && current.planConfirmed && !current.planExecuted) {
             commit("resetPlanExecution");
           } else if (!current.plan) {
@@ -634,20 +751,20 @@ export default {
         await consumeSse(response, turnCommit(state, commit), {
           execution: !!current?.planConfirmed && !current?.planExecuted,
         });
-        if (state.sessionId === sessionId) {
-          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+        if (ownsStream(state, stream)) {
+          if (stream.stopped) commit("setTurnStopped");
           await dispatch("reloadConversationMessages");
         }
       } catch (err) {
-        if (state.sessionId !== sessionId) return;
+        if (!ownsStream(state, stream)) return;
         if (err.name === "AbortError") {
-          if (userStopped) {
-            commit("updateLastAssistantMessage", { done: true });
+          if (stream.stopped) {
+            commit("setTurnStopped");
           }
         } else {
           await dispatch("reloadConversationMessages");
           const planMessage = state.messages.at(-1);
-          if (state.sessionId !== sessionId) return;
+          if (!ownsStream(state, stream)) return;
           if (planMessage?.planConfirmed && !planMessage.planExecuted) {
             commit("setPlanConfirmationError", {
               proposalId: planMessage.plan.proposalId,
@@ -659,12 +776,16 @@ export default {
           }
         }
       } finally {
-        abortController = null;
-        if (state.sessionId === sessionId) commit("setLoading", false);
+        if (ownsStream(state, stream)) {
+          activeStream = null;
+          commit("setLoading", false);
+          commit("setStopping", false);
+        }
       }
     },
 
     async sendMessage({ state, commit, dispatch }, payload) {
+      if (state.isLoading) return;
       const activeSessionId = state.sessionId; // capture to detect session switches mid-stream
 
       const content = typeof payload === "string" ? payload : payload?.content;
@@ -685,7 +806,7 @@ export default {
       if (!formReply && !isAiControlMessage(text))
         commit("supersedePendingPlans");
 
-      userStopped = false;
+      const stream = beginStream(activeSessionId);
       commit("setLoading", true);
 
       const userMsg = {
@@ -702,14 +823,17 @@ export default {
       if (attached.length) {
         try {
           const staged = await uploadChatAttachments(state.sessionId, attached);
+          if (!ownsStream(state, stream)) return;
           commit(
             "patchLastUserAttachments",
             applyStagedIds(attachments, staged),
           );
         } catch (err) {
+          if (!ownsStream(state, stream)) return;
           commit("removeLastUserMessage");
           commit("setAttachedFiles", attached);
           commit("setLoading", false);
+          activeStream = null;
           commit("addMessage", {
             id: Date.now(),
             role: "assistant",
@@ -725,17 +849,13 @@ export default {
       // Persist the user turn before the server live-turn can append it. The live
       // endpoint remains the sole writer for the generated assistant turn.
       await dispatch("syncHistory");
-      if (state.sessionId !== activeSessionId) {
-        commit("setLoading", false);
-        return;
-      }
-
-      abortController = new AbortController();
+      if (!ownsStream(state, stream)) return;
 
       const history = buildHistory(state.messages);
       const streamCommit = turnCommit(state, commit);
 
       try {
+        stream.started = true;
         const response = await fetchWithAuth("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF": "1" },
@@ -747,33 +867,34 @@ export default {
               ? parseInt(state.selectedModelId)
               : null,
           }),
-          signal: abortController.signal,
+          signal: stream.controller.signal,
         });
 
         if (!response.ok) throw await responseError(response);
         await consumeSse(response, streamCommit);
-        if (state.sessionId === activeSessionId) {
-          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+        if (ownsStream(state, stream)) {
+          if (stream.stopped) commit("setTurnStopped");
           await dispatch("reloadConversationMessages");
         }
       } catch (err) {
         // If the session was switched while streaming, don't corrupt the new conversation's messages
-        if (state.sessionId !== activeSessionId) return;
+        if (!ownsStream(state, stream)) return;
 
         if (err.name === "AbortError") {
-          if (userStopped) {
-            commit("updateLastAssistantMessage", { done: true });
+          if (stream.stopped) {
+            commit("setTurnStopped");
           }
         } else {
           await dispatch("reloadConversationMessages");
-          if (state.sessionId !== activeSessionId) return;
+          if (!ownsStream(state, stream)) return;
           commit("setLastAssistantRequestError", requestErrorDetails(err));
         }
       } finally {
-        abortController = null;
-        if (state.sessionId === activeSessionId) {
+        if (ownsStream(state, stream)) {
+          activeStream = null;
+          commit("setStopping", false);
           const last = state.messages.at(-1);
-          if (!userStopped && last?.role === "assistant" && !last.done) {
+          if (!stream.stopped && last?.role === "assistant" && !last.done) {
             await dispatch("attachLiveStream");
           } else {
             commit("setLoading", false);
@@ -782,15 +903,45 @@ export default {
       }
     },
 
-    stopGeneration({ state }) {
-      userStopped = true;
-      abortController?.abort();
-      if (state.sessionId) {
-        fetchWithAuth("/api/ai/stop", {
+    async stopGeneration({ state, commit, dispatch }) {
+      const stream = activeStream;
+      if (!stream || !ownsStream(state, stream) || state.isStopping) return;
+      commit("setStopping", true);
+      try {
+        if (!stream.started) {
+          stream.stopped = true;
+          stream.controller.abort();
+          if (state.messages.at(-1)?.role !== "assistant")
+            commit("addMessage", emptyAssistantMessage());
+          commit("setTurnStopped");
+          commit("setLoading", false);
+          commit("setStopping", false);
+          activeStream = null;
+          await dispatch("syncHistory");
+          return;
+        }
+        const response = await fetchWithAuth("/api/ai/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF": "1" },
-          body: JSON.stringify({ sessionId: state.sessionId }),
-        }).catch(() => {});
+          body: JSON.stringify({ sessionId: stream.sessionId }),
+        });
+        if (!response.ok) throw await responseError(response);
+        const result = await response.json();
+        if (!ownsStream(state, stream)) return;
+        if (result.stopped) {
+          stream.stopped = true;
+          commit("setTurnStopped");
+          commit("setLoading", false);
+          commit("setStopping", false);
+          stream.controller.abort();
+        }
+      } catch (error) {
+        if (ownsStream(state, stream))
+          commit("updateLastAssistantMessage", {
+            requestError: { stage: "stop", ...requestErrorDetails(error) },
+          });
+      } finally {
+        if (ownsStream(state, stream)) commit("setStopping", false);
       }
     },
 
@@ -818,13 +969,13 @@ export default {
       }
 
       commit("setPlanConfirming", { proposalId, confirming: true });
-      userStopped = false;
       const activeSessionId = state.sessionId;
+      const stream = beginStream(activeSessionId);
       commit("setLoading", true);
-      abortController = new AbortController();
       let responseAccepted = false;
 
       try {
+        stream.started = true;
         const response = await fetchWithAuth("/api/ai/execute-plan", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF": "1" },
@@ -832,32 +983,32 @@ export default {
             proposalId,
             sessionId: activeSessionId,
           }),
-          signal: abortController.signal,
+          signal: stream.controller.signal,
         });
         if (!response.ok) {
           throw await responseError(response);
         }
         responseAccepted = true;
-        if (state.sessionId !== activeSessionId) return;
+        if (!ownsStream(state, stream)) return;
         commit("setPlanConfirmed", proposalId);
         await consumeSse(response, turnCommit(state, commit), {
           execution: true,
         });
-        if (state.sessionId === activeSessionId) {
-          if (userStopped) commit("updateLastAssistantMessage", { done: true });
+        if (ownsStream(state, stream)) {
+          if (stream.stopped) commit("setTurnStopped");
           await dispatch("reloadConversationMessages");
         }
       } catch (err) {
-        if (state.sessionId !== activeSessionId) return;
+        if (!ownsStream(state, stream)) return;
         if (err.name === "AbortError") {
           await dispatch("reloadConversationMessages");
-          if (state.sessionId !== activeSessionId) return;
-          if (userStopped) {
-            commit("updateLastAssistantMessage", { done: true });
+          if (!ownsStream(state, stream)) return;
+          if (stream.stopped) {
+            commit("setTurnStopped");
           }
         } else {
           await dispatch("reloadConversationMessages");
-          if (state.sessionId !== activeSessionId) return;
+          if (!ownsStream(state, stream)) return;
           if (
             state.messages.find((m) => m.plan?.proposalId === proposalId)
               ?.planExecuted
@@ -873,11 +1024,12 @@ export default {
           commit("updateLastAssistantMessage", { done: true });
         }
       } finally {
-        abortController = null;
-        commit("setPlanConfirming", { proposalId, confirming: false });
-        if (state.sessionId === activeSessionId) {
+        if (ownsStream(state, stream)) {
+          activeStream = null;
+          commit("setStopping", false);
+          commit("setPlanConfirming", { proposalId, confirming: false });
           const last = state.messages.at(-1);
-          if (!userStopped && last?.role === "assistant" && !last.done) {
+          if (!stream.stopped && last?.role === "assistant" && !last.done) {
             await dispatch("attachLiveStream");
           } else {
             commit("setLoading", false);
@@ -887,6 +1039,8 @@ export default {
     },
 
     async syncHistory({ state, commit, dispatch }) {
+      const sessionId = state.sessionId;
+      const streamAtSync = activeStream;
       // Include completed assistant messages and all user messages; skip empty assistant placeholders
       const msgs = state.messages.filter(
         (m) =>
@@ -895,7 +1049,7 @@ export default {
             (m.done ||
               (m.plan &&
                 (m.planConfirmed || m.planCancelled || m.planSuperseded))) &&
-            (m.content || m.toolCalls?.length || m.plan)),
+            (m.content || m.toolCalls?.length || m.plan || m.turnStopped)),
       );
       if (msgs.length < 1) return;
       const modelName =
@@ -903,7 +1057,7 @@ export default {
       try {
         const { http } = await import("@/main");
         const body = {
-          sessionId: state.sessionId,
+          sessionId,
           modelName,
           messages: msgs.map((m) => ({
             role: m.role,
@@ -914,6 +1068,8 @@ export default {
           })),
         };
         const res = await http.post("/ai/conversations/messages", body);
+        if (state.sessionId !== sessionId || activeStream !== streamAtSync)
+          return;
         const saved = res.data?.saved ?? [];
         if (saved.length > 0) {
           commit("applyDbIds", saved);
@@ -932,9 +1088,10 @@ export default {
       }
     },
 
-    async loadConversation({ state, commit, dispatch }, sessionId) {
-      // Stop any ongoing generation before switching conversations
-      if (state.isLoading) await dispatch("stopGeneration");
+    async loadConversation({ commit, dispatch }, sessionId) {
+      // Navigation detaches the subscriber, never the server-owned generation.
+      await dispatch("detachLiveStream");
+      const version = ++navigationVersion;
       try {
         const { http } = await import("@/main");
         const res = await http.get(
@@ -942,12 +1099,12 @@ export default {
           { cache: false },
         );
         const data = res.data;
-        if (!data) return;
+        if (!data || version !== navigationVersion) return;
         commit("setSessionId", data.sessionId);
         commit("setConversationTitle", data.title ?? null);
         const messages = hydrateConversation(data.messages || []);
         commit("setMessages", messages);
-        await dispatch("maybeAttachLiveStream", data);
+        dispatch("maybeAttachLiveStream", data);
       } catch {
         /* silent */
       }
@@ -978,13 +1135,19 @@ export default {
 
     async generateTitle({ state, commit }, firstUserMessage) {
       if (state.conversationTitle) return;
+      const sessionId = state.sessionId;
       try {
         const { http } = await import("@/main");
         const res = await http.post(
-          `/ai/conversations/${state.sessionId}/generate-title`,
+          `/ai/conversations/${sessionId}/generate-title`,
           { firstUserMessage },
         );
-        if (res.data?.title) commit("setConversationTitle", res.data.title);
+        if (
+          res.data?.title &&
+          state.sessionId === sessionId &&
+          !state.conversationTitle
+        )
+          commit("setConversationTitle", res.data.title);
       } catch {
         /* silent */
       }

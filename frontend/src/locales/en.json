@@ -107,6 +107,7 @@
       "noStoresLink": "Open setup"
     },
     "logs": {
+      "detailsUnavailable": "Request and response details were not retained or have expired. The request summary is still available.",
       "method": "Method",
       "anyMethod": "Any method",
       "code": "Status",
@@ -490,10 +491,12 @@
     "attribute_key_taken": "An attribute with this key already exists",
     "attribute_not_found": "Attribute not found",
     "log_entry_not_found": "Log entry not found",
+    "log_details_unavailable": "Detailed log data was not retained or has expired.",
     "authenticator_key_failed": "Could not create an authenticator key",
     "adapter_not_found": "Adapter not found",
     "external_categories_unavailable": "Could not load categories from the marketplace. Try again later.",
     "mapping_not_found": "Category mapping not found",
+    "mapping_category_mismatch": "The product category has changed. Reload the available mappings and choose again.",
     "mapping_source_required": "Choose a source field for this mapping.",
     "mapping_modifier_required": "Choose a modifier for this mapping.",
     "mapping_pairs_required": "Provide at least one source and destination field pair.",
@@ -518,6 +521,8 @@
     "file_name_required": "Enter a file name.",
     "files_required": "Select at least one file.",
     "group_name_taken": "A group with this name already exists.",
+    "group_merge_selection_invalid": "Select a target group and 1–100 other groups from the same store.",
+    "group_merge_marketplace_conflict": "These groups link to different marketplace groups on the same connection. Resolve those links before merging.",
     "product_not_in_group": "The product is not in this group.",
     "note_not_found": "Note not found.",
     "same_store_transfer": "Choose a different store, or use clone mode.",
@@ -540,6 +545,7 @@
     "transfer_links_confirmation_required": "Confirm that marketplace links should be broken before continuing.",
     "invalid_filter": "The selected catalog filter is not valid.",
     "barcode_invalid": "Enter a valid EAN-8 or EAN-13 barcode.",
+    "barcode_already_used": "This barcode is already used by a product or variant in this store.",
     "sku_required": "Enter a SKU.",
     "sku_too_long": "SKU must be 50 characters or fewer.",
     "sku_unchanged": "The new SKU is the same as the current SKU.",
@@ -742,6 +748,9 @@
       "otherPlaceholder": "Another answer…"
     },
     "attach": "Attach",
+    "dropFilesTitle": "Drop files to attach",
+    "dropFilesHint": "They will be sent with your message.",
+    "dropFilesOnly": "Drop individual files, not folders.",
     "attachedFiles": "{n} files attached",
     "attachedFilesMessage": "I attached these files.",
     "moreAttachments": "+{n} more",
@@ -805,6 +814,11 @@
     "planExecutionStatusUnknownNextStep": "Do not repeat the action. Check the conversation or Operations first, then ask the assistant to verify the current state.",
     "planHttpStatus": "Response code: HTTP {status}",
     "planExecuting": "Executing…",
+    "assistantWorking": "Assistant is working…",
+    "generationStopped": "Stopped by user",
+    "generationStoppedHint": "The reply was interrupted. The received portion has been saved.",
+    "planStoppedHint": "Further steps were stopped. Applied changes have not been undone; check Operations for jobs that were already started.",
+    "stopFailed": "The stop could not be confirmed. The assistant may still be working; try stopping it again.",
     "planExecuted": "Done",
     "planFailed": "Execution failed",
     "planPartial": "Partially completed",
@@ -2500,7 +2514,21 @@
       "noneLinkedWarning": "None of the selected products are linked to this adapter",
       "runButton": "Run",
       "operationStarted": "Operation started",
+      "mappingHint": "Choose one mapping per local category. It will be assigned to every selected product in that category on this adapter. Existing assignments will be replaced; no export is started.",
+      "loadingMappings": "Loading available mappings…",
+      "mappingLoadFailed": "Could not check mappings for all selected products. Retry or refresh the selection.",
+      "mappingPlaceholder": "Choose mapping",
+      "noMappings": "No mappings for this category",
+      "noCategory": "No category",
+      "mappingGroupCount": "Selected products: {count}",
+      "mappingFallback": "Mapping #{id}",
+      "unmappedSkipped": "Products without a category or an available mapping will be skipped: {count}. Configure their category mappings first.",
+      "mappingsSaved": "Mapping assignments saved: {count}",
       "actions": {
+        "assignMapping": {
+          "label": "Assign mapping",
+          "description": "Choose a category mapping for products on this adapter without exporting"
+        },
         "export": {
           "label": "Export products",
           "description": "Create or update products on the adapter"
@@ -2524,6 +2552,9 @@
       }
     },
     "bulkEditDialog": {
+      "mappingsTab": "Mappings",
+      "mappingsHint": "Assign mappings on this tab. Product fields and attributes are saved separately on their tabs; their drafts are kept when you assign mappings.",
+      "noAdapters": "No connected adapters are available.",
       "title": "Bulk edit",
       "selectedLabel": "Selected products",
       "selectedCount": "Selected products: {count}",
@@ -2901,6 +2932,7 @@
       "toast": {
         "updated": "Product successfully updated.",
         "validationFailed": "Check the highlighted fields before saving.",
+        "changedDuringSave": "The product changed while saving. Save it again before continuing.",
         "fileDeleted": "File successfully deleted.",
         "deleted": "Product successfully deleted.",
         "noteAdded": "New note added.",
@@ -3488,6 +3520,13 @@
       }
     },
     "productGroupsPage": {
+      "mergeAction": "Merge groups",
+      "mergeTitle": "Merge product groups",
+      "mergeDescription": "Move products from the {count} selected groups into one group. The other selected groups will be deleted; their products will be kept.",
+      "mergeTarget": "Group to keep",
+      "mergeTargetPlaceholder": "Select a target group",
+      "mergeNotice": "The target group's name and description are kept. Compatible adapter links are preserved. Conflicting links block the whole merge. This does not change or export marketplace cards.",
+      "mergeSuccess": "Product groups merged",
       "breadcrumb": "Product groups",
       "nameRequired": "Enter a group name",
       "created": "Group created",

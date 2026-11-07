@@ -1320,13 +1320,17 @@ export default {
       :product-ids="selectedProductIds"
       :category-attributes="categoryAttributes"
       :store-attributes="storeAttributes"
+      :connections="connections"
+      :can-manage-adapters="canManageAdapters"
       @saved="handleBulkEditSaved"
+      @mappings-saved="onAdaptersChanged"
     />
 
     <!-- Bulk Adapter Dialog -->
     <BulkAdapterDialog
       v-model="isBulkAdapterDialogOpen"
       :selected-products="selectedProducts"
+      @saved="onAdaptersChanged"
     />
 
     <!-- Excel Actions Dialog -->

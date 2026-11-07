@@ -22,6 +22,60 @@ namespace Delegat.Tests;
 [Collection("AiPlanSigningKey")]
 public class AiChatAgentEvaluationTests
 {
+    [Theory]
+    [InlineData("ru", "перегенерируй штрихкоды выбранных товаров")]
+    [InlineData("en", "regenerate barcodes for selected products")]
+    public async Task NativeBarcodeRegeneration_SearchesThenProposesOneBulkWriteWithoutPython(string locale, string query)
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        var input = JsonSerializer.Serialize(new { summary = "Regenerate selected product barcodes", affectedCount = 3, isDestructive = true,
+            steps = new[] { new { tool = "platform_request", description = "Generate new barcodes for the selected products",
+                args = new { method = "PATCH", path = "/products/bulk", body = new { productIds = new[] { 7, 12, 28 }, wait = true,
+                    updates = new { barcode = "", generateBarcodes = true } } } } } });
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("search_actions", JsonSerializer.Serialize(new { query, limit = 1 }), "discover-native"),
+            ToolCall("propose_plan", input, "bulk-proposal"));
+        var user = UserMessage(query + " (productIds: 7, 12, 28)");
+        const string session = "native-barcode-bulk";
+        var chunks = await Collect(fixture.Chat.StreamChatAsync([user], fixture.StoreId, fixture.UserId, sessionId: session, locale: locale));
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains("/products/bulk", fixture.Client.Requests[1].Messages.Last().Content);
+        Assert.Contains("generateBarcodes", fixture.Client.Requests[1].Messages.Last().Content);
+        Assert.Equal(0, fixture.Invoker.Calls);
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        using var document = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var plan = document.RootElement.GetProperty("plan");
+        Assert.Single(plan.GetProperty("steps").EnumerateArray());
+        Assert.DoesNotContain("run_python", string.Concat(chunks));
+        await AiConversationTurnStore.AppendUserIfNeededAsync(fixture.Db, session, fixture.StoreId, fixture.UserId, user, default);
+        await AiConversationTurnStore.UpsertAssistantAsync(fixture.Db, session, fixture.StoreId, fixture.UserId, snapshot, default);
+        var proposal = plan.GetProperty("proposalId").GetString()!;
+        var steps = await fixture.Chat.ConsumeConfirmedPlanAsync(session, proposal, fixture.StoreId, fixture.UserId, default);
+        await Collect(fixture.Chat.ExecutePlanStreamAsync(steps!.ToList(), fixture.StoreId, fixture.UserId, proposal));
+        Assert.Equal(1, fixture.Invoker.Calls);
+        Assert.Equal("/api/products/bulk", fixture.Invoker.LastPath);
+        Assert.Equal(new[] { 7, 12, 28 }, fixture.Invoker.LastBody!.Value.GetProperty("productIds").EnumerateArray().Select(id => id.GetInt32()));
+        Assert.True(fixture.Invoker.LastBody.Value.GetProperty("updates").GetProperty("generateBarcodes").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RepeatedCommonUpdates_AreRejectedBeforeSigningAndReproposedAsOneBulkStep()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        var repeated = JsonSerializer.Serialize(new { summary = "Update selected stock", steps = new[] { 7, 12 }.Select(id => new {
+            tool = "platform_request", description = "Update stock", args = new { method = "PATCH", path = $"/products/{id}", body = new { storageQuantity = 5 } },
+        }) });
+        const string bulk = """{"summary":"Update selected stock","steps":[{"tool":"platform_request","description":"Update stock","args":{"method":"PATCH","path":"/products/bulk","body":{"productIds":[7,12],"updates":{"storageQuantity":5}}}}]}""";
+        await using var fixture = await CreateFixtureAsync(ToolCall("propose_plan", repeated, "inefficient"), ToolCall("propose_plan", bulk, "efficient"));
+        var chunks = await Collect(fixture.Chat.StreamChatAsync([UserMessage("Set stock to 5 on the selected products")], fixture.StoreId, fixture.UserId, sessionId: "bulk-efficiency", locale: "en"));
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains("Plan not presented", fixture.Client.Requests[1].Messages.Last().Content);
+        Assert.Contains("exactly the same productIds", fixture.Client.Requests[1].Messages.Last().Content);
+        var presented = Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        Assert.Contains("/products/bulk", presented);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
     [Fact]
     public async Task ReadToolResult_IsIncludedInNextModelRequestBeforeFinalAnswer()
     {
@@ -426,6 +480,149 @@ public class AiChatAgentEvaluationTests
     }
 
     [Fact]
+    public async Task FailedPythonPlan_ReviewsRealErrorAndProposesCorrectionWithoutExecutingIt()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        var python = new ScriptedPythonHttp(new { exitCode = 1, stdout = "unverified partial output", stderr = "AttributeError: 'DelegatClient' object has no attribute 'request'" });
+        const string fixedCode = "result = client.platform('GET', '/products?startIndex=0&pageSize=100')\nprint(result['items'])";
+        var first = Text("FABRICATED PRE-EXECUTION TABLE").Take(1)
+            .Concat(PythonPlan("client.get('/products')", "bad-code")).ToArray();
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [first, ToolCall("run_python", JsonSerializer.Serialize(new { code = fixedCode }), "forbidden-review-retry"),
+             PythonPlan(fixedCode, "corrected-plan")], python);
+        var (proposalId, steps) = await PrepareConfirmedPlanAsync(fixture, "python-failure");
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(steps, fixture.StoreId, fixture.UserId,
+            proposalId, sessionId: "python-failure", locale: "en"));
+        Assert.Equal(1, python.Calls);
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
+        var reviewContext = fixture.Client.Requests[1].Messages.Last().Content;
+        Assert.Contains("AttributeError", reviewContext);
+        Assert.Contains("unverified partial output", reviewContext);
+        Assert.Contains("Find products matching the requested rule", reviewContext);
+        Assert.DoesNotContain("FABRICATED", reviewContext);
+        Assert.Contains("client.platform", fixture.Client.Requests[1].System);
+        Assert.Contains("Not run. Execution is already finished", fixture.Client.Requests[2].Messages.Last().Content);
+        var turns = AiSseTurnRecorder.FoldTurns(chunks);
+        Assert.Equal(2, turns.Count);
+        using var failed = JsonDocument.Parse(turns[0].ToolCallsJson!);
+        Assert.True(failed.RootElement.GetProperty("planFailed").GetBoolean());
+        Assert.DoesNotContain("FABRICATED", turns[0].Content);
+        using var recovery = JsonDocument.Parse(turns[1].ToolCallsJson!);
+        var newProposalId = recovery.RootElement.GetProperty("plan").GetProperty("proposalId").GetString()!;
+        Assert.NotEqual(proposalId, newProposalId);
+        Assert.False(recovery.RootElement.TryGetProperty("planConfirmed", out _));
+        await AiConversationTurnStore.UpsertAssistantAsync(fixture.Db, "python-failure", fixture.StoreId, fixture.UserId, turns[0], default);
+        await AiConversationTurnStore.AppendAssistantAsync(fixture.Db, "python-failure", fixture.StoreId, fixture.UserId, turns[1], default);
+        Assert.Null(await fixture.Chat.ConsumeConfirmedPlanAsync("python-failure", proposalId, fixture.StoreId, fixture.UserId, default));
+        var corrected = await fixture.Chat.ConsumeConfirmedPlanAsync("python-failure", newProposalId, fixture.StoreId, fixture.UserId, default);
+        Assert.Equal(fixedCode, corrected![0].Args!.Value.GetProperty("code").GetString());
+        Assert.Equal(1, python.Calls); // Consuming approval does not itself dispatch any tool.
+    }
+
+    [Fact]
+    public async Task SuccessfulPythonPlan_AnswersFromActualStdoutInASeparateTurn()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        const string table = "| ID | Name | a count | consonants |\n| 12 | Cabinet stand | 2 | 8 |\nMatched: 1";
+        var python = new ScriptedPythonHttp(new { exitCode = 0, stdout = table, stderr = "" });
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [PythonPlan("print('computed table')", "calculate"), Text(table)], python);
+        var (proposalId, steps) = await PrepareConfirmedPlanAsync(fixture, "python-success");
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(steps, fixture.StoreId, fixture.UserId,
+            proposalId, sessionId: "python-success", locale: "en"));
+        Assert.Equal(1, python.Calls);
+        Assert.Contains("Matched: 1", fixture.Client.Requests[1].Messages.Last().Content);
+        var turns = AiSseTurnRecorder.FoldTurns(chunks);
+        Assert.Equal(2, turns.Count);
+        Assert.Equal("", turns[0].Content);
+        Assert.Equal(table, turns[1].Content);
+        Assert.DoesNotContain("planFailed", turns[1].ToolCallsJson);
+        Assert.Contains("executionProposalId", turns[1].ToolCallsJson);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IncompleteSuccessfulPython_OffersCorrectionWithoutPublishingThenDeletingADraftTable(bool blockedRoundFirst)
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        const string draft = "UNVERIFIED TABLE THAT MUST NEVER BE VISIBLE";
+        var python = new ScriptedPythonHttp(new { exitCode = 0, stdout = "Read 50 rows", stderr = "" });
+        var recovery = Text(draft).Take(1).Concat(PythonPlan(
+            "print('read remaining pages after checking completeness')", "complete-input")).ToArray();
+        var responses = new List<IReadOnlyList<AiStreamEvent>> {
+            PythonPlan("res = client.sql('SELECT id, sku, name FROM products')", "limited-input"),
+        };
+        if (blockedRoundFirst)
+            responses.Add(Text(draft).Take(1).Concat(ToolCall("run_python", "{\"code\":\"print('retry')\"}", "blocked")).ToArray());
+        responses.Add(recovery);
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null, responses.ToArray(), python);
+        var (proposalId, steps) = await PrepareConfirmedPlanAsync(fixture, "incomplete-success");
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(steps, fixture.StoreId, fixture.UserId,
+            proposalId, sessionId: "incomplete-success", locale: "en"));
+        // Check every emitted event, not merely the folded snapshot after draft removal.
+        Assert.DoesNotContain(draft, string.Concat(chunks));
+        Assert.DoesNotContain("All steps finished", string.Concat(chunks));
+        var turns = AiSseTurnRecorder.FoldTurns(chunks);
+        Assert.Equal(2, turns.Count);
+        Assert.Equal("", turns[0].Content);
+        Assert.Equal("", turns[1].Content);
+        using var review = JsonDocument.Parse(turns[1].ToolCallsJson!);
+        Assert.NotEqual(proposalId, review.RootElement.GetProperty("plan").GetProperty("proposalId").GetString());
+        Assert.Equal(1, python.Calls);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task CompletedReview_DoesNotAutoContinueFromTheWordingOfItsFinalAnswer()
+    {
+        const string answer = "The table above is complete. I will check the catalog";
+        await using var fixture = await CreateFixtureAsync(Text(answer));
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Review the actual complete output")], fixture.StoreId, fixture.UserId,
+            locale: "en", planResultReview: true));
+        Assert.Single(fixture.Client.Requests);
+        Assert.Equal(answer, AiSseTurnRecorder.Fold(chunks).Content);
+        Assert.Single(chunks, c => c.Contains("\"type\":\"text\"", StringComparison.Ordinal));
+    }
+
+    private static IReadOnlyList<AiStreamEvent> PythonPlan(string code, string id) => ToolCall("propose_plan",
+        JsonSerializer.Serialize(new { summary = "Calculate matching products", steps = new[] {
+            new { tool = "run_python", description = "Compute matching product names and counts", args = new { code } },
+        } }), id);
+
+    private static async Task<(string ProposalId, List<PlanStepInput> Steps)> PrepareConfirmedPlanAsync(ChatFixture fixture, string sessionId)
+    {
+        var user = UserMessage("Find products matching the requested rule");
+        var initial = await Collect(fixture.Chat.StreamChatAsync([user], fixture.StoreId, fixture.UserId, sessionId: sessionId, locale: "en"));
+        var snapshot = AiSseTurnRecorder.Fold(initial);
+        Assert.DoesNotContain("FABRICATED", snapshot.Content);
+        using var document = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var proposalId = document.RootElement.GetProperty("plan").GetProperty("proposalId").GetString()!;
+        await AiConversationTurnStore.AppendUserIfNeededAsync(fixture.Db, sessionId, fixture.StoreId, fixture.UserId, user, default);
+        await AiConversationTurnStore.UpsertAssistantAsync(fixture.Db, sessionId, fixture.StoreId, fixture.UserId, snapshot, default);
+        var steps = await fixture.Chat.ConsumeConfirmedPlanAsync(sessionId, proposalId, fixture.StoreId, fixture.UserId, default);
+        return (proposalId, steps!.ToList());
+    }
+
+    private sealed class ScriptedPythonHttp(object payload) : HttpMessageHandler, IHttpClientFactory
+    {
+        public int Calls { get; private set; }
+        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    [Fact]
     public async Task ConnectedMcpCall_IsRejectedUntilAStandalonePlanIsConfirmed()
     {
         var mcp = new EmptyMcpGateway(new AiTool
@@ -523,7 +720,7 @@ public class AiChatAgentEvaluationTests
         string? attachmentSessionId,
         string? attachmentFileName,
         byte[]? attachmentBytes,
-        params IReadOnlyList<AiStreamEvent>[] responses)
+        IReadOnlyList<AiStreamEvent>[] responses, IHttpClientFactory? pythonHttp = null)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -567,7 +764,7 @@ public class AiChatAgentEvaluationTests
         var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
         IStorageService storage = attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
         var python = new PythonSandboxClient(
-            db, new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
+            db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
             new HttpContextAccessor(), new FakeJwt());
         var toolHost = new AgentToolHost(
             new CatalogSearchService(db),
@@ -750,6 +947,8 @@ public class AiChatAgentEvaluationTests
     private sealed class RecordingInvoker : ICabinetRequestInvoker
     {
         public int Calls { get; private set; }
+        public string? LastPath { get; private set; }
+        public JsonElement? LastBody { get; private set; }
 
         public Task<(object result, string summary)> InvokeAsync(
             int storeId,
@@ -761,6 +960,8 @@ public class AiChatAgentEvaluationTests
             CancellationToken ct)
         {
             Calls++;
+            LastPath = apiPath;
+            LastBody = body?.Clone();
             return Task.FromResult<(object, string)>((new { ok = true }, "called"));
         }
     }

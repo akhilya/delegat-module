@@ -156,6 +156,8 @@ public class PlanStepInput
 
 public static class SseEventType
 {
+    public const string AssistantStart = "assistant_start";
+    public const string Stopped = "stopped";
     public const string Text = "text";
     public const string Tool = "tool";
     public const string Plan = "plan";

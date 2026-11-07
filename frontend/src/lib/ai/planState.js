@@ -1,5 +1,21 @@
 /** Accepted/terminal plan state is monotonic within a conversation. */
 export function reconcilePlanMessages(current, incoming) {
+  const stopped = current.filter((m) => m.turnStopped);
+  incoming = incoming.map((message) => {
+    const local = stopped.find((m) => m.dbId && m.dbId === message.dbId);
+    return local && !message.turnStopped ? { ...local } : message;
+  });
+  const last = current.at(-1);
+  if (last?.turnStopped && !last.dbId && !last.plan) {
+    const index = current.length - 1;
+    if (incoming.length === index) incoming = [...incoming, last];
+    else if (
+      incoming.length === current.length &&
+      incoming[index]?.role === "assistant" &&
+      !incoming[index].turnStopped
+    )
+      incoming[index] = { ...last, dbId: incoming[index].dbId };
+  }
   const byProposal = new Map(
     current
       .filter((m) => m.plan?.proposalId)
@@ -9,6 +25,7 @@ export function reconcilePlanMessages(current, incoming) {
     const local = byProposal.get(message.plan?.proposalId);
     if (!local) return message;
     const localAdvanced =
+      (local.turnStopped && !message.turnStopped) ||
       (local.planConfirmed && !message.planConfirmed) ||
       (local.planExecuted && !message.planExecuted) ||
       (local.planConfirmed &&
@@ -38,6 +55,10 @@ export function reconcilePlanMessages(current, incoming) {
       next.splice(later < 0 ? next.length : later, 0, local);
     }
   }
+  for (const local of current.filter((m) => m.executionProposalId)) {
+    if (!next.some((m) => m.executionProposalId === local.executionProposalId))
+      next.push(local);
+  }
   return next;
 }
 
@@ -51,6 +72,7 @@ export function canConfirmPlan(message) {
     !message.planExecuted &&
     !message.planFailed &&
     !message.planConfirming &&
-    !message.planConfirmationError
+    !message.planConfirmationError &&
+    !message.turnStopped
   );
 }

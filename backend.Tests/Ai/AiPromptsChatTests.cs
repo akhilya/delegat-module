@@ -10,7 +10,29 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatPromptVersion_IsBumpedForGroundedDocumentationAnswers()
     {
-        Assert.Equal("chat-v14", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v17", AiPrompts.ChatPromptVersion);
+    }
+
+    [Fact]
+    public void PythonContract_LimitsMatchTheActualGatewayAndSqlGuard()
+    {
+        var defaultQuery = AgentSqlGuard.Parse("SELECT id, name FROM products");
+        Assert.Null(defaultQuery.Error);
+        Assert.Contains($"defaults to LIMIT {defaultQuery.Limit}", PythonSdkContract.Instructions);
+        Assert.Contains($"clamps explicit LIMIT to {AgentSqlGuard.MaxLimit}", PythonSdkContract.Instructions);
+        Assert.Contains($"caps items to {CabinetRequestInvoker.MaxListItems}", PythonSdkContract.Instructions);
+        Assert.Contains("fetched unique count to equal totalCount", PythonSdkContract.Instructions);
+    }
+
+    [Fact]
+    public void ChatSystem_PrefersNativeCompatibleActionsWithoutBroadeningOrErasingSemantics()
+    {
+        var prompt = NormalizeWhitespace(Prompt());
+        Assert.Contains("Choose native server operations before inventing an algorithm", prompt);
+        Assert.Contains("preserving exactly the selected productIds", prompt);
+        Assert.Contains("unrelated hits are not permission to guess", prompt);
+        Assert.Contains("Native server generation/validation does not require Python", prompt);
+        Assert.Contains("Keep separate steps when required by semantics", prompt);
     }
 
     [Fact]

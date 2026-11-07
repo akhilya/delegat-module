@@ -1414,8 +1414,6 @@ public class ProductController : ControllerBase
         public List<int> productIds { get; set; }
     }
 
-    private static readonly Random _random = new();
-
     /// <summary>
     /// Fills hasMapping / mappingMissing on list-row adapterLinks so the products table
     /// can color adapter buttons without opening each cell menu.
@@ -1462,7 +1460,7 @@ public class ProductController : ControllerBase
     {
         var body = "20";
         for (int i = 0; i < 10; i++)
-            body += _random.Next(0, 10).ToString();
+            body += Random.Shared.Next(0, 10).ToString();
 
         int sum = 0;
         for (int i = 0; i < body.Length; i++)
