@@ -12,6 +12,106 @@ namespace Delegat.Tests;
 public class AiLiveTurnHubTests
 {
     [Fact]
+    public void Recorder_DiscardsUnexecutedResultTextWhenAPlanIsProposed()
+    {
+        var snapshot = AiSseTurnRecorder.Fold([
+            AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "Invented calculation table" }),
+            AiSseTurnRecorder.Format(SseEventType.Plan, new { proposalId = "pending", summary = "Compute results", discardDraftText = true }),
+            AiSseTurnRecorder.Format(SseEventType.Done, new { }),
+        ]);
+        Assert.Equal("", snapshot.Content);
+        Assert.DoesNotContain("Invented", snapshot.ToolCallsJson);
+        Assert.Contains("pending", snapshot.ToolCallsJson);
+    }
+
+    [Fact]
+    public async Task PlanFollowup_PersistsFailedOutcomeAndNewProposalAsSeparateMessages()
+    {
+        using var hub = CreateHub(out var db);
+        await SeedConfirmedPlan(db);
+        Assert.True(hub.TryStart("s", 1, 1, null, FailedPlanWithRecovery));
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        var rows = db.aiConversationMessages.Where(m => m.role == "assistant").OrderBy(m => m.Id).ToList();
+        Assert.Equal(2, rows.Count);
+        using var failed = JsonDocument.Parse(rows[0].toolCallsJson!);
+        using var recovery = JsonDocument.Parse(rows[1].toolCallsJson!);
+        Assert.Equal("original", failed.RootElement.GetProperty("plan").GetProperty("proposalId").GetString());
+        Assert.True(failed.RootElement.GetProperty("planFailed").GetBoolean());
+        Assert.True(failed.RootElement.GetProperty("planExecuted").GetBoolean());
+        Assert.Equal("replacement", recovery.RootElement.GetProperty("plan").GetProperty("proposalId").GetString());
+        Assert.Equal("original", recovery.RootElement.GetProperty("executionProposalId").GetString());
+        Assert.False(recovery.RootElement.TryGetProperty("planConfirmed", out _));
+    }
+
+    [Fact]
+    public async Task StopDuringReview_DoesNotStopOrReopenTheAlreadyCompletedPlan()
+    {
+        using var hub = CreateHub(out var db);
+        await SeedConfirmedPlan(db);
+        Assert.True(hub.TryStart("s", 1, 1, null, ReviewAfterCompletedPlan));
+        var turn = hub.Find("s", 1, 1)!;
+        await WaitUntil(() => turn.SnapshotChunks().Count >= 3);
+        Assert.True(hub.Stop("s", 1, 1));
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        var rows = db.aiConversationMessages.Where(m => m.role == "assistant").OrderBy(m => m.Id).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.True(AiConversationTurnStore.HasExecutedPlan(rows[0].toolCallsJson));
+        Assert.False(AiConversationTurnStore.HasStoppedTurn(rows[0].toolCallsJson));
+        Assert.True(AiConversationTurnStore.HasStoppedTurn(rows[1].toolCallsJson));
+    }
+
+    private static async Task SeedConfirmedPlan(DataContext db)
+    {
+        await AiConversationTurnStore.AppendUserIfNeededAsync(db, "s", 1, 1, User("Calculate"), default);
+        await AiConversationTurnStore.UpsertAssistantAsync(db, "s", 1, 1,
+            new("", """{"_ui":"assistantTurn","plan":{"proposalId":"original","summary":"Calculate"},"planConfirmed":true,"tools":[],"timeline":[]}""", null), default);
+    }
+
+    private static async IAsyncEnumerable<string> FailedPlanWithRecovery(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
+    {
+        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { ok = false });
+        yield return AiSseTurnRecorder.Format(SseEventType.AssistantStart, new { executionProposalId = "original" });
+        yield return AiSseTurnRecorder.Format(SseEventType.Plan, new { proposalId = "replacement", summary = "Correct calculation", discardDraftText = true });
+        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { });
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<string> ReviewAfterCompletedPlan(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
+    {
+        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { ok = true });
+        yield return AiSseTurnRecorder.Format(SseEventType.AssistantStart, new { executionProposalId = "original" });
+        yield return AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "Analyzing result" });
+        await Task.Delay(Timeout.Infinite, ct);
+    }
+
+    [Theory]
+    [InlineData("", false, false)]
+    [InlineData("done", false, false)]
+    [InlineData("error", false, false)]
+    [InlineData("success", true, false)]
+    [InlineData("failure", true, true)]
+    public async Task PlanOutcome_RequiresExplicitTerminalOk(string ending, bool completed, bool failed)
+    {
+        using var db = TestDbFactory.CreateDb();
+        await AiConversationTurnStore.AppendUserIfNeededAsync(db, "outcome", 1, 1, User("prepare"), CancellationToken.None);
+        const string proposal = """{"_ui":"assistantTurn","plan":{"proposalId":"p1","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[{"type":"text","text":"Ready."}]}""";
+        await AiConversationTurnStore.UpsertAssistantAsync(db, "outcome", 1, 1, new("Ready.", proposal, null), CancellationToken.None);
+        var chunks = new List<string> {
+            AiSseTurnRecorder.Format(SseEventType.Tool, new { id = "t1", name = "platform_request", status = "running", input = "{}" }),
+        };
+        if (ending == "done") chunks.Add(AiSseTurnRecorder.Format(SseEventType.Done, new { }));
+        if (ending == "error") chunks.Add(AiSseTurnRecorder.Format(SseEventType.Error, new { code = "internal_error" }));
+        if (ending is "success" or "failure") chunks.Add(AiSseTurnRecorder.Format(SseEventType.Done, new { ok = ending == "success" }));
+        await AiConversationTurnStore.UpsertAssistantAsync(db, "outcome", 1, 1, AiSseTurnRecorder.Fold(chunks), CancellationToken.None);
+        var stored = db.aiConversationMessages.Single(m => m.role == "assistant");
+        using var json = JsonDocument.Parse(stored.toolCallsJson!);
+        Assert.True(json.RootElement.GetProperty("planConfirmed").GetBoolean());
+        Assert.Equal(completed, json.RootElement.GetProperty("planExecuted").GetBoolean());
+        Assert.Equal(failed, json.RootElement.TryGetProperty("planFailed", out var flag) && flag.GetBoolean());
+        if (ending == "error") Assert.Equal("internal_error", json.RootElement.GetProperty("requestError").GetProperty("code").GetString());
+    }
+
+    [Fact]
     public void Recorder_FoldsTextToolsAndPlan()
     {
         var chunks = new[]
@@ -145,6 +245,39 @@ public class AiLiveTurnHubTests
     }
 
     [Fact]
+    public async Task Stop_AcceptedPlanPersistsUnknownOutcomeAndCannotBeConsumedAgain()
+    {
+        using var hub = CreateHub(out var db);
+        await AiConversationTurnStore.AppendUserIfNeededAsync(db, "s", 1, 1, User("prepare"), CancellationToken.None);
+        const string proposal = """{"_ui":"assistantTurn","plan":{"proposalId":"p1","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[{"type":"text","text":"Ready."}]}""";
+        await AiConversationTurnStore.UpsertAssistantAsync(db, "s", 1, 1, new("Ready.", proposal, null), CancellationToken.None);
+        Assert.True(hub.TryStart("s", 1, 1, null, HangAfterText));
+        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Count > 0);
+        Assert.True(hub.Stop("s", 1, 1));
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        var assistant = db.aiConversationMessages.Single(m => m.role == "assistant");
+        using var json = JsonDocument.Parse(assistant.toolCallsJson!);
+        Assert.True(json.RootElement.GetProperty("planConfirmed").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("planExecuted").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("turnStopped").GetBoolean());
+        var retry = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(db, "s", "p1", 1, 1, CancellationToken.None);
+        Assert.Null(retry.Steps);
+        Assert.Equal("already_processed", retry.RejectionReason);
+    }
+
+    [Fact]
+    public async Task StoppedUnconfirmedProposalCannotBeConsumed()
+    {
+        using var db = TestDbFactory.CreateDb();
+        await AiConversationTurnStore.AppendUserIfNeededAsync(db, "stopped-proposal", 1, 1, User("prepare"), CancellationToken.None);
+        const string proposal = """{"_ui":"assistantTurn","plan":{"proposalId":"p1","summary":"Update"},"turnStopped":true,"tools":[],"timeline":[]}""";
+        await AiConversationTurnStore.UpsertAssistantAsync(db, "stopped-proposal", 1, 1, new("", proposal, null), CancellationToken.None);
+        var result = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(db, "stopped-proposal", "p1", 1, 1, CancellationToken.None);
+        Assert.Null(result.Steps);
+        Assert.Equal("plan_cancelled", result.RejectionReason);
+    }
+
+    [Fact]
     public async Task Stop_PersistsPartialAssistant()
     {
         using var hub = CreateHub(out var db);
@@ -156,6 +289,57 @@ public class AiLiveTurnHubTests
         var messages = db.aiConversationMessages.OrderBy(m => m.Id).ToList();
         Assert.Contains(messages, m => m.role == "user" && m.content == "hello");
         Assert.Contains(messages, m => m.role == "assistant" && m.content.Contains("partial"));
+        var assistant = messages.Single(m => m.role == "assistant");
+        using var json = JsonDocument.Parse(assistant.toolCallsJson!);
+        Assert.True(json.RootElement.GetProperty("turnStopped").GetBoolean());
+        Assert.Contains(hub.Find("s", 1, 1)!.SnapshotChunks(), chunk => chunk.Contains("\"type\":\"stopped\""));
+    }
+
+    [Fact]
+    public async Task Stop_BeforeFirstTokenPersistsAnEmptyStoppedReply()
+    {
+        using var hub = CreateHub(out var db);
+        Assert.True(hub.TryStart("s", 1, 1, User("hello"), Hang));
+        Assert.True(hub.Stop("s", 1, 1));
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        var assistant = db.aiConversationMessages.Single(m => m.role == "assistant");
+        Assert.Equal("", assistant.content);
+        Assert.True(AiConversationTurnStore.HasStoppedTurn(assistant.toolCallsJson));
+    }
+
+    [Fact]
+    public async Task DisconnectingSubscriberDoesNotStopTheProducer()
+    {
+        using var hub = CreateHub(out _);
+        Assert.True(hub.TryStart("s", 1, 1, User("hello"), HangAfterText));
+        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Count > 0);
+        var turn = hub.Find("s", 1, 1)!;
+        using var subscription = new CancellationTokenSource();
+        await using (var reader = turn.Subscribe(subscription.Token).GetAsyncEnumerator())
+        {
+            Assert.True(await reader.MoveNextAsync());
+            subscription.Cancel();
+        }
+        Assert.True(hub.IsGenerating("s", 1, 1));
+        Assert.False(turn.StopRequested);
+        await using var resumed = turn.Subscribe().GetAsyncEnumerator();
+        Assert.True(await resumed.MoveNextAsync());
+        Assert.Contains("partial", resumed.Current);
+        hub.Stop("s", 1, 1);
+    }
+
+    [Fact]
+    public void Recorder_CancelledPlanKeepsStoppedToolsInsteadOfReportingSuccess()
+    {
+        var snapshot = AiSseTurnRecorder.Fold([
+            AiSseTurnRecorder.Format(SseEventType.Tool, new { id = "t1", name = "run_python", status = "running" }),
+            AiSseTurnRecorder.Format(SseEventType.Done, new { ok = false, cancelled = true }),
+        ]);
+        using var json = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        Assert.True(snapshot.TurnEnded);
+        Assert.True(json.RootElement.GetProperty("turnStopped").GetBoolean());
+        Assert.False(json.RootElement.TryGetProperty("planExecuted", out _));
+        Assert.Equal("stopped", json.RootElement.GetProperty("tools")[0].GetProperty("status").GetString());
     }
 
     [Fact]
@@ -223,7 +407,7 @@ public class AiLiveTurnHubTests
             CancellationToken.None);
 
         const string execJson =
-            """{"_ui":"assistantTurn","tools":[{"id":"t1","name":"platform_request"}],"timeline":[{"type":"tool","id":"t1"},{"type":"text","text":"Plan executed."}]}""";
+            """{"_ui":"assistantTurn","planExecuted":true,"tools":[{"id":"t1","name":"platform_request"}],"timeline":[{"type":"tool","id":"t1"},{"type":"text","text":"Plan executed."}]}""";
         await AiConversationTurnStore.UpsertAssistantAsync(
             db, "s", 1, 1,
             new AiSseTurnSnapshot("Plan executed.", execJson, "m"),
@@ -256,7 +440,7 @@ public class AiLiveTurnHubTests
             CancellationToken.None);
 
         const string execJson =
-            """{"_ui":"assistantTurn","tools":[{"id":"t1","name":"platform_request","summary":"Product limit reached — nothing was created.","result":{"error":"product_limit_reached","status":409}}],"timeline":[{"type":"tool","id":"t1"}],"planFailed":true}""";
+            """{"_ui":"assistantTurn","planExecuted":true,"tools":[{"id":"t1","name":"platform_request","summary":"Product limit reached — nothing was created.","result":{"error":"product_limit_reached","status":409}}],"timeline":[{"type":"tool","id":"t1"}],"planFailed":true}""";
         await AiConversationTurnStore.UpsertAssistantAsync(
             db, "s", 1, 1,
             new AiSseTurnSnapshot("Nothing was changed (0 of 1 steps succeeded).", execJson, "m"),
@@ -282,7 +466,7 @@ public class AiLiveTurnHubTests
             new AiSseTurnSnapshot("Ready.", planJson, "m"),
             CancellationToken.None);
         const string execJson =
-            """{"_ui":"assistantTurn","tools":[],"timeline":[{"type":"text","text":"Plan executed."}]}""";
+            """{"_ui":"assistantTurn","planExecuted":true,"tools":[],"timeline":[{"type":"text","text":"Plan executed."}]}""";
         await AiConversationTurnStore.UpsertAssistantAsync(
             db, "s", 1, 1,
             new AiSseTurnSnapshot("Plan executed.", execJson, "m"),
@@ -352,7 +536,7 @@ public class AiLiveTurnHubTests
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         yield return AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "done-text" });
-        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { modelName = "x" });
+        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { modelName = "x", ok = true });
         await Task.CompletedTask;
     }
 

@@ -1,17 +1,12 @@
 <script>
-import AppPageChrome from "@/components/AppPageChrome.vue";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  InsetGroup,
-  InsetGroupItem,
-  InsetGroupLabel,
-} from "@/components/ui/inset-group";
-import { FieldGroup } from "@/components/ui/field";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
+import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import {
   Select,
@@ -51,7 +46,6 @@ const blankDraft = () => ({
 
 export default {
   components: {
-    AppPageChrome,
     Button,
     Input,
     Textarea,
@@ -60,8 +54,7 @@ export default {
     Spinner,
     InsetGroup,
     InsetGroupItem,
-    InsetGroupLabel,
-    FieldGroup,
+    SettingsFormSection,
     SettingsFormField,
     Select,
     SelectContent,
@@ -383,7 +376,7 @@ export default {
 </script>
 
 <template>
-  <AppPageChrome>
+  <div class="flex min-h-0 flex-1 flex-col">
     <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
     <div v-else class="page-region-in flex w-full max-w-xl flex-col">
       <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
@@ -496,6 +489,7 @@ export default {
                     <Button
                       variant="ghost"
                       size="icon"
+                      reveal-on-row-hover
                       class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       :aria-label="$t('common.delete')"
                       @click.stop
@@ -571,7 +565,7 @@ export default {
       <Dialog v-model:open="dialogOpen">
         <DialogContent
           size="lg"
-          class="grid max-h-[min(44rem,calc(100dvh-5rem))] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0"
+          class="flex max-h-[calc(100dvh-5rem)] flex-col gap-0 overflow-hidden p-0"
         >
           <DialogHeader variant="bar">
             <DialogTitle>
@@ -587,273 +581,216 @@ export default {
               $t("pages.scheduledTasks.description")
             }}</DialogDescription>
           </DialogHeader>
-          <form
-            class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]"
-            @submit.prevent="save"
-          >
-            <div class="min-h-0 overflow-y-auto overscroll-contain px-6 py-5">
-              <div class="space-y-5">
-                <section>
-                  <InsetGroupLabel>{{
-                    $t("pages.scheduledTasks.groupTask")
-                  }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      as="div"
-                      class="cursor-default items-stretch px-3 py-3 hover:bg-transparent"
+          <form class="flex min-h-0 flex-col" @submit.prevent="save">
+            <div class="min-h-0 overflow-y-auto overscroll-contain p-6">
+              <SettingsFormSection
+                :title="$t('pages.scheduledTasks.groupTask')"
+                class="w-full"
+              >
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.name')"
+                  label-for="scheduled-task-name"
+                  required
+                >
+                  <Input
+                    id="scheduled-task-name"
+                    v-model="draft.name"
+                    class="w-full"
+                    required
+                    maxlength="120"
+                    :placeholder="$t('pages.scheduledTasks.namePlaceholder')"
+                  />
+                </SettingsFormField>
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.action')"
+                  label-for="scheduled-task-action"
+                  :description="actionDescription(draft.actionId)"
+                  required
+                >
+                  <Select
+                    v-model="draft.actionId"
+                    @update:model-value="onActionChanged"
+                  >
+                    <SelectTrigger
+                      id="scheduled-task-action"
+                      class="w-full min-w-0"
                     >
-                      <FieldGroup class="gap-4">
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.name')"
-                          label-for="scheduled-task-name"
-                          :required="true"
-                        >
-                          <Input
-                            id="scheduled-task-name"
-                            v-model="draft.name"
-                            required
-                            maxlength="120"
-                            :placeholder="
-                              $t('pages.scheduledTasks.namePlaceholder')
-                            "
-                          />
-                        </SettingsFormField>
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.action')"
-                          label-for="scheduled-task-action"
-                          :description="actionDescription(draft.actionId)"
-                          :required="true"
-                        >
-                          <Select
-                            v-model="draft.actionId"
-                            @update:model-value="onActionChanged"
-                          >
-                            <SelectTrigger id="scheduled-task-action">
-                              <SelectValue
-                                :placeholder="
-                                  $t('pages.scheduledTasks.actionPlaceholder')
-                                "
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem
-                                v-if="!currentActionAvailable && draft.actionId"
-                                :value="draft.actionId"
-                              >
-                                {{
-                                  $t("pages.scheduledTasks.unknownAction", {
-                                    id: draft.actionId,
-                                  })
-                                }}
-                              </SelectItem>
-                              <SelectItem
-                                v-for="action in actions"
-                                :key="action.id"
-                                :value="action.id"
-                              >
-                                {{ actionName(action.id) }}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </SettingsFormField>
-                      </FieldGroup>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-
-                <section v-if="isBuiltInAction(draft.actionId)">
-                  <InsetGroupLabel>{{
-                    $t("pages.scheduledTasks.groupConnection")
-                  }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      as="div"
-                      class="cursor-default items-stretch px-3 py-3 hover:bg-transparent"
-                    >
-                      <SettingsFormField
-                        :label="$t('pages.scheduledTasks.connection')"
-                        label-for="scheduled-task-connection"
-                        :description="
-                          connections.length === 0
-                            ? $t('pages.scheduledTasks.noActiveConnections')
-                            : ''
+                      <SelectValue
+                        :placeholder="
+                          $t('pages.scheduledTasks.actionPlaceholder')
                         "
-                        :required="true"
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-if="!currentActionAvailable && draft.actionId"
+                        :value="draft.actionId"
+                        >{{
+                          $t("pages.scheduledTasks.unknownAction", {
+                            id: draft.actionId,
+                          })
+                        }}</SelectItem
                       >
-                        <Select
-                          v-model="draft.connectionId"
-                          :disabled="connections.length === 0"
-                        >
-                          <SelectTrigger id="scheduled-task-connection">
-                            <SelectValue
-                              :placeholder="
-                                $t('pages.scheduledTasks.connectionPlaceholder')
-                              "
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem
-                              v-for="connection in connections"
-                              :key="connection.id"
-                              :value="String(connection.id)"
-                            >
-                              {{ connection.name }}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </SettingsFormField>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-
-                <section v-if="draft.actionId === 'import-products'">
-                  <InsetGroupLabel>{{
-                    $t("pages.scheduledTasks.groupRunOptions")
-                  }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      as="div"
-                      class="cursor-default items-stretch px-3 py-3 hover:bg-transparent"
-                    >
-                      <FieldGroup class="gap-4">
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.maxProducts')"
-                          label-for="scheduled-task-max-products"
-                          :description="
-                            $t('pages.scheduledTasks.maxProductsHint')
-                          "
-                          :required="true"
-                        >
-                          <Input
-                            id="scheduled-task-max-products"
-                            v-model.number="draft.maxProducts"
-                            type="number"
-                            min="1"
-                            max="200"
-                            required
-                            class="max-w-36 tabular-nums"
-                          />
-                        </SettingsFormField>
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.categoryIdLabel')"
-                          label-for="scheduled-task-target-category"
-                          :description="
-                            $t('pages.scheduledTasks.categoryIdHint')
-                          "
-                        >
-                          <Input
-                            id="scheduled-task-target-category"
-                            v-model="draft.targetCategoryId"
-                            type="number"
-                            min="1"
-                            class="max-w-56 tabular-nums"
-                          />
-                        </SettingsFormField>
-                      </FieldGroup>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-
-                <section v-if="!isBuiltInAction(draft.actionId)">
-                  <InsetGroupLabel>{{
-                    $t("pages.scheduledTasks.groupRunOptions")
-                  }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      as="div"
-                      class="cursor-default items-stretch px-3 py-3 hover:bg-transparent"
-                    >
-                      <SettingsFormField
-                        :label="$t('pages.scheduledTasks.parameters')"
-                        label-for="scheduled-task-parameters"
-                        :description="$t('pages.scheduledTasks.parametersHint')"
+                      <SelectItem
+                        v-for="action in actions"
+                        :key="action.id"
+                        :value="action.id"
+                        >{{ actionName(action.id) }}</SelectItem
                       >
-                        <Textarea
-                          id="scheduled-task-parameters"
-                          v-model="draft.parametersText"
-                          rows="5"
-                          spellcheck="false"
-                          class="font-mono text-xs"
-                        />
-                      </SettingsFormField>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-
-                <section>
-                  <InsetGroupLabel>{{
-                    $t("pages.scheduledTasks.groupInterval")
-                  }}</InsetGroupLabel>
-                  <InsetGroup>
-                    <InsetGroupItem
-                      as="div"
-                      class="cursor-default items-stretch px-3 py-3 hover:bg-transparent"
+                    </SelectContent>
+                  </Select>
+                </SettingsFormField>
+                <SettingsFormField
+                  v-if="isBuiltInAction(draft.actionId)"
+                  :label="$t('pages.scheduledTasks.connection')"
+                  label-for="scheduled-task-connection"
+                  :description="
+                    connections.length === 0
+                      ? $t('pages.scheduledTasks.noActiveConnections')
+                      : ''
+                  "
+                  required
+                >
+                  <Select
+                    v-model="draft.connectionId"
+                    :disabled="connections.length === 0"
+                  >
+                    <SelectTrigger
+                      id="scheduled-task-connection"
+                      class="w-full min-w-0"
                     >
-                      <FieldGroup class="gap-4">
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.interval')"
-                          label-for="scheduled-task-interval"
-                          :required="true"
-                        >
-                          <div class="flex items-center gap-2">
-                            <Input
-                              id="scheduled-task-interval"
-                              v-model.number="draft.intervalMinutes"
-                              type="number"
-                              min="1"
-                              max="525600"
-                              required
-                              class="max-w-36 tabular-nums"
-                            />
-                            <span class="text-sm text-muted-foreground">{{
-                              $t("pages.scheduledTasks.minutes")
-                            }}</span>
-                          </div>
-                        </SettingsFormField>
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.timeZone')"
-                          label-for="scheduled-task-timezone"
-                          :required="true"
-                        >
-                          <Select v-model="draft.timeZoneId">
-                            <SelectTrigger
-                              id="scheduled-task-timezone"
-                              class="w-full"
-                            >
-                              <SelectValue
-                                :placeholder="
-                                  $t('pages.scheduledTasks.timeZone')
-                                "
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem
-                                v-for="timezone in timezoneOptions"
-                                :key="timezone.value"
-                                :value="timezone.value"
-                              >
-                                {{ timezone.label }}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </SettingsFormField>
-                        <SettingsFormField
-                          :label="$t('pages.scheduledTasks.enabled')"
-                          label-for="scheduled-task-enabled"
-                          inline
-                        >
-                          <Switch
-                            id="scheduled-task-enabled"
-                            v-model:model-value="draft.isEnabled"
-                          />
-                        </SettingsFormField>
-                      </FieldGroup>
-                    </InsetGroupItem>
-                  </InsetGroup>
-                </section>
-              </div>
+                      <SelectValue
+                        :placeholder="
+                          $t('pages.scheduledTasks.connectionPlaceholder')
+                        "
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="connection in connections"
+                        :key="connection.id"
+                        :value="String(connection.id)"
+                        >{{ connection.name }}</SelectItem
+                      >
+                    </SelectContent>
+                  </Select>
+                </SettingsFormField>
+              </SettingsFormSection>
+
+              <SettingsFormSection
+                v-if="draft.actionId === 'import-products'"
+                :title="$t('pages.scheduledTasks.groupRunOptions')"
+                class="w-full"
+              >
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.maxProducts')"
+                  label-for="scheduled-task-max-products"
+                  required
+                >
+                  <Input
+                    id="scheduled-task-max-products"
+                    v-model.number="draft.maxProducts"
+                    type="number"
+                    min="1"
+                    max="200"
+                    required
+                    class="w-full tabular-nums"
+                  />
+                </SettingsFormField>
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.categoryIdLabel')"
+                  label-for="scheduled-task-target-category"
+                  :description="$t('pages.scheduledTasks.categoryIdHint')"
+                >
+                  <Input
+                    id="scheduled-task-target-category"
+                    v-model="draft.targetCategoryId"
+                    type="number"
+                    min="1"
+                    class="w-full tabular-nums"
+                    :placeholder="
+                      $t('pages.scheduledTasks.categoryIdPlaceholder')
+                    "
+                  />
+                </SettingsFormField>
+              </SettingsFormSection>
+
+              <SettingsFormSection
+                v-if="!isBuiltInAction(draft.actionId)"
+                :title="$t('pages.scheduledTasks.groupRunOptions')"
+                class="w-full"
+              >
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.parameters')"
+                  label-for="scheduled-task-parameters"
+                  :description="$t('pages.scheduledTasks.parametersHint')"
+                >
+                  <Textarea
+                    id="scheduled-task-parameters"
+                    v-model="draft.parametersText"
+                    rows="5"
+                    spellcheck="false"
+                    class="w-full font-mono text-xs"
+                  />
+                </SettingsFormField>
+              </SettingsFormSection>
+
+              <SettingsFormSection
+                :title="$t('pages.scheduledTasks.groupInterval')"
+                class="w-full"
+              >
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.intervalMinutes')"
+                  label-for="scheduled-task-interval"
+                  required
+                >
+                  <Input
+                    id="scheduled-task-interval"
+                    v-model.number="draft.intervalMinutes"
+                    type="number"
+                    min="1"
+                    max="525600"
+                    required
+                    class="w-full tabular-nums"
+                  />
+                </SettingsFormField>
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.timeZone')"
+                  label-for="scheduled-task-timezone"
+                  required
+                >
+                  <Select v-model="draft.timeZoneId">
+                    <SelectTrigger
+                      id="scheduled-task-timezone"
+                      class="w-full min-w-0"
+                    >
+                      <SelectValue
+                        :placeholder="$t('pages.scheduledTasks.timeZone')"
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="timezone in timezoneOptions"
+                        :key="timezone.value"
+                        :value="timezone.value"
+                        >{{ timezone.label }}</SelectItem
+                      >
+                    </SelectContent>
+                  </Select>
+                </SettingsFormField>
+                <SettingsFormField
+                  :label="$t('pages.scheduledTasks.enabled')"
+                  label-for="scheduled-task-enabled"
+                  inline
+                >
+                  <Switch
+                    id="scheduled-task-enabled"
+                    v-model:model-value="draft.isEnabled"
+                  />
+                </SettingsFormField>
+              </SettingsFormSection>
             </div>
-            <DialogFooter variant="bar" class="sm:justify-end">
+            <DialogFooter variant="bar">
               <Button
                 type="button"
                 variant="outline"
@@ -878,5 +815,5 @@ export default {
         </DialogContent>
       </Dialog>
     </div>
-  </AppPageChrome>
+  </div>
 </template>

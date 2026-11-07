@@ -4,6 +4,52 @@ namespace Delegat.Tests;
 
 public class CabinetActionCatalogTests
 {
+    [Theory]
+    [InlineData("перегенерируй штрихкоды этих товаров")]
+    [InlineData("обновить товар, изменить штрихкод карточки")]
+    [InlineData("regenerate barcodes for selected products")]
+    [InlineData("fill missing product barcodes")]
+    [InlineData("generateBarcodes")]
+    [InlineData("изменить остатки выбранных товаров")]
+    [InlineData("set storageQuantity for selected products")]
+    public void Search_ConcreteCatalogFields_OffersNativeBulkFirst(string query)
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search(query, limit: 1));
+        Assert.Equal("/products/bulk", hit.Path);
+        Assert.Contains("generateBarcodes", hit.Note);
+        Assert.Contains("barcode: \"\", generateBarcodes: true", hit.Note);
+        Assert.Contains("NOT a per-product values map", hit.Note);
+        Assert.Contains("failedCount", hit.Note);
+    }
+
+    [Theory]
+    [InlineData("астрономия созвездия")]
+    [InlineData("quasar telescope")]
+    public void Search_UnrelatedRequest_DoesNotManufactureAnAction(string query)
+        => Assert.Empty(new CabinetActionCatalog().Search(query));
+
+    [Fact]
+    public void BulkContract_AdvertisesOnlyRealNestedDtoFields()
+    {
+        var fields = AssistantBodySchema.UpdateFields("PATCH", "/products/bulk");
+        Assert.Contains("generateBarcodes", fields);
+        Assert.Contains("barcode", fields);
+        Assert.Contains("storageQuantity", fields);
+        Assert.DoesNotContain("productIds", fields);
+        Assert.DoesNotContain("id", fields);
+        var hit = Assert.Single(new CabinetActionCatalog().Search("generateBarcodes", 1));
+        Assert.Contains("Accepted updates fields", hit.Note);
+        Assert.Contains("distinct externally supplied barcodes need individual PATCH", hit.Note);
+        Assert.Contains("unique attribute values cannot be shared", hit.Note);
+        var shape = AssistantBodySchema.Match("PATCH", "/products/bulk")!.Body.Properties["updates"];
+        foreach (var field in new[] { "name", "description", "storageQuantity", "price", "oldPrice", "minPrice", "netPrice",
+                     "currency", "barcode", "generateBarcodes", "priceDelta", "attributeValues", "storeAttributeValues" })
+        {
+            Assert.True(shape.Properties.ContainsKey(field), $"Advertised bulk field {field} is absent from the controller DTO");
+            Assert.Contains(field, AssistantWriteContract.ProductsBulk);
+        }
+    }
+
     [Fact]
     public void ProductFileDownload_IsNotDiscoverableAsCabinetAction()
     {
@@ -82,5 +128,38 @@ public class CabinetActionCatalogTests
         Assert.Contains(hits, h => h.Path.Equals("/products/bulk", StringComparison.OrdinalIgnoreCase)
             && h.Note.Contains("priceDelta", StringComparison.Ordinal));
         Assert.Contains(hits, h => h.Path.Contains("export-all-prices/run", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("обновить карточки в магазине")]
+    [InlineData("refresh product listings in shop")]
+    [InlineData("update product listings on marketplace")]
+    [InlineData("повторно отправить товары на маркетплейс")]
+    public void Search_RefreshListings_OffersBatchExportFirst(string query)
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search(query, limit: 1));
+        Assert.Equal("/marketplace/connections/{id}/products/export-batch", hit.Path);
+    }
+
+    [Fact]
+    public void Search_UpdatePrices_DoesNotBecomeProductExport()
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search("обновить цены в магазине", limit: 1));
+        Assert.Equal("/tools/export-all-prices/run", hit.Path);
+    }
+
+    [Fact]
+    public void Search_MappingEdit_DoesNotBecomeProductExport()
+    {
+        var hit = Assert.Single(new CabinetActionCatalog().Search("доделать маппинг связать основные параметры", limit: 1));
+        Assert.Equal("/marketplace/connections/{id}/mappings/{mappingId}/graph/connect", hit.Path);
+    }
+
+    [Fact]
+    public void Search_DoesNotTreatGenericRouteIdsOrUsageNotesAsActionNames()
+    {
+        var catalog = new CabinetActionCatalog();
+        Assert.Empty(catalog.Search("id"));
+        Assert.Empty(catalog.Search("pending"));
     }
 }

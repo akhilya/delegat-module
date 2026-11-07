@@ -13,6 +13,9 @@ public class AiKnowledgeChunk
     [Column(TypeName = "longtext")]
     public string body { get; set; } = "";
 
+    [StringLength(200)] public string? embeddingModel { get; set; }
+    [Column(TypeName = "longtext")] public string? embeddingJson { get; set; }
+
     public int? storeId { get; set; }
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
 }

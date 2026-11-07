@@ -67,6 +67,20 @@ public static class AssistantBodySchema
         return list.Length == 0 ? null : list;
     }
 
+    /// <summary>Bounded DTO field names, excluding selectors and nested item identifiers.</summary>
+    internal static IReadOnlyList<string> UpdateFields(string method, string path)
+    {
+        var action = Match(method, path);
+        if (action == null) return [];
+        var shape = action.Body.Properties.GetValueOrDefault("updates") ?? action.Body;
+        return shape.Properties
+            .Where(p => (p.Value.Item == null && p.Value.Properties.Count == 0 && !p.Value.Dictionary && !p.Value.Free)
+                || p.Key is "attributeValues" or "storeAttributeValues")
+            .Select(p => p.Key)
+            .Where(k => k is not ("productIds" or "allMatching" or "where" or "wait" or "id"))
+            .OrderBy(k => k, StringComparer.Ordinal).ToArray();
+    }
+
     internal static string Normalize(string path)
     {
         var q = path.IndexOf('?');

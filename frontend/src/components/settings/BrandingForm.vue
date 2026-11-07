@@ -433,7 +433,7 @@ defineExpose({
           <div class="flex items-center gap-2">
             <input
               type="color"
-              class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
+              class="size-9 shrink-0 cursor-pointer rounded-control border bg-background p-1"
               :value="form.primaryColor || '#343434'"
               @input="(e) => (form.primaryColor = e.target.value.toUpperCase())"
             />
@@ -456,7 +456,7 @@ defineExpose({
           <div class="flex items-center gap-2">
             <input
               type="color"
-              class="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
+              class="size-9 shrink-0 cursor-pointer rounded-control border bg-background p-1"
               :value="form.accentColor || '#F7F7F7'"
               @input="(e) => (form.accentColor = e.target.value.toUpperCase())"
             />

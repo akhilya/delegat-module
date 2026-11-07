@@ -78,6 +78,7 @@ public sealed class AiLiveTurnHub
     {
         var turn = Find(sessionId, storeId, userId);
         if (turn == null || turn.IsCompleted) return false;
+        if (AiSseTurnRecorder.FoldTurns(turn.SnapshotChunks())[^1].TurnEnded) return false;
         turn.Stop();
         return true;
     }
@@ -113,13 +114,23 @@ public sealed class AiLiveTurnHub
             }
             finally
             {
+                // Closing an HTTP subscription is not Stop. Only an explicit user
+                // stop gets a durable terminal marker, including an empty reply.
+                var snapshots = AiSseTurnRecorder.FoldTurns(turn.SnapshotChunks());
+                if (turn.StopRequested && !snapshots[^1].TurnEnded)
+                {
+                    turn.Publish(AiSseTurnRecorder.Format(SseEventType.Stopped, new { }));
+                    snapshots = AiSseTurnRecorder.FoldTurns(turn.SnapshotChunks());
+                }
                 if (db != null)
                 {
                     try
                     {
-                        var snapshot = AiSseTurnRecorder.Fold(turn.SnapshotChunks());
                         await AiConversationTurnStore.UpsertAssistantAsync(
-                            db, turn.SessionId, turn.StoreId, turn.UserId, snapshot, CancellationToken.None);
+                            db, turn.SessionId, turn.StoreId, turn.UserId, snapshots[0], CancellationToken.None);
+                        foreach (var followup in snapshots.Skip(1))
+                            await AiConversationTurnStore.AppendAssistantAsync(
+                                db, turn.SessionId, turn.StoreId, turn.UserId, followup, CancellationToken.None);
                     }
                     catch (Exception ex)
                     {

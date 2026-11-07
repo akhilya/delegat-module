@@ -4,7 +4,7 @@ import PageSection from "@/components/pageSection.vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
 import {
   Table,
   TableBody,
@@ -16,10 +16,7 @@ import {
 import { LogTableFrame } from "@/components/logs";
 import BarcodeCell from "@/components/products/BarcodeCell.vue";
 import { http } from "@/main";
-import {
-  displaySonnerError,
-  displaySonnerSuccess,
-} from "@/store/sonnerHelper";
+import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import {
   Barcode,
   ChevronLeft,
@@ -39,7 +36,7 @@ export default {
     AppPageChrome,
     PageSection,
     Button,
-    NavSearchField,
+    PageListToolbar,
     Checkbox,
     Table,
     TableBody,
@@ -49,13 +46,15 @@ export default {
     TableRow,
     LogTableFrame,
     BarcodeCell,
-    Barcode,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
     Download,
     X,
+  },
+  setup() {
+    return { Barcode };
   },
   data() {
     return {
@@ -83,7 +82,9 @@ export default {
     },
     somePageSelected() {
       if (this.items.length === 0) return false;
-      const n = this.items.filter((row) => this.selection[String(row.id)]).length;
+      const n = this.items.filter(
+        (row) => this.selection[String(row.id)],
+      ).length;
       return n > 0 && n < this.items.length;
     },
     pageFrom() {
@@ -190,9 +191,8 @@ export default {
 
     async downloadOne(row) {
       if (!row?.barcode) return;
-      const { barcodeFormatFor, downloadBarcodePng } = await import(
-        "@/lib/barcodeDownload.js"
-      );
+      const { barcodeFormatFor, downloadBarcodePng } =
+        await import("@/lib/barcodeDownload.js");
       await downloadBarcodePng(row.barcode, barcodeFormatFor(row.barcode));
     },
 
@@ -203,12 +203,18 @@ export default {
       }
       this.isDownloadingSelected = true;
       try {
-        const { downloadBarcodesZip } = await import("@/lib/barcodeDownload.js");
-        const added = await downloadBarcodesZip(this.selectedItems, "barcodes-selected.zip");
+        const { downloadBarcodesZip } =
+          await import("@/lib/barcodeDownload.js");
+        const added = await downloadBarcodesZip(
+          this.selectedItems,
+          "barcodes-selected.zip",
+        );
         if (added === 0) {
           displaySonnerError(this.$t("pages.barcodesPage.downloadEmpty"));
         } else {
-          displaySonnerSuccess(this.$t("pages.barcodesPage.downloadedCount", { count: added }));
+          displaySonnerSuccess(
+            this.$t("pages.barcodesPage.downloadedCount", { count: added }),
+          );
         }
       } catch (error) {
         displaySonnerError(error);
@@ -248,12 +254,15 @@ export default {
           displaySonnerError(this.$t("pages.barcodesPage.downloadEmpty"));
           return;
         }
-        const { downloadBarcodesZip } = await import("@/lib/barcodeDownload.js");
+        const { downloadBarcodesZip } =
+          await import("@/lib/barcodeDownload.js");
         const added = await downloadBarcodesZip(all, "barcodes-all.zip");
         if (added === 0) {
           displaySonnerError(this.$t("pages.barcodesPage.downloadEmpty"));
         } else {
-          displaySonnerSuccess(this.$t("pages.barcodesPage.downloadedCount", { count: added }));
+          displaySonnerSuccess(
+            this.$t("pages.barcodesPage.downloadedCount", { count: added }),
+          );
         }
       } catch (error) {
         displaySonnerError(error);
@@ -271,7 +280,7 @@ export default {
 <template>
   <AppPageChrome>
     <template #nav-center>
-      <NavSearchField
+      <PageListToolbar
         v-model="searchQuery"
         :placeholder="$t('pages.barcodesPage.searchPlaceholder')"
         @submit="applySearch"
@@ -299,7 +308,9 @@ export default {
               </TableHead>
               <TableHead>{{ $t("common.name") }}</TableHead>
               <TableHead class="w-40">SKU</TableHead>
-              <TableHead class="w-56">{{ $t("pages.barcodesPage.columnBarcode") }}</TableHead>
+              <TableHead class="w-56">{{
+                $t("pages.barcodesPage.columnBarcode")
+              }}</TableHead>
               <TableHead class="w-12" />
             </TableRow>
           </TableHeader>
@@ -315,8 +326,12 @@ export default {
               <TableCell class="max-w-0 font-medium whitespace-normal">
                 <span class="line-clamp-2">{{ row.name }}</span>
               </TableCell>
-              <TableCell class="text-muted-foreground max-w-0 font-mono text-sm tabular-nums">
-                <span class="block truncate">{{ row.sku || $t("common.emDash") }}</span>
+              <TableCell
+                class="text-muted-foreground max-w-0 font-mono text-sm tabular-nums"
+              >
+                <span class="block truncate">{{
+                  row.sku || $t("common.emDash")
+                }}</span>
               </TableCell>
               <TableCell>
                 <BarcodeCell :barcode="row.barcode" />
@@ -340,12 +355,22 @@ export default {
         <template #footer>
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <p class="text-sm text-muted-foreground tabular-nums">
-              {{ $t("pages.barcodesPage.pageRange", { from: pageFrom, to: pageTo, total: totalCount }) }}
+              {{
+                $t("pages.barcodesPage.pageRange", {
+                  from: pageFrom,
+                  to: pageTo,
+                  total: totalCount,
+                })
+              }}
             </p>
             <template v-if="selectedCount > 0">
               <div class="h-4 w-px bg-border" />
               <span class="text-sm font-medium text-foreground">
-                {{ $t("pages.barcodesPage.selectedCount", { count: selectedCount }) }}
+                {{
+                  $t("pages.barcodesPage.selectedCount", {
+                    count: selectedCount,
+                  })
+                }}
               </span>
               <Button
                 variant="ghost"
@@ -365,7 +390,11 @@ export default {
               >
                 <Spinner v-if="isDownloadingSelected" class="mr-2" />
                 <Download v-else class="mr-2 size-4" />
-                {{ $t("pages.barcodesPage.downloadSelected", { count: selectedCount }) }}
+                {{
+                  $t("pages.barcodesPage.downloadSelected", {
+                    count: selectedCount,
+                  })
+                }}
               </Button>
             </template>
             <Button

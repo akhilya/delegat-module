@@ -426,6 +426,8 @@ export default {
                     </Button>
                     <Button
                       v-if="!key.isRevoked"
+                      reveal-on-row-hover
+                      :aria-label="$t('common.delete')"
                       variant="ghost"
                       size="icon"
                       :disabled="revokingId === key.id"
@@ -506,6 +508,7 @@ export default {
       v-show="showLogs"
       ref="logsPanel"
       :api-keys="apiKeys"
+      :toolbar-visible="showLogs"
     />
   </div>
 </template>

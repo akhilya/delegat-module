@@ -12,7 +12,33 @@ internal static class ProposePlanReader
         public bool HasContent =>
             !string.IsNullOrWhiteSpace(Summary)
             && Steps.Count > 0
-            && Steps.All(IsWellFormedStep);
+            && Steps.All(IsWellFormedStep)
+            && Steps.All(step => HasConsistentNamedExport(step, Steps.Count == 1 ? AffectedCount : 0));
+    }
+
+    private static bool HasConsistentNamedExport(JsonElement step, int affectedCount)
+    {
+        if (!string.Equals(step.GetProperty("tool").GetString(), "platform_request", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var args = step.GetProperty("args");
+        if (!HasText(args, "method") || !string.Equals(args.GetProperty("method").GetString(), "POST", StringComparison.OrdinalIgnoreCase)
+            || !HasText(args, "path")
+            || !AssistantWriteContract.PathHas(args.GetProperty("path").GetString()!, "products/export-batch")
+            || !args.TryGetProperty("body", out var body) || body.ValueKind != JsonValueKind.Object
+            || !body.TryGetProperty("productIds", out var ids))
+            return true;
+
+        if (ids.ValueKind != JsonValueKind.Array
+            || (body.TryGetProperty("allMatching", out var allMatching) && allMatching.ValueKind == JsonValueKind.True)
+            || (body.TryGetProperty("where", out var where) && where.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(where.GetString())))
+            return false;
+
+        var values = ids.EnumerateArray().ToArray();
+        return values.Length > 0
+            && values.All(id => id.ValueKind == JsonValueKind.Number && id.TryGetInt32(out var n) && n > 0)
+            && values.Select(id => id.GetInt32()).Distinct().Count() == values.Length
+            && (affectedCount == 0 || affectedCount == values.Length);
     }
 
     private static bool IsWellFormedStep(JsonElement step) =>

@@ -34,6 +34,8 @@ Bridge `import-archive` rejects zip bombs: max upload 64 MiB, ≤500 entries, �
 
 If the bridge returns 404/405 for `import-archive`, the adapter falls back to the legacy URL-queue + `images/drain` path.
 
+This starts another image-transfer attempt; it does **not** guarantee that the photos arrived. Queueing, downloading, or draining images can still fail or leave work pending on the bridge. Product upsert can already have succeeded while image transfer fails, so a successful product export alone is not evidence that every image was attached. Inspect the image-import/drain warnings and bridge error results when verifying photos.
+
 For diagnosing failed bulk exports, enable **Adapter HTTP logs** in Settings. Mapping/validation failures blocked before the adapter HTTP call do not appear there — check the export batch `lastError` instead.
 
 Headers: `X-Delegat-Api-Key` and `Authorization: Bearer <key>`.

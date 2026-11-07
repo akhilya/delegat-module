@@ -348,6 +348,7 @@ export default {
                   type="button"
                   variant="ghost"
                   size="icon"
+                  reveal-on-row-hover
                   class="size-8 shrink-0 text-muted-foreground hover:text-destructive"
                   :disabled="deletingId === variant.id"
                   :aria-label="

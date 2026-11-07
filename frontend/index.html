@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
+    <!-- Match useDark before fonts, app CSS or modules can delay the first paint. -->
+    <script>
+      try {
+        const theme = localStorage.getItem("vueuse-color-scheme");
+        const dark = theme === "dark" ||
+          (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      } catch {
+        // Storage may be unavailable; keep the product's default light theme.
+      }
+    </script>
+    <style>
+      /* Fallbacks match style.css until its theme tokens arrive. */
+      html { color-scheme: light; background: var(--background, oklch(1 0 0)); }
+      html.dark { color-scheme: dark; background: var(--background, oklch(0.205 0 0)); }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Onest variable font with full Cyrillic — single family for body+headings keeps

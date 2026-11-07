@@ -1,9 +1,38 @@
 using Delegat.Services.Marketplace;
+using Microsoft.EntityFrameworkCore;
 
 namespace Delegat.Tests;
 
 public class AdapterHttpLogServiceTests
 {
+    [Fact]
+    public void HostStorageBudget_DoesNotInheritTheLargerSdkCaptureLimit()
+    {
+        // These are documented persistence budgets, independent of SDK download/capture support.
+        Assert.InRange(AdapterHttpLogService.MaxStoredBodyChars, 1, 64 * 1024);
+        Assert.InRange(AdapterHttpLogService.MaxDetailedRowsSafety, 1, 5_000);
+        Assert.True(AdapterHttpLogService.MaxStoredBodyChars <
+            global::Delegat.Marketplace.SDK.AdapterHttpLogHelper.MaxStoredBodyChars);
+    }
+
+    [Fact]
+    public void DetailProjection_TruncatesBodiesInMySqlRatherThanClientMemory()
+    {
+        // SQL generation only: this test never opens a database connection.
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseMySql("Server=localhost;Database=unused;User=unused;Password=unused",
+                new MySqlServerVersion(new Version(8, 4, 0))).Options;
+        using var db = new DataContext(options);
+        var sql = AdapterHttpLogService.ProjectDetails(db.adapterHttpLogs.AsNoTracking()
+            .Where(l => l.storeId == 1 && l.Id == 2), DateTime.UtcNow.AddHours(-24)).ToQueryString();
+
+        Assert.Contains("SUBSTRING(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(AdapterHttpLogService.MaxPreviewBodyChars.ToString(), sql);
+        Assert.Contains("CHAR_LENGTH(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT `a`.`Id`, `a`.`createdAt`, `a`.`storeId`, `a`.`connectionId`, `a`.`adapterKey`, `a`.`method`, `a`.`url`, `a`.`path`, `a`.`statusCode`, `a`.`durationMs`, `a`.`requestHeadersJson`, `a`.`requestBody`", sql);
+    }
+
     [Fact]
     public void RedactHeadersJson_MasksSensitiveHeaders_CaseInsensitive()
     {

@@ -1,6 +1,34 @@
 export const MAX_FOLDER_FILES = 500;
 export const ATTACHMENT_PREVIEW_LIMIT = 6;
 
+/** Ignore text/link drags so normal composer editing keeps its native behavior. */
+export function isFileDrag(dataTransfer) {
+  return (
+    Array.from(dataTransfer?.types || []).includes("Files") ||
+    Array.from(dataTransfer?.items || []).some((item) => item.kind === "file") ||
+    (dataTransfer?.files?.length || 0) > 0
+  );
+}
+
+/** The assistant accepts individual files, not recursive directory uploads. */
+export function filesFromDrop(dataTransfer) {
+  const items = Array.from(dataTransfer?.items || []).filter(
+    (item) => item.kind === "file",
+  );
+  let hasDirectories = false;
+  const files = items.length
+    ? items.flatMap((item) => {
+        if (item.webkitGetAsEntry?.()?.isDirectory) {
+          hasDirectories = true;
+          return [];
+        }
+        const file = item.getAsFile?.();
+        return file ? [file] : [];
+      })
+    : Array.from(dataTransfer?.files || []);
+  return { files, hasDirectories };
+}
+
 /**
  * @param {FileList | File[] | null | undefined} fileList
  * @returns {Array<{ relativePath: string, fileName: string, size: number, file: File }>}

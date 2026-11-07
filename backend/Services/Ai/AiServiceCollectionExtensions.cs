@@ -32,6 +32,13 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<CatalogSearchService>();
         services.AddScoped<SqlReadonlyService>();
         services.AddScoped<KnowledgeIndexService>();
+        services.AddSingleton<KnowledgeIndexSnapshotCache>();
+        services.AddHttpClient<IKnowledgeEmbeddingClient, KnowledgeEmbeddingClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(20))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+            });
         services.AddScoped<AiMemoryService>();
         services.AddSingleton<CabinetPipeline>();
         services.AddScoped<ICabinetRequestInvoker, CabinetRequestInvoker>();
@@ -44,6 +51,7 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AgentToolHost>();
         services.AddScoped<AgentSessionResolver>();
         services.AddHostedService<KnowledgeIndexHostedService>();
+        services.AddHostedService<KnowledgeEmbeddingHostedService>();
         services.AddHostedService<ChatAttachmentCleanupHostedService>();
         services.AddScoped<MappingIntelligenceService>();
         services.AddScoped<AiOperationService>();

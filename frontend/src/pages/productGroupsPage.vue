@@ -5,13 +5,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import {
-  Plus,
-  Layers,
-  Trash2,
-  X,
-} from "lucide-vue-next";
+import { Plus, Layers, Trash2 } from "lucide-vue-next";
 import { Checkbox } from "@/components/ui/checkbox";
+import ListSelectAllRow from "@/components/lists/ListSelectAllRow.vue";
+import ListBulkActions from "@/components/lists/ListBulkActions.vue";
+import { canAct, PERMS } from "@/lib/permissions";
+import { getCachedMe } from "@/lib/meCache";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,10 +23,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import CreateProductGroupDialog from "@/components/products/CreateProductGroupDialog.vue";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import MergeProductGroupsDialog from "@/components/products/MergeProductGroupsDialog.vue";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 
 export default {
   components: {
@@ -36,9 +33,9 @@ export default {
     Spinner,
     Button,
     Plus,
-    Layers,
     Trash2,
-    X,
+    ListSelectAllRow,
+    ListBulkActions,
     Checkbox,
     AlertDialog,
     AlertDialogAction,
@@ -52,12 +49,16 @@ export default {
     InsetGroupItem,
     ConfirmDialog,
     CreateProductGroupDialog,
+    MergeProductGroupsDialog,
   },
   data() {
     return {
       groups: [],
+      emptyListIcon: Layers,
       isLoading: false,
       isDeleting: false,
+      isMerging: false,
+      showMergeDialog: false,
       showCreateDialog: false,
       groupToDelete: null,
       selectedIds: {},
@@ -65,6 +66,12 @@ export default {
     };
   },
   computed: {
+    selectedGroups() {
+      return this.groups.filter((group) => this.selectedIds[String(group.id)]);
+    },
+    canManageCatalog() {
+      return canAct(getCachedMe(), PERMS.CatalogManage);
+    },
     selectedCount() {
       return Object.keys(this.selectedIds).length;
     },
@@ -77,7 +84,9 @@ export default {
     },
     somePageSelected() {
       if (this.groups.length === 0) return false;
-      const n = this.groups.filter((group) => this.selectedIds[String(group.id)]).length;
+      const n = this.groups.filter(
+        (group) => this.selectedIds[String(group.id)],
+      ).length;
       return n > 0 && n < this.groups.length;
     },
   },
@@ -103,13 +112,14 @@ export default {
     },
 
     async handleDeleteGroup(groupId) {
+      if (this.isDeleting || this.isMerging) return;
       this.isDeleting = true;
       await this.deleteGroup({
         id: groupId,
         onSuccess: () => {
           displaySonnerSuccess(this.$t("pages.productGroupsPage.deleted"));
           this.removeFromSelection(groupId);
-          this.fetchGroups();
+          this.groups = this.groups.filter((group) => group.id !== groupId);
         },
         onError: (error) => {
           displaySonnerError(error);
@@ -130,6 +140,7 @@ export default {
     },
 
     toggleRow(group, checked) {
+      if (this.isDeleting || this.isMerging) return;
       const key = String(group.id);
       if (checked) {
         this.selectedIds = { ...this.selectedIds, [key]: true };
@@ -139,6 +150,7 @@ export default {
     },
 
     toggleAllPage(checked) {
+      if (this.isDeleting || this.isMerging) return;
       if (checked) {
         const next = { ...this.selectedIds };
         for (const group of this.groups) {
@@ -155,10 +167,12 @@ export default {
     },
 
     clearSelection() {
+      if (this.isMerging) return;
       this.selectedIds = {};
     },
 
     async handleBulkDelete() {
+      if (!this.canManageCatalog || this.isDeleting || this.isMerging) return;
       const ids = Object.keys(this.selectedIds);
       if (ids.length === 0) return;
 
@@ -170,6 +184,10 @@ export default {
           id,
           onSuccess: () => {
             deleted += 1;
+            this.groups = this.groups.filter(
+              (group) => String(group.id) !== id,
+            );
+            this.removeFromSelection(id);
           },
           onError: (error) => {
             displaySonnerError(error);
@@ -183,14 +201,20 @@ export default {
           this.$t("pages.productGroupsPage.deletedCount", { count: deleted }),
         );
       }
-      this.selectedIds = {};
       this.isBulkDeleteDialogOpen = false;
       this.isDeleting = false;
-      await this.fetchGroups();
     },
 
     openGroup(groupId) {
+      if (this.isMerging) return;
       this.$router.push(`/product-groups/${groupId}/edit`);
+    },
+
+    onGroupsMerged({ sourceGroupIds }) {
+      const removed = new Set(sourceGroupIds.map(String));
+      this.groups = this.groups.filter((group) => !removed.has(String(group.id)));
+      this.selectedIds = {};
+      this.fetchGroups();
     },
 
     groupMarketplaceNames(group) {
@@ -223,7 +247,7 @@ export default {
       <PageSection
         :loading="isLoading"
         :empty="groups.length === 0"
-        :empty-icon="Layers"
+        :empty-icon="emptyListIcon"
         :empty-title="$t('pages.productGroupsPage.emptyTitle')"
         :empty-description="$t('pages.productGroupsPage.emptyDescription')"
       >
@@ -236,29 +260,29 @@ export default {
 
         <div class="flex flex-col gap-3">
           <InsetGroup>
-            <InsetGroupItem as="div">
-              <template #leading>
-                <Checkbox
-                  :model-value="allPageSelected"
-                  :indeterminate="somePageSelected"
-                  :aria-label="$t('pages.productGroupsPage.selectAll')"
-                  @update:model-value="(v) => toggleAllPage(v === true)"
-                />
-              </template>
-              <p class="text-muted-foreground text-sm font-normal">
-                {{ $t("pages.productGroupsPage.selectAll") }}
-              </p>
-            </InsetGroupItem>
+            <ListSelectAllRow
+              v-if="canManageCatalog"
+              :model-value="
+                allPageSelected
+                  ? true
+                  : somePageSelected
+                    ? 'indeterminate'
+                    : false
+              "
+              :disabled="isDeleting || isMerging"
+              @update:model-value="toggleAllPage"
+            />
             <InsetGroupItem
               v-for="group in groups"
               :key="group.id"
               show-chevron
               @click="openGroup(group.id)"
             >
-              <template #leading>
+              <template v-if="canManageCatalog" #leading>
                 <span @click.stop>
                   <Checkbox
                     :model-value="isSelected(group)"
+                    :disabled="isDeleting || isMerging"
                     :aria-label="group.name"
                     @update:model-value="(v) => toggleRow(group, v === true)"
                   />
@@ -271,7 +295,9 @@ export default {
               >
                 {{ group.description }}
               </p>
-              <p class="text-muted-foreground mt-0.5 truncate text-xs font-normal">
+              <p
+                class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
+              >
                 {{
                   $t("pages.productGroupsPage.rowMeta", {
                     count: group.membersCount || 0,
@@ -281,10 +307,14 @@ export default {
                   · {{ groupMarketplaceNames(group) }}
                 </template>
               </p>
-              <template #trailing>
+              <template v-if="canManageCatalog" #trailing>
                 <ConfirmDialog
                   :title="$t('pages.productGroupsPage.deleteTitle')"
-                  :description="$t('pages.productGroupsPage.deleteDescription', { name: group.name })"
+                  :description="
+                    $t('pages.productGroupsPage.deleteDescription', {
+                      name: group.name,
+                    })
+                  "
                   :confirm-label="$t('common.delete')"
                   :loading="isDeleting"
                   @confirm="handleDeleteGroup(group.id)"
@@ -292,6 +322,8 @@ export default {
                   <template #trigger>
                     <Button
                       variant="ghost"
+                      reveal-on-row-hover
+                      :disabled="isDeleting"
                       size="icon"
                       class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       :aria-label="$t('common.delete')"
@@ -305,39 +337,51 @@ export default {
             </InsetGroupItem>
           </InsetGroup>
 
-          <div
-            v-if="hasSelection"
-            class="flex flex-wrap items-center gap-2 px-1"
+          <ListBulkActions
+            v-if="canManageCatalog"
+            :count="selectedCount"
+            :busy="isDeleting || isMerging"
+            @clear="clearSelection"
+            @delete="isBulkDeleteDialogOpen = true"
           >
-            <span class="text-sm font-medium">
-              {{ $t("pages.productGroupsPage.selectedCount", { count: selectedCount }) }}
-            </span>
-            <Button variant="ghost" size="sm" class="h-8" @click="clearSelection">
-              <X class="h-4 w-4" />
-            </Button>
             <Button
-              variant="destructive"
+              type="button"
+              variant="outline"
               size="sm"
               class="h-8"
-              @click="isBulkDeleteDialogOpen = true"
-            >
-              <Trash2 class="mr-1 h-4 w-4" />
-              {{ $t("common.delete") }}
-            </Button>
-          </div>
+              :disabled="selectedCount < 2 || selectedCount > 101 || isDeleting || isMerging"
+              @click="showMergeDialog = true"
+            >{{ $t("pages.productGroupsPage.mergeAction") }}</Button>
+          </ListBulkActions>
         </div>
       </PageSection>
+
+      <MergeProductGroupsDialog
+        v-if="canManageCatalog"
+        v-model:open="showMergeDialog"
+        v-model:busy="isMerging"
+        :groups="selectedGroups"
+        @merged="onGroupsMerged"
+      />
 
       <AlertDialog v-model:open="isBulkDeleteDialogOpen">
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{{ $t("pages.productGroupsPage.bulkDeleteTitle") }}</AlertDialogTitle>
+            <AlertDialogTitle>{{
+              $t("pages.productGroupsPage.bulkDeleteTitle")
+            }}</AlertDialogTitle>
             <AlertDialogDescription>
-              {{ $t("pages.productGroupsPage.bulkDeleteDescription", { count: selectedCount }) }}
+              {{
+                $t("pages.productGroupsPage.bulkDeleteDescription", {
+                  count: selectedCount,
+                })
+              }}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel :disabled="isDeleting">{{ $t("common.cancel") }}</AlertDialogCancel>
+            <AlertDialogCancel :disabled="isDeleting">{{
+              $t("common.cancel")
+            }}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               :disabled="isDeleting"

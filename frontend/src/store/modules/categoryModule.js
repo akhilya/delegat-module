@@ -36,9 +36,9 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getCategory(ctx, { id, onSuccess, onError }) {
+    async getCategory(ctx, { id, summary = false, onSuccess, onError }) {
       return await useAxios(
-        `/categories/${id}`,
+        `/categories/${id}${summary ? "/summary" : ""}`,
         { method: "GET", cache: false },
         http,
         {
@@ -89,7 +89,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateCategory(ctx, { id, name, description, hasSizes, onSuccess, onError }) {
+    async updateCategory(
+      ctx,
+      { id, name, description, hasSizes, onSuccess, onError },
+    ) {
       return await useAxios(
         `/categories/${id}`,
         {
@@ -136,15 +139,33 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getCategoryAttributes(ctx, { categoryId, onSuccess, onError }) {
+    async getCategoryAttributes(
+      ctx,
+      { categoryId, summary = false, onSuccess, onError },
+    ) {
       return await useAxios(
-        `/categories/${categoryId}/attributes`,
+        `/categories/${categoryId}/attributes${summary ? "/summary" : ""}`,
         { method: "GET", cache: false },
         http,
         {
           immediate: true,
           abortPrevious: true,
         },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
+    /** Loads one definition, including its dictionary, for the attribute editor. */
+    async getCategoryAttribute(
+      ctx,
+      { categoryId, attributeId, onSuccess, onError },
+    ) {
+      return await useAxios(
+        `/categories/${categoryId}/attributes/${attributeId}`,
+        { method: "GET", cache: false },
+        http,
+        { immediate: true, abortPrevious: true },
       )
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
@@ -189,7 +210,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateAttribute(ctx, { categoryId, attributeId, attribute, onSuccess, onError }) {
+    async updateAttribute(
+      ctx,
+      { categoryId, attributeId, attribute, onSuccess, onError },
+    ) {
       return await useAxios(
         `/categories/${categoryId}/attributes/${attributeId}`,
         {
@@ -217,9 +241,14 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteAttribute(ctx, { categoryId, attributeId, onSuccess, onError }) {
+    async deleteAttribute(
+      ctx,
+      { categoryId, attributeId, onSuccess, onError },
+    ) {
       try {
-        const response = await http.delete(`/categories/${categoryId}/attributes/${attributeId}`);
+        const response = await http.delete(
+          `/categories/${categoryId}/attributes/${attributeId}`,
+        );
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);
@@ -236,7 +265,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async reorderAttributes(ctx, { categoryId, attributeIds, onSuccess, onError }) {
+    async reorderAttributes(
+      ctx,
+      { categoryId, attributeIds, onSuccess, onError },
+    ) {
       return await useAxios(
         `/categories/${categoryId}/attributes/reorder`,
         {

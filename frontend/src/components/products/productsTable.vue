@@ -453,7 +453,10 @@ export default {
               >
                 <div
                   class="flex items-center gap-1 min-w-0 overflow-hidden"
-                  :class="isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : ''"
+                  :class="[
+                    header.column.id === 'select' && 'justify-center',
+                    isSortable(header.column.id) ? 'cursor-pointer hover:text-foreground' : '',
+                  ]"
                   :title="isSortable(header.column.id) ? $t('products.productsTable.sortHeaderHint') : undefined"
                   @click="onHeaderClick(header.column.id, $event)"
                 >

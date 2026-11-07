@@ -185,10 +185,11 @@ public class AiController : ControllerBase
                 code: "plan_not_pending_or_mismatched");
 
         var sessionId = request.SessionId;
+        var locale = Request.Headers["X-UI-Locale"].ToString();
         _liveTurns.TryStart(
             sessionId, storeId.Value, userId.Value, userMessage: null,
             (sp, token) => sp.GetRequiredService<AiChatService>()
-                .ExecutePlanStreamAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token));
+                .ExecutePlanStreamAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
 
         var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
         if (turn == null)

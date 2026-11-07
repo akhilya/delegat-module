@@ -57,15 +57,18 @@ public class ProductBulkUpdateService
     private readonly DataContext _db;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AttributeUniquenessService _attributeUniqueness;
+    private readonly Func<string> _barcodeGenerator;
 
     public ProductBulkUpdateService(
         DataContext db,
         IUnitOfWork unitOfWork,
-        AttributeUniquenessService attributeUniqueness)
+        AttributeUniquenessService attributeUniqueness,
+        Func<string>? barcodeGenerator = null)
     {
         _db = db;
         _unitOfWork = unitOfWork;
         _attributeUniqueness = attributeUniqueness;
+        _barcodeGenerator = barcodeGenerator ?? ProductController.GenerateEan13;
     }
 
     public static string SerializeUpdates(ProductBulkUpdateFields updates) =>
@@ -99,6 +102,18 @@ public class ProductBulkUpdateService
         if (updates.price.HasValue && updates.priceDelta.HasValue)
             throw ApiException.BadRequest(code: "price_delta_conflict");
 
+        if (!string.IsNullOrEmpty(updates.barcode))
+        {
+            if (!ProductController.IsValidEanBarcode(updates.barcode))
+                throw ApiException.BadRequest(code: "barcode_invalid");
+            if (productIds.Distinct().Count() > 1 ||
+                await _db.products.IgnoreQueryFilters().AnyAsync(p => p.storeId == storeId &&
+                    p.barcode == updates.barcode && !productIds.Contains(p.Id), ct) ||
+                await _db.productVariants.IgnoreQueryFilters().AnyAsync(v => v.product.storeId == storeId &&
+                    v.barcode == updates.barcode, ct))
+                throw ApiException.Conflict(code: "barcode_already_used");
+        }
+
         var foundIds = await _db.products.AsNoTracking()
             .Where(p => productIds.Contains(p.Id) && p.storeId == storeId)
             .Select(p => p.Id)
@@ -123,6 +138,10 @@ public class ProductBulkUpdateService
         var result = new ProductBulkUpdateResult();
         var total = productIds.Count;
 
+        // Queued jobs may outlive the catalog state checked at enqueue time.
+        if (!string.IsNullOrEmpty(updates.barcode))
+            await ValidateBeforeEnqueueAsync(storeId, productIds, updates, ct);
+
         if (operationLogger != null && operationId != null)
         {
             await operationLogger.LogAsync(operationId, storeId, "info",
@@ -143,6 +162,17 @@ public class ProductBulkUpdateService
             .ToListAsync(ct);
 
         var byId = products.ToDictionary(p => p.Id);
+        HashSet<string>? occupiedBarcodes = null;
+        if (updates.generateBarcodes == true)
+        {
+            occupiedBarcodes = (await _db.products.IgnoreQueryFilters().AsNoTracking()
+                .Where(p => p.storeId == storeId && p.barcode != null)
+                .Select(p => p.barcode!).ToListAsync(ct))
+                .Concat(await _db.productVariants.IgnoreQueryFilters().AsNoTracking()
+                    .Where(v => v.product.storeId == storeId && v.barcode != null)
+                    .Select(v => v.barcode!).ToListAsync(ct))
+                .ToHashSet(StringComparer.Ordinal);
+        }
         var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
         var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
 
@@ -180,6 +210,17 @@ public class ProductBulkUpdateService
             try
             {
                 ApplyProductFields(product, updates);
+
+                if (occupiedBarcodes != null && string.IsNullOrEmpty(product.barcode))
+                {
+                    string candidate;
+                    do
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        candidate = _barcodeGenerator();
+                    } while (!occupiedBarcodes.Add(candidate));
+                    product.barcode = candidate;
+                }
 
                 if (updates.attributeValues != null)
                 {
@@ -421,12 +462,9 @@ public class ProductBulkUpdateService
         {
             var newBarcode = updates.barcode == "" ? null : updates.barcode;
             if (newBarcode != null && !ProductController.IsValidEanBarcode(newBarcode))
-                throw ApiException.BadRequest($"Invalid barcode: {newBarcode}");
+                throw ApiException.BadRequest(code: "barcode_invalid");
             product.barcode = newBarcode;
         }
-
-        if (updates.generateBarcodes == true && string.IsNullOrEmpty(product.barcode))
-            product.barcode = ProductController.GenerateEan13();
     }
 
     private async Task EnsureBulkUniqueAttributesAllowedAsync(

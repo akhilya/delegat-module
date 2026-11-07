@@ -29,18 +29,23 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
     v-bind="forwarded"
     :class="
       cn(
-        'peer border-input bg-background data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-xs border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50',
+        'peer group/checkbox inline-flex size-8 shrink-0 items-center justify-center rounded-md align-middle transition-colors outline-none hover:bg-muted/60 focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent',
         props.class,
       )
     "
   >
-    <CheckboxIndicator
-      data-slot="checkbox-indicator"
-      class="flex items-center justify-center text-current transition-none data-[state=checked]:animate-in data-[state=checked]:zoom-in-95 data-[state=checked]:duration-[var(--duration-press)] data-[state=checked]:ease-[var(--ease-out-quart)]"
+    <span
+      data-slot="checkbox-control"
+      class="border-input bg-background flex size-4 shrink-0 items-center justify-center rounded-xs border shadow-xs group-data-[state=checked]/checkbox:bg-primary group-data-[state=checked]/checkbox:text-primary-foreground group-data-[state=checked]/checkbox:border-primary group-data-[state=indeterminate]/checkbox:bg-primary group-data-[state=indeterminate]/checkbox:text-primary-foreground group-data-[state=indeterminate]/checkbox:border-primary group-aria-invalid/checkbox:border-destructive"
     >
-      <slot>
-        <Check class="size-3.5" />
-      </slot>
-    </CheckboxIndicator>
+      <CheckboxIndicator
+        data-slot="checkbox-indicator"
+        class="flex items-center justify-center text-current transition-none data-[state=checked]:animate-in data-[state=checked]:zoom-in-95 data-[state=checked]:duration-[var(--duration-press)] data-[state=checked]:ease-[var(--ease-out-quart)]"
+      >
+        <slot>
+          <Check class="size-3.5" />
+        </slot>
+      </CheckboxIndicator>
+    </span>
   </CheckboxRoot>
 </template>

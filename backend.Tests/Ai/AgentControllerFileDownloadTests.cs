@@ -51,6 +51,70 @@ public class AgentControllerFileDownloadTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DownloadFile_ReusesTicketAndRechecksUserForEveryRequest(bool deactivateBeforeLastRequest)
+    {
+        var originalAiEnabled = Environment.GetEnvironmentVariable("AI_ENABLED");
+        Environment.SetEnvironmentVariable("AI_ENABLED", "true");
+        try
+        {
+            await using var db = TestDbFactory.CreateDb();
+            var (user, store, fileId) = await SeedPrivateFileAsync(db);
+            var storage = new MemoryStorage(System.Text.Encoding.UTF8.GetBytes("0123456789"));
+            var tickets = CreateTicketService();
+            var ticket = tickets.Create(fileId, store.Id, user.Id, DateTimeOffset.UtcNow.AddMinutes(5));
+            var downloads = new AgentFileDownloadService(db, storage, tickets);
+
+            foreach (var (range, expected) in new[] { ("bytes=0-4", "01234"), ("bytes=5-9", "56789") })
+            {
+                var context = new DefaultHttpContext();
+                context.Request.Headers["Range"] = range;
+                context.Response.Body = new MemoryStream();
+                var controller = CreateController(db, context, downloads);
+
+                var result = await controller.DownloadFile(fileId, ticket, default);
+
+                Assert.IsType<EmptyResult>(result);
+                Assert.Equal(StatusCodes.Status206PartialContent, context.Response.StatusCode);
+                Assert.Equal(expected,
+                    System.Text.Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray()));
+            }
+
+            if (deactivateBeforeLastRequest)
+            {
+                user.isActive = false;
+                await db.SaveChangesAsync();
+            }
+            var lastContext = new DefaultHttpContext();
+            lastContext.Response.Body = new MemoryStream();
+            var lastController = CreateController(db, lastContext, downloads);
+
+            var lastResult = await lastController.DownloadFile(fileId, ticket, default);
+
+            if (deactivateBeforeLastRequest)
+            {
+                Assert.IsType<NotFoundResult>(lastResult);
+                Assert.Equal(0, storage.FullStreamCalls);
+                Assert.Equal(0, lastContext.Response.Body.Length);
+            }
+            else
+            {
+                Assert.IsType<EmptyResult>(lastResult);
+                Assert.Equal(1, storage.FullStreamCalls);
+                Assert.Equal("0123456789",
+                    System.Text.Encoding.UTF8.GetString(((MemoryStream)lastContext.Response.Body).ToArray()));
+            }
+            Assert.Equal(2, storage.RangeStreamCalls);
+            Assert.False((await db.files.FindAsync(fileId))!.isPublic);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AI_ENABLED", originalAiEnabled);
+        }
+    }
+
     [Fact]
     public async Task DownloadFile_RejectsExpiredAndCrossStoreTicketsBeforeStorageRead()
     {

@@ -127,6 +127,22 @@ public class AgentFileDownloadServiceTests
         Assert.False(tickets.TryValidate(token + "x", now, out _));
     }
 
+    [Fact]
+    public void RepeatedTicketValidation_DoesNotConsumeOrExtendItsLifetime()
+    {
+        var tickets = CreateTicketService();
+        var issuedAt = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
+        var expiresAt = issuedAt.AddSeconds(AgentFileDownloadTicketService.LifetimeSeconds);
+        var token = tickets.Create(7, 2, 3, expiresAt);
+
+        foreach (var at in new[] { issuedAt, issuedAt, expiresAt.AddSeconds(-1) })
+        {
+            Assert.True(tickets.TryValidate(token, at, out var grant));
+            Assert.Equal(expiresAt, grant.ExpiresAt);
+        }
+        Assert.False(tickets.TryValidate(token, expiresAt, out _));
+    }
+
     [Theory]
     [InlineData("bytes=2-5", 8, 2, 5)]
     [InlineData("bytes=4-", 8, 4, 7)]

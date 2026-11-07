@@ -45,6 +45,7 @@ async function onRetry() {
     <Button
       size="lg"
       :disabled="isChecking"
+      :aria-busy="isChecking"
       @click="onRetry"
     >
       <Spinner v-if="isChecking" size="sm" />
@@ -54,15 +55,5 @@ async function onRetry() {
           : t("pages.unavailablePage.retry")
       }}
     </Button>
-    <p
-      class="text-[0.8125rem] leading-snug tracking-[-0.01em] text-muted-foreground"
-      aria-live="polite"
-    >
-      {{
-        isChecking
-          ? t("pages.unavailablePage.checking")
-          : t("pages.unavailablePage.autoHint")
-      }}
-    </p>
   </ServiceLayout>
 </template>

@@ -43,6 +43,7 @@ const props = defineProps({
 const slots = useSlots();
 const route = useRoute();
 const me = ref(getCachedMe() ?? null);
+const navbarHeight = ref(64);
 
 const showNavCenter = computed(() => {
   if (props.hasNavCenter !== undefined) return props.hasNavCenter;
@@ -89,9 +90,12 @@ onUnmounted(() => {
 
 <template>
   <Page
+    data-slot="app-page"
+    :style="{ '--app-navbar-height': `${navbarHeight}px` }"
     :class="
       cn(
-        fillViewport && '!min-h-0 h-full max-h-full min-w-0 w-full overflow-hidden',
+        fillViewport &&
+          '!min-h-0 h-full max-h-full min-w-0 w-full overflow-hidden',
         showNavCenter && 'has-nav-tools',
         props.class,
       )
@@ -101,6 +105,7 @@ onUnmounted(() => {
       <NavigationBar
         class="w-full min-w-0 bg-background adaptive-padding"
         :has-center="showNavCenter"
+        @resize="navbarHeight = $event"
       >
         <template #left>
           <slot v-if="$slots['nav-left']" name="nav-left" />
@@ -110,11 +115,14 @@ onUnmounted(() => {
             :items="resolvedBreadcrumbs"
           />
         </template>
-        <template v-if="showNavCenter" #center>
+        <template v-if="$slots['nav-center']" #center>
           <slot name="nav-center" />
         </template>
         <template v-if="$slots['nav-right']" #right>
           <slot name="nav-right" />
+        </template>
+        <template v-if="$slots['nav-tabs']" #tabs>
+          <slot name="nav-tabs" />
         </template>
       </NavigationBar>
     </Teleport>
@@ -125,7 +133,10 @@ onUnmounted(() => {
     -->
     <div
       :class="
-        cn('flex min-h-0 min-w-0 flex-1 flex-col', fillViewport && 'overflow-hidden')
+        cn(
+          'flex min-h-0 min-w-0 flex-1 flex-col',
+          fillViewport && 'overflow-hidden',
+        )
       "
     >
       <div

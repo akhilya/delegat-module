@@ -487,7 +487,7 @@ export default {
       </template>
 
       <div class="overflow-x-auto">
-        <Table class="table-fixed">
+        <Table class="min-w-[64rem] table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead class="w-28">{{ $t("common.status") }}</TableHead>
@@ -524,12 +524,13 @@ export default {
                 </Badge>
               </TableCell>
               <TableCell class="max-w-0">
-                <code
-                  class="block truncate rounded bg-muted px-1.5 py-0.5 text-xs"
+                <Badge
+                  variant="outline"
+                  class="max-w-full"
                   :title="model.modelId"
                 >
-                  {{ model.modelId }}
-                </code>
+                  <span class="truncate">{{ model.modelId }}</span>
+                </Badge>
               </TableCell>
               <TableCell class="max-w-0 text-muted-foreground text-sm">
                 <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
@@ -570,6 +571,7 @@ export default {
                   <Button
                     variant="ghost"
                     size="icon"
+                    reveal-on-row-hover
                     class="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     @click="deleteModel(model)"
                   >

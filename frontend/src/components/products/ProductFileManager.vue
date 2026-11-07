@@ -14,6 +14,7 @@ import { useRoute, useRouter } from "vue-router";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { useFileDialog, useDebounceFn } from "@vueuse/core";
 import { Button } from "@/components/ui/button";
+import FileDropOverlay from "@/components/FileDropOverlay.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Input from "@/components/ui/input/Input.vue";
 import {
@@ -231,11 +232,9 @@ const isLoadingMoreFiles = ref(false);
 const hasMoreFiles = ref(false);
 const loadMoreSentinel = ref(null);
 const fileListScrollEl = ref(null);
-const canScrollY = ref(false);
 const FILES_PAGE_SIZE = 50;
 let nextFilesStartIndex = 0;
 let loadMoreObserver = null;
-let fileListResizeObserver = null;
 // Values must match C# FileTagColor enum NAMES (JsonStringEnumConverter)
 const TAG_COLORS = [
   {
@@ -851,15 +850,6 @@ function setupLoadMoreObserver() {
     { root, rootMargin: "120px", threshold: 0 },
   );
   loadMoreObserver.observe(loadMoreSentinel.value);
-}
-
-function checkFileListScroll() {
-  const el = fileListScrollEl.value;
-  if (!el) {
-    canScrollY.value = false;
-    return;
-  }
-  canScrollY.value = el.scrollHeight > el.clientHeight + 8;
 }
 
 function navigateToFolder(folderId) {
@@ -1991,7 +1981,6 @@ onMounted(async () => {
   await loadFiles({ reset: true });
   await nextTick();
   setupLoadMoreObserver();
-  checkFileListScroll();
 });
 
 onUnmounted(() => {
@@ -2000,8 +1989,6 @@ onUnmounted(() => {
     loadMoreObserver.disconnect();
     loadMoreObserver = null;
   }
-  fileListScrollEl.value?.removeEventListener("scroll", checkFileListScroll);
-  fileListResizeObserver?.disconnect();
 });
 
 watch(currentFolderId, () => {
@@ -2014,36 +2001,6 @@ watch(currentFolderId, () => {
 watch(loadMoreSentinel, () => {
   nextTick(() => setupLoadMoreObserver());
 });
-
-watch(
-  fileListScrollEl,
-  (el, oldEl) => {
-    if (oldEl) oldEl.removeEventListener("scroll", checkFileListScroll);
-    fileListResizeObserver?.disconnect();
-    if (el) {
-      el.addEventListener("scroll", checkFileListScroll);
-      fileListResizeObserver = new ResizeObserver(checkFileListScroll);
-      fileListResizeObserver.observe(el);
-      checkFileListScroll();
-    } else {
-      canScrollY.value = false;
-    }
-  },
-  { flush: "post" },
-);
-
-watch(
-  [
-    () => localFiles.value.length,
-    () => folders.value.length,
-    () => pendingUploads.value.length,
-    hasMoreFiles,
-    isLoadingMoreFiles,
-    inlineNewFolder,
-    currentFolderId,
-  ],
-  () => nextTick(checkFileListScroll),
-);
 
 watch(
   () => props.productId,
@@ -2201,6 +2158,8 @@ const selectedFileCount = computed(
     <!-- File list -->
     <div
       ref="fileListScrollEl"
+      data-slot="table-frame"
+      data-table-outline="none"
       class="relative flex min-h-0 flex-1 flex-col overflow-auto"
       @contextmenu="onContextMenu($event, 'area', null)"
       @click.self="clearSelection"
@@ -2210,17 +2169,10 @@ const selectedFileCount = computed(
       @drop="onAreaDrop"
     >
       <!-- External file drop overlay -->
-      <div
-        v-if="externalDragCounter > 0 && dragItems.length === 0"
-        class="absolute inset-3 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/80 pointer-events-none"
-      >
-        <div class="flex flex-col items-center gap-1 text-muted-foreground">
-          <Upload class="size-8" />
-          <p class="text-sm font-medium">
-            {{ t("products.productFileManager.dropFilesToUpload") }}
-          </p>
-        </div>
-      </div>
+      <FileDropOverlay
+        :active="externalDragCounter > 0 && dragItems.length === 0"
+        :title="t('products.productFileManager.dropFilesToUpload')"
+      />
 
       <EmptyState
         v-if="
@@ -2265,21 +2217,15 @@ const selectedFileCount = computed(
         class="w-full"
       >
         <colgroup>
-          <col class="w-10" />
+          <col class="w-16" />
           <col class="w-full" />
           <col class="hidden w-48 sm:table-column" />
           <col />
           <col class="w-36" />
           <col class="w-20" />
-          <col class="w-16" />
+          <col class="w-20" />
         </colgroup>
-        <TableBody
-          :class="
-            canScrollY
-              ? '[&_tr:last-child]:border-0'
-              : '[&_tr:last-child]:!border-b'
-          "
-        >
+        <TableBody>
           <!-- Go up row (..) -->
           <TableRow
             v-if="currentFolderId != null"
@@ -2502,7 +2448,7 @@ const selectedFileCount = computed(
                   <!-- Existing tags list -->
                   <div class="p-1 max-h-48 overflow-y-auto">
                     <div v-for="tag in storeTags" :key="tag.id">
-                      <div :class="MENU_ITEM">
+                      <div data-row-actions :class="MENU_ITEM">
                         <!-- Color dot - click to edit color -->
                         <Button
                           type="button"
@@ -2553,6 +2499,7 @@ const selectedFileCount = computed(
                           type="button"
                           variant="ghost"
                           size="icon"
+                          reveal-on-row-hover
                           class="size-7 min-h-0 shrink-0 text-muted-foreground hover:text-destructive"
                           :aria-label="
                             t('products.productFileManager.deleteTagAria', {
@@ -3052,7 +2999,8 @@ const selectedFileCount = computed(
 
     <!-- Sticky bottom actions -->
     <div
-      class="flex shrink-0 items-center gap-2 border-t bg-background p-3 rounded-b-xl"
+      data-slot="table-actions-footer"
+      class="flex shrink-0 items-center gap-2 bg-background p-3 rounded-b-xl"
     >
       <Button variant="outline" size="sm" @click="startInlineCreate">
         <Plus class="size-4 mr-1" />

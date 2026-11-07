@@ -41,10 +41,15 @@ public class AiConversationController : ControllerBase
             .Where(c => c.storeId == storeId.Value && c.userId == userId.Value)
             .OrderByDescending(c => c.lastMessageAt)
             .Take(30)
-            .Select(c => new { c.sessionId, c.title, c.messageCount, c.lastMessageAt })
+            .Select(c => new { c.sessionId, c.title, c.messageCount, c.lastMessageAt,
+                lastAssistantMeta = c.messages.Where(m => m.role == "assistant")
+                    .OrderByDescending(m => m.createdAt).ThenByDescending(m => m.Id)
+                    .Select(m => m.toolCallsJson).FirstOrDefault() })
             .ToListAsync(ct);
 
-        return Ok(convs);
+        return Ok(convs.Select(c => new { c.sessionId, c.title, c.messageCount, c.lastMessageAt,
+            generating = _liveTurns.IsGenerating(c.sessionId, storeId.Value, userId.Value),
+            stopped = AiConversationTurnStore.HasStoppedTurn(c.lastAssistantMeta) }));
     }
 
     // GET /api/ai/conversations/{sessionId} - load specific conversation
@@ -171,7 +176,7 @@ public class AiConversationController : ControllerBase
                 if (m.DbId is > 0 && byId.TryGetValue(m.DbId.Value, out var row))
                 {
                     row.role = m.Role;
-                    row.content = m.Content;
+                    if (!AiConversationTurnStore.HasStoppedTurn(row.toolCallsJson)) row.content = m.Content;
                     row.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(row.toolCallsJson, m.ToolCallsJson);
                     historyUpdates[row.Id] = m;
                     continue;
@@ -245,7 +250,7 @@ public class AiConversationController : ControllerBase
                 && existing[nextExistingIndex].role == "assistant")
             {
                 var last = existing[nextExistingIndex];
-                last.content = incoming.Content;
+                if (!AiConversationTurnStore.HasStoppedTurn(last.toolCallsJson)) last.content = incoming.Content;
                 last.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
                     last.toolCallsJson, incoming.ToolCallsJson);
                 historyUpdates[last.Id] = incoming;
@@ -305,7 +310,7 @@ public class AiConversationController : ControllerBase
                     // Rebase client display/form metadata on the latest row. PreserveServerPlan
                     // makes the server's current plan and execution flags authoritative.
                     message.role = incoming.Role;
-                    message.content = incoming.Content;
+                    if (!AiConversationTurnStore.HasStoppedTurn(message.toolCallsJson)) message.content = incoming.Content;
                     message.toolCallsJson = AiConversationTurnStore.PreserveServerPlan(
                         message.toolCallsJson, incoming.ToolCallsJson);
                 }

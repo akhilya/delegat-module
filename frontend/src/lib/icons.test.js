@@ -34,6 +34,7 @@ describe("cabinet icons", () => {
 
   it("avoids square-badge glyphs under the large cabinet radius", () => {
     assert.match(builder, /Check:\s*"CheckFilled"/);
+    assert.match(builder, /Save:\s*"CheckFilled"/);
     assert.match(builder, /ExternalLink:\s*"ArrowRightUpFilled"/);
     assert.match(builder, /LayoutGrid:\s*"ClassifyFilled"/);
     assert.match(builder, /Image:\s*"PicFilled"/);

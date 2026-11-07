@@ -276,8 +276,9 @@ public class AgentToolHostTests
         Assert.True(AgentToolResult.IsFailure(result, summary));
         Assert.Contains("nothing was created", summary, StringComparison.OrdinalIgnoreCase);
         var ru = AgentToolResult.FormatPlanOutcome(0, 1, [summary], "ru");
-        Assert.Contains("Не получилось", ru, StringComparison.Ordinal);
-        Assert.Contains("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("Не удалось завершить", ru, StringComparison.Ordinal);
+        Assert.DoesNotContain("ничего не изменилось", ru, StringComparison.Ordinal);
+        Assert.Contains("проверьте результат", ru, StringComparison.Ordinal);
         Assert.DoesNotContain("Plan executed", ru, StringComparison.Ordinal);
         Assert.DoesNotContain("Готово: выполнены все шаги", ru, StringComparison.Ordinal);
     }
@@ -591,6 +592,31 @@ public class AgentToolHostTests
     }
 
     [Fact]
+    public async Task GetDoc_RestoresIndexedSectionHeadings()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        const string path = "docs/guide.md";
+        db.aiKnowledgeChunks.AddRange(
+            new Delegat.Models.Ai.AiKnowledgeChunk
+            {
+                sourcePath = path, title = "Guide", body = "# Guide\n\nIntroduction.",
+            },
+            new Delegat.Models.Ai.AiKnowledgeChunk
+            {
+                sourcePath = path, title = "Conditions", body = "Another attempt is not guaranteed success.",
+            });
+        await db.SaveChangesAsync();
+        var host = CreateHost(db);
+
+        var (result, _) = await host.DispatchAsync(
+            "get_doc", """{"slug":"docs/guide.md"}""", 1, 1, default);
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("# Guide\n\nIntroduction.\n\n## Conditions\n\nAnother attempt is not guaranteed success.",
+            json.RootElement.GetProperty("markdown").GetString());
+    }
+
+    [Fact]
     public async Task SearchActions_FindsExportWithoutWanderingTools()
     {
         await using var db = TestDbFactory.CreateDb();
@@ -603,6 +629,40 @@ public class AgentToolHostTests
         Assert.Contains("export-batch", json, StringComparison.Ordinal);
         Assert.Contains("allMatching", json, StringComparison.Ordinal);
         Assert.Contains("actions", summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchActions_RefreshListings_ReturnsActionAndBodyContract()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var host = CreateHost(db);
+        var (result, _) = await host.DispatchAsync(
+            "search_actions",
+            """{"query":"обновить карточки в магазине","limit":1}""",
+            1, 1, default);
+
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("/products/export-batch", json, StringComparison.Ordinal);
+        Assert.Contains("productIds", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("export-all-prices", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchKnowledge_ReturnsTheMatchingPassageFromStoredChunks()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        db.aiKnowledgeChunks.Add(new AiKnowledgeChunk
+        {
+            sourcePath = "docs/operations.md",
+            title = "Operations",
+            body = new string('a', 1_200) + " The reconciliation checkpoint is mandatory.",
+        });
+        await db.SaveChangesAsync();
+
+        var (result, _) = await CreateHost(db).DispatchAsync(
+            "search_knowledge", """{"query":"reconciliation checkpoint"}""", 1, 1, default);
+
+        Assert.Contains("reconciliation checkpoint is mandatory", JsonSerializer.Serialize(result), StringComparison.Ordinal);
     }
 
     [Fact]

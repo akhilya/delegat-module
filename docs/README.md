@@ -23,6 +23,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 
 - [Capabilities and roadmap](platform/capabilities.md) — feature overview; roadmap items are proposals and require verification
 - [Releasing](platform/releasing.md) — `VERSION`, `CHANGELOG.md`, SemVer, release process
+- [Adapter HTTP log operations](operations/adapter-http-logs.md) — retention policy, performance/root-cause review, deployment verification, and safe space reclamation
 - [SaaS distribution architecture](architecture/saas-architecture.md) — **technical draft**; provisioning and Control Plane product decisions are maintained in the sibling repo
 - [Platform Link](platform/platform-link.md) — instance client notes; Control Plane contract is maintained in the sibling repo
 - [Control Plane stub](architecture/control-plane.md) — pointer only
@@ -39,7 +40,8 @@ If sources disagree, trust verified implementation and its contract tests; updat
 
 - [AI architecture](architecture/ai-system.md)
 - [AI maintenance and prompt/tool contract](architecture/ai-assistant.md)
-- [Assistant quality evaluation](ai/assistant-quality-evaluation.md) — offline fixtures, measurements, and comparison gates
+- [Assistant quality evaluation](ai/assistant-quality-evaluation.md) — offline fixtures, isolated live-model findings, and comparison gates
+- [Assistant production rollout](ai/production-rollout.md) — release, instance-local embeddings, activation checks, and rollback
 - [AI-agent quality and efficiency audit](architecture/ai-agent-audit.md) — snapshot dated 2026-10-28; remaining work is listed in the document
 - [Authentication implementation notes](architecture/authentication.md)
 - [Operator playbook](ai/operator-playbook.md) — indexed operational procedures; keep aligned with API and implementation

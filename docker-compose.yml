@@ -88,6 +88,24 @@ services:
     networks:
       - delegat-network
 
+  # Optional local embedding model for the RAG evaluation pilot (not started by default).
+  ollama:
+    profiles: ["rag"]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: delegat-rag-ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_KEEP_ALIVE: 5m
+    cpus: ${OLLAMA_CPUS:-1.0}
+    mem_limit: ${OLLAMA_MEM_LIMIT:-2g}
+    restart: unless-stopped
+    networks:
+      - delegat-network
+
   # MinIO bucket initialization
   minio-init:
     image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
@@ -117,6 +135,8 @@ volumes:
   # warning and still mounts the existing data. Harmless.
   minio_data:
     name: ${MINIO_VOLUME_NAME:-delegat-minio-data}
+  ollama_data:
+    name: ${OLLAMA_VOLUME_NAME:-delegat-rag-ollama-data}
 
 networks:
   delegat-network:

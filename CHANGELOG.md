@@ -11,6 +11,14 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Product groups support confirmed merging into an explicitly selected target group. Products, ordering, and compatible adapter links are preserved; conflicting marketplace group links block the entire merge without changes. No export is started by merging.
+
+- Bulk edit includes a permission-gated Mappings tab, using the same category-mapping picker as bulk adapter actions. Assigning mappings keeps unsaved product fields and attributes intact and does not start export.
+- Catalog bulk adapter actions can assign category mappings to selected products without exporting. Choose one compatible mapping per local category; products without mappings are explicitly counted and skipped.
+- Assistant chat accepts drag-and-drop file attachments using the same drop target as the file manager. Files stay in the draft until sent; folder drops show a localized hint.
+- Product editing supports Ctrl+S (Cmd+S on macOS), including while typing in fields, with save notifications and protection against duplicate submissions. Browser page saving is suppressed for this shortcut.
+- Categories support confirmed bulk deletion with store-scoped, all-or-nothing validation. Categories containing active products block the whole selection; trashed products remain in the trash.
+- Category and global attribute lists share multi-selection, bulk required/unique/visibility editing, and confirmed deletion. Bulk changes preserve other definition settings and product values; deletion removes the selected definitions and their values atomically.
 - Optional Platform AI for linked instances, using the Control Plane's organization-wide monthly token quota and provider proxy; existing customer-connected (BYOK) models remain independent.
 - Optional sampled Sentry traces for AI turns, with model/tool spans and aggregate usage measurements. Export is disabled without `SENTRY_DSN` and does not include prompts, tool arguments/results, or request data.
 - Cabinet assistant remembers user-stated, non-sensitive preferences and useful facts across chats. Memories are scoped to the user and store, can be searched/saved/forgotten through assistant tools, are injected as untrusted context, and are capped at 40 entries.
@@ -69,9 +77,34 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Assistant attachment picking uses a paperclip icon. The model selector is hidden when only one enabled model is available.
+- AI Model IDs use the shared badge component. Desktop toast notifications stay to the left of the companion buttons and follow their position when sheets open; mobile placement is unchanged.
+- Checkboxes have larger click/touch targets, and table selection columns and outer cells have more breathing room, including headers. Form corners now match the existing buttons; file tables no longer duplicate their parent's outline.
+- Form controls share one consistent corner radius. Empty states use bare icons and shorter copy; the unavailable page keeps only a heading, recovery hint, and retry action.
+- Adapter product tables have stable column widths, roomier rows, readable product names, and horizontal scrolling instead of compressed columns.
+- Save buttons use a simple checkmark instead of a floppy-disk icon. API Keys / Request logs tabs sit in the main navbar, with log filters above the list.
+- Notifications use compact Apple-inspired banners with status icons and an inset dismiss button. API errors no longer dump technical details; server failures show one concise, localized retry-later notification.
+
+- Tools and schedules share one page with navbar tabs; existing schedule links open the Schedules tab. Schedule creation and editing use the standard form dialog, with full-width fields and no nested list cards.
+- Long filter options stay on one truncated line, with full text available on hover. Order overview and mailbox tabs align to the left.
+- Navbar search and product-editor tabs stay centered between equal side tracks, with the same gutters as page content and capped search width. Adapter primary tabs stay in the main navbar; in-page product tools remain left-aligned.
+- Catalog, notes, barcodes, orders, connection products, and log lists share search styling. Filters use standard shadcn-vue dropdown radio items, submenus, and reset instead of a custom popup panel. Navbar tools adapt to available panel width so Help and account actions do not overlap search.
+- All cabinet tables share a thin, rounded outline, including catalog scroll panes, logs, file lists, and assistant SQL results. Sticky headers and scrolling are preserved; separate action footers no longer duplicate the table's bottom border.
+- Groups, categories, and both attribute lists share the groups-style selection layout: Select all inside the list, selected count and actions below it. Row-scoped trash controls throughout lists and tables share desktop-hover/keyboard-focus behavior and remain available on touch.
+- Cabinet assistant keeps file-reported diagnoses separate from the requested marketplace action: a listing refresh uses existing mappings without unrequested edits. Named exports check existing links and reject inconsistent counts or broadened selections; long plan steps remain expandable without filling the confirmation card.
+- Cabinet assistant action search now ranks route names and purpose-built aliases instead of incidental words in API usage notes, making listing refreshes easier to distinguish from price changes and mapping edits.
+- Assistant documentation retrieval now indexes the full text of long sections, shows the passage that matched the search, and retains the last indexed public articles through temporary source outages instead of dropping them. Dated audit snapshots and the offline evaluation protocol are no longer indexed as current operator guidance.
+- Assistant documentation-answer guidance now preserves source conditions and integration scope, separates documented rules from current configuration, and cautions against inferring absent capabilities or guaranteed fallback success.
+- Disabled-Python guidance no longer substitutes current helper availability for documentation questions about permissions. WooCommerce image-transfer documentation clarifies that fallback can fail after a successful product export; neither behavior is a delivery guarantee.
+- Assistant `get_doc` restores identifiable section headings in indexed articles instead of returning headingless fragments; existing size limits and search ranking are unchanged.
+- Ordinary lexical knowledge search and indexed article reads no longer fetch unused embedding JSON from MySQL, reducing retrieval allocations without changing ranking.
+- AI reference docs distinguish the default Viewer role from effective grants and explain that private file-download tickets can be reused before their original expiry; runtime permissions and ticket behavior are unchanged.
+- Add opt-in, local-only hybrid documentation retrieval that stores model-tagged vectors in MySQL and blends semantic and lexical ranking. The default and failure path, including embedding HTTP timeouts, stay lexical; caller cancellation still stops the operation. Ordinary assistant improvements require no embedding service.
+- Production Compose can enable instance-local hybrid documentation retrieval with a private, version-pinned Ollama sidecar, explicit model provisioning, resource limits, and a lexical rollback path. CI/release checks validate the deployment configuration without starting services.
+- Hybrid retrieval reuses one parsed-vector snapshot across requests instead of repeatedly loading every vector; refreshes follow index updates or a one-minute expiry. Query embedding waits are capped at three seconds before lexical fallback.
 - Cabinet assistant ranks exact catalog identities ahead of partial matches, marks incomplete search results, and can answer an exact-SKU field lookup with one grounded read instead of two.
 - Cabinet assistant rejects incomplete action plans before showing a confirmation card, rather than letting the user confirm a plan that cannot execute.
-- Assistant plans group product changes, summarize bulk price adjustments, and keep lengthy item details collapsed until opened.
+- Assistant plans show one status, compact confirmation controls, and numbered steps in execution order, with lengthy details available on demand.
 - Use a migration-only database command timeout (30 minutes by default, configurable with `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`) so large index builds are not interrupted by the regular 120-second query timeout.
 - Ozon's mapping canvas groups price fields and refreshes field metadata without losing saved bindings. Price import falls back to `marketing_seller_price` when `marketing_price` is unavailable.
 - Cabinet assistant asks one clarification when a read-only lookup lacks its product; it does not list the broad catalog or add edit/navigation links unless requested or needed.
@@ -199,6 +232,29 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Exporting from the product editor now saves pending product and image-order changes first, waits for an in-progress save, and stops if saving fails. Full, price, stock, and recreate exports refresh available mappings after saving rather than using stale category data.
+
+- Adapter HTTP logs retain request/response details for 24 hours and at most 5,000 recent records, while keeping searchable summaries for seven days. New payloads are smaller, cleanup runs every ten minutes, and detail previews/downloads avoid loading unnecessary full bodies. The cabinet explains when detailed data is no longer available.
+- Adapter log pagination no longer stops before the last page. New searches and detail selections cancel preceding requests and ignore late responses, preventing stale results, spurious errors, and incorrect loading states.
+
+- Assistant action discovery now prioritizes concrete product fields and translated aliases, including native bulk barcode generation. Plans prefer supported server/bulk operations instead of unnecessary Python preparation; repeated equivalent scalar writes are returned for replanning before confirmation, while distinct values and dependent changes remain separate.
+
+- Barcode assignments now reject duplicates across products and variants within a store, including trash, for cabinet/API edits, imports, transfers, and bulk updates. Concurrent writes are serialized; bulk generation avoids occupied codes. Existing duplicates are not automatically rewritten.
+
+- Assistant catalog pagination no longer stops after a gateway-trimmed terminal page. Python guidance now states the actual list cap and SQL limits. Result review withholds provisional tables until it chooses an answer or correction, and no longer announces task completion merely because a script exited successfully.
+
+- Assistant plan results now receive a separate review grounded in actual execution output. Failed calculations can propose a corrected plan for fresh confirmation, without automatic retries or overwriting the failed plan. New proposals discard speculative result text; failed steps no longer imply that nothing changed.
+- Python instructions now describe the actual SDK methods, result shapes, and pagination instead of leaving the assistant to guess requests-style helpers that do not exist.
+
+- Assistant work remains running when navigating to history, another conversation, or a new chat. History refreshes live activity, and returning to a running conversation reconnects immediately. Explicit Stop is shown on the reply and saved across reloads, including empty replies and interrupted plans, without marking unfinished tools successful.
+
+- Dark mode is applied before first paint, preventing a white flash on reload. Adapter product sync timestamps without a timezone suffix are parsed as UTC, fixing incorrect relative update times in local timezones.
+
+- Numeric form fields use the same dark-theme background as other inputs, including product prices, stock levels, and variants.
+- Floating Documentation, Operations, and AI buttons keep opaque backgrounds on hover and while open in both themes. Companion tooltips appear after 100ms instead of 300ms.
+- Executing an assistant plan no longer restores a cached pending card or offers the same accepted plan again. Confirmation/cancellation target the selected proposal; reconnecting does not duplicate execution details. Interrupted results and unavailable background operations stay unconfirmed rather than appearing successful, and partial completion is distinct from failure.
+
+- Category and global attribute management loads dictionary-free SQL summaries; a category attribute's complete definition loads only when opened. Attribute deletion and bulk flag edits update rows in place without reloading the page or list. Row delete controls appear on desktop hover/keyboard focus and stay visible on touch devices.
 - The product picker on the group edit page scrolls long product lists while keeping search, pagination, and action buttons visible.
 - Category mappings and the field-mapping editor remain available when AI is disabled; loading mappings or local/marketplace categories no longer fails with a controller dependency error.
 - Unified assistant chat chrome and message spacing with quieter user bubbles, a clearer conversation header, accessible message actions, and a composer matching dashboard controls. Enter no longer submits during IME composition.

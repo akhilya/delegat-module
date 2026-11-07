@@ -52,6 +52,9 @@ jobs:
       - name: Validate project documentation standards
         run: npm run check:docs
 
+      - name: Validate AI production configuration
+        run: npm run check:ai-production
+
   build:
     name: Build & Push Images
     runs-on: ubuntu-latest

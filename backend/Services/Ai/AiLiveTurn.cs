@@ -11,6 +11,7 @@ public sealed class AiLiveTurn : IDisposable
     private readonly List<ChannelWriter<string>> _listeners = [];
     private bool _completed;
     private bool _disposed;
+    private bool _stopRequested;
 
     public AiLiveTurn(string sessionId, int storeId, int userId)
     {
@@ -24,6 +25,10 @@ public sealed class AiLiveTurn : IDisposable
     public int StoreId { get; }
     public int UserId { get; }
     public CancellationTokenSource Cts { get; }
+    public bool StopRequested
+    {
+        get { lock (_gate) return _stopRequested; }
+    }
     public bool IsCompleted
     {
         get { lock (_gate) return _completed; }
@@ -68,6 +73,11 @@ public sealed class AiLiveTurn : IDisposable
 
     public void Stop()
     {
+        lock (_gate)
+        {
+            if (_completed) return;
+            _stopRequested = true;
+        }
         try { Cts.Cancel(); }
         catch (ObjectDisposedException) { /* already finished */ }
     }

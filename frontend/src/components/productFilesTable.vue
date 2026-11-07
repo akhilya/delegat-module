@@ -79,7 +79,7 @@ export default {
 </script>
 
 <template>
-  <Table class="border-b">
+  <Table>
     <TableHeader>
       <TableRow>
         <TableHead class="w-12 text-center">#</TableHead>
@@ -119,7 +119,7 @@ export default {
             <AlertDialogTrigger as-child>
               <Button
                 variant="link"
-                class="opacity-0 group-hover:opacity-100 duration-75"
+                reveal-on-row-hover
               >
                 <Trash2 class="size-4" />
                 {{ $t('common.delete') }}

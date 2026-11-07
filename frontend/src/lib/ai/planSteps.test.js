@@ -6,10 +6,25 @@ import {
   planHasContent,
   planHiddenStepCount,
   planStepPresentation,
+  planStepDescriptionNeedsCollapse,
+  planStepPreview,
   planStepsNeedCollapse,
 } from "./planSteps.js";
 
 describe("plan step preview", () => {
+  it("keeps a verbose single export step readable without hiding its full text", () => {
+    const step = {
+      description: `Export 49 Ozon products: ${"Figurine, ".repeat(49)}`,
+    };
+    assert.equal(planStepDescriptionNeedsCollapse(step), true);
+    assert.equal(planStepPreview(step).length <= 111, true);
+    assert.equal(
+      planStepDescriptionNeedsCollapse({
+        description: "Export 49 products to Ozon",
+      }),
+      false,
+    );
+  });
   it("keeps a short plan fully open", () => {
     assert.equal(PLAN_STEP_PREVIEW, 3);
     assert.equal(planStepsNeedCollapse(3), false);
@@ -157,8 +172,8 @@ describe("plan card", () => {
     );
     assert.match(card, /planStepsNeedCollapse/);
     assert.match(card, /Collapsible/);
-    assert.match(card, /planProductDetails/);
-    assert.match(card, /planProductChanges/);
+    assert.match(card, /planStepList\(props\.plan\)/);
+    assert.doesNotMatch(card, /stepPresentation\.value\.otherSteps/);
     assert.match(card, /planShowMore/);
     assert.match(card, /tabular-nums/);
     assert.doesNotMatch(card, /InsetGroupItem/);

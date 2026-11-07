@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
-import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
+import AttributeDefinitionList from "@/components/products/AttributeDefinitionList.vue";
 import {
   Select,
   SelectContent,
@@ -24,10 +24,9 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
-import { Plus, Settings2, Trash2, GripVertical } from "lucide-vue-next";
+import { Plus, Settings2 } from "lucide-vue-next";
 import { PAGE_STORE_ATTRIBUTE_EDIT } from "@/router";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
@@ -37,7 +36,6 @@ import {
   resolveStoreAttributeTypeValue,
   storeAttributeRowCaption,
 } from "@/lib/storeAttributeUi";
-import draggable from "vuedraggable";
 
 export default {
   components: {
@@ -48,8 +46,7 @@ export default {
     Input,
     SettingsFormField,
     FieldGroup,
-    InsetGroup,
-    InsetGroupItem,
+    AttributeDefinitionList,
     Select,
     SelectContent,
     SelectItem,
@@ -63,18 +60,13 @@ export default {
     DialogTrigger,
     DialogFooter,
     DialogClose,
-    ConfirmDialog,
     Plus,
-    Trash2,
-    GripVertical,
-    draggable,
   },
   data() {
     return {
       attributes: [],
       isLoading: false,
       isCreating: false,
-      isDeleting: false,
       isReordering: false,
       showCreateDialog: false,
       newAttributeName: "",
@@ -94,7 +86,6 @@ export default {
     ...mapActions([
       "getAllStoreAttributes",
       "createStoreAttribute",
-      "deleteStoreAttribute",
       "reorderStoreAttributes",
     ]),
 
@@ -112,9 +103,10 @@ export default {
       });
     },
 
-    async fetchAttributes() {
-      this.isLoading = true;
+    async fetchAttributes({ silent = false } = {}) {
+      if (!silent) this.isLoading = true;
       await this.getAllStoreAttributes({
+        summary: true,
         onSuccess: (response) => {
           this.attributes = response.data.value || [];
         },
@@ -208,32 +200,6 @@ export default {
         },
       });
       this.isCreating = false;
-    },
-
-    async handleDeleteAttribute(attributeId) {
-      this.isDeleting = true;
-      await this.deleteStoreAttribute({
-        id: attributeId,
-        onSuccess: (response) => {
-          const deletedCount = response.data?.value?.deletedValuesCount || 0;
-          if (deletedCount > 0) {
-            displaySonnerSuccess(
-              this.$t("pages.storeAttributesPage.toast.deletedWithValues", {
-                count: deletedCount,
-              }),
-            );
-          } else {
-            displaySonnerSuccess(
-              this.$t("pages.storeAttributesPage.toast.deleted"),
-            );
-          }
-          this.fetchAttributes();
-        },
-        onError: (error) => {
-          displaySonnerError(error);
-        },
-      });
-      this.isDeleting = false;
     },
 
     async handleReorder() {
@@ -371,93 +337,14 @@ export default {
           </Button>
         </template>
 
-        <InsetGroup>
-          <draggable
-            v-model="attributes"
-            item-key="id"
-            handle=".drag-handle"
-            ghost-class="opacity-50"
-            class="flex flex-col gap-0.5"
-            tag="div"
-            @end="handleReorder"
-          >
-            <template #item="{ element: attribute }">
-              <div>
-                <InsetGroupItem
-                  show-chevron
-                  @click="openAttribute(attribute.id)"
-                >
-                  <template #leading>
-                    <span
-                      class="drag-handle pointer-events-auto flex size-8 cursor-grab items-center justify-center active:cursor-grabbing"
-                      @click.stop
-                    >
-                      <GripVertical class="size-4 text-muted-foreground/70" />
-                    </span>
-                  </template>
-                  <p class="truncate">
-                    {{ attribute.name }}
-                    <span
-                      v-if="attribute.isRequired"
-                      class="text-destructive"
-                      :title="
-                        $t(
-                          'pages.storeAttributesPage.dialog.requiredFieldLabel',
-                        )
-                      "
-                      >*</span
-                    >
-                    <span
-                      v-if="attribute.isUnique"
-                      class="ml-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-                      :title="
-                        $t('pages.storeAttributesPage.dialog.uniqueFieldLabel')
-                      "
-                      >{{
-                        $t("pages.storeAttributesPage.dialog.uniqueBadge")
-                      }}</span
-                    >
-                  </p>
-                  <p
-                    class="text-muted-foreground mt-0.5 truncate text-xs font-normal"
-                  >
-                    {{ attributeRowCaption(attribute) }}
-                  </p>
-                  <template #trailing>
-                    <ConfirmDialog
-                      :title="
-                        $t('pages.storeAttributesPage.deleteDialog.title')
-                      "
-                      :description="
-                        $t(
-                          'pages.storeAttributesPage.deleteDialog.description',
-                          {
-                            name: attribute.name,
-                          },
-                        )
-                      "
-                      :confirm-label="$t('common.delete')"
-                      :loading="isDeleting"
-                      @confirm="handleDeleteAttribute(attribute.id)"
-                    >
-                      <template #trigger>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          :aria-label="$t('common.delete')"
-                          @click.stop
-                        >
-                          <Trash2 class="size-4" />
-                        </Button>
-                      </template>
-                    </ConfirmDialog>
-                  </template>
-                </InsetGroupItem>
-              </div>
-            </template>
-          </draggable>
-        </InsetGroup>
+        <AttributeDefinitionList
+          v-model="attributes"
+          endpoint="/store-attributes"
+          :caption="attributeRowCaption"
+          :disabled="isReordering"
+          @open="openAttribute($event.id)"
+          @reorder="handleReorder"
+        />
       </PageSection>
     </div>
   </AppPageChrome>

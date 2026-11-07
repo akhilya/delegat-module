@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Delegat.Marketplace.SDK;
 using Delegat.Models.Marketplace;
 using Delegat.Services;
+using Delegat.Infrastructure.Middleware;
 
 namespace Delegat.Services.Marketplace;
 
@@ -70,7 +71,8 @@ public record AdapterHttpLogDetailDto(
     bool ResponseBodyTruncated,
     int ResponseBodyLength,
     string? ErrorMessage,
-    string? OperationId);
+    string? OperationId,
+    bool DetailsAvailable = true);
 
 /// <summary>
 /// Queues adapter HTTP logs and persists them asynchronously. Also implements SDK sink.
@@ -78,10 +80,11 @@ public record AdapterHttpLogDetailDto(
 public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQueryService, IAsyncDisposable
 {
     /// <summary>Preview size returned in detail responses (full body via download endpoint).</summary>
-    public const int MaxPreviewBodyChars = AdapterHttpLogHelper.MaxPreviewBodyChars;
+    public const int MaxPreviewBodyChars = 16 * 1024;
 
     /// <summary>Hard cap for bodies written to the database.</summary>
-    public const int MaxStoredBodyChars = AdapterHttpLogHelper.MaxStoredBodyChars;
+    public const int MaxStoredBodyChars = 64 * 1024;
+    public const int MaxStoredHeadersChars = 16 * 1024;
 
     /// <summary>Backward-compatible alias for <see cref="MaxStoredBodyChars"/>.</summary>
     public const int MaxBodyChars = MaxStoredBodyChars;
@@ -89,6 +92,8 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     public const string TruncationMarker = AdapterHttpLogHelper.TruncationMarker;
 
     public const int DefaultRetentionDays = 7;
+    public const int DefaultDetailRetentionHours = 24;
+    public const int MaxDetailedRowsSafety = 5_000;
     public const int MaxRowsSafety = 200_000;
     private const int CleanupDeleteBatchSize = 500;
 
@@ -219,14 +224,17 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
 
-        var l = await db.adapterHttpLogs.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id && x.storeId == storeId, ct);
-        if (l == null) return null;
+        var cutoff = DateTime.UtcNow.AddHours(-GetDetailRetentionHours());
+        return await ProjectDetails(db.adapterHttpLogs.AsNoTracking()
+            .Where(l => l.Id == id && l.storeId == storeId), cutoff).FirstOrDefaultAsync(ct);
+    }
 
-        var (reqPreview, reqTruncated, reqLen) = PreviewBody(l.requestBody);
-        var (resPreview, resTruncated, resLen) = PreviewBody(l.responseBody);
-
-        return new AdapterHttpLogDetailDto(
+    /// <summary>
+    /// SQL-translatable bounded projection; the caller must scope the input query to its store.
+    /// Expired payloads are hidden even before cleanup runs.
+    /// </summary>
+    public static IQueryable<AdapterHttpLogDetailDto> ProjectDetails(IQueryable<AdapterHttpLog> query, DateTime cutoff) =>
+        query.Select(l => new AdapterHttpLogDetailDto(
             l.Id,
             l.createdAt,
             l.storeId,
@@ -237,29 +245,44 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             l.path,
             l.statusCode,
             l.durationMs,
-            l.requestHeadersJson,
-            reqPreview,
-            reqTruncated,
-            reqLen,
-            l.responseHeadersJson,
-            resPreview,
-            resTruncated,
-            resLen,
+            l.createdAt >= cutoff && l.requestHeadersJson != null
+                ? l.requestHeadersJson.Length > MaxStoredHeadersChars ? l.requestHeadersJson.Substring(0, MaxStoredHeadersChars) : l.requestHeadersJson : null,
+            l.createdAt >= cutoff && l.requestBody != null
+                ? l.requestBody.Length > MaxPreviewBodyChars ? l.requestBody.Substring(0, MaxPreviewBodyChars) + TruncationMarker : l.requestBody : null,
+            l.createdAt >= cutoff && l.requestBody != null &&
+                (l.requestBody.Length > MaxPreviewBodyChars || l.requestBody.EndsWith(TruncationMarker)),
+            l.createdAt >= cutoff && l.requestBody != null ? l.requestBody.Length : 0,
+            l.createdAt >= cutoff && l.responseHeadersJson != null
+                ? l.responseHeadersJson.Length > MaxStoredHeadersChars ? l.responseHeadersJson.Substring(0, MaxStoredHeadersChars) : l.responseHeadersJson : null,
+            l.createdAt >= cutoff && l.responseBody != null
+                ? l.responseBody.Length > MaxPreviewBodyChars ? l.responseBody.Substring(0, MaxPreviewBodyChars) + TruncationMarker : l.responseBody : null,
+            l.createdAt >= cutoff && l.responseBody != null &&
+                (l.responseBody.Length > MaxPreviewBodyChars || l.responseBody.EndsWith(TruncationMarker)),
+            l.createdAt >= cutoff && l.responseBody != null ? l.responseBody.Length : 0,
             l.errorMessage,
-            l.operationId);
-    }
+            l.operationId,
+            l.createdAt >= cutoff && (l.requestBody != null || l.responseBody != null ||
+                l.requestHeadersJson != null || l.responseHeadersJson != null)));
 
     public async Task<string?> GetStoredBodyAsync(int storeId, int id, bool response, CancellationToken ct = default)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
 
+        var cutoff = DateTime.UtcNow.AddHours(-GetDetailRetentionHours());
         var l = await db.adapterHttpLogs.AsNoTracking()
             .Where(x => x.Id == id && x.storeId == storeId)
-            .Select(x => new { x.requestBody, x.responseBody })
+            .Select(x => new
+            {
+                Available = x.createdAt >= cutoff && (x.requestBody != null || x.responseBody != null ||
+                    x.requestHeadersJson != null || x.responseHeadersJson != null),
+                Body = x.createdAt < cutoff ? null : response ? x.responseBody : x.requestBody
+            })
             .FirstOrDefaultAsync(ct);
         if (l == null) return null;
-        return response ? l.responseBody : l.requestBody;
+        if (!l.Available)
+            throw ApiException.NotFound(code: "log_details_unavailable");
+        return l.Body ?? "";
     }
 
     public async Task CleanupAsync(CancellationToken ct = default)
@@ -267,10 +290,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DataContext>();
 
-        var retentionDays = DefaultRetentionDays;
-        var raw = Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS");
-        if (int.TryParse(raw, out var days))
-            retentionDays = Math.Clamp(days, 1, 30);
+        var retentionDays = GetRetentionDays();
 
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var oldDeleted = await DeleteOldestAdapterLogsAsync(db, cutoff, 100_000, ct);
@@ -285,6 +305,77 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
             if (deleted > 0)
                 _logger.LogInformation("Adapter HTTP log safety cap removed {Count} oldest rows", deleted);
         }
+
+        var detailCutoff = DateTime.UtcNow.AddHours(-GetDetailRetentionHours());
+        var compacted = await ClearDetailsAsync(db, WithDetails(db.adapterHttpLogs)
+            .Where(l => l.createdAt < detailCutoff), 100_000, ct);
+
+        // Also bound storage during high-volume imports within the retention window.
+        var boundary = await WithDetails(db.adapterHttpLogs).AsNoTracking()
+            .OrderByDescending(l => l.createdAt).ThenByDescending(l => l.Id)
+            .Skip(MaxDetailedRowsSafety)
+            .Select(l => new { l.createdAt, l.Id }).FirstOrDefaultAsync(ct);
+        if (boundary != null)
+            compacted += await ClearDetailsAsync(db, WithDetails(db.adapterHttpLogs).Where(l =>
+                l.createdAt < boundary.createdAt || l.createdAt == boundary.createdAt && l.Id <= boundary.Id), 100_000, ct);
+        if (compacted > 0)
+            _logger.LogInformation("Adapter HTTP log cleanup cleared payloads from {Count} rows; summaries retained", compacted);
+    }
+
+    private static int GetRetentionDays() =>
+        int.TryParse(Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_RETENTION_DAYS"), out var days)
+            ? Math.Clamp(days, 1, 30) : DefaultRetentionDays;
+
+    private static int GetDetailRetentionHours() =>
+        Math.Min(GetRetentionDays() * 24,
+            int.TryParse(Environment.GetEnvironmentVariable("ADAPTER_HTTP_LOG_DETAIL_RETENTION_HOURS"), out var hours)
+                ? Math.Clamp(hours, 1, 168) : DefaultDetailRetentionHours);
+
+    private static IQueryable<AdapterHttpLog> WithDetails(IQueryable<AdapterHttpLog> query) =>
+        query.Where(l => l.requestBody != null || l.responseBody != null ||
+            l.requestHeadersJson != null || l.responseHeadersJson != null);
+
+    private static async Task<int> ClearDetailsAsync(DataContext db, IQueryable<AdapterHttpLog> query,
+        int maxRows, CancellationToken ct)
+    {
+        var cleared = 0;
+        DateTime? lastCreatedAt = null;
+        var lastId = 0;
+        while (cleared < maxRows)
+        {
+            var batchQuery = query.AsNoTracking();
+            // Compacted summaries remain in the table. Advance past them instead of
+            // rescanning every previously cleared row on each cleanup batch.
+            if (lastCreatedAt.HasValue)
+                batchQuery = batchQuery.Where(l => l.createdAt > lastCreatedAt.Value ||
+                    l.createdAt == lastCreatedAt.Value && l.Id > lastId);
+            var batch = await batchQuery.OrderBy(l => l.createdAt).ThenBy(l => l.Id)
+                .Select(l => new { l.Id, l.createdAt })
+                .Take(Math.Min(CleanupDeleteBatchSize, maxRows - cleared)).ToListAsync(ct);
+            if (batch.Count == 0) break;
+            lastCreatedAt = batch[^1].createdAt;
+            lastId = batch[^1].Id;
+            var ids = batch.Select(l => l.Id).ToList();
+            var rows = db.adapterHttpLogs.Where(l => ids.Contains(l.Id));
+            if (db.Database.IsRelational())
+                cleared += await rows.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(l => l.requestBody, (string?)null)
+                    .SetProperty(l => l.responseBody, (string?)null)
+                    .SetProperty(l => l.requestHeadersJson, (string?)null)
+                    .SetProperty(l => l.responseHeadersJson, (string?)null), ct);
+            else
+            {
+                var entries = await rows.ToListAsync(ct);
+                foreach (var entry in entries)
+                {
+                    entry.requestBody = entry.responseBody = null;
+                    entry.requestHeadersJson = entry.responseHeadersJson = null;
+                }
+                cleared += entries.Count;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        return cleared;
     }
 
     private static async Task<int> DeleteOldestAdapterLogsAsync(
@@ -378,9 +469,9 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         Path = Truncate(e.Path, 1000),
         StatusCode = e.StatusCode,
         DurationMs = e.DurationMs,
-        RequestHeadersJson = e.RequestHeadersJson,
+        RequestHeadersJson = Truncate(e.RequestHeadersJson, MaxStoredHeadersChars),
         RequestBody = TruncateBody(e.RequestBody),
-        ResponseHeadersJson = e.ResponseHeadersJson,
+        ResponseHeadersJson = Truncate(e.ResponseHeadersJson, MaxStoredHeadersChars),
         ResponseBody = TruncateBody(e.ResponseBody),
         ErrorMessage = Truncate(e.ErrorMessage, 2000),
         OperationId = Truncate(e.OperationId, 64)

@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 import PageDockFooter from "@/components/PageDockFooter.vue";
 
-const props = defineProps({
+defineProps({
   class: { type: null, required: false },
   /**
    * Fill the remaining pane and pin the footer. Rows scroll inside.
@@ -27,7 +27,16 @@ const props = defineProps({
       )
     "
   >
-    <div :class="fill ? 'min-h-0 flex-1 overflow-auto' : dockFooter ? 'min-w-0' : 'overflow-x-auto'">
+    <div
+      data-slot="table-frame"
+      :class="
+        fill
+          ? 'min-h-0 flex-1 overflow-auto'
+          : dockFooter
+            ? 'min-w-0'
+            : 'overflow-x-auto'
+      "
+    >
       <slot />
     </div>
     <PageDockFooter v-if="dockFooter && $slots.footer">
@@ -37,7 +46,8 @@ const props = defineProps({
     </PageDockFooter>
     <div
       v-else-if="$slots.footer"
-      class="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-3 py-2 text-sm"
+      data-slot="table-actions-footer"
+      class="flex shrink-0 items-center justify-between gap-3 bg-background px-3 py-2 text-sm"
     >
       <slot name="footer" />
     </div>

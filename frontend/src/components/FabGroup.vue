@@ -47,6 +47,14 @@ function toggleDocs() {
 function floatVariant(open) {
   return open ? "outline" : "default";
 }
+function floatButtonClasses(open) {
+  return [
+    "relative size-12 shrink-0 rounded-full shadow-lg",
+    open
+      ? "bg-background hover:bg-accent dark:bg-background dark:hover:bg-accent"
+      : "bg-primary hover:bg-primary",
+  ];
+}
 function navVariant(open) {
   return open ? "secondary" : "ghost";
 }
@@ -54,21 +62,20 @@ function navVariant(open) {
 
 <template>
   <Teleport v-if="!isNavbar" to="body">
-    <TooltipProvider :delay-duration="300">
+    <TooltipProvider :delay-duration="100">
       <div
         data-fab-group
         class="fixed bottom-6 z-[9996] hidden flex-col-reverse gap-2.5 lg:flex"
         :style="{
           right: `${fabRight}px`,
-          transition:
-            'right var(--duration-overlay) var(--ease-out-quart)',
+          transition: 'right var(--duration-overlay) var(--ease-out-quart)',
         }"
       >
         <Tooltip v-if="aiEnabled">
           <TooltipTrigger as-child>
             <Button
               size="icon"
-              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :class="floatButtonClasses(aiOpen)"
               :variant="floatVariant(aiOpen)"
               :data-companion-open="aiOpen ? '' : undefined"
               :aria-pressed="aiOpen"
@@ -92,7 +99,7 @@ function navVariant(open) {
           <TooltipTrigger as-child>
             <Button
               size="icon"
-              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :class="floatButtonClasses(opsOpen)"
               :variant="floatVariant(opsOpen)"
               :data-companion-open="opsOpen ? '' : undefined"
               :aria-pressed="opsOpen"
@@ -117,7 +124,7 @@ function navVariant(open) {
           <TooltipTrigger as-child>
             <Button
               size="icon"
-              class="relative size-12 shrink-0 rounded-full shadow-lg"
+              :class="floatButtonClasses(docsOpen)"
               :variant="floatVariant(docsOpen)"
               :data-companion-open="docsOpen ? '' : undefined"
               :aria-pressed="docsOpen"
@@ -135,7 +142,7 @@ function navVariant(open) {
     </TooltipProvider>
   </Teleport>
 
-  <TooltipProvider v-else :delay-duration="300">
+  <TooltipProvider v-else :delay-duration="100">
     <div data-fab-group class="flex items-center gap-0.5 lg:hidden">
       <Tooltip>
         <TooltipTrigger as-child>

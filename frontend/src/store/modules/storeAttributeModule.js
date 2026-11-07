@@ -13,9 +13,9 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getAllStoreAttributes(ctx, { onSuccess, onError }) {
+    async getAllStoreAttributes(ctx, { summary = false, onSuccess, onError }) {
       return await useAxios(
-        `/store-attributes`,
+        `/store-attributes${summary ? "/summary" : ""}`,
         { method: "GET", cache: false },
         http,
         {

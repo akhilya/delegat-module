@@ -102,6 +102,41 @@ public class ProductBulkUpdateTests
     }
 
     [Fact]
+    public async Task BulkUpdate_RegeneratesOnlySelectedBarcodesInOneSynchronousRequest()
+    {
+        var (db, data, user, controller, _) = CreateSut();
+        using (db)
+        {
+            var (store, category, a, b) = await SeedTwoProductsAsync(data, user);
+            const string oldBarcode = "2000000000015";
+            const string untouchedBarcode = "2000000000022";
+            a.barcode = oldBarcode;
+            var untouched = data.AddProduct(store.Id, name: "Untouched", categoryId: category.Id);
+            untouched.barcode = untouchedBarcode;
+            await data.SaveAsync();
+            var request = Request([a.Id, b.Id], new ProductController.BulkUpdateFields
+            {
+                barcode = "",
+                generateBarcodes = true,
+            });
+            request.wait = true;
+            var response = Assert.IsType<OkObjectResult>(await controller.BulkUpdateProducts(request));
+            using var document = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(response.Value));
+            Assert.Equal(2, document.RootElement.GetProperty("updatedCount").GetInt32());
+            Assert.Equal(0, document.RootElement.GetProperty("failedCount").GetInt32());
+            Assert.False(document.RootElement.GetProperty("queued").GetBoolean());
+            Assert.True(ProductController.IsValidEanBarcode(a.barcode!));
+            Assert.True(ProductController.IsValidEanBarcode(b.barcode!));
+            Assert.NotEqual(oldBarcode, a.barcode);
+            Assert.NotEqual(a.barcode, b.barcode);
+            Assert.NotEqual(untouchedBarcode, a.barcode);
+            Assert.NotEqual(untouchedBarcode, b.barcode);
+            Assert.Equal(untouchedBarcode, untouched.barcode);
+            Assert.Empty(await db.pendingProductBulkUpdates.ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task BulkUpdate_Enqueue_CreatesPendingJob()
     {
         var (db, data, user, controller, _) = CreateSut();

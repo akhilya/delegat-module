@@ -39,6 +39,8 @@ export function summarizePlanOperations(operationIds, statuses) {
       active: false,
       complete: false,
       failed: false,
+      partial: false,
+      unknown: false,
       progress: null,
     };
   }
@@ -52,19 +54,25 @@ export function summarizePlanOperations(operationIds, statuses) {
   const allKnown = rows.length === ids.length;
   const complete =
     allKnown &&
-    rows.every(
+    rows.every((row) =>
+      OPERATION_TERMINAL_STATUSES.has(String(row.status || "").toLowerCase()),
+    );
+  const unknown =
+    !allKnown ||
+    rows.some(
       (row) =>
-        OPERATION_TERMINAL_STATUSES.has(
+        !OPERATION_TERMINAL_STATUSES.has(
           String(row.status || "").toLowerCase(),
-        ) || row.status === "missing",
+        ) &&
+        !["pending", "running", "paused", "queued"].includes(
+          String(row.status || "").toLowerCase(),
+        ),
     );
-  const failed =
-    complete &&
-    rows.some((row) =>
-      ["failed", "partial", "cancelled"].includes(
-        String(row.status || "").toLowerCase(),
-      ),
-    );
+  const failed = rows.some((row) =>
+    ["failed", "partial", "cancelled"].includes(
+      String(row.status || "").toLowerCase(),
+    ),
+  );
   const progressRows = rows.filter(
     (row) => Number.isFinite(row.totalItems) && row.totalItems > 0,
   );
@@ -83,10 +91,21 @@ export function summarizePlanOperations(operationIds, statuses) {
     : null;
 
   return {
-    tracking: !complete,
-    active: active || !allKnown,
+    tracking:
+      (!complete && !rows.every((row) => row.status === "missing")) ||
+      !allKnown,
+    active,
     complete,
     failed,
+    unknown,
+    partial:
+      failed &&
+      rows.some(
+        (row) =>
+          row.status === "partial" ||
+          row.status === "completed" ||
+          row.completedItems > 0,
+      ),
     progress,
   };
 }

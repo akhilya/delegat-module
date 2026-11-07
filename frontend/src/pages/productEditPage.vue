@@ -89,7 +89,7 @@ import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { mapPool } from "@/lib/runPool";
-import { confirm } from "@/composables/useConfirm";
+import { confirm, isConfirmOverlayActive } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
 import { useStoreDateTime } from "@/composables/useStoreDateTime";
@@ -771,34 +771,61 @@ export default {
       return result === true;
     }
 
-    // Save product (manual save only)
+    let saveInFlight = null;
     async function saveProduct(showSuccessToast = true) {
-      // First validate the main form
-      const formValid = await form.validate();
-      if (!formValid.valid) {
-        return false;
-      }
-
-      syncCategoryAttributesCacheFromForm();
-
-      isSubmitting.value = true;
-
-      const values = form.values;
-      const input = {
-        ...values.product,
-        ...(selectedCategoryId.value != null
-          ? { categoryId: Number(selectedCategoryId.value) }
-          : {}),
-        attributeValues: categoryAttributeCacheToValues(
-          allCategoryAttributeValues.value,
-        ),
-        storeAttributeValues: formRecordToAttributeValues(
-          values.storeAttributes,
-          "storeAttributeId",
-        ),
-      };
-
+      if (saveInFlight) return saveInFlight;
+      saveInFlight = persistProduct(showSuccessToast);
       try {
+        return await saveInFlight;
+      } finally {
+        saveInFlight = null;
+      }
+    }
+
+    async function ensureSavedBeforeExport() {
+      await nextTick();
+      if (isProductLoading.value) return false;
+      if (!hasUnsavedChanges.value && !isSubmitting.value) return true;
+      if (!canManageCatalog.value) return false;
+      return saveProduct(false);
+    }
+
+    async function persistProduct(showSuccessToast = true) {
+      if (isSubmitting.value) return false;
+      isSubmitting.value = true;
+      try {
+        // First validate the main form
+        const formValid = await form.validate();
+        if (!formValid.valid) {
+          displaySonnerError(t("pages.productEditPage.toast.validationFailed"));
+          return false;
+        }
+
+        syncCategoryAttributesCacheFromForm();
+
+        const draftFingerprint = () => JSON.stringify([
+          form.values,
+          selectedCategoryId.value,
+          allCategoryAttributeValues.value,
+          sortedImages.value.map((image) => image.fileId),
+        ]);
+        const savingDraft = draftFingerprint();
+
+        const values = form.values;
+        const input = {
+          ...values.product,
+          ...(selectedCategoryId.value != null
+            ? { categoryId: Number(selectedCategoryId.value) }
+            : {}),
+          attributeValues: categoryAttributeCacheToValues(
+            allCategoryAttributeValues.value,
+          ),
+          storeAttributeValues: formRecordToAttributeValues(
+            values.storeAttributes,
+            "storeAttributeId",
+          ),
+        };
+
         let updateOk = false;
         await store.dispatch("updateProduct", {
           productId: productId.value,
@@ -817,6 +844,13 @@ export default {
 
         const imagesOk = await persistImages();
         if (!imagesOk) return false;
+
+        // Do not replace a newer draft with the saved version or export that older version.
+        if (draftFingerprint() !== savingDraft) {
+          hasUnsavedChanges.value = true;
+          displaySonnerError(t("pages.productEditPage.toast.changedDuringSave"));
+          return false;
+        }
 
         await syncProductAfterSave();
         hasUnsavedChanges.value = false;
@@ -1300,6 +1334,54 @@ export default {
       else if (e.key === "ArrowLeft") prevImage();
     }
 
+    async function handleSaveHotkey(event) {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        !(event.code === "KeyS" || event.key?.toLowerCase() === "s")
+      )
+        return;
+      event.preventDefault();
+      if (
+        event.repeat ||
+        isSubmitting.value ||
+        isProductLoading.value ||
+        isInitialLoad.value ||
+        !productSKU.value ||
+        !canManageCatalog.value ||
+        lightboxIndex.value != null ||
+        isConfirmOverlayActive()
+      )
+        return;
+      if (
+        document.querySelector(
+          '[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"]',
+        ) ||
+        (event.target instanceof Element &&
+          event.target.closest('[data-slot="sheet-content"]'))
+      )
+        return;
+
+      // Reka number fields commit on blur; restore focus after committing the draft.
+      if (
+        event.target instanceof HTMLInputElement &&
+        event.target.getAttribute("role") === "spinbutton"
+      ) {
+        event.target.blur();
+        event.target.focus({ preventScroll: true });
+      }
+      await nextTick();
+      if (isSubmitting.value) return;
+      if (!hasUnsavedChanges.value) {
+        displaySonnerSuccess(t("pages.productEditPage.saveDisabled.noChanges"));
+        return;
+      }
+      await saveProduct(true);
+    }
+
     function onBeforeUnload(e) {
       if (hasUnsavedChanges.value) {
         e.preventDefault();
@@ -1316,6 +1398,7 @@ export default {
 
     onMounted(async () => {
       window.addEventListener("keydown", handleLightboxKeydown);
+      window.addEventListener("keydown", handleSaveHotkey);
       window.addEventListener("beforeunload", onBeforeUnload);
       try {
         const { loadMe } = await import("@/main");
@@ -1327,6 +1410,7 @@ export default {
     });
     onUnmounted(() => {
       window.removeEventListener("keydown", handleLightboxKeydown);
+      window.removeEventListener("keydown", handleSaveHotkey);
       window.removeEventListener("beforeunload", onBeforeUnload);
       store.commit("aiChat/clearPageContext");
       clearTimeout(skuCopiedTimer);
@@ -1379,6 +1463,7 @@ export default {
       productGroup,
       isLoadingGroup,
       hasUnsavedChanges,
+      ensureSavedBeforeExport,
       goToDuplicate,
       fetchProduct,
       showSkuDialog,
@@ -2287,6 +2372,7 @@ export default {
             <div v-show="tab == 'marketplaces'">
               <ProductMarketplaceIntegrations
                 :productId="productId"
+                :before-export="ensureSavedBeforeExport"
                 @product-updated="fetchProduct"
               />
             </div>
@@ -2399,6 +2485,7 @@ export default {
                         <Button
                           type="submit"
                           form="product-edit-form"
+                          aria-keyshortcuts="Control+s Meta+s"
                           :disabled="isSaveDisabled"
                         >
                           <Spinner v-if="isSubmitting" class="mr-2" />

@@ -18,6 +18,7 @@ import {
   ArrowUpFilled,
   ArrowsLeftFilled,
   ArrowsRightFilled,
+  AttachmentFilled,
   BarcodeFilled,
   BillFilled,
   Book2Filled,
@@ -100,7 +101,6 @@ import {
   RoundFilled,
   Rows3Filled,
   RulerFilled,
-  SaveFilled,
   ScrollableListFilled,
   SearchFilled,
   SelectorVerticalFilled,
@@ -248,6 +248,7 @@ export const PackagePlus = createMingCuteIcon(PackageFilled, "PackagePlus");
 export const Paintbrush = createMingCuteIcon(PaintBrushFilled, "Paintbrush");
 export const Palette = createMingCuteIcon(PaletteFilled, "Palette");
 export const PanelLeft = createMingCuteIcon(LayoutLeftbarOpenFilled, "PanelLeft");
+export const Paperclip = createMingCuteIcon(AttachmentFilled, "Paperclip");
 export const Pause = createMingCuteIcon(PauseFilled, "Pause");
 export const Pencil = createMingCuteIcon(PencilFilled, "Pencil");
 export const Play = createMingCuteIcon(PlayFilled, "Play");
@@ -257,7 +258,7 @@ export const Puzzle = createMingCuteIcon(Plugin2Filled, "Puzzle");
 export const RefreshCw = createMingCuteIcon(Refresh1Filled, "RefreshCw");
 export const Rows3 = createMingCuteIcon(Rows3Filled, "Rows3");
 export const Ruler = createMingCuteIcon(RulerFilled, "Ruler");
-export const Save = createMingCuteIcon(SaveFilled, "Save");
+export const Save = createMingCuteIcon(CheckFilled, "Save");
 export const ScrollText = createMingCuteIcon(ScrollableListFilled, "ScrollText");
 export const Search = createMingCuteIcon(SearchRegular, "Search");
 export const SearchCheck = createMingCuteIcon(SearchFilled, "SearchCheck");

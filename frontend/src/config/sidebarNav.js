@@ -10,7 +10,6 @@ import {
   PAGE_STORE_ATTRIBUTES,
   PAGE_ORDERS,
   PAGE_TOOLS,
-  PAGE_SCHEDULED_TASKS,
 } from "@/router";
 import {
   Boxes,
@@ -27,7 +26,6 @@ import {
   Sparkles,
   Activity,
   Wand2,
-  Clock3,
   Globe,
   Settings2,
   ClipboardList,
@@ -295,14 +293,6 @@ const SIDEBAR_GROUPS = [
         type: "link",
         to: PAGE_TOOLS,
         icon: Wand2,
-      },
-      {
-        id: "scheduledTasks",
-        labelKey: "nav.scheduledTasks",
-        type: "link",
-        to: PAGE_SCHEDULED_TASKS,
-        icon: Clock3,
-        visible: (ctx) => can(ctx, PERMS.MarketplaceManage),
       },
       {
         id: "attributes",

@@ -1,5 +1,6 @@
 <script>
-import NavSearchField from "@/components/NavSearchField.vue";
+import PageListToolbar from "@/components/PageListToolbar.vue";
+import SettingsNavbarTools from "@/components/SettingsNavbarTools.vue";
 import {
   Table,
   TableBody,
@@ -9,7 +10,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  LogToolbar,
   LogListPanel,
   LogRefreshButton,
   LogDateCell,
@@ -32,14 +32,14 @@ import { AlertTriangle } from "lucide-vue-next";
 
 export default {
   components: {
-    NavSearchField,
+    PageListToolbar,
+    SettingsNavbarTools,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
-    LogToolbar,
     LogListPanel,
     LogRefreshButton,
     LogDateCell,
@@ -48,12 +48,11 @@ export default {
     ErrorLogDetailSheet,
     LogSelectCheckbox,
     LogSortHeader,
-    AlertTriangle,
   },
   setup() {
     const { timezone, loadMemberships } = useStoreDateTime();
     loadMemberships();
-    return { storeTimezone: timezone };
+    return { storeTimezone: timezone, AlertTriangle };
   },
   data() {
     return {
@@ -97,8 +96,14 @@ export default {
     detailMeta() {
       if (!this.selected) return [];
       return [
-        { label: this.$t("pages.errorLogsPage.metaTime"), value: this.formatLogDate(this.selected.createdAt) },
-        { label: this.$t("pages.errorLogsPage.metaMethod"), value: this.selected.method },
+        {
+          label: this.$t("pages.errorLogsPage.metaTime"),
+          value: this.formatLogDate(this.selected.createdAt),
+        },
+        {
+          label: this.$t("pages.errorLogsPage.metaMethod"),
+          value: this.selected.method,
+        },
         {
           label: this.$t("pages.errorLogsPage.metaUser"),
           value: this.selected.userName || this.selected.userId || "-",
@@ -122,10 +127,16 @@ export default {
       return this.filteredLogs.map((r) => r.id).filter((id) => id != null);
     },
     allPageSelected() {
-      return this.pageIds.length > 0 && this.pageIds.every((id) => this.selectedIds.includes(id));
+      return (
+        this.pageIds.length > 0 &&
+        this.pageIds.every((id) => this.selectedIds.includes(id))
+      );
     },
     somePageSelected() {
-      return !this.allPageSelected && this.pageIds.some((id) => this.selectedIds.includes(id));
+      return (
+        !this.allPageSelected &&
+        this.pageIds.some((id) => this.selectedIds.includes(id))
+      );
     },
   },
   methods: {
@@ -151,7 +162,8 @@ export default {
 
     toggleSelect(id, checked) {
       if (checked === true) {
-        if (!this.selectedIds.includes(id)) this.selectedIds = [...this.selectedIds, id];
+        if (!this.selectedIds.includes(id))
+          this.selectedIds = [...this.selectedIds, id];
       } else {
         this.selectedIds = this.selectedIds.filter((x) => x !== id);
       }
@@ -291,19 +303,18 @@ export default {
 };
 </script>
 
-
 <template>
   <div class="flex flex-col pb-4">
-    <LogToolbar class="mb-3 shrink-0">
-      <NavSearchField
+    <SettingsNavbarTools>
+      <PageListToolbar
         v-model="query"
-        class="w-full min-w-0 sm:max-w-xs"
         :placeholder="$t('pages.errorLogsPage.searchPlaceholder')"
-      />
-      <template #actions>
-        <LogRefreshButton :loading="isLoading" @click="fetchLogs" />
-      </template>
-    </LogToolbar>
+      >
+        <template #actions>
+          <LogRefreshButton compact :loading="isLoading" @click="fetchLogs" />
+        </template>
+      </PageListToolbar>
+    </SettingsNavbarTools>
 
     <LogListPanel
       :loading="isLoading"
@@ -329,7 +340,9 @@ export default {
       @clear-selection="clearSelection"
     >
       <Table :contain="false" class="w-full">
-        <TableHeader class="sticky top-0 z-10 bg-background [&_th]:bg-background">
+        <TableHeader
+          class="sticky top-0 z-10 bg-background [&_th]:bg-background"
+        >
           <TableRow class="hover:bg-transparent">
             <TableHead class="w-10">
               <LogSelectCheckbox
@@ -414,7 +427,10 @@ export default {
               </div>
             </TableCell>
             <TableCell class="overflow-hidden text-sm">
-              <div class="truncate" :title="String(log.userName || log.userId || '')">
+              <div
+                class="truncate"
+                :title="String(log.userName || log.userId || '')"
+              >
                 {{ log.userName || log.userId || "-" }}
               </div>
             </TableCell>

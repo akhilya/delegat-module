@@ -1,7 +1,14 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted } from "vue";
+import {
+  ref,
+  computed,
+  nextTick,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import { useStore } from "vuex";
-import { unrefElement } from "@vueuse/core";
+import { unrefElement, useEventListener } from "@vueuse/core";
 import {
   ArrowDown,
   ArrowUp,
@@ -16,8 +23,9 @@ import {
   ChevronLeft,
   History,
   MessageSquare,
-  Files,
+  Paperclip,
   AlertTriangle,
+  Loader2,
 } from "lucide-vue-next";
 import AiPlanCard from "./AiPlanCard.vue";
 import AiChatProcess from "./AiChatProcess.vue";
@@ -26,6 +34,7 @@ import AiChatForm from "./AiChatForm.vue";
 import OperationContextBubble from "./OperationContextBubble.vue";
 import AiChatAttachmentList from "./AiChatAttachmentList.vue";
 import AiChatEmpty from "./AiChatEmpty.vue";
+import FileDropOverlay from "@/components/FileDropOverlay.vue";
 import { emptyPromptScope, pickEmptyPromptKeys } from "@/lib/ai/emptyPrompts";
 import {
   AlertDialog,
@@ -82,8 +91,11 @@ import { addCalendarDays, calendarDayKey } from "@/utils/dateTime";
 import { useI18n } from "vue-i18n";
 import {
   filesFromDirectoryInput,
+  filesFromDrop,
+  isFileDrag,
   mergeAttachedFiles,
 } from "@/lib/ai/attachments";
+import { displaySonnerError } from "@/store/sonnerHelper";
 import { hasPermission, PERMS } from "@/lib/permissions";
 import { getCachedMe } from "@/lib/meCache";
 import {
@@ -116,6 +128,7 @@ const isAtBottom = ref(true);
 const aiWidthStorageKey = SHEET_WIDTH_STORAGE.ai;
 
 const activeView = ref("chat");
+const fileDragDepth = ref(0);
 
 const conversations = ref([]);
 const convListLoading = ref(false);
@@ -132,6 +145,7 @@ const confirmDeleteDialog = ref({
 
 const isOpen = computed(() => store.state.aiChat.isOpen);
 const isLoading = computed(() => store.state.aiChat.isLoading);
+const isStopping = computed(() => store.state.aiChat.isStopping);
 const attachedFiles = computed(() => store.state.aiChat.attachedFiles || []);
 const attachedCount = computed(() => attachedFiles.value.length);
 const canAttach = computed(() =>
@@ -156,6 +170,7 @@ const lastModelName = computed(
 
 function planErrorText(message) {
   const error = message?.planConfirmationError || message?.requestError;
+  if (error?.stage === "stop") return t("ai.stopFailed");
   const reasonKey = error?.reason
     ? `ai.planConfirmationReasons.${error.reason}`
     : "";
@@ -208,13 +223,21 @@ const hostedAiUsageText = computed(() => {
   const status = hostedAiStatus.value;
   if (!status?.configured || !status?.entitled) return "";
   if (status.usageUnavailable) return t("ai.hostedUsageUnavailable");
-  const used = (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
+  const used =
+    (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
   return t("ai.hostedUsage", {
     used: formatTokenCount(used),
     quota: formatTokenCount(status.quotaTokens),
   });
 });
 const hasEnabledModels = computed(() => enabledModels.value.length > 0);
+const canAddAttachments = computed(
+  () =>
+    activeView.value === "chat" &&
+    canAttach.value &&
+    hasEnabledModels.value &&
+    !isLoading.value,
+);
 const selectedModelId = computed(() => store.state.aiChat.selectedModelId);
 const defaultModel = computed(
   () =>
@@ -288,6 +311,11 @@ function onOpenChange(open) {
 }
 
 function onSheetEscape(event) {
+  if (fileDragDepth.value > 0) {
+    event.preventDefault();
+    resetFileDrag();
+    return;
+  }
   if (activeView.value === "history") {
     event.preventDefault();
     backToChat();
@@ -303,11 +331,11 @@ function onOpenAutoFocus(event) {
 function stopGeneration() {
   store.dispatch("aiChat/stopGeneration");
 }
-function confirmPlan() {
-  store.dispatch("aiChat/confirmPlan");
+function confirmPlan(proposalId) {
+  store.dispatch("aiChat/confirmPlan", proposalId);
 }
-function cancelPlan() {
-  store.dispatch("aiChat/cancelPlan");
+function cancelPlan(proposalId) {
+  store.dispatch("aiChat/cancelPlan", proposalId);
 }
 
 const copiedId = ref(null);
@@ -349,22 +377,45 @@ function sendFeedback(msg, rating) {
   store.dispatch("aiChat/sendFeedback", { dbId: msg.dbId, rating });
 }
 
-async function loadConversations() {
-  convListLoading.value = true;
+let historyTimer;
+let historyGeneration = 0;
+async function loadConversations(generation, quiet = false) {
+  if (!quiet) convListLoading.value = true;
   try {
     const { http } = await import("@/main");
-    const res = await http.get("/ai/conversations");
-    conversations.value = res.data || [];
+    const res = await http.get("/ai/conversations", { cache: false });
+    if (generation === historyGeneration) conversations.value = res.data || [];
   } catch {
-    conversations.value = [];
+    // Keep the last known list during a temporary refresh failure.
   } finally {
-    convListLoading.value = false;
+    if (generation === historyGeneration) {
+      convListLoading.value = false;
+      historyTimer = setTimeout(
+        () => loadConversations(generation, true),
+        2500,
+      );
+    }
   }
 }
 
-async function openHistory() {
+function openHistory() {
   activeView.value = "history";
-  await loadConversations();
+}
+
+watch([activeView, isOpen], ([view, open]) => {
+  clearTimeout(historyTimer);
+  const generation = ++historyGeneration;
+  if (open && view === "history") loadConversations(generation);
+});
+onBeforeUnmount(() => {
+  ++historyGeneration;
+  clearTimeout(historyTimer);
+});
+
+function conversationRunning(conversation) {
+  return conversation.sessionId === sessionId.value
+    ? isLoading.value
+    : conversation.generating;
 }
 
 function backToChat() {
@@ -485,17 +536,65 @@ function onFormSubmit(msg, payload) {
 }
 
 function pickFiles() {
+  if (!canAddAttachments.value) return;
   filesInputEl.value?.click();
 }
 
-function onFilesPicked(e) {
-  const extra = filesFromDirectoryInput(e.target?.files);
+function addAttachments(files) {
+  if (!canAddAttachments.value) return;
+  const extra = filesFromDirectoryInput(files);
+  if (!extra.length) return;
   store.commit(
     "aiChat/setAttachedFiles",
     mergeAttachedFiles(attachedFiles.value, extra),
   );
-  e.target.value = "";
+  nextTick(() => inputDom()?.focus({ preventScroll: true }));
 }
+
+function onFilesPicked(event) {
+  addAttachments(event.target?.files);
+  if (event.target) event.target.value = "";
+}
+
+function resetFileDrag() {
+  fileDragDepth.value = 0;
+}
+
+function onFilesDragEnter(event) {
+  if (!isFileDrag(event.dataTransfer)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (canAddAttachments.value) fileDragDepth.value++;
+}
+
+function onFilesDragOver(event) {
+  if (!isFileDrag(event.dataTransfer)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = canAddAttachments.value ? "copy" : "none";
+}
+
+function onFilesDragLeave() {
+  fileDragDepth.value = Math.max(0, fileDragDepth.value - 1);
+}
+
+function onFilesDrop(event) {
+  resetFileDrag();
+  if (!isFileDrag(event.dataTransfer)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!canAddAttachments.value) return;
+  const { files, hasDirectories } = filesFromDrop(event.dataTransfer);
+  addAttachments(files);
+  if (hasDirectories) displaySonnerError(t("ai.dropFilesOnly"));
+}
+
+useEventListener(window, "dragend", resetFileDrag);
+useEventListener(window, "drop", resetFileDrag);
+useEventListener(window, "blur", resetFileDrag);
+watch([isOpen, canAddAttachments], () => {
+  if (!isOpen.value || !canAddAttachments.value) resetFileDrag();
+});
 
 function clearAttachments() {
   store.commit("aiChat/setAttachedFiles", []);
@@ -563,7 +662,9 @@ watch(isLoading, (loading, wasLoading) => {
 });
 
 function formatTokenCount(value) {
-  return new Intl.NumberFormat(locale.value).format(Math.max(0, Number(value) || 0));
+  return new Intl.NumberFormat(locale.value).format(
+    Math.max(0, Number(value) || 0),
+  );
 }
 
 function onPanelWidth(w) {
@@ -578,6 +679,14 @@ function messageTimeline(msg) {
 
 function hasPlanExec(msg) {
   return Number.isInteger(msg.planExecStart);
+}
+
+function planExecutionTools(msg) {
+  if (!hasPlanExec(msg)) return [];
+  return messageTimeline(msg)
+    .slice(msg.planExecStart)
+    .filter((item) => item.type === "tool" && item.tool)
+    .map((item) => item.tool);
 }
 
 function turnLayout(msg) {
@@ -601,7 +710,11 @@ function executionPart(msg) {
 
 function replyText(msg) {
   const layout = turnLayout(msg);
-  return hasPlanExec(msg) ? layout.execution.reply : layout.proposal.reply;
+  return hasPlanExec(msg)
+    ? layout.execution.reply
+    : msg.plan
+      ? ""
+      : layout.proposal.reply;
 }
 
 function chatForms(msg) {
@@ -654,7 +767,16 @@ function isLatestTurn(msg) {
       @update:width="onPanelWidth"
       @escape-key-down="onSheetEscape"
       @open-auto-focus="onOpenAutoFocus"
+      @dragenter="onFilesDragEnter"
+      @dragover="onFilesDragOver"
+      @dragleave="onFilesDragLeave"
+      @drop="onFilesDrop"
     >
+      <FileDropOverlay
+        :active="fileDragDepth > 0 && canAddAttachments"
+        :title="t('ai.dropFilesTitle')"
+        :description="t('ai.dropFilesHint')"
+      />
       <SheetHeader
         v-if="activeView === 'chat'"
         variant="bar"
@@ -783,7 +905,24 @@ function isLatestTurn(msg) {
                   {{ c.title || t("ai.untitled") }}
                 </p>
                 <p class="mt-0.5 text-xs text-muted-foreground">
-                  {{ c.messageCount }} {{ t("ai.messagesCountSuffix") }}
+                  <span
+                    v-if="conversationRunning(c)"
+                    role="status"
+                    class="inline-flex items-center gap-1.5"
+                  >
+                    <Loader2
+                      class="size-3 motion-safe:animate-spin"
+                      aria-hidden="true"
+                    />
+                    {{ t("ai.assistantWorking") }}
+                  </span>
+                  <span v-else-if="c.stopped" role="status">{{
+                    t("ai.generationStopped")
+                  }}</span>
+                  <span v-else
+                    >{{ c.messageCount }}
+                    {{ t("ai.messagesCountSuffix") }}</span
+                  >
                 </p>
                 <template #trailing>
                   <span class="flex items-center gap-0.5">
@@ -795,6 +934,7 @@ function isLatestTurn(msg) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      reveal-on-row-hover
                       class="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       :title="t('ai.deleteConversationTooltip')"
                       :aria-label="t('ai.deleteConversationTooltip')"
@@ -892,7 +1032,7 @@ function isLatestTurn(msg) {
                   />
 
                   <MarkdownProse
-                    v-if="hasPlanExec(msg) && proposalView(msg).reply"
+                    v-if="msg.plan && proposalView(msg).reply"
                     density="compact"
                     :html="renderAiMarkdown(proposalView(msg).reply)"
                     class="min-w-0 w-full wrap-break-word"
@@ -939,13 +1079,14 @@ function isLatestTurn(msg) {
                       :cancelled="msg.planCancelled"
                       :superseded="msg.planSuperseded"
                       :executed="msg.planExecuted"
+                      :stopped="msg.turnStopped"
                       :failed="msg.planFailed"
                       :confirming="msg.planConfirming"
                       :confirmation-blocked="
                         msg.planConfirmationError?.stage === 'confirmation' &&
                         !msg.planConfirmed
                       "
-                      :tool-calls="msg.toolCalls"
+                      :tool-calls="planExecutionTools(msg)"
                       :ready="msg.done && !isLoading"
                       @confirm="confirmPlan"
                       @cancel="cancelPlan"
@@ -966,6 +1107,30 @@ function isLatestTurn(msg) {
                     class="min-w-0 w-full wrap-break-word"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   />
+
+                  <div
+                    v-if="msg.turnStopped"
+                    role="status"
+                    class="flex w-full items-start gap-2 text-xs leading-relaxed text-muted-foreground"
+                    data-testid="ai-turn-stopped"
+                  >
+                    <Square
+                      class="mt-0.5 size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <p class="font-medium">{{ t("ai.generationStopped") }}</p>
+                      <p>
+                        {{
+                          t(
+                            msg.planConfirmed
+                              ? "ai.planStoppedHint"
+                              : "ai.generationStoppedHint",
+                          )
+                        }}
+                      </p>
+                    </div>
+                  </div>
 
                   <AiChatActions
                     v-if="msg.done && chatActions(msg).length"
@@ -1128,10 +1293,10 @@ function isLatestTurn(msg) {
                 :aria-label="t('ai.attach')"
                 @click="pickFiles"
               >
-                <Files class="size-4" />
+                <Paperclip class="size-4" />
               </InputGroupButton>
               <Select
-                v-if="enabledModels.length"
+                v-if="enabledModels.length > 1"
                 :model-value="effectiveModelId"
                 @update:model-value="
                   (v) => store.commit('aiChat/setSelectedModel', v || null)
@@ -1153,12 +1318,14 @@ function isLatestTurn(msg) {
                     :value="String(m.id)"
                     class="text-xs"
                   >
-                    {{ m.isPlatformHosted ? t("ai.platformModelName") : m.name }}
+                    {{
+                      m.isPlatformHosted ? t("ai.platformModelName") : m.name
+                    }}
                   </SelectItem>
                 </SelectContent>
               </Select>
               <span
-                v-else
+                v-else-if="!enabledModels.length"
                 class="max-w-[min(12rem,45vw)] truncate px-2 text-xs text-muted-foreground select-none"
                 :title="t('ai.noModelsPlaceholder')"
               >
@@ -1171,6 +1338,7 @@ function isLatestTurn(msg) {
               size="icon-sm"
               :title="t('ai.stopGeneration')"
               :aria-label="t('ai.stopGeneration')"
+              :disabled="isStopping"
               @click="stopGeneration"
             >
               <Square class="size-3" />
@@ -1197,7 +1365,11 @@ function isLatestTurn(msg) {
         <p
           v-if="showHostedAiUsage"
           class="px-1 text-[11px] leading-4 tabular-nums"
-          :class="hostedAiStatus.usageUnavailable ? 'text-warning-foreground' : 'text-muted-foreground'"
+          :class="
+            hostedAiStatus.usageUnavailable
+              ? 'text-warning-foreground'
+              : 'text-muted-foreground'
+          "
           aria-live="polite"
         >
           {{ hostedAiUsageText }}

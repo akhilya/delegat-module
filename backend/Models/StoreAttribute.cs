@@ -8,7 +8,7 @@ namespace Delegat.Models;
 /// <summary>
 /// Represents a store-level custom attribute definition that applies to all products in the store.
 /// </summary>
-public class StoreAttribute : IEntity, IMapToDTO<StoreAttribute.AttributeDTO>, IAddable<StoreAttribute.AddForm>, IUpdateable<StoreAttribute.UpdateForm>
+public class StoreAttribute : IEntity, IAttributeDefinitionSettings, IMapToDTO<StoreAttribute.AttributeDTO>, IAddable<StoreAttribute.AddForm>, IUpdateable<StoreAttribute.UpdateForm>
 {
     /// <summary>
     /// Unique attribute identifier.

@@ -26,6 +26,7 @@ const failed = computed(() => {
   return /HTTP\s+[45]\d\d/i.test(props.tool.summary || "");
 });
 const statusLabel = computed(() => {
+  if (props.tool.status === "stopped") return t("ai.generationStopped");
   if (running.value) return t("ai.pythonRunning");
   if (failed.value) {
     return (
@@ -69,7 +70,11 @@ watch(running, (isRunning, was) => {
       >
         {{ statusLabel }}
       </span>
-      <AiRunStatus :running="running" />
+      <AiRunStatus
+        :running="running"
+        :stopped="tool.status === 'stopped'"
+        :failed="failed"
+      />
     </div>
 
     <Collapsible v-if="parts.code">

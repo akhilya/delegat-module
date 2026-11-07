@@ -251,7 +251,7 @@ export interface ProductColumnDef extends ColumnDef<Product> {
 export const columns: ProductColumnDef[] = [
   {
     id: "select",
-    size: 36,
+    size: 80,
     enableHiding: false,
     header: ({ table }) =>
       h(Checkbox, {
@@ -261,14 +261,12 @@ export const columns: ProductColumnDef[] = [
         "onUpdate:modelValue": (value: boolean) =>
           table.toggleAllPageRowsSelected(!!value),
         "aria-label": "Select all",
-        class: "translate-y-0.5 ml-2",
       }),
     cell: ({ row }) =>
       h(Checkbox, {
         modelValue: row.getIsSelected(),
         "onUpdate:modelValue": (value: boolean) => row.toggleSelected(!!value),
         "aria-label": "Select row",
-        class: "translate-y-0.5 ml-2",
       }),
   },
   {
