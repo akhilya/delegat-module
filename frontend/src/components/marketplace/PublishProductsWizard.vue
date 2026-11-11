@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import {
   AlertCircle,
-  Check,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -52,25 +51,6 @@ const emit = defineEmits([
   "cancel",
 ]);
 
-const steps = computed(() => [
-  {
-    id: "categories",
-    label: "marketplace.connectionPage.products.publishWizardCategories",
-  },
-  {
-    id: "products",
-    label: "marketplace.connectionPage.products.publishWizardProducts",
-  },
-  {
-    id: "review",
-    label: "marketplace.connectionPage.products.publishWizardReview",
-  },
-]);
-
-const activeStepIndex = computed(() =>
-  steps.value.findIndex((item) => item.id === props.step),
-);
-
 const blockedProducts = computed(
   () => props.readiness?.products?.filter((product) => !product.isReady) ?? [],
 );
@@ -90,13 +70,8 @@ function isSelected(productId) {
       class="max-h-[min(90dvh,820px)] overflow-hidden p-0 sm:rounded-xl"
     >
       <div class="flex max-h-[min(90dvh,820px)] flex-col">
-        <DialogHeader class="border-b px-6 py-5 pr-12">
-          <p
-            class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          >
-            {{ adapterName }}
-          </p>
-          <DialogTitle class="text-base font-semibold tracking-tight">
+        <DialogHeader variant="bar" class="pr-12">
+          <DialogTitle>
             {{
               $t("marketplace.connectionPage.products.publishWizardTitle", {
                 adapter: adapterName,
@@ -109,42 +84,6 @@ function isSelected(productId) {
             }}
           </DialogDescription>
         </DialogHeader>
-
-        <nav aria-label="Steps" class="border-b bg-muted/30 px-6 py-3">
-          <ol class="grid grid-cols-3 gap-2">
-            <li v-for="(item, index) in steps" :key="item.id" class="min-w-0">
-              <Button
-                variant="ghost"
-                class="h-auto w-full justify-start gap-2 px-2 py-1.5 text-left text-xs font-normal"
-                :class="
-                  index === activeStepIndex
-                    ? 'bg-background font-semibold text-foreground ring-1 ring-border'
-                    : index < activeStepIndex
-                      ? 'text-foreground'
-                      : 'text-muted-foreground'
-                "
-                :aria-current="index === activeStepIndex ? 'step' : undefined"
-                :disabled="index >= activeStepIndex"
-                @click="emit('change-step', item.id)"
-              >
-                <span
-                  class="flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] tabular-nums"
-                  :class="
-                    index < activeStepIndex
-                      ? 'border-foreground bg-foreground text-background'
-                      : index === activeStepIndex
-                        ? 'border-foreground text-foreground'
-                        : 'border-border text-muted-foreground'
-                  "
-                >
-                  <Check v-if="index < activeStepIndex" class="size-3.5" />
-                  <template v-else>{{ index + 1 }}</template>
-                </span>
-                <span class="truncate">{{ $t(item.label) }}</span>
-              </Button>
-            </li>
-          </ol>
-        </nav>
 
         <main class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <section v-if="step === 'categories'" class="space-y-4">
@@ -436,7 +375,7 @@ function isSelected(productId) {
           </p>
         </main>
 
-        <DialogFooter class="border-t bg-muted/20 px-6 py-4 sm:justify-between">
+        <DialogFooter variant="bar" class="sm:justify-between">
           <Button variant="ghost" @click="emit('cancel')">
             {{ $t("common.cancel") }}
           </Button>

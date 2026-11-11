@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from "vue";
 import { DropdownMenuTrigger, useForwardProps } from "reka-ui";
 
 const props = defineProps({
@@ -8,13 +9,13 @@ const props = defineProps({
 });
 
 const forwardedProps = useForwardProps(props);
+const triggerAttrs = computed(() =>
+  props.asChild ? {} : { "data-slot": "dropdown-menu-trigger" },
+);
 </script>
 
 <template>
-  <DropdownMenuTrigger
-    data-slot="dropdown-menu-trigger"
-    v-bind="forwardedProps"
-  >
+  <DropdownMenuTrigger v-bind="{ ...triggerAttrs, ...forwardedProps }">
     <slot />
   </DropdownMenuTrigger>
 </template>

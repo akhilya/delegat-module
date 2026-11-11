@@ -349,7 +349,10 @@ export default {
       const targetProductId = this.productId;
       this.exportPreparation = (async () => {
         try {
-          if ((await this.beforeExport()) !== true || this.productId !== targetProductId)
+          if (
+            (await this.beforeExport()) !== true ||
+            this.productId !== targetProductId
+          )
             return false;
           // Saving may have changed the category and its available mappings.
           return await this.fetchData();
@@ -995,7 +998,9 @@ export default {
       conn = this.currentExportConnection(conn);
       if (!conn) return;
       if (this.beforeExport && !conn.hasMapping) {
-        displaySonnerError(t("productMarketplaceIntegrations.chooseMappingBeforeExport"));
+        displaySonnerError(
+          t("productMarketplaceIntegrations.chooseMappingBeforeExport"),
+        );
         return;
       }
       if (conn.mappingMissing) {
@@ -1171,7 +1176,12 @@ export default {
     },
 
     async submitRecreate() {
-      if (this.isRecreating || !this.recreateConn || !this.recreateNewSku.trim()) return;
+      if (
+        this.isRecreating ||
+        !this.recreateConn ||
+        !this.recreateNewSku.trim()
+      )
+        return;
       if (!(await this.prepareExport())) return;
       if (this.isRecreating) return;
       const current = this.currentExportConnection(this.recreateConn);
@@ -1592,9 +1602,7 @@ export default {
               }}
             </p>
             <template #trailing>
-              <ButtonGroup
-                class="border-0 shadow-none [&_[data-slot=button]]:border-0 [&_[data-slot=button]]:shadow-none"
-              >
+              <ButtonGroup joined>
                 <Button
                   size="sm"
                   @click="runSelectedExportAll"

@@ -36,6 +36,12 @@ for (const width of [1280, 390]) {
             titleKey: "pages.toolsPage.catalogConnectTitle",
             path: "/tools/catalog-connect",
           },
+          {
+            id: "catalog-scrape",
+            mode: "page",
+            titleKey: "pages.toolsPage.catalogScrapeTitle",
+            path: "/tools/catalog-scrape",
+          },
         ];
       else if (path === "/scheduled-tasks/actions")
         body = [{ id: "import-products", name: "Import products" }];
@@ -104,5 +110,10 @@ for (const width of [1280, 390]) {
     await expect(
       page.getByText("Связать каталоги", { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByText("Собрать с витрины", { exact: true }),
+    ).toHaveCount(0);
+    await page.goto("/tools/catalog-scrape");
+    await expect(page).toHaveURL(/\/tools$/);
   });
 }

@@ -88,6 +88,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- The standalone barcode and notes pages are hidden from navigation without removing their routes. Administration is a single, tab-free page with Plan, Summary (instance and per-store usage), Stores, Users, AI, Public API, Logging, and Database backup in sequence; section access remains independent, and previous settings/admin links redirect there. The AI model table opens in a wide dialog. Product barcode previews use a compact, readable scale on a white background in both themes. Help, Operations, and the enabled AI assistant share the navbar; the account menu remains in the sidebar footer. Missing-photo placeholders use the muted surface in both themes.
+- Administration's Stores, Users, and AI sections use the shared inset-group styling, with create, invite, add-model, and personal-settings actions at the bottom of their lists. The Administration sidebar entry keeps its original settings icon.
+- Desktop page gutters are now symmetric; the right side no longer reserves extra space for corner buttons that have moved into the navbar.
+- Assistant chat user messages now use the shared neutral outline surface. Adapter setup and product-publishing dialogs use standard bar-dialog chrome without a top step indicator; split actions in adapter settings, field mapping, and product integrations share one surface, sheen, and press response.
+- Catalog scrape is hidden from the Tools page; its implementation and authenticated API remain available.
 - The product Images tab is now Media and reuses the main gallery for photos, videos, previews, uploads, ordering, and removal. Storage media can be reattached, and product save actions are available in the Media tab.
 - File attribute controls stay compact in product forms; file selection and upload use a searchable, size-bounded popover instead of rendering the product's full file list inline.
 - Assistant attachment picking uses a paperclip icon. The model selector is hidden when only one enabled model is available.
@@ -245,6 +250,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Deleting a shared file tag now retains its selection through confirmation and sends the permanent-delete request.
 - Automatically created marketplace categories use the final breadcrumb title rather than the full path, before name-length limits; both product import category choices and standalone category import targets use shared inset rows while retaining the common attribute/unit normalization pipeline.
 - Photos and videos can be dragged between the Media tab's selected gallery and storage sections, including empty drop targets, without deleting storage files.
 - Clicking empty fields around an expanded product photo closes its preview again; media action buttons use opaque surfaces.

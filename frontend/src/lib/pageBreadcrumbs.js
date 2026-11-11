@@ -29,17 +29,19 @@ const PAGE_TOOL_JOB = "/tools/:toolId";
 const PAGE_SCHEDULED_TASKS = "/tools/scheduled-tasks";
 const PAGE_SETTINGS = "/settings";
 const PAGE_SETTINGS_USER = "/settings/user";
+const PAGE_ADMIN = "/settings/admin";
 const PAGE_ADMIN_STORES = "/settings/admin/stores";
 
 const SETTINGS_CRUMB_KEYS = {
-  [PAGE_SETTINGS]: "nav.overview",
+  [PAGE_SETTINGS]: "nav.administration",
   [PAGE_SETTINGS_USER]: "nav.user",
-  [PAGE_ADMIN_STORES]: "nav.stores",
-  "/settings/admin/users": "nav.users",
+  [PAGE_ADMIN]: "nav.administration",
+  [PAGE_ADMIN_STORES]: "nav.administration",
+  "/settings/admin/users": "nav.administration",
   "/settings/admin/api": "nav.api",
   "/settings/admin/plugins": "nav.plugins",
   "/settings/admin/error-logs": "nav.errorLogs",
-  "/settings/admin/ai": "nav.ai",
+  "/settings/admin/ai": "nav.administration",
   "/settings/adapter-logs": "nav.adapterLogs",
 };
 
@@ -52,28 +54,36 @@ function queryFlag(query, key) {
   return value === "1" || value === 1 || value === true;
 }
 
-function settingsRootPath(canPlatformSettings) {
-  return canPlatformSettings ? PAGE_SETTINGS : PAGE_SETTINGS_USER;
+function settingsRootPath() {
+  return PAGE_ADMIN;
+}
+
+function settingsRootLabel(t) {
+  return t("nav.administration");
 }
 
 function settingsCrumbs(path, { t, detail, canPlatformSettings }) {
-  const settingsRoot = settingsRootPath(canPlatformSettings);
+  const settingsRoot = settingsRootPath();
   if (path === PAGE_SETTINGS) {
-    return [crumb(t("nav.overview"))];
+    return [crumb(t("nav.administration"))];
+  }
+  if (path === PAGE_SETTINGS_USER && !canPlatformSettings) {
+    return [crumb(t("nav.user"))];
   }
 
   const storeDetailPrefix = `${PAGE_ADMIN_STORES}/`;
   if (path.startsWith(storeDetailPrefix)) {
     return [
-      crumb(t("nav.overview"), settingsRoot),
-      crumb(t("nav.stores"), PAGE_ADMIN_STORES),
+      crumb(settingsRootLabel(t), settingsRoot),
       crumb(detail || t("routes.store")),
     ];
   }
 
+  if (path === PAGE_ADMIN) return [crumb(t("nav.administration"))];
+
   const key = SETTINGS_CRUMB_KEYS[path];
-  if (!key) return [crumb(t("nav.overview"))];
-  return [crumb(t("nav.overview"), settingsRoot), crumb(detail || t(key))];
+  if (!key) return [crumb(t("nav.administration"))];
+  return [crumb(settingsRootLabel(t), settingsRoot), crumb(detail || t(key))];
 }
 
 function adaptersCrumb(t) {

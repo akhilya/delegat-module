@@ -72,6 +72,7 @@ describe("docsSlugForPath", () => {
   it("maps settings, AI, and tools", () => {
     assert.equal(docsSlugForPath("/settings"), "workspace/settings");
     assert.equal(docsSlugForPath("/settings/user"), "workspace/settings");
+    assert.equal(docsSlugForPath("/settings/admin"), "workspace/settings");
     assert.equal(docsSlugForPath("/settings/operations"), "workspace/settings");
     assert.equal(docsSlugForPath("/settings/admin/ai"), "workspace/ai");
     assert.equal(docsSlugForPath("/tools"), "workspace/tools");

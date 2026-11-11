@@ -34,6 +34,7 @@ import {
   toolStageClass,
   toolStageLabelKey,
   toolTitle,
+  visibleToolEntries,
 } from "@/lib/toolsCatalog";
 import {
   AlertDialog,
@@ -107,8 +108,11 @@ export default {
     canManageMarketplace() {
       return hasPermission(getCachedMe(), PERMS.MarketplaceManage);
     },
+    visibleTools() {
+      return visibleToolEntries(this.tools);
+    },
     catalogSections() {
-      return groupToolsCatalog(this.tools);
+      return groupToolsCatalog(this.visibleTools);
     },
     confirmTitle() {
       const key = toolConfirmTitleKey(this.confirmEntry);
@@ -257,7 +261,7 @@ export default {
     <div v-show="activeTab === 'tools'" class="flex min-h-0 flex-1 flex-col">
       <EmptyState v-if="loading" loading class="min-h-0 flex-1" />
       <EmptyState
-        v-else-if="tools.length === 0"
+        v-else-if="catalogSections.length === 0"
         :title="$t('pages.toolsPage.emptyTitle')"
         :description="$t('pages.toolsPage.emptyDescription')"
       >

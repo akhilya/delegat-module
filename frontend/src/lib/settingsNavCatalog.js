@@ -3,14 +3,11 @@ import { canAccessPath } from "./routeAccess.js";
 /** Canonical settings destinations. Icons/labels live in `config/settingsNav.js`. */
 export const SETTINGS_NAV_DEFS = [
   { id: "user", path: "/settings/user" },
-  { id: "overview", path: "/settings" },
-  { id: "stores", path: "/settings/admin/stores" },
-  { id: "users", path: "/settings/admin/users" },
+  { id: "admin", path: "/settings/admin" },
   { id: "api", path: "/settings/admin/api" },
   { id: "plugins", path: "/settings/admin/plugins" },
   { id: "logs", path: "/settings/admin/error-logs" },
   { id: "adapter-logs", path: "/settings/adapter-logs" },
-  { id: "ai", path: "/settings/admin/ai" },
 ];
 
 /**

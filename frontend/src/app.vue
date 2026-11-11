@@ -12,7 +12,6 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { computed, defineAsyncComponent, ref, Transition } from "vue";
 import { Button } from "@/components/ui/button";
 import { Monitor } from "lucide-vue-next";
-import FabGroup from "@/components/FabGroup.vue";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { useI18n } from "vue-i18n";
 import { brandName } from "@/brand";
@@ -39,7 +38,6 @@ export default {
     Button,
     Monitor,
     AiChatPanel,
-    FabGroup,
     ConfirmDialogHost,
   },
   setup() {
@@ -186,7 +184,6 @@ export default {
   <template v-if="!isBareLayout">
     <OperationsPanel />
     <AiChatPanel v-if="aiEnabled" :key="appKey" />
-    <FabGroup :ai-enabled="aiEnabled" />
   </template>
 
   <!-- Mobile device warning -->

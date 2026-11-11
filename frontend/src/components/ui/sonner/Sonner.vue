@@ -8,7 +8,7 @@ import { isDark } from "@/theme";
 import { useCompanionSheets } from "@/composables/useCompanionSheets";
 
 const { t } = useI18n();
-const { fabRight } = useCompanionSheets();
+const { toastRight } = useCompanionSheets();
 
 const props = defineProps({
   invert: { type: Boolean, required: false },
@@ -39,7 +39,7 @@ const resolvedTheme = computed(() => {
 });
 
 const toasterStyle = computed(() => ({
-  "--companion-fab-right": `${fabRight.value}px`,
+  "--companion-toast-right": `${toastRight.value}px`,
   "--border-radius": "var(--radius)",
   "--normal-bg": "var(--popover)",
   "--normal-text": "var(--popover-foreground)",

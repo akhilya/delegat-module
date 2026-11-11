@@ -61,10 +61,7 @@ export default {
 </script>
 
 <template>
-  <div
-    v-if="showPhoto"
-    class="bg-secondary relative overflow-hidden rounded-lg"
-  >
+  <div v-if="showPhoto" class="bg-muted/40 relative overflow-hidden rounded-lg">
     <div
       v-if="isLoading"
       class="absolute inset-0 z-10 flex items-center justify-center"
@@ -90,8 +87,8 @@ export default {
     />
     <slot />
   </div>
-  <div v-else class="bg-secondary flex items-center justify-center rounded-lg">
-    <Image class="text-secondary-foreground size-[25%]" aria-hidden="true" />
+  <div v-else class="bg-muted/40 flex items-center justify-center rounded-lg">
+    <Image class="text-muted-foreground size-[25%]" aria-hidden="true" />
     <slot />
   </div>
 </template>

@@ -12,6 +12,21 @@ const button = readFileSync(
   new URL("../components/ui/button/index.js", import.meta.url),
   "utf8",
 );
+const connectionPage = readFileSync(
+  new URL("../pages/marketplace/connectionPage.vue", import.meta.url),
+  "utf8",
+);
+const mappingCanvas = readFileSync(
+  new URL("../components/marketplace/graph/MappingCanvas.vue", import.meta.url),
+  "utf8",
+);
+const productMarketplaceIntegrations = readFileSync(
+  new URL(
+    "../components/products/productMarketplaceIntegrations.vue",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const sheet = readFileSync(
   new URL("../components/ui/sheet/SheetContent.vue", import.meta.url),
   "utf8",
@@ -252,6 +267,29 @@ describe("button lift (Control Plane)", () => {
     assert.match(
       style,
       /\[data-slot="button"\]\[data-variant="ghost"\][\s\S]*background-image:\s*none/,
+    );
+  });
+});
+
+describe("joined split buttons", () => {
+  it("uses the shared joined ButtonGroup for primary actions with dropdowns", () => {
+    for (const source of [
+      connectionPage,
+      mappingCanvas,
+      productMarketplaceIntegrations,
+    ]) {
+      assert.match(
+        source,
+        /<ButtonGroup joined[^>]*>[\s\S]*?<DropdownMenu>[\s\S]*?<\/ButtonGroup>/,
+      );
+    }
+    assert.match(
+      style,
+      /\[data-slot="button-group"\]\[data-interaction="joined"\]:active\s*\{\s*transform: scale\(0\.98\)/,
+    );
+    assert.match(
+      style,
+      /\[data-slot="button-group"\]\[data-interaction="joined"\]\s*\[data-slot="button"\]:active\s*\{\s*scale: 1/,
     );
   });
 });

@@ -2,17 +2,11 @@
 // Page-level toolbar: available panel width decides whether search stacks.
 import { ref } from "vue";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import UserAccountMenu from "@/components/UserAccountMenu.vue";
 import FabGroup from "@/components/FabGroup.vue";
-import { CircleHelp } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import { pageHelpSlug } from "@/lib/docsHelp";
 import { useResizeObserver } from "@vueuse/core";
 
-import { http } from "@/main";
 import { mapActions } from "vuex";
 import { displaySonnerError } from "@/store/sonnerHelper";
-import { normalizeAppVersion, resolveDisplayVersion } from "@/lib/appVersion";
 
 export default {
   emits: ["resize"],
@@ -30,34 +24,15 @@ export default {
   },
   components: {
     SidebarTrigger,
-    UserAccountMenu,
     FabGroup,
-    CircleHelp,
-    Button,
   },
   data() {
     return {
       me: undefined,
-      platformVersion: null,
-      appVersion: import.meta.env.VITE_APP_VERSION || null,
     };
-  },
-  computed: {
-    displayVersion() {
-      return resolveDisplayVersion(this.platformVersion, this.appVersion);
-    },
-    pageHelpSlug() {
-      return pageHelpSlug(this.$route.path, this.$store.state.docs?.catalog);
-    },
   },
   methods: {
     ...mapActions(["getMe"]),
-    openPageHelp() {
-      this.$store.dispatch("docs/openForRoute", {
-        path: this.$route.path,
-        connId: this.$route.params.connId,
-      });
-    },
   },
   async mounted() {
     await this.getMe({
@@ -68,13 +43,6 @@ export default {
         displaySonnerError(error);
       },
     });
-
-    http
-      .get("/health")
-      .then((r) => {
-        this.platformVersion = normalizeAppVersion(r.data?.version);
-      })
-      .catch(() => {});
   },
 };
 </script>
@@ -116,25 +84,7 @@ export default {
         >
           <slot name="right" />
         </div>
-        <Button
-          v-if="pageHelpSlug"
-          variant="ghost"
-          class="navbar-help size-9 shrink-0 gap-1.5 p-0"
-          :title="$t('components.docsSheet.needHelp')"
-          :aria-label="$t('components.docsSheet.needHelp')"
-          @click="openPageHelp"
-        >
-          <CircleHelp class="size-4" />
-          <span class="navbar-help-label hidden">{{
-            $t("components.docsSheet.needHelp")
-          }}</span>
-        </Button>
-        <FabGroup placement="navbar" :ai-enabled="me?.aiEnabled === true" />
-        <UserAccountMenu
-          variant="navbar"
-          :user-name="me?.userName"
-          :version="displayVersion"
-        />
+        <FabGroup :ai-enabled="me?.aiEnabled === true" />
       </div>
     </div>
     <div
@@ -209,17 +159,6 @@ export default {
   .has-center .app-navbar-actions {
     grid-column: 3;
     justify-self: end;
-  }
-}
-
-@container (min-width: 88rem) {
-  .navbar-help {
-    width: auto;
-    padding-inline: 0.75rem;
-  }
-
-  .navbar-help-label {
-    display: inline;
   }
 }
 </style>

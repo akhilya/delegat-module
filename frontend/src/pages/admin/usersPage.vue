@@ -39,7 +39,12 @@ import {
   UserPlus,
   X,
 } from "lucide-vue-next";
-import { ASSIGNABLE_PERMISSIONS, hasPermission, mergeAssignableCatalog, PERMS } from "@/lib/permissions";
+import {
+  ASSIGNABLE_PERMISSIONS,
+  hasPermission,
+  mergeAssignableCatalog,
+  PERMS,
+} from "@/lib/permissions";
 import { isOwnerRoleLocked, isUserAccessRowLocked } from "@/lib/userAccessEdit";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import { newPasswordFieldsIssue } from "@/lib/authValidation";
@@ -587,18 +592,9 @@ export default {
 </script>
 
 <template>
-  <div class="flex w-full max-w-xl flex-col pb-10">
-    <div
-      v-if="!isLoading && users.length > 0"
-      class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2"
-    >
-      <Button @click="openInviteDialog">
-        <UserPlus class="size-4 mr-2" />
-        {{ $t("pages.usersPage.invite.button") }}
-      </Button>
-    </div>
-
+  <div class="flex w-full max-w-xl flex-col gap-3 pb-0">
     <PageSection
+      class="!mb-0 !flex-none"
       :loading="isLoading"
       :empty="loadError || users.length === 0"
       :empty-icon="emptyListIcon"
@@ -617,10 +613,6 @@ export default {
         <Button v-if="loadError" variant="outline" @click="fetchUsers">
           <RefreshCw class="mr-2 size-4" />
           {{ $t("common.retry") }}
-        </Button>
-        <Button v-else @click="openInviteDialog">
-          <UserPlus class="mr-2 size-4" />
-          {{ $t("pages.usersPage.invite.button") }}
         </Button>
       </template>
 
@@ -644,6 +636,13 @@ export default {
         </InsetGroupItem>
       </InsetGroup>
     </PageSection>
+
+    <div v-if="!isLoading && !loadError" class="flex justify-end">
+      <Button @click="openInviteDialog">
+        <UserPlus class="mr-2 size-4" />
+        {{ $t("pages.usersPage.invite.button") }}
+      </Button>
+    </div>
 
     <Dialog :open="isInviteDialogOpen" @update:open="onInviteDialogOpenChange">
       <DialogContent
@@ -1022,7 +1021,11 @@ export default {
               $t("common.cancel")
             }}</Button>
           </DialogClose>
-          <Button type="submit" form="edit-user-form" :disabled="isSavingEdit || Boolean(editPasswordIssue)">
+          <Button
+            type="submit"
+            form="edit-user-form"
+            :disabled="isSavingEdit || Boolean(editPasswordIssue)"
+          >
             <Spinner v-if="isSavingEdit" class="mr-2" />
             <Save v-else class="mr-2 size-4" />
             {{ $t("common.save") }}

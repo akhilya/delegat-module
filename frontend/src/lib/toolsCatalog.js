@@ -21,6 +21,15 @@ export function toolHref(entry) {
   return entry.path || `/tools/${entry.id}`;
 }
 
+const HIDDEN_TOOL_IDS = new Set(["catalog-scrape"]);
+
+/** Keep temporarily disabled tools implemented without exposing them in the hub. */
+export function visibleToolEntries(entries) {
+  return (Array.isArray(entries) ? entries : []).filter(
+    (entry) => entry && !HIDDEN_TOOL_IDS.has(entry.id),
+  );
+}
+
 export function isJobTool(entry) {
   return entry?.mode === "job";
 }

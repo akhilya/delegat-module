@@ -21,7 +21,12 @@ describe("missing product photo placeholder", () => {
     assert.match(imageFile, /onImageError/);
     assert.match(imageFile, /failed: true/);
     assert.match(imageFile, /v-if="showPhoto"/);
-    assert.match(imageFile, /<Image class="text-secondary-foreground size-\[25%\]"/);
+    assert.match(imageFile, /bg-muted\/40/);
+    assert.match(
+      imageFile,
+      /<Image class="text-muted-foreground size-\[25%\]"/,
+    );
+    assert.doesNotMatch(imageFile, /bg-secondary|text-secondary-foreground/);
     assert.match(imageFile, /referrerpolicy="no-referrer"/);
     assert.doesNotMatch(imageFile, /v-if="file"/);
   });
@@ -31,6 +36,9 @@ describe("missing product photo placeholder", () => {
     assert.match(appImage, /failed: true/);
     assert.match(appImage, /v-if="src && !failed"/);
     assert.match(appImage, /<slot v-else>/);
+    assert.match(appImage, /bg-muted\/40/);
+    assert.match(appImage, /text-muted-foreground size-\[25%\]/);
+    assert.doesNotMatch(appImage, /bg-secondary|text-secondary-foreground/);
     assert.match(appImage, /referrerpolicy="no-referrer"/);
   });
 

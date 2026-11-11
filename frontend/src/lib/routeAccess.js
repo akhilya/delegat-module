@@ -2,6 +2,7 @@ import { hasAnyPermission, hasPermission, PERMS } from "./permissions.js";
 
 const PAGE_SETTINGS = "/settings";
 const PAGE_SETTINGS_USER = "/settings/user";
+const PAGE_ADMIN = "/settings/admin";
 const PAGE_ADMIN_STORES = "/settings/admin/stores";
 const PAGE_ADMIN_USERS = "/settings/admin/users";
 const PAGE_ADMIN_API = "/settings/admin/api";
@@ -30,7 +31,6 @@ const PAGE_STORE_STORAGE = "/storage";
  * Missing entry = authenticated members only (no extra gate).
  */
 const ROUTE_PERMISSIONS = {
-  [PAGE_SETTINGS]: [PERMS.SettingsPlatform],
   [PAGE_ADMIN_USERS]: [PERMS.UsersManage],
   [PAGE_ADMIN_API]: [PERMS.ApiAccess],
   [PAGE_ADMIN_PLUGINS]: [PERMS.PluginsManage],
@@ -119,6 +119,15 @@ export function getRequiredPermissionsForPath(path) {
  */
 export function canAccessPath(me, path) {
   const p = normalizeRoutePath(path);
+  if (p === PAGE_SETTINGS) return canAccessPath(me, PAGE_ADMIN);
+  if (p === PAGE_ADMIN) {
+    return (
+      hasPermission(me, PERMS.SettingsPlatform) ||
+      [PAGE_ADMIN_STORES, PAGE_ADMIN_USERS, PAGE_ADMIN_AI].some((sectionPath) =>
+        canAccessPath(me, sectionPath),
+      )
+    );
+  }
   if (p === PAGE_ADMIN_AI && me?.aiEnabled !== true) return false;
   if (p === PAGE_ADMIN_PLUGINS && me?.pluginsEnabled !== true) return false;
   if (p === PAGE_ADMIN_ERROR_LOGS && me?.logErrorsEnabled !== true)
@@ -147,7 +156,7 @@ function canBrowsePathWithWorkspaceView(me, p) {
  * @param {object|null} me
  */
 export function fallbackPathForUser(me) {
-  if (hasPermission(me, PERMS.SettingsPlatform)) return PAGE_SETTINGS;
+  if (hasPermission(me, PERMS.SettingsPlatform)) return PAGE_ADMIN;
   if (
     hasAnyPermission(me, [
       PERMS.StoresCreate,
@@ -155,7 +164,7 @@ export function fallbackPathForUser(me) {
       PERMS.StoreMembersManage,
     ])
   ) {
-    return PAGE_ADMIN_STORES;
+    return PAGE_ADMIN;
   }
   if (
     hasPermission(me, PERMS.CatalogManage) ||

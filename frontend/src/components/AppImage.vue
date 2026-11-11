@@ -112,10 +112,10 @@ function onError(e) {
     </template>
     <slot v-else>
       <div
-        class="bg-secondary flex size-full items-center justify-center"
+        class="bg-muted/40 flex size-full items-center justify-center"
         aria-hidden="true"
       >
-        <Image class="text-secondary-foreground size-[25%]" />
+        <Image class="text-muted-foreground size-[25%]" />
       </div>
     </slot>
   </div>

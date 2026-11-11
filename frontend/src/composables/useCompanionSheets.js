@@ -9,7 +9,7 @@ import {
 import {
   COMPANION_STACK_MIN_WIDTH,
   companionEdgeOffset,
-  companionFabRight,
+  companionToastRight,
 } from "@/lib/companionSheets";
 
 export function companionSnapshotFromState(state) {
@@ -36,10 +36,7 @@ export function companionSnapshotFromState(state) {
       open: !!state.aiChat?.isOpen,
       width:
         Number(state.aiChat?.panelWidth) ||
-        readStoredSheetWidth(
-          SHEET_WIDTH_STORAGE.ai,
-          SHEET_WIDTH_DEFAULTS.ai,
-        ),
+        readStoredSheetWidth(SHEET_WIDTH_STORAGE.ai, SHEET_WIDTH_DEFAULTS.ai),
     },
   };
 }
@@ -53,9 +50,13 @@ export function useCompanionSheets() {
   return {
     snapshot,
     stack,
-    fabRight: computed(() => companionFabRight(snapshot.value, layout.value)),
+    toastRight: computed(() =>
+      companionToastRight(snapshot.value, layout.value),
+    ),
     edgeOffset(id) {
-      return computed(() => companionEdgeOffset(id, snapshot.value, layout.value));
+      return computed(() =>
+        companionEdgeOffset(id, snapshot.value, layout.value),
+      );
     },
   };
 }

@@ -56,10 +56,14 @@ const purgeAtLabel = computed(() => {
 
 const overageHint = computed(() => {
   if (overageActive.value && purgeAtLabel.value) {
-    return t("pages.usagePage.overageWithDeadline", { date: purgeAtLabel.value });
+    return t("pages.usagePage.overageWithDeadline", {
+      date: purgeAtLabel.value,
+    });
   }
   if (purgeAtLabel.value) {
-    return t("pages.usagePage.overageDeadlineOnly", { date: purgeAtLabel.value });
+    return t("pages.usagePage.overageDeadlineOnly", {
+      date: purgeAtLabel.value,
+    });
   }
   return t("pages.usagePage.overageNoDeadline");
 });
@@ -102,7 +106,8 @@ function formatBytes(bytes) {
 function formatCompact(metric, { bytes = false } = {}) {
   if (!metric) return "—";
   const used = bytes ? formatBytes(metric.used) : String(metric.used);
-  if (metric.limit == null) return `${used} · ${t("pages.usagePage.unlimited")}`;
+  if (metric.limit == null)
+    return `${used} · ${t("pages.usagePage.unlimited")}`;
   const limit = bytes ? formatBytes(metric.limit) : String(metric.limit);
   return t("pages.usagePage.usedOfLimitCompact", { used, limit });
 }
@@ -110,7 +115,8 @@ function formatCompact(metric, { bytes = false } = {}) {
 function formatDetail(metric, { bytes = false } = {}) {
   if (!metric) return "—";
   const used = bytes ? formatBytes(metric.used) : String(metric.used);
-  if (metric.limit == null) return `${used} · ${t("pages.usagePage.unlimited")}`;
+  if (metric.limit == null)
+    return `${used} · ${t("pages.usagePage.unlimited")}`;
   const limit = bytes ? formatBytes(metric.limit) : String(metric.limit);
   const remaining = bytes
     ? formatBytes(metric.remaining ?? 0)
@@ -169,12 +175,7 @@ onMounted(load);
 
 <template>
   <div class="flex flex-col gap-8">
-    <EmptyState
-      v-if="isLoading"
-      loading
-      :framed="false"
-      class="min-h-40"
-    />
+    <EmptyState v-if="isLoading" loading :framed="false" class="min-h-40" />
 
     <template v-else-if="snapshot">
       <section>
@@ -188,10 +189,7 @@ onMounted(load);
               </span>
             </template>
           </InsetGroupItem>
-          <InsetGroupItem
-            :disabled="isTrimming"
-            @click="load"
-          >
+          <InsetGroupItem :disabled="isTrimming" @click="load">
             <template #leading>
               <RefreshCw class="size-4" />
             </template>
@@ -219,7 +217,9 @@ onMounted(load);
       </section>
 
       <section>
-        <InsetGroupLabel>{{ $t("pages.usagePage.instanceTotals") }}</InsetGroupLabel>
+        <InsetGroupLabel>{{
+          $t("pages.usagePage.instanceTotals")
+        }}</InsetGroupLabel>
         <InsetGroup>
           <InsetGroupItem
             v-for="row in instanceRows"
@@ -244,18 +244,22 @@ onMounted(load);
             <template #trailing>
               <span
                 class="text-xs font-normal tabular-nums"
-                :class="row.metric?.isOver ? 'text-destructive' : 'text-muted-foreground'"
+                :class="
+                  row.metric?.isOver
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                "
               >
                 {{ formatCompact(row.metric, { bytes: row.bytes }) }}
               </span>
             </template>
           </InsetGroupItem>
-        </InsetGroup>
-      </section>
-
-      <section v-if="snapshot.stores?.length">
-        <InsetGroupLabel>{{ $t("pages.usagePage.perStore") }}</InsetGroupLabel>
-        <InsetGroup>
+          <p
+            v-if="snapshot.stores?.length"
+            class="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground"
+          >
+            {{ $t("pages.usagePage.perStore") }}
+          </p>
           <Collapsible
             v-for="store in snapshot.stores"
             :key="store.storeId"
@@ -289,7 +293,11 @@ onMounted(load);
                   </span>
                   <span
                     class="tabular-nums"
-                    :class="row.metric?.isOver ? 'text-destructive' : 'text-foreground'"
+                    :class="
+                      row.metric?.isOver
+                        ? 'text-destructive'
+                        : 'text-foreground'
+                    "
                   >
                     {{ formatCompact(row.metric, { bytes: row.bytes }) }}
                   </span>
@@ -297,15 +305,14 @@ onMounted(load);
               </div>
             </CollapsibleContent>
           </Collapsible>
-        </InsetGroup>
-      </section>
-
-      <section v-if="previewGroups.length">
-        <InsetGroupLabel>{{ $t("pages.usagePage.previewTitle") }}</InsetGroupLabel>
-        <p class="mb-2 px-1 text-xs leading-relaxed text-muted-foreground">
-          {{ $t("pages.usagePage.previewDescription") }}
-        </p>
-        <InsetGroup>
+          <div v-if="previewGroups.length" class="px-3 pb-1 pt-3">
+            <p class="text-xs font-medium text-muted-foreground">
+              {{ $t("pages.usagePage.previewTitle") }}
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {{ $t("pages.usagePage.previewDescription") }}
+            </p>
+          </div>
           <Collapsible
             v-for="group in previewGroups"
             :key="group.key"

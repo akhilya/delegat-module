@@ -1,8 +1,12 @@
 <script>
 import { Spinner } from "@/components/ui/spinner";
-import PageSection from "@/components/pageSection.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import OperatorMcpConnectPanel from "@/components/settings/OperatorMcpConnectPanel.vue";
+import {
+  InsetGroup,
+  InsetGroupItem,
+  InsetGroupLabel,
+} from "@/components/ui/inset-group";
 import { FieldGroup } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input/Input.vue";
@@ -63,9 +67,11 @@ import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 export default {
   components: {
     Spinner,
-    PageSection,
     SettingsFormField,
     OperatorMcpConnectPanel,
+    InsetGroup,
+    InsetGroupItem,
+    InsetGroupLabel,
     FieldGroup,
     Button,
     Input,
@@ -111,6 +117,7 @@ export default {
     const store = useStore();
     const models = ref([]);
     const isLoading = ref(false);
+    const isModelsDialogOpen = ref(false);
     const isDialogOpen = ref(false);
     const isPersonalSettingsOpen = ref(false);
     const editingModel = ref(null);
@@ -427,6 +434,7 @@ export default {
       Bot,
       models,
       isLoading,
+      isModelsDialogOpen,
       isDialogOpen,
       isPersonalSettingsOpen,
       editingModel,
@@ -434,6 +442,9 @@ export default {
       testingId,
       form,
       openCreate,
+      openModelsDialog: () => {
+        isModelsDialogOpen.value = true;
+      },
       openEdit,
       closeDialog,
       save,
@@ -459,134 +470,196 @@ export default {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-    <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-      <Button variant="outline" @click="openPersonalSettings">
-        <SlidersHorizontal class="mr-2 size-4" />
-        {{ $t("pages.aiModelsPage.personalSettingsButton") }}
-      </Button>
-      <Button @click="openCreate">
-        <Plus class="mr-2 size-4" />
-        {{ $t("pages.aiModelsPage.addModel") }}
-      </Button>
-    </div>
+  <div class="flex w-full max-w-xl flex-col">
+    <section class="space-y-2">
+      <InsetGroupLabel class="mb-0">
+        {{ $t("pages.aiModelsPage.modelsSectionTitle") }}
+      </InsetGroupLabel>
+      <InsetGroup>
+        <InsetGroupItem v-if="isLoading" as="div">
+          <template #leading>
+            <Spinner size="sm" />
+          </template>
+          <p>{{ $t("common.loading") }}</p>
+        </InsetGroupItem>
+        <InsetGroupItem v-else-if="models.length === 0" as="div">
+          <template #leading>
+            <Bot class="size-4" />
+          </template>
+          <p>{{ $t("pages.aiModelsPage.emptyModelsTitle") }}</p>
+          <p class="mt-0.5 text-xs font-normal text-muted-foreground">
+            {{ $t("pages.aiModelsPage.emptyModelsDescription") }}
+          </p>
+        </InsetGroupItem>
+        <template v-else>
+          <InsetGroupItem
+            v-for="model in models"
+            :key="model.id"
+            show-chevron
+            :class="!model.isEnabled ? 'text-muted-foreground' : ''"
+            @click="openEdit(model)"
+          >
+            <template #leading>
+              <Bot class="size-4" />
+            </template>
+            <p class="truncate font-medium">{{ model.name }}</p>
+            <p
+              class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
+            >
+              {{
+                isAnthropic(model.provider) ? "Anthropic" : "OpenAI-compatible"
+              }}
+              · {{ model.modelId }}
+            </p>
+            <template v-if="model.isDefault" #trailing>
+              <Badge variant="secondary">
+                {{ $t("pages.aiModelsPage.defaultModelLabel") }}
+              </Badge>
+            </template>
+          </InsetGroupItem>
+          <InsetGroupItem show-chevron @click="openModelsDialog">
+            <template #leading>
+              <SlidersHorizontal class="size-4" />
+            </template>
+            <p>{{ $t("pages.aiModelsPage.manageModelsButton") }}</p>
+          </InsetGroupItem>
+        </template>
+      </InsetGroup>
 
-    <PageSection
-      class="!flex-none"
-      :loading="isLoading"
-      :empty="!isLoading && models.length === 0"
-      :empty-icon="Bot"
-      :empty-title="$t('pages.aiModelsPage.emptyModelsTitle')"
-      :empty-description="$t('pages.aiModelsPage.emptyModelsDescription')"
-    >
-      <template #empty-action>
-        <Button class="mt-2" @click="openCreate">
+      <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+        <Button variant="outline" @click="openPersonalSettings">
+          <SlidersHorizontal class="mr-2 size-4" />
+          {{ $t("pages.aiModelsPage.personalSettingsButton") }}
+        </Button>
+        <Button @click="openCreate">
           <Plus class="mr-2 size-4" />
           {{ $t("pages.aiModelsPage.addModel") }}
         </Button>
-      </template>
-
-      <div class="overflow-x-auto">
-        <Table class="min-w-[64rem] table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-28">{{ $t("common.status") }}</TableHead>
-              <TableHead class="w-[18%]">{{ $t("common.name") }}</TableHead>
-              <TableHead class="w-36">{{
-                $t("pages.aiModelsPage.providerLabel")
-              }}</TableHead>
-              <TableHead class="w-[18%]">Model ID</TableHead>
-              <TableHead>API URL</TableHead>
-              <TableHead class="w-36"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="model in models" :key="model.id">
-              <TableCell>
-                <Switch
-                  :model-value="model.isEnabled"
-                  class="scale-[0.8]"
-                  @update:model-value="(v) => setModelEnabled(model, v)"
-                />
-              </TableCell>
-              <TableCell class="max-w-0">
-                <div class="truncate font-medium" :title="model.name">
-                  {{ model.name }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">
-                  {{
-                    isAnthropic(model.provider)
-                      ? "Anthropic"
-                      : "OpenAI-compatible"
-                  }}
-                </Badge>
-              </TableCell>
-              <TableCell class="max-w-0">
-                <Badge
-                  variant="outline"
-                  class="max-w-full"
-                  :title="model.modelId"
-                >
-                  <span class="truncate">{{ model.modelId }}</span>
-                </Badge>
-              </TableCell>
-              <TableCell class="max-w-0 text-muted-foreground text-sm">
-                <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                  <span class="truncate" :title="model.apiUrl">{{
-                    model.apiUrl
-                  }}</span>
-                  <Network
-                    v-if="model.proxyUrl"
-                    class="size-3 shrink-0 text-primary/70"
-                    :title="
-                      $t('pages.aiModelsPage.proxyTitle', {
-                        url: model.proxyUrl,
-                      })
-                    "
-                  />
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    :disabled="testingId === model.id"
-                    @click="testModel(model)"
-                  >
-                    <Spinner
-                      v-if="testingId === model.id"
-                      size="xs"
-                      class="mr-1"
-                    />
-                    <Zap v-else class="mr-1 size-3" />
-                    {{ $t("pages.aiModelsPage.testButton") }}
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="openEdit(model)">
-                    <Pencil class="size-4" />
-                    <span class="sr-only">{{ $t("common.edit") }}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    reveal-on-row-hover
-                    class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    @click="deleteModel(model)"
-                  >
-                    <Trash2 class="size-4" />
-                    <span class="sr-only">{{ $t("common.delete") }}</span>
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
       </div>
-    </PageSection>
+    </section>
 
     <OperatorMcpConnectPanel class="mt-8" />
+
+    <Dialog v-model:open="isModelsDialogOpen">
+      <DialogContent
+        size="6xl"
+        class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader variant="bar">
+          <DialogTitle>{{
+            $t("pages.aiModelsPage.modelsSectionTitle")
+          }}</DialogTitle>
+          <DialogDescription>
+            {{ $t("pages.aiModelsPage.modelsSectionDescription") }}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+          <Table class="min-w-[64rem] table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-28">{{ $t("common.status") }}</TableHead>
+                <TableHead class="w-[18%]">{{ $t("common.name") }}</TableHead>
+                <TableHead class="w-36">{{
+                  $t("pages.aiModelsPage.providerLabel")
+                }}</TableHead>
+                <TableHead class="w-[18%]">Model ID</TableHead>
+                <TableHead>API URL</TableHead>
+                <TableHead class="w-36"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="model in models" :key="model.id">
+                <TableCell>
+                  <Switch
+                    :model-value="model.isEnabled"
+                    class="scale-[0.8]"
+                    @update:model-value="(v) => setModelEnabled(model, v)"
+                  />
+                </TableCell>
+                <TableCell class="max-w-0">
+                  <div class="truncate font-medium" :title="model.name">
+                    {{ model.name }}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">
+                    {{
+                      isAnthropic(model.provider)
+                        ? "Anthropic"
+                        : "OpenAI-compatible"
+                    }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="max-w-0">
+                  <Badge
+                    variant="outline"
+                    class="max-w-full"
+                    :title="model.modelId"
+                  >
+                    <span class="truncate">{{ model.modelId }}</span>
+                  </Badge>
+                </TableCell>
+                <TableCell class="max-w-0 text-muted-foreground text-sm">
+                  <div
+                    class="flex min-w-0 items-center gap-1.5 overflow-hidden"
+                  >
+                    <span class="truncate" :title="model.apiUrl">{{
+                      model.apiUrl
+                    }}</span>
+                    <Network
+                      v-if="model.proxyUrl"
+                      class="size-3 shrink-0 text-primary/70"
+                      :title="
+                        $t('pages.aiModelsPage.proxyTitle', {
+                          url: model.proxyUrl,
+                        })
+                      "
+                    />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      :disabled="testingId === model.id"
+                      @click="testModel(model)"
+                    >
+                      <Spinner
+                        v-if="testingId === model.id"
+                        size="xs"
+                        class="mr-1"
+                      />
+                      <Zap v-else class="mr-1 size-3" />
+                      {{ $t("pages.aiModelsPage.testButton") }}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      @click="openEdit(model)"
+                    >
+                      <Pencil class="size-4" />
+                      <span class="sr-only">{{ $t("common.edit") }}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      reveal-on-row-hover
+                      class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      @click="deleteModel(model)"
+                    >
+                      <Trash2 class="size-4" />
+                      <span class="sr-only">{{ $t("common.delete") }}</span>
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <AlertDialog
       :open="confirmDialog.open"

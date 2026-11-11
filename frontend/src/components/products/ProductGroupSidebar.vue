@@ -136,7 +136,9 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
   <div
     ref="rootRef"
     class="product-group-sidebar hidden lg:flex shrink-0 flex-col self-start overflow-hidden rounded-xl border bg-card text-card-foreground sticky top-0 h-[var(--app-fill-pane-height)]"
-    :class="compact ? 'product-group-sidebar--compact' : 'product-group-sidebar--full'"
+    :class="
+      compact ? 'product-group-sidebar--compact' : 'product-group-sidebar--full'
+    "
     :data-compact="compact ? '' : undefined"
   >
     <div
@@ -209,7 +211,9 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                                 : 'hover:bg-accent/50',
                             ]
                       "
-                      v-bind="member.isCurrent ? { 'data-current-member': '' } : {}"
+                      v-bind="
+                        member.isCurrent ? { 'data-current-member': '' } : {}
+                      "
                       :aria-label="memberLabel(member)"
                       :aria-current="member.isCurrent ? 'page' : undefined"
                     >
@@ -227,13 +231,13 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                           :class="[
                             'size-14 shrink-0 rounded-md',
                             !memberThumbSrc(member)
-                              ? 'bg-secondary flex items-center justify-center'
+                              ? 'bg-muted/40 flex items-center justify-center'
                               : 'bg-muted',
                           ]"
                           img-class="relative z-10 size-full object-contain"
                         >
                           <Image
-                            class="text-secondary-foreground size-[25%]"
+                            class="text-muted-foreground size-[25%]"
                             aria-hidden="true"
                           />
                         </AppImage>
@@ -247,13 +251,13 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                         :class="[
                           'size-full shrink-0 rounded-lg',
                           !memberThumbSrc(member)
-                            ? 'bg-secondary flex items-center justify-center'
+                            ? 'bg-muted/40 flex items-center justify-center'
                             : 'bg-muted',
                         ]"
                         img-class="relative z-10 size-full object-contain"
                       >
                         <Image
-                          class="text-secondary-foreground size-[25%]"
+                          class="text-muted-foreground size-[25%]"
                           aria-hidden="true"
                         />
                       </AppImage>
@@ -294,7 +298,9 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
                         img-class="max-h-64 max-w-64 rounded-sm object-contain"
                       />
                       <div
-                        :class="memberPreviewSrc(member) ? 'px-0.5 pb-0.5' : undefined"
+                        :class="
+                          memberPreviewSrc(member) ? 'px-0.5 pb-0.5' : undefined
+                        "
                       >
                         <p class="font-medium">
                           {{ member.productName || member.productSku }}
@@ -314,7 +320,9 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
             <ContextMenuContent v-if="getDuplicateUrl" class="w-56">
               <ContextMenuLabel class="min-w-0 overflow-hidden font-normal">
                 <div class="flex min-w-0 flex-col gap-0.5">
-                  <span class="block truncate text-sm font-medium text-foreground">
+                  <span
+                    class="block truncate text-sm font-medium text-foreground"
+                  >
                     {{ member.productName || member.productSku }}
                   </span>
                   <span
@@ -327,7 +335,9 @@ defineExpose({ scrollCurrentIntoView, scrollRef, compact });
               </ContextMenuLabel>
               <ContextMenuSeparator />
               <ContextMenuGroup>
-                <ContextMenuItem @click="$router.push(getDuplicateUrl(member.productId))">
+                <ContextMenuItem
+                  @click="$router.push(getDuplicateUrl(member.productId))"
+                >
                   <Copy />
                   {{ t("products.productGroupSidebar.duplicate") }}
                 </ContextMenuItem>

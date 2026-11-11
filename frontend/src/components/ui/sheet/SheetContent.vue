@@ -134,7 +134,7 @@ function isPortaledOverlayTarget(target) {
     target.closest("[data-slot='alert-dialog-overlay']") ||
     target.closest("[data-slot='dialog-content']") ||
     target.closest("[data-slot='sheet-content']") ||
-    target.closest("[data-fab-group]") ||
+    target.closest("[data-companion-actions]") ||
     target.closest("[data-reka-popper-content-wrapper]"),
   );
 }

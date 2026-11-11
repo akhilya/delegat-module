@@ -23,9 +23,15 @@ import {
 } from "lucide-vue-next";
 import { t } from "@/i18n";
 
+const props = defineProps({
+  includeQuota: { type: Boolean, default: true },
+});
+
 const isDumping = ref(false);
 const me = ref(null);
-const canDownloadDump = computed(() => hasPermission(me.value, PERMS.SettingsDump));
+const canDownloadDump = computed(() =>
+  hasPermission(me.value, PERMS.SettingsDump),
+);
 const loggingLoading = ref(true);
 const loggingSaving = ref(false);
 const publicApiLoading = ref(true);
@@ -58,26 +64,26 @@ const apiUsageEnabled = ref(true);
 
 const loggingDirty = computed(
   () =>
-    logging.logErrorsEnabled !== savedLogging.logErrorsEnabled
-    || logging.logApiRequestsEnabled !== savedLogging.logApiRequestsEnabled
-    || logging.logAdapterHttpEnabled !== savedLogging.logAdapterHttpEnabled,
+    logging.logErrorsEnabled !== savedLogging.logErrorsEnabled ||
+    logging.logApiRequestsEnabled !== savedLogging.logApiRequestsEnabled ||
+    logging.logAdapterHttpEnabled !== savedLogging.logAdapterHttpEnabled,
 );
 
 const publicApiLocked = computed(() => apiUsageEnabled.value === false);
 
 const publicApiDirty = computed(
   () =>
-    !publicApiLocked.value
-    && publicApi.publicApiEnabled !== savedPublicApi.publicApiEnabled,
+    !publicApiLocked.value &&
+    publicApi.publicApiEnabled !== savedPublicApi.publicApiEnabled,
 );
 
 const apiLoggingDisabled = computed(
   () =>
-    loggingLoading.value
-    || loggingSaving.value
-    || publicApiLoading.value
-    || publicApiLocked.value
-    || !publicApi.publicApiEnabled,
+    loggingLoading.value ||
+    loggingSaving.value ||
+    publicApiLoading.value ||
+    publicApiLocked.value ||
+    !publicApi.publicApiEnabled,
 );
 
 watch(
@@ -213,7 +219,9 @@ async function saveLoggingSettings() {
         : false,
       logAdapterHttpEnabled: logging.logAdapterHttpEnabled,
     };
-    const { data } = await http.patch("/settings/logging", payload, { cache: false });
+    const { data } = await http.patch("/settings/logging", payload, {
+      cache: false,
+    });
     applyLoggingPayload(data);
     await refreshMe();
     displaySonnerSuccess(t("pages.settingsOverviewPage.loggingSaved"));
@@ -245,7 +253,8 @@ async function savePublicApiSettings() {
 }
 
 function togglePublicApi() {
-  if (publicApiLocked.value || publicApiLoading.value || publicApiSaving.value) return;
+  if (publicApiLocked.value || publicApiLoading.value || publicApiSaving.value)
+    return;
   publicApi.publicApiEnabled = !publicApi.publicApiEnabled;
 }
 
@@ -256,21 +265,33 @@ function toggleLogging(key) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPlanFlags(), loadPublicApiSettings(), loadLoggingSettings()]);
+  await Promise.all([
+    loadPlanFlags(),
+    loadPublicApiSettings(),
+    loadLoggingSettings(),
+  ]);
   settingsLoaded.value = true;
 });
 </script>
 
 <template>
-  <div class="flex w-full max-w-xl flex-col gap-8 pb-10">
-    <QuotaUsagePanel />
+  <div
+    class="flex w-full max-w-xl flex-col gap-8"
+    :class="props.includeQuota ? 'pb-10' : 'pb-0'"
+  >
+    <QuotaUsagePanel v-if="props.includeQuota" />
 
     <section>
-      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.publicApiTitle") }}</InsetGroupLabel>
+      <InsetGroupLabel>{{
+        $t("pages.settingsOverviewPage.publicApiTitle")
+      }}</InsetGroupLabel>
       <InsetGroup>
         <InsetGroupItem
           :as="publicApiLocked ? 'div' : 'button'"
-          :disabled="!publicApiLocked && (!settingsLoaded || publicApiLoading || publicApiSaving)"
+          :disabled="
+            !publicApiLocked &&
+            (!settingsLoaded || publicApiLoading || publicApiSaving)
+          "
           :aria-pressed="publicApiLocked ? false : publicApi.publicApiEnabled"
           @click="togglePublicApi"
         >
@@ -288,7 +309,9 @@ onMounted(async () => {
           <template #trailing>
             <Switch
               v-if="settingsLoaded"
-              :model-value="publicApiLocked ? false : publicApi.publicApiEnabled"
+              :model-value="
+                publicApiLocked ? false : publicApi.publicApiEnabled
+              "
               :disabled="publicApiLoading || publicApiSaving || publicApiLocked"
               tabindex="-1"
               class="pointer-events-none"
@@ -304,7 +327,12 @@ onMounted(async () => {
       <div v-if="!publicApiLocked" class="mt-2 flex justify-end">
         <Button
           size="sm"
-          :disabled="!settingsLoaded || publicApiLoading || publicApiSaving || !publicApiDirty"
+          :disabled="
+            !settingsLoaded ||
+            publicApiLoading ||
+            publicApiSaving ||
+            !publicApiDirty
+          "
           @click="savePublicApiSettings"
         >
           <Spinner v-if="publicApiSaving" class="mr-2" />
@@ -315,7 +343,9 @@ onMounted(async () => {
     </section>
 
     <section>
-      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.loggingTitle") }}</InsetGroupLabel>
+      <InsetGroupLabel>{{
+        $t("pages.settingsOverviewPage.loggingTitle")
+      }}</InsetGroupLabel>
       <InsetGroup>
         <InsetGroupItem
           :disabled="!settingsLoaded || loggingLoading || loggingSaving"
@@ -346,7 +376,10 @@ onMounted(async () => {
         </InsetGroupItem>
         <InsetGroupItem
           :as="apiLoggingDisabled ? 'div' : 'button'"
-          :disabled="!apiLoggingDisabled && (!settingsLoaded || loggingLoading || loggingSaving)"
+          :disabled="
+            !apiLoggingDisabled &&
+            (!settingsLoaded || loggingLoading || loggingSaving)
+          "
           :aria-pressed="logging.logApiRequestsEnabled"
           @click="toggleLogging('logApiRequestsEnabled')"
         >
@@ -407,7 +440,9 @@ onMounted(async () => {
       <div class="mt-2 flex justify-end">
         <Button
           size="sm"
-          :disabled="!settingsLoaded || loggingLoading || loggingSaving || !loggingDirty"
+          :disabled="
+            !settingsLoaded || loggingLoading || loggingSaving || !loggingDirty
+          "
           @click="saveLoggingSettings"
         >
           <Spinner v-if="loggingSaving" class="mr-2" />
@@ -418,7 +453,9 @@ onMounted(async () => {
     </section>
 
     <section v-if="canDownloadDump">
-      <InsetGroupLabel>{{ $t("pages.settingsOverviewPage.databaseBackupTitle") }}</InsetGroupLabel>
+      <InsetGroupLabel>{{
+        $t("pages.settingsOverviewPage.databaseBackupTitle")
+      }}</InsetGroupLabel>
       <InsetGroup>
         <InsetGroupItem
           :disabled="isDumping"

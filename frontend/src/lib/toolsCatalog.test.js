@@ -19,6 +19,7 @@ import {
   toolStageClass,
   toolStageLabelKey,
   toolTitle,
+  visibleToolEntries,
 } from "./toolsCatalog.js";
 
 describe("toolsCatalog", () => {
@@ -53,6 +54,20 @@ describe("toolsCatalog", () => {
     assert.equal(toolTitle(entry, t), "T:pages.toolsPage.catalogScrapeTitle");
     assert.equal(toolHref(entry), "/tools/catalog-scrape");
     assert.equal(isPageTool(entry), true);
+  });
+
+  it("hides the catalog scraper while retaining other tool entries", () => {
+    const entries = [
+      { id: "catalog-scrape", mode: "page" },
+      { id: "catalog-connect", mode: "page" },
+      { id: "ozon.scraper", source: "adapter" },
+    ];
+
+    assert.deepEqual(visibleToolEntries(entries), [
+      { id: "catalog-connect", mode: "page" },
+      { id: "ozon.scraper", source: "adapter" },
+    ]);
+    assert.deepEqual(visibleToolEntries(null), []);
   });
 
   it("uses i18n keys for Public API try", () => {

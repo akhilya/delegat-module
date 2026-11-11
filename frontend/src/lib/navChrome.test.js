@@ -72,6 +72,35 @@ const adapterLogs = readFileSync(
   new URL("../pages/marketplace/adapterLogsPage.vue", import.meta.url),
   "utf8",
 );
+const adminPage = readFileSync(
+  new URL("../pages/admin/administrationPage.vue", import.meta.url),
+  "utf8",
+);
+const storesPage = readFileSync(
+  new URL("../pages/admin/storesPage.vue", import.meta.url),
+  "utf8",
+);
+const usersPage = readFileSync(
+  new URL("../pages/admin/usersPage.vue", import.meta.url),
+  "utf8",
+);
+const settingsOverview = readFileSync(
+  new URL("../pages/settings/settingsOverviewPage.vue", import.meta.url),
+  "utf8",
+);
+const settingsNav = readFileSync(
+  new URL("../config/settingsNav.js", import.meta.url),
+  "utf8",
+);
+const quotaUsage = readFileSync(
+  new URL("../components/settings/QuotaUsagePanel.vue", import.meta.url),
+  "utf8",
+);
+const router = readFileSync(new URL("../router.js", import.meta.url), "utf8");
+const aiModelsPage = readFileSync(
+  new URL("../pages/settings/AiModelsPage.vue", import.meta.url),
+  "utf8",
+);
 const apiLogs = readFileSync(
   new URL("../components/logs/ApiRequestLogsPanel.vue", import.meta.url),
   "utf8",
@@ -123,6 +152,14 @@ const languageSwitcher = readFileSync(
 );
 const fabGroup = readFileSync(
   new URL("../components/FabGroup.vue", import.meta.url),
+  "utf8",
+);
+const barcodeCell = readFileSync(
+  new URL("../components/products/BarcodeCell.vue", import.meta.url),
+  "utf8",
+);
+const productColumns = readFileSync(
+  new URL("../components/products/columns.ts", import.meta.url),
   "utf8",
 );
 
@@ -186,22 +223,99 @@ describe("toolbar search", () => {
   });
 });
 
-describe("navbar help", () => {
-  it("shows the help label only when the panel itself has enough room", () => {
-    assert.match(nav, /CircleHelp/);
-    assert.match(nav, /docsSheet\.needHelp/);
-    assert.match(nav, /@container \(min-width: 88rem\)/);
-    assert.match(nav, /navbar-help-label/);
-    assert.doesNotMatch(nav, /hidden sm:inline/);
-    assert.doesNotMatch(nav, /BookOpen/);
-    assert.doesNotMatch(nav, /hidden size-9 shrink-0 md:inline-flex/);
+describe("navbar companion actions", () => {
+  it("keeps Help, Operations, and enabled AI actions in the navbar at every width", () => {
+    assert.match(nav, /<FabGroup :ai-enabled="me\?\.aiEnabled === true"/);
+    assert.doesNotMatch(nav, /UserAccountMenu|navbar-help|needHelp/);
+    assert.match(fabGroup, /data-companion-actions/);
+    assert.match(fabGroup, /documentationTitle/);
+    assert.match(fabGroup, /backgroundJobsTitle/);
+    assert.match(fabGroup, /v-if="aiEnabled"/);
+    assert.doesNotMatch(fabGroup, /lg:hidden|Teleport|data-fab-group/);
   });
 
-  it("does not add a second docs icon in the compact navbar FAB cluster", () => {
-    const compact = fabGroup.slice(fabGroup.indexOf("lg:hidden"));
-    assert.match(compact, /backgroundJobsTitle/);
-    assert.doesNotMatch(compact, /documentationTitle/);
-    assert.match(fabGroup, /documentationTitle/);
+  it("renders product barcode previews across the column at a readable scale", () => {
+    assert.match(barcodeCell, /height: SMALL_BARCODE_HEIGHT/);
+    assert.match(barcodeCell, /SMALL_BARCODE_HEIGHT = 32/);
+    assert.match(barcodeCell, /width: 1\.8/);
+    assert.match(barcodeCell, /lineColor: "#111111"/);
+    assert.match(barcodeCell, /background: "#ffffff"/);
+    assert.doesNotMatch(barcodeCell, /--foreground|getLineColor|isDark/);
+    assert.match(barcodeCell, /h-8 w-full/);
+    assert.match(barcodeCell, /class="block size-full"/);
+    assert.match(barcodeCell, /w-full flex-col gap-1/);
+    assert.match(barcodeCell, /bg-white px-1 py-0\.5 text-neutral-950/);
+    assert.match(barcodeCell, /text-xs leading-none font-semibold/);
+    assert.match(productColumns, /id: "barcode"[\s\S]{0,180}size: 192/);
+  });
+
+  it("places the wide AI models table inside its own dialog", () => {
+    const dialogStart = aiModelsPage.indexOf(
+      '<Dialog v-model:open="isModelsDialogOpen">',
+    );
+    const tableStart = aiModelsPage.indexOf(
+      '<Table class="min-w-[64rem] table-fixed">',
+    );
+    const dialogEnd = aiModelsPage.indexOf("</Dialog>", dialogStart);
+
+    assert.ok(dialogStart >= 0);
+    assert.ok(tableStart > dialogStart && tableStart < dialogEnd);
+    assert.match(aiModelsPage.slice(dialogStart, dialogEnd), /size="6xl"/);
+    assert.match(aiModelsPage.slice(dialogStart, dialogEnd), /overflow-auto/);
+  });
+
+  it("uses inset groups and bottom actions for administration lists", () => {
+    assert.match(aiModelsPage, /<InsetGroup>/);
+    assert.match(aiModelsPage, /v-for="model in models"/);
+    assert.match(aiModelsPage, /<InsetGroupLabel class="mb-0">/);
+    const aiTemplate = aiModelsPage.slice(aiModelsPage.indexOf("<template>"));
+    assert.ok(
+      aiTemplate.indexOf("</InsetGroup>") <
+        aiTemplate.indexOf("personalSettingsButton"),
+    );
+
+    const storesTemplate = storesPage.slice(storesPage.indexOf("<template>"));
+    const usersTemplate = usersPage.slice(usersPage.indexOf("<template>"));
+    assert.ok(
+      storesTemplate.indexOf("</PageSection>") <
+        storesTemplate.indexOf('v-if="canCreateStores && !isLoading"'),
+    );
+    assert.ok(
+      usersTemplate.indexOf("</PageSection>") <
+        usersTemplate.indexOf('v-if="!isLoading && !loadError"'),
+    );
+    assert.match(settingsNav, /admin: Settings2/);
+  });
+
+  it("renders one ordered Administration page with independently gated sections", () => {
+    assert.match(adminPage, /getAccessibleAdminSections\(me\.value\)/);
+    assert.match(
+      adminPage,
+      /hasPermission\(me\.value, PERMS\.SettingsPlatform\)/,
+    );
+    assert.doesNotMatch(adminPage, /\bTabs(?:List|Trigger|Content)?\b/);
+    assert.ok(
+      adminPage.indexOf("<QuotaUsagePanel") <
+        adminPage.indexOf('v-for="section in sections"'),
+    );
+    assert.ok(
+      adminPage.indexOf('v-for="section in sections"') <
+        adminPage.indexOf("<SettingsOverviewPage"),
+    );
+    assert.match(
+      settingsOverview,
+      /includeQuota: \{ type: Boolean, default: true \}/,
+    );
+    assert.match(quotaUsage, /pages\.usagePage\.perStore/);
+    assert.doesNotMatch(
+      quotaUsage,
+      /<InsetGroupLabel>\{\{ \$t\("pages\.usagePage\.perStore"\)/,
+    );
+    assert.match(settings, /path !== PAGE_ADMIN_API && route\.query\.tab/);
+    assert.match(router, /path: "", redirect: PAGE_ADMIN/);
+    assert.match(router, /path: "admin\/stores",\s+redirect: PAGE_ADMIN/);
+    assert.match(router, /path: "admin\/users",\s+redirect: PAGE_ADMIN/);
+    assert.match(router, /path: "admin\/ai",\s+redirect: PAGE_ADMIN/);
   });
 });
 
@@ -238,6 +352,21 @@ describe("navbar compact chrome", () => {
     assert.match(app, /data-slot="page-scroll"/);
     assert.match(app, /overflow-y-auto/);
     assert.doesNotMatch(app, /bindPageScrollClientWidth/);
+  });
+
+  it("keeps page gutters symmetric at every responsive breakpoint", () => {
+    const adaptivePadding = style.match(
+      /\.adaptive-padding\s*\{([\s\S]*?)\n\}/,
+    )?.[1];
+
+    assert.ok(adaptivePadding, "adaptive-padding styles should exist");
+    assert.match(adaptivePadding, /pl-\[8vw\]\s+pr-\[8vw\]/);
+    assert.match(adaptivePadding, /max-\[2000px\]:pl-6\s+max-\[2000px\]:pr-6/);
+    assert.match(adaptivePadding, /max-2xl:pl-6\s+max-2xl:pr-6/);
+    assert.match(adaptivePadding, /max-\[1281px\]:pl-5\s+max-\[1281px\]:pr-5/);
+    assert.match(adaptivePadding, /max-lg:pl-5\s+max-lg:pr-5/);
+    assert.match(adaptivePadding, /max-sm:pl-3\s+max-sm:pr-3/);
+    assert.doesNotMatch(adaptivePadding, /pr-20|pr-\[max\(/);
   });
 
   it("keeps store storage inside the pane so the file list scrolls and the footer stays put", () => {

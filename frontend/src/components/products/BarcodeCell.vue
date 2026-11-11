@@ -1,6 +1,6 @@
 <script>
 import JsBarcode from "jsbarcode";
-import { ref, onMounted, nextTick, watch } from "vue";
+import { computed, ref, onMounted, nextTick, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,12 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { Download } from "lucide-vue-next";
 
-function getLineColor() {
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--foreground")
-    .trim();
-  return raw || "#000000";
-}
+const SMALL_BARCODE_HEIGHT = 32;
 
 export default {
   components: { Popover, PopoverContent, PopoverTrigger, Button, Download },
@@ -26,18 +21,21 @@ export default {
     const largeSvg = ref(null);
     const isOpen = ref(false);
 
-    const format = props.barcode.length === 8 ? "EAN8" : "EAN13";
+    const format = computed(() =>
+      props.barcode.length === 8 ? "EAN8" : "EAN13",
+    );
 
     function renderSmall() {
       if (!smallSvg.value) return;
       try {
         JsBarcode(smallSvg.value, props.barcode, {
-          format,
-          height: 32,
+          format: format.value,
+          height: SMALL_BARCODE_HEIGHT,
           displayValue: false,
           margin: 0,
-          width: 1.2,
-          lineColor: getLineColor(),
+          width: 1.8,
+          lineColor: "#111111",
+          background: "#ffffff",
         });
       } catch {
         // Keep the preview empty when the barcode value is invalid.
@@ -48,12 +46,13 @@ export default {
       if (!largeSvg.value) return;
       try {
         JsBarcode(largeSvg.value, props.barcode, {
-          format,
+          format: format.value,
           height: 80,
           displayValue: true,
           margin: 8,
           fontSize: 16,
-          lineColor: getLineColor(),
+          lineColor: "#111111",
+          background: "#ffffff",
         });
       } catch {
         // Keep the preview empty when the barcode value is invalid.
@@ -62,7 +61,7 @@ export default {
 
     async function downloadBarcode() {
       const { downloadBarcodePng } = await import("@/lib/barcodeDownload.js");
-      await downloadBarcodePng(props.barcode, format);
+      await downloadBarcodePng(props.barcode, format.value);
     }
 
     onMounted(() => {
@@ -74,6 +73,7 @@ export default {
       async () => {
         await nextTick();
         renderSmall();
+        if (isOpen.value) renderLarge();
       },
     );
 
@@ -95,15 +95,19 @@ export default {
       <Button
         type="button"
         variant="ghost"
-        class="h-auto min-h-0 flex-col gap-0.5 rounded-md px-1 py-0.5 font-normal hover:bg-muted/60"
+        class="h-auto min-h-0 w-full flex-col gap-1 rounded-md px-1 py-0.5 font-normal hover:bg-muted/60"
         :aria-label="$t('barcodeCell.clickToEnlarge')"
         :title="$t('barcodeCell.clickToEnlarge')"
       >
-        <svg ref="smallSvg" class="block h-8 w-[96px] max-w-full"></svg>
         <span
-          class="text-[10px] font-mono leading-none tabular-nums text-foreground/80"
+          class="flex w-full flex-col items-center gap-1 rounded-sm bg-white px-1 py-0.5 text-neutral-950 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.10)]"
         >
-          {{ barcode }}
+          <div class="h-8 w-full">
+            <svg ref="smallSvg" class="block size-full"></svg>
+          </div>
+          <span class="text-xs leading-none font-semibold tabular-nums">
+            {{ barcode }}
+          </span>
         </span>
       </Button>
     </PopoverTrigger>

@@ -588,31 +588,15 @@ export default {
 </script>
 
 <template>
-  <div class="flex w-full max-w-xl flex-col pb-10">
-    <div
-      v-if="canCreateStores && !isLoading && stores.length > 0"
-      class="mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2"
-    >
-      <Button @click="showCreateDialog = true">
-        <Plus class="size-4 mr-2" />
-        {{ $t("pages.storesPage.createStore") }}
-      </Button>
-    </div>
-
+  <div class="flex w-full max-w-xl flex-col gap-3 pb-0">
     <PageSection
+      class="!mb-0 !flex-none"
       :loading="isLoading"
       :empty="stores.length === 0"
       :empty-icon="Store"
       :empty-title="$t('pages.storesPage.emptyTitle')"
       :empty-description="$t('pages.storesPage.emptyDescription')"
     >
-      <template v-if="canCreateStores" #empty-action>
-        <Button @click="showCreateDialog = true">
-          <Plus class="mr-2 size-4" />
-          {{ $t("pages.storesPage.createStore") }}
-        </Button>
-      </template>
-
       <InsetGroup>
         <InsetGroupItem
           v-for="store in stores"
@@ -631,6 +615,13 @@ export default {
         </InsetGroupItem>
       </InsetGroup>
     </PageSection>
+
+    <div v-if="canCreateStores && !isLoading" class="flex justify-end">
+      <Button @click="showCreateDialog = true">
+        <Plus class="mr-2 size-4" />
+        {{ $t("pages.storesPage.createStore") }}
+      </Button>
+    </div>
 
     <Dialog v-if="canCreateStores" v-model:open="showCreateDialog">
       <DialogContent

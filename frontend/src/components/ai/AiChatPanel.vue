@@ -991,7 +991,7 @@ function isLatestTurn(msg) {
                         msg.content === t('ai.attachedFilesMessage')
                       )
                     "
-                    variant="secondary"
+                    variant="outline"
                     align="end"
                   >
                     <BubbleContent>{{ msg.content }}</BubbleContent>

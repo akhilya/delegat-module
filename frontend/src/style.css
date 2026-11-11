@@ -371,6 +371,33 @@ button {
   box-shadow: inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
+/* Joined split actions share one hover surface and press as a single control;
+   keyboard focus remains local to the segment that owns the action. */
+[data-slot="button-group"][data-interaction="joined"] {
+  transition: transform var(--duration-press) var(--ease-out-quart);
+}
+
+[data-slot="button-group"][data-interaction="joined"]:active {
+  transform: scale(0.98);
+}
+
+[data-slot="button-group"][data-interaction="joined"]:hover
+  [data-slot="button"][data-variant="default"] {
+  background-color: color-mix(in oklch, var(--primary) 90%, transparent);
+}
+
+[data-slot="button-group"][data-interaction="joined"]
+  [data-slot="button"]:active {
+  scale: 1;
+}
+
+@media (pointer: coarse) {
+  [data-slot="button-group"][data-interaction="joined"]
+    [data-slot="button"][data-size="icon"] {
+    min-width: 2.75rem;
+  }
+}
+
 /* Respect users who ask for less motion: collapse transitions/animations to a crossfade. */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -388,13 +415,13 @@ button {
     Default is the wide-screen gutter (8vw). Do not invert this to min-width
     @apply — arbitrary min-[…] variants inside @apply drop the 8vw rule, and
     2K / QHD content stretches edge to edge. Tighten with max-* only.
-    Below lg: symmetric gutters (FABs live in the navbar). From lg: extra
-    right for corner FABs (at least 5rem).
+    Keep both sides symmetric at every breakpoint. Companion actions live in
+    the navbar, so page content no longer reserves space for corner FABs.
   */
-  @apply pl-[8vw] pr-[max(8vw,5rem)]
-    max-[2000px]:pl-6 max-[2000px]:pr-20
-    max-2xl:pl-6 max-2xl:pr-20
-    max-[1281px]:pl-5 max-[1281px]:pr-20
+  @apply pl-[8vw] pr-[8vw]
+    max-[2000px]:pl-6 max-[2000px]:pr-6
+    max-2xl:pl-6 max-2xl:pr-6
+    max-[1281px]:pl-5 max-[1281px]:pr-5
     max-lg:pl-5 max-lg:pr-5
     max-sm:pl-3 max-sm:pr-3;
 }
@@ -588,10 +615,10 @@ input[type="number"] {
   font-family: var(--font-display);
 }
 
-/* Stay to the left of the moving desktop companion cluster: 48px button + 16px gap. */
+/* Keep desktop notifications clear of open companion sheets without reserving FAB space. */
 @media (min-width: 1024px) {
   .toaster[data-y-position="bottom"][data-x-position="right"] {
-    right: calc(var(--companion-fab-right) + 4rem);
+    right: var(--companion-toast-right);
     transition: right var(--duration-overlay) var(--ease-out-quart);
   }
 }

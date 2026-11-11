@@ -295,7 +295,7 @@ test("connection keeps primary tabs in the navbar and product tools left-aligned
   await expect(search).toHaveValue("ADAPTER-SKU");
 });
 
-test("filters and Help remain contained after panel and viewport resizing", async ({
+test("filters and navbar companion actions remain contained after resizing", async ({
   page,
 }, testInfo) => {
   await mockCabinet(page);
@@ -303,8 +303,15 @@ test("filters and Help remain contained after panel and viewport resizing", asyn
   await page.goto("/notes");
   const nav = page.locator('[data-slot="app-navbar"]');
   await expect(
-    nav.getByRole("button", { name: "Нужна помощь?", exact: true }),
+    nav.getByRole("button", { name: "Документация", exact: true }),
   ).toBeVisible();
+  await expect(
+    nav.getByRole("button", { name: "Фоновые процессы", exact: true }),
+  ).toBeVisible();
+  await expect(
+    nav.getByRole("button", { name: "Нужна помощь?", exact: true }),
+  ).toHaveCount(0);
+  await expect(nav.getByText("Long account display name")).toHaveCount(0);
   const tools = nav.locator('[data-slot="navbar-tools"]');
   const title = nav.locator('[data-slot="navbar-title"]');
   const navbarBox = (await nav.boundingBox())!;
@@ -339,7 +346,6 @@ test("filters and Help remain contained after panel and viewport resizing", asyn
         (await tools.boundingBox())!.y - (await title.boundingBox())!.y,
     )
     .toBeGreaterThan(50);
-  await expect(nav.locator(".navbar-help-label")).toBeHidden();
   await nav.evaluate((element) => {
     element.style.width = "";
   });

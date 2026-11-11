@@ -3444,8 +3444,12 @@ export default {
               </SettingsFormSection>
 
               <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
-                <ButtonGroup class="items-stretch [&_button]:h-9">
-                  <Button @click="handleSave" :disabled="isSaving">
+                <ButtonGroup joined class="items-stretch">
+                  <Button
+                    variant="default"
+                    @click="handleSave"
+                    :disabled="isSaving"
+                  >
                     <Spinner v-if="isSaving" class="mr-2" />
                     <Save v-else class="size-4 mr-2" />
                     {{ $t("common.save") }}
@@ -3453,8 +3457,8 @@ export default {
                   <DropdownMenu>
                     <DropdownMenuTrigger as-child>
                       <Button
+                        variant="default"
                         size="icon"
-                        class="h-9 w-9 shrink-0"
                         :aria-label="
                           $t('marketplace.connectionPage.header.moreActions')
                         "

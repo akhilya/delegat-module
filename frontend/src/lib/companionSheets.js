@@ -2,10 +2,10 @@
 export const COMPANION_INSET = 8;
 /** Gap between stacked companion sheets. */
 export const COMPANION_GAP = 8;
-/** Space between the leftmost sheet and the FAB cluster. */
-export const COMPANION_FAB_GAP = 16;
-/** Closed-cluster `right` (Tailwind `right-4`). */
-export const COMPANION_FAB_CLOSED_RIGHT = 16;
+/** Separation between the open companion stack and desktop notifications. */
+export const COMPANION_TOAST_GAP = 16;
+/** Closed-state notification inset (Tailwind `right-4`). */
+export const COMPANION_TOAST_CLOSED_RIGHT = 16;
 /** Side-by-side companions from `lg` (1024px). Narrower: one sheet, full width. */
 export const COMPANION_STACK_MIN_WIDTH = 1024;
 
@@ -47,11 +47,11 @@ export function companionStackExtent(snapshot) {
   return n ? COMPANION_INSET + extent : 0;
 }
 
-export function companionFabRight(snapshot, { stack = true } = {}) {
-  if (!stack) return COMPANION_FAB_CLOSED_RIGHT;
+export function companionToastRight(snapshot, { stack = true } = {}) {
+  if (!stack) return COMPANION_TOAST_CLOSED_RIGHT;
   const extent = companionStackExtent(snapshot);
-  if (!extent) return COMPANION_FAB_CLOSED_RIGHT;
-  return extent + COMPANION_FAB_GAP;
+  if (!extent) return COMPANION_TOAST_CLOSED_RIGHT;
+  return extent + COMPANION_TOAST_GAP;
 }
 
 /** Prefer the rightmost open companion when the viewport can no longer stack. */

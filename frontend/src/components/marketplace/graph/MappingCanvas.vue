@@ -2311,7 +2311,7 @@ async function importMappingFile(event) {
         <div
           class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
         >
-          <ButtonGroup>
+          <ButtonGroup joined>
             <Button
               size="sm"
               :disabled="saving || errorCount > 0"

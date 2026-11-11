@@ -11,28 +11,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { t } from "@/i18n";
-import { useCompanionSheets } from "@/composables/useCompanionSheets";
 
-const props = defineProps({
+defineProps({
   aiEnabled: { type: Boolean, default: false },
-  /** float = corner FABs (lg+). navbar = compact icons in the top bar (< lg). */
-  placement: {
-    type: String,
-    default: "float",
-    validator: (value) => ["float", "navbar"].includes(value),
-  },
 });
 
 const store = useStore();
-const { fabRight } = useCompanionSheets();
 
-const isNavbar = computed(() => props.placement === "navbar");
 const isAiLoading = computed(() => store.state.aiChat?.isLoading);
 const aiOpen = computed(() => !!store.state.aiChat?.isOpen);
 const opsOpen = computed(() => !!store.state.operations?.panelOpen);
 const docsOpen = computed(() => !!store.state.docs?.panelOpen);
 const activeCount = computed(() => store.getters["operations/activeCount"]);
-const tooltipSide = computed(() => (isNavbar.value ? "bottom" : "left"));
 
 function toggleAi() {
   store.commit("aiChat/toggle");
@@ -44,106 +34,33 @@ function toggleDocs() {
   store.dispatch("docs/togglePanel");
 }
 
-function floatVariant(open) {
-  return open ? "outline" : "default";
-}
-function floatButtonClasses(open) {
-  return [
-    "relative size-12 shrink-0 rounded-full shadow-lg",
-    open
-      ? "bg-background hover:bg-accent dark:bg-background dark:hover:bg-accent"
-      : "bg-primary hover:bg-primary",
-  ];
-}
 function navVariant(open) {
   return open ? "secondary" : "ghost";
 }
 </script>
 
 <template>
-  <Teleport v-if="!isNavbar" to="body">
-    <TooltipProvider :delay-duration="100">
-      <div
-        data-fab-group
-        class="fixed bottom-6 z-[9996] hidden flex-col-reverse gap-2.5 lg:flex"
-        :style="{
-          right: `${fabRight}px`,
-          transition: 'right var(--duration-overlay) var(--ease-out-quart)',
-        }"
-      >
-        <Tooltip v-if="aiEnabled">
-          <TooltipTrigger as-child>
-            <Button
-              size="icon"
-              :class="floatButtonClasses(aiOpen)"
-              :variant="floatVariant(aiOpen)"
-              :data-companion-open="aiOpen ? '' : undefined"
-              :aria-pressed="aiOpen"
-              :aria-label="t('components.fabGroup.aiAssistantTitle')"
-              @click="toggleAi"
-            >
-              <Spinner v-if="isAiLoading" size="lg" />
-              <Sparkles v-else class="size-5" />
-              <span
-                v-if="isAiLoading"
-                class="pointer-events-none absolute inset-0 animate-pulse rounded-full bg-white/10"
-              />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent :side="tooltipSide">
-            {{ t("components.fabGroup.aiAssistantTitle") }}
-          </TooltipContent>
-        </Tooltip>
+  <TooltipProvider :delay-duration="100">
+    <div data-companion-actions class="flex items-center gap-0.5">
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            size="icon"
+            class="relative size-9 shrink-0"
+            :variant="navVariant(docsOpen)"
+            :data-companion-open="docsOpen ? '' : undefined"
+            :aria-pressed="docsOpen"
+            :aria-label="t('components.fabGroup.documentationTitle')"
+            @click="toggleDocs"
+          >
+            <CircleHelp class="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          {{ t("components.fabGroup.documentationTitle") }}
+        </TooltipContent>
+      </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button
-              size="icon"
-              :class="floatButtonClasses(opsOpen)"
-              :variant="floatVariant(opsOpen)"
-              :data-companion-open="opsOpen ? '' : undefined"
-              :aria-pressed="opsOpen"
-              :aria-label="t('components.fabGroup.backgroundJobsTitle')"
-              @click="toggleOps"
-            >
-              <Activity class="size-5" />
-              <span
-                v-if="activeCount > 0"
-                class="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground"
-              >
-                {{ activeCount > 9 ? "9+" : activeCount }}
-              </span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent :side="tooltipSide">
-            {{ t("components.fabGroup.backgroundJobsTitle") }}
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button
-              size="icon"
-              :class="floatButtonClasses(docsOpen)"
-              :variant="floatVariant(docsOpen)"
-              :data-companion-open="docsOpen ? '' : undefined"
-              :aria-pressed="docsOpen"
-              :aria-label="t('components.fabGroup.documentationTitle')"
-              @click="toggleDocs"
-            >
-              <CircleHelp class="size-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent :side="tooltipSide">
-            {{ t("components.fabGroup.documentationTitle") }}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-    </TooltipProvider>
-  </Teleport>
-
-  <TooltipProvider v-else :delay-duration="100">
-    <div data-fab-group class="flex items-center gap-0.5 lg:hidden">
       <Tooltip>
         <TooltipTrigger as-child>
           <Button
@@ -162,10 +79,11 @@ function navVariant(open) {
             />
           </Button>
         </TooltipTrigger>
-        <TooltipContent :side="tooltipSide">
+        <TooltipContent side="bottom">
           {{ t("components.fabGroup.backgroundJobsTitle") }}
         </TooltipContent>
       </Tooltip>
+
       <Tooltip v-if="aiEnabled">
         <TooltipTrigger as-child>
           <Button
@@ -181,7 +99,7 @@ function navVariant(open) {
             <Sparkles v-else class="size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent :side="tooltipSide">
+        <TooltipContent side="bottom">
           {{ t("components.fabGroup.aiAssistantTitle") }}
         </TooltipContent>
       </Tooltip>

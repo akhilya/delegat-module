@@ -40,12 +40,21 @@ describe("resolvePageBreadcrumbs", () => {
     );
   });
 
-  it("builds settings from the nav map", () => {
-    assert.deepEqual(trail({ path: "/settings" }), [{ label: "nav.overview" }]);
-    assert.deepEqual(trail({ path: "/settings/admin/stores" }), [
-      { label: "nav.overview", to: "/settings" },
-      { label: "nav.stores" },
+  it("builds the unified Administration breadcrumb", () => {
+    assert.deepEqual(trail({ path: "/settings" }), [
+      { label: "nav.administration" },
     ]);
+    assert.deepEqual(
+      trail({ path: "/settings/admin", query: { tab: "users" } }),
+      [{ label: "nav.administration" }],
+    );
+  });
+
+  it("keeps the Administration breadcrumb single-level without platform settings", () => {
+    assert.deepEqual(
+      trail({ path: "/settings/admin", canPlatformSettings: false }),
+      [{ label: "nav.administration" }],
+    );
   });
 
   it("puts the store name on the store detail trail", () => {
@@ -55,8 +64,7 @@ describe("resolvePageBreadcrumbs", () => {
         detail: "Main",
       }),
       [
-        { label: "nav.overview", to: "/settings" },
-        { label: "nav.stores", to: "/settings/admin/stores" },
+        { label: "nav.administration", to: "/settings/admin" },
         { label: "Main" },
       ],
     );

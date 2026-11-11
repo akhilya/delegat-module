@@ -347,20 +347,18 @@ export default {
             </Button>
           </DialogTrigger>
           <DialogContent
-            size="lg"
-            class="flex max-h-[min(88vh,48rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+            size="2xl"
+            class="flex max-h-[min(88vh,48rem)] flex-col gap-0 overflow-hidden p-0"
           >
-            <DialogHeader class="border-b px-6 pb-5 pt-6 text-left sm:px-8">
-              <DialogTitle
-                class="text-xl font-semibold tracking-tight sm:text-2xl"
-              >
+            <DialogHeader variant="bar" class="pr-12">
+              <DialogTitle>
                 {{
                   createDialogStep === 3
                     ? $t("marketplace.marketplacePage.connectionSetupTitle")
                     : $t("marketplace.marketplacePage.newConnectionTitle")
                 }}
               </DialogTitle>
-              <DialogDescription class="max-w-lg text-sm leading-relaxed">
+              <DialogDescription class="max-w-lg leading-relaxed">
                 {{
                   createDialogStep === 1
                     ? $t("marketplace.marketplacePage.chooseAdapterStep")
@@ -375,7 +373,7 @@ export default {
               </DialogDescription>
             </DialogHeader>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
               <EmptyState
                 v-if="adapters.length === 0"
                 size="sm"
@@ -415,45 +413,6 @@ export default {
               </EmptyState>
 
               <template v-else-if="!connectionQuotaReached">
-                <ol
-                  class="mb-7 grid grid-cols-3 gap-3"
-                  :aria-label="$t('marketplace.marketplacePage.stepsAriaLabel')"
-                >
-                  <li
-                    v-for="(label, index) in [
-                      $t('marketplace.marketplacePage.stepAdapter'),
-                      $t('marketplace.marketplacePage.stepCredentials'),
-                      $t('marketplace.marketplacePage.stepUse'),
-                    ]"
-                    :key="index"
-                    class="min-w-0"
-                    :aria-current="
-                      index + 1 === createDialogStep ? 'step' : undefined
-                    "
-                  >
-                    <div
-                      class="mb-2 h-1 rounded-full"
-                      :class="
-                        index + 1 <= createDialogStep
-                          ? 'bg-foreground'
-                          : 'bg-muted'
-                      "
-                    />
-                    <p
-                      class="truncate text-xs font-medium"
-                      :class="
-                        index + 1 <= createDialogStep
-                          ? 'text-foreground'
-                          : 'text-muted-foreground'
-                      "
-                    >
-                      <span class="mr-1.5 tabular-nums text-muted-foreground"
-                        >0{{ index + 1 }}</span
-                      >{{ label }}
-                    </p>
-                  </li>
-                </ol>
-
                 <Transition
                   mode="out-in"
                   enter-active-class="transition duration-150 ease-out motion-reduce:transition-none"
@@ -532,9 +491,7 @@ export default {
                     </form>
 
                     <section v-else class="space-y-4">
-                      <p
-                        class="rounded-xl border bg-muted/30 px-4 py-3 text-sm font-medium"
-                      >
+                      <p class="px-1 text-sm font-medium">
                         {{ createdConnection?.name }}
                       </p>
                       <AdapterProductDirectionOptions

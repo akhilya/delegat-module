@@ -27,19 +27,16 @@ const storeAttributeEditPage = () =>
   import("./pages/storeAttributeEditPage.vue");
 const storeStoragePage = () => import("./pages/storeStoragePage.vue");
 const SettingsShell = () => import("./layouts/SettingsShell.vue");
-const SettingsOverviewPage = () =>
-  import("./pages/settings/settingsOverviewPage.vue");
 const SettingsUserPage = () => import("./pages/settings/settingsUserPage.vue");
 const NotFoundPage = () => import("./pages/notFoundPage.vue");
 const UnavailablePage = () => import("./pages/unavailablePage.vue");
 const ToolsPage = () => import("./pages/toolsPage.vue");
 const CatalogConnectPage = () => import("./pages/tools/CatalogConnectPage.vue");
-const CatalogScrapePage = () => import("./pages/tools/CatalogScrapePage.vue");
 const PublicApiTryPage = () => import("./pages/tools/PublicApiTryPage.vue");
 const ToolJobPage = () => import("./pages/tools/ToolJobPage.vue");
-const AdminStoresPage = () => import("./pages/admin/storesPage.vue");
+const AdminManagementPage = () =>
+  import("./pages/admin/administrationPage.vue");
 const AdminStoreDetailPage = () => import("./pages/admin/storeDetailPage.vue");
-const AdminUsersPage = () => import("./pages/admin/usersPage.vue");
 const AdminErrorLogsPage = () => import("./pages/admin/errorLogsPage.vue");
 const AdminApiPage = () => import("./pages/admin/apiPage.vue");
 const MarketplacePage = () => import("./pages/marketplace/marketplacePage.vue");
@@ -53,7 +50,6 @@ const MarketplaceFieldMappingPage = () =>
   import("./pages/marketplace/fieldMappingPage.vue");
 const AdapterLogsPage = () => import("./pages/marketplace/adapterLogsPage.vue");
 const PluginsPage = () => import("./pages/marketplace/pluginsPage.vue");
-const AiModelsPage = () => import("./pages/settings/AiModelsPage.vue");
 const SetupWizardPage = () => import("./pages/setup/SetupWizardPage.vue");
 const OrdersPage = () => import("./pages/orders/OrdersPage.vue");
 const OrdersAssemblyPage = () =>
@@ -91,6 +87,7 @@ export const PAGE_TOOL_JOB = "/tools/:toolId";
 export const PAGE_SCHEDULED_TASKS = "/tools/scheduled-tasks";
 export const PAGE_ADMIN_STORES = "/settings/admin/stores";
 export const PAGE_ADMIN_STORE_DETAIL = "/settings/admin/stores/:id";
+export const PAGE_ADMIN = "/settings/admin";
 export const PAGE_ADMIN_USERS = "/settings/admin/users";
 export const PAGE_ADMIN_ERROR_LOGS = "/settings/admin/error-logs";
 export const PAGE_ADMIN_API = "/settings/admin/api";
@@ -249,14 +246,7 @@ export const routes = [
     component: SettingsShell,
     meta: { stableKey: "settings" },
     children: [
-      {
-        path: "",
-        component: SettingsOverviewPage,
-        meta: {
-          titleKey: "routes.settingsOverview",
-          permissions: [PERMS.SettingsPlatform],
-        },
-      },
+      { path: "", redirect: PAGE_ADMIN },
       { path: "operations", redirect: "" },
       {
         path: "user",
@@ -265,16 +255,22 @@ export const routes = [
       },
       { path: "store", redirect: "/settings/admin/stores" },
       {
-        path: "admin/stores",
-        component: AdminStoresPage,
+        path: "admin",
+        component: AdminManagementPage,
         meta: {
-          titleKey: "routes.stores",
+          titleKey: "routes.administration",
           permissions: [
             PERMS.StoresCreate,
             PERMS.StoreSettingsManage,
             PERMS.StoreMembersManage,
+            PERMS.UsersManage,
+            PERMS.SettingsPlatform,
           ],
         },
+      },
+      {
+        path: "admin/stores",
+        redirect: PAGE_ADMIN,
       },
       {
         path: "admin/stores/:id",
@@ -290,8 +286,7 @@ export const routes = [
       },
       {
         path: "admin/users",
-        component: AdminUsersPage,
-        meta: { titleKey: "routes.users", permissions: [PERMS.UsersManage] },
+        redirect: PAGE_ADMIN,
       },
       {
         path: "admin/tokens",
@@ -320,11 +315,7 @@ export const routes = [
       },
       {
         path: "admin/ai",
-        component: AiModelsPage,
-        meta: {
-          titleKey: "routes.aiModels",
-          permissions: [PERMS.SettingsPlatform],
-        },
+        redirect: PAGE_ADMIN,
       },
       {
         path: "admin/usage",
@@ -357,11 +348,7 @@ export const routes = [
   },
   {
     path: PAGE_CATALOG_SCRAPE,
-    component: CatalogScrapePage,
-    meta: {
-      titleKey: "routes.catalogScrape",
-      permissions: [PERMS.MarketplaceManage],
-    },
+    redirect: PAGE_TOOLS,
   },
   {
     path: PAGE_PUBLIC_API_TRY,

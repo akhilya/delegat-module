@@ -311,7 +311,7 @@ export const columns: ProductColumnDef[] = [
     label: t("products.columns.barcodeLabel"),
     hideable: true,
     header: t("products.columns.barcodeLabel"),
-    size: 110,
+    size: 192,
     cell: ({ row }) => {
       const barcode = row.original.barcode;
       if (!barcode) {

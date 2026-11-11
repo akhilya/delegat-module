@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { PERMS } from "./permissions.js";
 import { canAccessPath, fallbackPathForUser } from "./routeAccess.js";
 import { canShowNavLink, uniqueByNavTarget } from "./navAccess.js";
 import { visibleSettingsNavIds } from "./settingsNavCatalog.js";
+import { getAccessibleAdminSections } from "./adminSections.js";
+
+const sidebarNav = readFileSync(
+  new URL("../config/sidebarNav.js", import.meta.url),
+  "utf8",
+);
 
 const OWNER = [
   PERMS.UsersManage,
@@ -60,24 +67,24 @@ describe("visibleSettingsNavIds", () => {
     assert.deepEqual(visibleSettingsNavIds(me(OPERATOR)), ["user"]);
   });
 
-  it("shows Stores once for a store manager", () => {
+  it("shows Administration for a store manager", () => {
     assert.deepEqual(visibleSettingsNavIds(me(STORE_MANAGER)), [
       "user",
-      "stores",
+      "admin",
     ]);
   });
 
-  it("shows Stores once when only store.settings.manage is granted", () => {
+  it("shows Administration when only store.settings.manage is granted", () => {
     assert.deepEqual(visibleSettingsNavIds(me([PERMS.StoreSettingsManage])), [
       "user",
-      "stores",
+      "admin",
     ]);
   });
 
-  it("shows Stores once when only store.members.manage is granted", () => {
+  it("shows Administration when only store.members.manage is granted", () => {
     assert.deepEqual(visibleSettingsNavIds(me([PERMS.StoreMembersManage])), [
       "user",
-      "stores",
+      "admin",
     ]);
   });
 
@@ -87,7 +94,7 @@ describe("visibleSettingsNavIds", () => {
     ]);
   });
 
-  it("shows platform settings for an owner when feature flags are on", () => {
+  it("shows Administration for an owner when feature flags are on", () => {
     assert.deepEqual(
       visibleSettingsNavIds(
         me(OWNER, {
@@ -98,17 +105,7 @@ describe("visibleSettingsNavIds", () => {
           publicApiEnabled: true,
         }),
       ),
-      [
-        "user",
-        "overview",
-        "stores",
-        "users",
-        "api",
-        "plugins",
-        "logs",
-        "adapter-logs",
-        "ai",
-      ],
+      ["user", "admin", "api", "plugins", "logs", "adapter-logs"],
     );
   });
 
@@ -123,7 +120,7 @@ describe("visibleSettingsNavIds", () => {
           publicApiEnabled: false,
         }),
       ),
-      ["user", "overview", "stores", "users"],
+      ["user", "admin"],
     );
   });
 
@@ -138,16 +135,71 @@ describe("visibleSettingsNavIds", () => {
           publicApiEnabled: true,
         }),
       ),
-      [
-        "user",
-        "overview",
-        "stores",
-        "users",
-        "api",
-        "logs",
-        "adapter-logs",
-        "ai",
-      ],
+      ["user", "admin", "api", "logs", "adapter-logs"],
+    );
+  });
+});
+
+describe("admin section access", () => {
+  it("keeps Stores, Users, and AI sections gated by their existing permissions", () => {
+    assert.deepEqual(
+      getAccessibleAdminSections(me([PERMS.StoreSettingsManage])).map(
+        (section) => section.id,
+      ),
+      ["stores"],
+    );
+    assert.deepEqual(
+      getAccessibleAdminSections(me([PERMS.UsersManage])).map(
+        (section) => section.id,
+      ),
+      ["users"],
+    );
+    assert.deepEqual(
+      getAccessibleAdminSections(
+        me([PERMS.SettingsPlatform], { aiEnabled: true }),
+      ).map((section) => section.id),
+      ["ai"],
+    );
+    assert.deepEqual(
+      getAccessibleAdminSections(
+        me([PERMS.SettingsPlatform], { aiEnabled: false }),
+      ),
+      [],
+    );
+    assert.deepEqual(
+      getAccessibleAdminSections(
+        me(
+          [
+            PERMS.StoreSettingsManage,
+            PERMS.UsersManage,
+            PERMS.SettingsPlatform,
+          ],
+          { aiEnabled: true },
+        ),
+      ).map((section) => section.id),
+      ["stores", "users", "ai"],
+    );
+  });
+
+  it("allows the unified route through independent sections or platform access", () => {
+    assert.equal(
+      canAccessPath(me([PERMS.StoreMembersManage]), "/settings/admin"),
+      true,
+    );
+    assert.equal(
+      canAccessPath(me([PERMS.StoreMembersManage]), "/settings"),
+      true,
+    );
+    assert.equal(
+      canAccessPath(me([PERMS.UsersManage]), "/settings/admin"),
+      true,
+    );
+    assert.equal(
+      canAccessPath(
+        me([PERMS.SettingsPlatform], { aiEnabled: false }),
+        "/settings/admin",
+      ),
+      true,
     );
   });
 });
@@ -160,21 +212,17 @@ const SIDEBAR_PATHS = [
   "/products/create",
   "/product-groups",
   "/categories",
-  "/barcodes",
-  "/notes",
   "/storage",
   "/adapter",
   "/tools",
   "/store-attributes",
   "/settings/user",
   "/settings",
-  "/settings/admin/stores",
-  "/settings/admin/users",
+  "/settings/admin",
   "/settings/admin/api",
   "/settings/admin/plugins",
   "/settings/admin/error-logs",
   "/settings/adapter-logs",
-  "/settings/admin/ai",
 ];
 
 function visibleSidebarPaths(permissions, extra = {}) {
@@ -184,6 +232,16 @@ function visibleSidebarPaths(permissions, extra = {}) {
 }
 
 describe("canShowNavLink", () => {
+  it("hides the standalone barcode page from navigation while keeping its route", () => {
+    assert.doesNotMatch(sidebarNav, /id:\s*"barcodes"/);
+    assert.equal(canAccessPath(me([PERMS.CatalogManage]), "/barcodes"), true);
+  });
+
+  it("hides notes from navigation while keeping the route", () => {
+    assert.doesNotMatch(sidebarNav, /id:\s*"notes"/);
+    assert.equal(canAccessPath(me([PERMS.CatalogManage]), "/notes"), true);
+  });
+
   it("allows product list for any member", () => {
     assert.equal(canShowNavLink(me(VIEWER), "/products"), true);
     assert.equal(canShowNavLink(me(VIEWER), "/products?trash=1"), true);
@@ -305,20 +363,16 @@ describe("sidebar path matrix by role", () => {
         "/products?trash=1",
         "/product-groups",
         "/categories",
-        "/barcodes",
-        "/notes",
         "/storage",
         "/adapter",
         "/tools",
         "/store-attributes",
         "/settings/user",
         "/settings",
-        "/settings/admin/stores",
-        "/settings/admin/users",
+        "/settings/admin",
         "/settings/admin/api",
         "/settings/admin/error-logs",
         "/settings/adapter-logs",
-        "/settings/admin/ai",
       ],
     );
   });
@@ -331,8 +385,6 @@ describe("sidebar path matrix by role", () => {
       "/products/create",
       "/product-groups",
       "/categories",
-      "/barcodes",
-      "/notes",
       "/storage",
       "/adapter",
       "/tools",
@@ -341,11 +393,11 @@ describe("sidebar path matrix by role", () => {
     ]);
   });
 
-  it("store manager: operator surfaces plus Stores once", () => {
+  it("store manager: operator surfaces plus Administration once", () => {
     const paths = visibleSidebarPaths(STORE_MANAGER);
     assert.deepEqual(
-      paths.filter((path) => path === "/settings/admin/stores"),
-      ["/settings/admin/stores"],
+      paths.filter((path) => path === "/settings/admin"),
+      ["/settings/admin"],
     );
     assert.deepEqual(paths, [
       "/orders/1",
@@ -354,14 +406,13 @@ describe("sidebar path matrix by role", () => {
       "/products/create",
       "/product-groups",
       "/categories",
-      "/barcodes",
-      "/notes",
       "/storage",
       "/adapter",
       "/tools",
       "/store-attributes",
       "/settings/user",
-      "/settings/admin/stores",
+      "/settings",
+      "/settings/admin",
     ]);
   });
 
@@ -372,15 +423,13 @@ describe("sidebar path matrix by role", () => {
       "/products/create",
       "/product-groups",
       "/categories",
-      "/barcodes",
-      "/notes",
       "/tools",
       "/store-attributes",
       "/settings/user",
     ]);
   });
 
-  it("owner with flags: platform settings without duplicating Stores", () => {
+  it("owner with flags: Administration without duplicate sidebar links", () => {
     const paths = visibleSidebarPaths(OWNER, {
       aiEnabled: true,
       pluginsEnabled: true,
@@ -388,22 +437,17 @@ describe("sidebar path matrix by role", () => {
       logAdapterHttpEnabled: true,
       publicApiEnabled: true,
     });
-    assert.equal(
-      paths.filter((path) => path === "/settings/admin/stores").length,
-      1,
-    );
+    assert.equal(paths.filter((path) => path === "/settings/admin").length, 1);
     assert.deepEqual(
       paths.filter((path) => path.startsWith("/settings")),
       [
         "/settings/user",
         "/settings",
-        "/settings/admin/stores",
-        "/settings/admin/users",
+        "/settings/admin",
         "/settings/admin/api",
         "/settings/admin/plugins",
         "/settings/admin/error-logs",
         "/settings/adapter-logs",
-        "/settings/admin/ai",
       ],
     );
   });

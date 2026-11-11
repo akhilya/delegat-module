@@ -1,6 +1,7 @@
 import {
   PAGE_SETTINGS,
   PAGE_SETTINGS_USER,
+  PAGE_ADMIN,
   PAGE_ADMIN_STORES,
   PAGE_ADMIN_USERS,
   PAGE_ADMIN_API,
@@ -12,12 +13,9 @@ import {
 import {
   Settings2,
   User,
-  Store,
-  Users,
   KeyRound,
   Plug,
   AlertTriangle,
-  Sparkles,
   ScrollText,
 } from "lucide-vue-next";
 import { t } from "@/i18n";
@@ -28,14 +26,15 @@ import { SETTINGS_NAV_DEFS } from "@/lib/settingsNavCatalog";
 /** @typedef {{ me: object|null, quotaOverAttention?: boolean }} NavContext */
 
 export const SETTINGS_ROUTE_LABEL_KEYS = {
-  [PAGE_SETTINGS]: "nav.overview",
+  [PAGE_SETTINGS]: "nav.administration",
   [PAGE_SETTINGS_USER]: "nav.user",
-  [PAGE_ADMIN_STORES]: "nav.stores",
-  [PAGE_ADMIN_USERS]: "nav.users",
+  [PAGE_ADMIN]: "nav.administration",
+  [PAGE_ADMIN_STORES]: "nav.administration",
+  [PAGE_ADMIN_USERS]: "nav.administration",
   [PAGE_ADMIN_API]: "nav.api",
   [PAGE_ADMIN_PLUGINS]: "nav.plugins",
   [PAGE_ADMIN_ERROR_LOGS]: "nav.errorLogs",
-  [PAGE_ADMIN_AI]: "nav.ai",
+  [PAGE_ADMIN_AI]: "nav.administration",
   [PAGE_ADAPTER_LOGS]: "nav.adapterLogs",
 };
 
@@ -54,14 +53,11 @@ const ADMIN_PREFIX = "/settings/admin";
 
 const SETTINGS_NAV_ICONS = {
   user: User,
-  overview: Settings2,
-  stores: Store,
-  users: Users,
+  admin: Settings2,
   api: KeyRound,
   plugins: Plug,
   logs: AlertTriangle,
   "adapter-logs": ScrollText,
-  ai: Sparkles,
 };
 
 /**
@@ -76,7 +72,7 @@ export function getSettingsNavItems(ctx) {
       labelKey: SETTINGS_ROUTE_LABEL_KEYS[def.path],
       to: def.path,
       icon: SETTINGS_NAV_ICONS[def.id],
-      ...(def.id === "overview"
+      ...(def.id === "admin"
         ? {
             attention: ctx.quotaOverAttention === true,
             attentionTooltipKey: "nav.quotaOverageAttention",

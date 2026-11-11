@@ -333,6 +333,11 @@ const renamingTagName = ref("");
 const showDeleteTagDialog = ref(false);
 const pendingDeleteTag = ref(null);
 
+// AlertDialogAction can close first; defer cleanup so its click handler reads the pending tag.
+watch(showDeleteTagDialog, (open) => {
+  if (!open) pendingDeleteTag.value = null;
+});
+
 function startRenameTag(tag) {
   renamingTagId.value = tag.id;
   renamingTagName.value = tag.name;
@@ -2125,14 +2130,7 @@ const selectedFileCount = computed(
       </AlertDialogContent>
     </AlertDialog>
 
-    <AlertDialog
-      v-model:open="showDeleteTagDialog"
-      @update:open="
-        (open) => {
-          if (!open) pendingDeleteTag = null;
-        }
-      "
-    >
+    <AlertDialog v-model:open="showDeleteTagDialog">
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{{
