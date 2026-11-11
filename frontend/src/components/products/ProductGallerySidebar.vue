@@ -1,9 +1,11 @@
 <script setup>
 import { Button } from "@/components/ui/button";
-import { Play, Plus, X } from "lucide-vue-next";
+import { Badge } from "@/components/ui/badge";
+import { Plus, X } from "lucide-vue-next";
 import { computed } from "vue";
 import { Spinner } from "@/components/ui/spinner";
 import AppImage from "@/components/AppImage.vue";
+import ProductVideoThumbnail from "@/components/products/ProductVideoThumbnail.vue";
 import draggable from "vuedraggable";
 import { t } from "@/i18n";
 import { getMediaKind } from "@/lib/mediaKind";
@@ -15,24 +17,39 @@ const mainImageFileId = computed(
       ?.fileId,
 );
 
-defineProps({
+const props = defineProps({
+  mode: {
+    type: String,
+    default: "gallery",
+    validator: (v) => ["gallery", "library"].includes(v),
+  },
   isUploading: { type: Boolean, default: false },
+  dragGroup: { type: String, default: null },
   disabled: { type: Boolean, default: false },
   layout: {
     type: String,
     default: "sidebar",
-    validator: (v) => ["sidebar", "inline"].includes(v),
+    validator: (v) => ["sidebar", "inline", "grid"].includes(v),
   },
 });
 
-const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
+const emit = defineEmits([
+  "drag-change",
+  "drag-end",
+  "remove",
+  "add",
+  "upload",
+  "preview",
+]);
+const MEDIA_GRID_CLASS =
+  "grid grid-cols-[repeat(auto-fill,minmax(min(100%,12rem),1fr))] gap-3";
 
 function thumbSrc(element) {
   return (
     element.previewUrl ||
     (isVideo(element)
       ? `/api/files/${element.fileId}/download`
-      : `/api/files/${element.fileId}/thumbnail?w=256`)
+      : `/api/files/${element.fileId}/thumbnail?w=${props.layout === "grid" ? 512 : 256}`)
   );
 }
 
@@ -60,13 +77,19 @@ function isMainImage(element) {
       :class="[
         layout === 'sidebar'
           ? 'thin-scrollbar min-h-0 flex-1 overflow-y-auto p-2'
-          : '',
+          : layout === 'grid' && !images.length && !dragGroup
+            ? MEDIA_GRID_CLASS
+            : '',
         disabled ? 'pointer-events-none opacity-50' : '',
       ]"
     >
       <draggable
-        v-if="images?.length"
+        v-if="images?.length || dragGroup"
         :list="images"
+        :group="dragGroup || undefined"
+        :sort="mode === 'gallery'"
+        :disabled="disabled || (mode === 'library' && !dragGroup)"
+        :data-gallery-mode="mode"
         item-key="fileId"
         :animation="200"
         ghost-class="drag-ghost"
@@ -75,18 +98,27 @@ function isMainImage(element) {
         :class="[
           layout === 'sidebar'
             ? 'flex flex-col gap-1.5'
-            : 'flex flex-wrap gap-2',
+            : layout === 'grid'
+              ? MEDIA_GRID_CLASS
+              : 'flex flex-wrap gap-2',
         ]"
-        @change="emit('drag-change')"
+        @change="emit('drag-change', $event)"
+        @end="emit('drag-end')"
       >
         <template #item="{ element, index }">
           <div
+            :data-file-id="element.fileId"
             :class="[
-              'gallery-item group relative overflow-hidden rounded-lg bg-muted cursor-grab active:cursor-grabbing hover:ring-2 ring-primary',
-              layout === 'sidebar'
-                ? 'aspect-square w-full'
+              'gallery-item group relative overflow-hidden rounded-lg bg-muted hover:ring-2 ring-primary',
+              mode === 'gallery' || dragGroup
+                ? 'cursor-grab active:cursor-grabbing'
+                : '',
+              layout !== 'inline'
+                ? 'aspect-square w-full min-w-0'
                 : 'size-28 sm:size-32',
-              isMainImage(element) ? 'ring-2 ring-primary' : '',
+              mode === 'gallery' && isMainImage(element)
+                ? 'ring-2 ring-primary'
+                : '',
             ]"
           >
             <Button
@@ -103,13 +135,11 @@ function isMainImage(element) {
               "
               @click="emit('preview', index)"
             >
-              <div
+              <ProductVideoThumbnail
                 v-if="isVideo(element)"
-                class="pointer-events-none absolute inset-0 flex size-full items-center justify-center bg-muted"
-                aria-hidden="true"
-              >
-                <Play class="size-8 fill-current text-muted-foreground" />
-              </div>
+                :src="thumbSrc(element)"
+                class="pointer-events-none absolute inset-0"
+              />
               <AppImage
                 v-else
                 :src="thumbSrc(element)"
@@ -117,49 +147,68 @@ function isMainImage(element) {
                   element.displayName ||
                   t('products.productGallerySidebar.productPhotoAlt')
                 "
-                blur-backdrop
                 spinner-size="sm"
                 class="pointer-events-none absolute inset-0 size-full"
-                img-class="pointer-events-none relative z-10 size-full object-contain"
+                img-class="pointer-events-none relative z-10 size-full object-cover"
               />
-              <div
+              <Badge
                 v-if="isVideo(element)"
-                class="pointer-events-none absolute bottom-1.5 left-1.5 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                variant="secondary"
+                class="pointer-events-none absolute bottom-1.5 left-1.5 z-20"
                 aria-hidden="true"
               >
                 {{ t("products.productGallerySidebar.videoBadge") }}
-              </div>
-              <div
-                v-if="isMainImage(element)"
-                class="pointer-events-none absolute top-1.5 left-1.5 z-20 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
+              </Badge>
+              <Badge
+                v-if="mode === 'gallery' && isMainImage(element)"
+                class="pointer-events-none absolute top-1.5 left-1.5 z-20"
                 aria-hidden="true"
               >
                 {{ t("products.productGallerySidebar.mainBadge") }}
-              </div>
+              </Badge>
             </Button>
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="icon"
               :disabled="disabled"
-              class="gallery-remove absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-black/60 text-white hover:bg-destructive"
-              :aria-label="t('products.productGallerySidebar.removePhoto')"
-              @click.stop="emit('remove', index)"
+              class="gallery-remove absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-background text-foreground"
+              :class="
+                mode === 'library'
+                  ? ''
+                  : 'hover:bg-destructive hover:text-destructive-foreground'
+              "
+              :aria-label="
+                t(
+                  mode === 'library'
+                    ? 'products.productGallerySidebar.addToGallery'
+                    : 'products.productGallerySidebar.removePhoto',
+                )
+              "
+              @click.stop="emit(mode === 'library' ? 'add' : 'remove', index)"
             >
-              <X class="size-3" />
+              <Plus v-if="mode === 'library'" class="size-3" />
+              <X v-else class="size-3" />
             </Button>
           </div>
         </template>
         <template #footer>
+          <div
+            v-if="mode === 'library' && !images.length"
+            class="col-span-full flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground"
+          >
+            {{ t("products.productGallerySidebar.dropToRemove") }}
+          </div>
           <Button
+            v-if="mode === 'gallery'"
             type="button"
             variant="ghost"
             :disabled="disabled || isUploading"
             :aria-label="t('products.productGallerySidebar.uploadPhoto')"
             :class="[
               'flex h-auto min-h-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent p-0 transition-colors hover:border-primary/50 hover:bg-transparent active:scale-[0.99]',
-              layout === 'sidebar'
-                ? 'aspect-square w-full'
+              layout !== 'inline'
+                ? 'aspect-square w-full min-w-0'
                 : 'size-28 sm:size-32',
             ]"
             @click="emit('upload')"
@@ -175,14 +224,16 @@ function isMainImage(element) {
       </draggable>
 
       <Button
-        v-else
+        v-else-if="mode === 'gallery'"
         type="button"
         variant="ghost"
         :disabled="disabled || isUploading"
         :aria-label="t('products.productGallerySidebar.uploadPhoto')"
         :class="[
           'flex h-auto min-h-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 bg-transparent p-0 transition-colors hover:border-primary/50 hover:bg-transparent active:scale-[0.99]',
-          layout === 'sidebar' ? 'aspect-square w-full' : 'size-28 sm:size-32',
+          layout !== 'inline'
+            ? 'aspect-square w-full min-w-0'
+            : 'size-28 sm:size-32',
         ]"
         @click="emit('upload')"
       >

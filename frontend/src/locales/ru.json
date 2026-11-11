@@ -233,15 +233,10 @@
       "download": "скачать",
       "deleteConfirmText": "Вы уверены что хотите удалить файл {name}?"
     },
-    "productImagesEditor": {
-      "productImagesTitle": "Изображения товара",
-      "dragToReorderHint": "Перетащите за ручку, чтобы изменить порядок или перенести между секциями. Первое фото — главное.",
-      "dragHandleAria": "Перетащить фото",
-      "otherImagesTitle": "Не на карточке",
-      "otherImagesHint": "Перетащите фото сюда, чтобы убрать его с карточки.",
-      "usedEmptyTitle": "На карточке нет фото",
-      "usedEmptyDescription": "Перетащите фото снизу или добавьте их во вкладке Файлы.",
-      "otherEmptyDescription": "Здесь появляются изображения, которых нет на карточке."
+    "productMediaEditor": {
+      "galleryTitle": "В галерее",
+      "availableTitle": "Не в галерее",
+      "availableHint": "Перетаскивайте фото и видео между секциями или нажмите + для добавления."
     },
     "rightActionStrip": {
       "backgroundJobsTitle": "Фоновые процессы",
@@ -2918,6 +2913,8 @@
       "openVideo": "Воспроизвести видео товара",
       "videoBadge": "Видео",
       "mainBadge": "Главное",
+      "addToGallery": "Добавить медиафайл в галерею",
+      "dropToRemove": "Перетащите медиафайл сюда, чтобы убрать его из галереи. Файл останется в хранилище.",
       "removePhoto": "Удалить медиафайл",
       "uploadPhoto": "Загрузить медиафайл"
     },
@@ -3214,8 +3211,7 @@
         "properties": "Свойства",
         "notes": "Заметки",
         "files": "Файлы",
-        "imagesShort": "Фото",
-        "images": "Изображения",
+        "media": "Медиа",
         "sizes": "Размеры",
         "marketplacesShort": "АД"
       },

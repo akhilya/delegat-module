@@ -300,6 +300,9 @@ iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive
 - **Stack:** `z-index: var(--z-toast)`
 
 ### Status chips / badges
+- Product gallery labels (Main / Video) use the shared shadcn-vue `Badge` with default / secondary variants; keep badge typography and geometry in the primitive rather than local mini-pills.
+- Product editing uses `ProductGallerySidebar` for both the properties-page gallery and the Media tab. `ProductMediaEditor` composes the same tiles in a responsive grid (12rem minimum, shrinking to the available width on narrow panes) for selected and available storage media. Photo thumbnails fill the square with `object-cover`; the full preview uses an explicitly viewport-sized `object-contain` stage, including upscaling smaller sources without cropping. Do not add a separate image-only editor or thumbnail style. Media order and selection share the product save flow; product deletion remains on Properties only.
+- Media action buttons use opaque project surfaces, not translucent fills. In the full photo preview, empty object-contain margins dismiss the overlay just like the outer backdrop; clicking the painted photo does not.
 - Use success / warning / destructive (and muted companions) for sync and marketplace state — never rainbow decoration
 - Technical identifier tags, including AI Model ID, use the shared `Badge`, not locally styled code blocks. Constrain long values with a truncated child and preserve the full identifier in `title`. Model tables keep a readable minimum width and scroll on narrow panes rather than collapsing identifier columns.
 

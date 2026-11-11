@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProductFileManager from "@/components/products/ProductFileManager.vue";
-import ProductImagesEditor from "@/components/productImagesEditor.vue";
+import ProductMediaEditor from "@/components/products/ProductMediaEditor.vue";
 import ProductAttributeForm from "@/components/products/productAttributeForm.vue";
 import StoreAttributeForm from "@/components/products/storeAttributeForm.vue";
 import ProductMarketplaceIntegrations from "@/components/products/productMarketplaceIntegrations.vue";
@@ -87,6 +87,7 @@ import {
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
 import { getMediaKind, isGalleryMedia } from "@/lib/mediaKind";
+import { isOutsideContainedImage } from "@/lib/productGalleryMedia";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { mapPool } from "@/lib/runPool";
@@ -160,7 +161,7 @@ export default {
     Input,
     Textarea,
     ProductFileManager,
-    ProductImagesEditor,
+    ProductMediaEditor,
     ProductAttributeForm,
     StoreAttributeForm,
     ProductMarketplaceIntegrations,
@@ -1216,6 +1217,17 @@ export default {
       images.value = sortedImages.value.map((img) => ({ ...img }));
     }
 
+    function addGalleryMedia(item) {
+      if (
+        sortedImages.value.some(
+          (media) => Number(media.fileId) === Number(item.fileId),
+        )
+      )
+        return;
+      sortedImages.value.push({ ...item, index: sortedImages.value.length });
+      onGalleryDragChange();
+    }
+
     async function removeGalleryImage(index) {
       const ok = await confirm({
         title: t("pages.productEditPage.removeGalleryImageConfirm.title"),
@@ -1233,22 +1245,21 @@ export default {
       images.value = sortedImages.value.map((img) => ({ ...img }));
     }
 
-    // Gallery media comes first; unattached image files remain previewable from Files.
+    // Gallery media comes first; storage media remains previewable before attachment.
     const lightboxItems = computed(() => {
       const attached = sortedImages.value.filter((item) => {
         return isGalleryMedia(item.contentType);
       });
       const attachedIds = new Set(attached.map((item) => Number(item.fileId)));
-      const imageFiles =
-        files.value?.filter((f) => getMediaKind(f.contentType) === "image") ??
-        [];
-      const unattached = imageFiles
+      const mediaFiles =
+        files.value?.filter((f) => isGalleryMedia(f.contentType)) ?? [];
+      const unattached = mediaFiles
         .filter((file) => !attachedIds.has(Number(file.id)))
         .map((file) => ({
           fileId: file.id,
           contentType: file.contentType,
           displayName: file.fileName,
-          kind: "image",
+          kind: getMediaKind(file.contentType),
         }));
       return [...attached, ...unattached];
     });
@@ -1367,6 +1378,18 @@ export default {
     }
     function closeLightbox() {
       lightboxIndex.value = null;
+    }
+    function onLightboxImageClick(event) {
+      const image = event.currentTarget.querySelector("img");
+      if (
+        isOutsideContainedImage(
+          event,
+          event.currentTarget.getBoundingClientRect(),
+          image?.naturalWidth,
+          image?.naturalHeight,
+        )
+      )
+        closeLightbox();
     }
     function nextImage() {
       if (lightboxIndex.value < lightboxItems.value.length - 1)
@@ -1552,9 +1575,11 @@ export default {
       openLightbox,
       openLightboxByFileId,
       closeLightbox,
+      onLightboxImageClick,
       nextImage,
       prevImage,
       onGalleryDragChange,
+      addGalleryMedia,
       removeGalleryImage,
       galleryFileInput,
       isUploadingGallery,
@@ -1580,14 +1605,9 @@ export default {
           <TabsTrigger value="files">{{
             $t("pages.productEditPage.tabs.files")
           }}</TabsTrigger>
-          <TabsTrigger value="images"
-            ><span class="sm:hidden">{{
-              $t("pages.productEditPage.tabs.imagesShort")
-            }}</span
-            ><span class="hidden sm:inline">{{
-              $t("pages.productEditPage.tabs.images")
-            }}</span></TabsTrigger
-          >
+          <TabsTrigger value="images">{{
+            $t("pages.productEditPage.tabs.media")
+          }}</TabsTrigger>
           <TabsTrigger v-if="category?.hasSizes" value="sizes">{{
             $t("pages.productEditPage.tabs.sizes")
           }}</TabsTrigger>
@@ -2409,12 +2429,17 @@ export default {
               />
             </div>
 
-            <!-- Images tab -->
+            <!-- Media tab; preserve the existing images route query for saved links. -->
             <div v-show="tab == 'images'">
-              <ProductImagesEditor
+              <ProductMediaEditor
                 :files="files"
-                v-model:images="images"
-                :productId="productId"
+                v-model:images="sortedImages"
+                :is-uploading="isUploadingGallery"
+                :disabled="isProductLoading"
+                @drag-change="onGalleryDragChange"
+                @remove="removeGalleryImage"
+                @add="addGalleryMedia"
+                @upload="triggerGalleryUpload"
                 @preview="openLightboxByFileId"
               />
             </div>
@@ -2486,10 +2511,14 @@ export default {
 
             <!-- In-flow actions: delete + save (duplicate lives in nav ⋯ menu) -->
             <div
-              v-show="tab === 'properties' && productSKU && canManageCatalog"
+              v-show="
+                ['properties', 'images'].includes(tab) &&
+                productSKU &&
+                canManageCatalog
+              "
               class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <AlertDialog>
+              <AlertDialog v-if="tab === 'properties'">
                 <AlertDialogTrigger as-child>
                   <Button variant="destructive" type="button">
                     <Trash2 class="size-4 mr-2" />
@@ -2524,7 +2553,7 @@ export default {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              <div class="flex items-center justify-end gap-3">
+              <div class="ml-auto flex items-center justify-end gap-3">
                 <p
                   v-if="hasUnsavedChanges"
                   class="text-sm text-muted-foreground"
@@ -2592,7 +2621,7 @@ export default {
         <Button
           variant="outline"
           size="icon-lg"
-          class="absolute top-4 right-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute top-4 right-4 z-20 rounded-md bg-background"
           :aria-label="$t('common.close')"
           @click="closeLightbox"
         >
@@ -2603,7 +2632,7 @@ export default {
           v-if="lightboxIndex > 0"
           variant="outline"
           size="icon-lg"
-          class="absolute left-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute left-4 z-20 rounded-md bg-background"
           :aria-label="$t('pages.productEditPage.lightbox.prevPhoto')"
           @click="prevImage"
         >
@@ -2618,23 +2647,28 @@ export default {
           :src="`/api/files/${lightboxItems[lightboxIndex].fileId}/download`"
           controls
           preload="metadata"
-          class="max-h-[90vh] max-w-[90vw]"
+          class="h-[calc(100dvh-8rem)] w-[calc(100vw-2rem)] object-contain sm:w-[calc(100vw-8rem)]"
         />
-        <AppImage
+        <div
           v-else
-          :key="lightboxItems[lightboxIndex].fileId"
-          :src="`/api/files/${lightboxItems[lightboxIndex].fileId}/download`"
-          :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
-          spinner-size="xl"
-          class="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
-          img-class="max-h-[90vh] max-w-[90vw] object-contain"
-        />
+          class="h-[calc(100dvh-8rem)] w-[calc(100vw-2rem)] sm:w-[calc(100vw-8rem)]"
+          @click="onLightboxImageClick"
+        >
+          <AppImage
+            :key="lightboxItems[lightboxIndex].fileId"
+            :src="`/api/files/${lightboxItems[lightboxIndex].fileId}/download`"
+            :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
+            spinner-size="xl"
+            class="size-full"
+            img-class="size-full object-contain"
+          />
+        </div>
         <!-- Next -->
         <Button
           v-if="lightboxIndex < lightboxItems.length - 1"
           variant="outline"
           size="icon-lg"
-          class="absolute right-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute right-4 z-20 rounded-md bg-background"
           :aria-label="$t('pages.productEditPage.lightbox.nextPhoto')"
           @click="nextImage"
         >
@@ -2642,7 +2676,7 @@ export default {
         </Button>
         <!-- Counter -->
         <div
-          class="absolute bottom-4 rounded-md border bg-background/90 px-3 py-1 text-sm tabular-nums text-foreground shadow-xs supports-backdrop-filter:backdrop-blur-xs"
+          class="absolute bottom-4 rounded-md border bg-background px-3 py-1 text-sm tabular-nums text-foreground shadow-xs"
         >
           {{ lightboxIndex + 1 }} / {{ lightboxItems.length }}
         </div>

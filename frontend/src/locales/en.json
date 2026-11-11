@@ -233,15 +233,10 @@
       "download": "download",
       "deleteConfirmText": "Are you sure you want to delete the file {name}?"
     },
-    "productImagesEditor": {
-      "productImagesTitle": "Product images",
-      "dragToReorderHint": "Drag by the grip to reorder or move between sections. The first photo is the main one.",
-      "dragHandleAria": "Drag photo",
-      "otherImagesTitle": "Not on the card",
-      "otherImagesHint": "Drag a photo here to take it off the card.",
-      "usedEmptyTitle": "No photos on the card",
-      "usedEmptyDescription": "Drag photos from below, or add them in Files.",
-      "otherEmptyDescription": "Image files that are not on the card appear here."
+    "productMediaEditor": {
+      "galleryTitle": "In gallery",
+      "availableTitle": "Not in gallery",
+      "availableHint": "Drag photos and videos between sections, or use + to add them."
     },
     "rightActionStrip": {
       "backgroundJobsTitle": "Background jobs",
@@ -2918,6 +2913,8 @@
       "openVideo": "Play product video",
       "videoBadge": "Video",
       "mainBadge": "Main",
+      "addToGallery": "Add media to gallery",
+      "dropToRemove": "Drop media here to remove it from the gallery. The file stays in storage.",
       "removePhoto": "Remove media",
       "uploadPhoto": "Upload media"
     },
@@ -3214,8 +3211,7 @@
         "properties": "Properties",
         "notes": "Notes",
         "files": "Files",
-        "imagesShort": "Photos",
-        "images": "Images",
+        "media": "Media",
         "sizes": "Sizes",
         "marketplacesShort": "MP"
       },
