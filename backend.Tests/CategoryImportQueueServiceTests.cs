@@ -9,6 +9,21 @@ namespace Delegat.Tests;
 public class CategoryImportQueueServiceTests
 {
     [Fact]
+    public async Task Enqueue_ExtractsLeafBeforeClippingLongMarketplacePaths()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id);
+        await db.SaveChangesAsync();
+        var source = new string('A', 180) + " / Board game accessories";
+        var job = await new CategoryImportQueueService(db).EnqueueIfNeededAsync(
+            connection, "236", source, source, null, null, "op1", 1);
+        Assert.Equal("Board game accessories", job!.localCategoryName);
+        Assert.Equal(source, job.externalCategoryName);
+    }
+
+    [Fact]
     public async Task Enqueue_SkipsWhenMappingExists()
     {
         var db = TestDbFactory.CreateDb();

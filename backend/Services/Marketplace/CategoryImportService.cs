@@ -162,7 +162,7 @@ public class CategoryImportService
         else
         {
             localCategoryName = StringClip.ClipRequired(
-                MarketplaceCategoryLabel.FirstReal(
+                MarketplaceCategoryLabel.ForLocalCategory(
                     externalCategoryId, localCategoryName, marketplaceName),
                 Category.CATEGORY_NAME_MAX_LENGTH,
                 $"Category {externalCategoryId}");

@@ -109,7 +109,8 @@ import {
 } from "@/components/ui/table";
 import Switch from "@/components/ui/switch/Switch.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import ImportCategoryChoice from "@/components/marketplace/ImportCategoryChoice.vue";
+import { marketplaceCategoryLeaf } from "@/lib/marketplaceCategoryName";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,7 +131,6 @@ import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -226,8 +226,7 @@ export default {
     TabsContent,
     TabsList,
     TabsTrigger,
-    RadioGroup,
-    RadioGroupItem,
+    ImportCategoryChoice,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -249,7 +248,6 @@ export default {
     SettingsFormSection,
     SearchableSelect,
     Field,
-    FieldContent,
     FieldDescription,
     FieldGroup,
     FieldLabel,
@@ -743,6 +741,8 @@ export default {
       for (const group of this.productsByExternalCategory) {
         const key = group.externalCategoryId || "__none__";
         const assignment = this.categoryAssignments[key];
+        if (assignment?.mode === "existing" && !assignment.localCategoryId)
+          return false;
         if (!assignment || assignment.mode !== "new") continue;
         const typedName = (assignment.newCategoryName || "").trim();
         if (group.externalCategoryId) {
@@ -2073,13 +2073,17 @@ export default {
           this.categoryAssignments[extCatId] = {
             mode: "existing",
             localCategoryId: existingMapping.localCategoryId,
-            newCategoryName: group.externalCategoryName || "",
+            newCategoryName: marketplaceCategoryLeaf(
+              group.externalCategoryName,
+            ),
           };
         } else {
           this.categoryAssignments[extCatId] = {
             mode: "new",
             localCategoryId: null,
-            newCategoryName: group.externalCategoryName || "",
+            newCategoryName: marketplaceCategoryLeaf(
+              group.externalCategoryName,
+            ),
           };
         }
       }
@@ -2209,7 +2213,8 @@ export default {
           } else if (assignment.mode === "new") {
             const typedName = (assignment.newCategoryName || "").trim();
             const categoryName = clipToLimit(
-              typedName || (extCatId ? marketplaceName : ""),
+              typedName ||
+                (extCatId ? marketplaceCategoryLeaf(marketplaceName) : ""),
               FIELD_LIMITS.categoryName,
             );
             if (!categoryName) {
@@ -5300,124 +5305,27 @@ export default {
                 }}
               </FieldDescription>
 
-              <RadioGroup
-                :model-value="
+              <ImportCategoryChoice
+                :mode="
                   categoryAssignments[importAssignmentKey(group)]?.mode ||
                   'none'
                 "
-                class="gap-3"
-                @update:model-value="
+                :has-external-category="!!group.externalCategoryId"
+                :category-name="
+                  categoryAssignments[importAssignmentKey(group)]
+                    ?.newCategoryName || ''
+                "
+                :category-id="importLocalCategoryValue(group)"
+                :options="importLocalCategoryOptions(group)"
+                :disabled="isImportingWithCategories"
+                @update:mode="
                   setAssignmentMode(importAssignmentKey(group), $event)
                 "
-              >
-                <Field orientation="horizontal">
-                  <RadioGroupItem
-                    :id="`import-existing-${group.externalCategoryId || 'none'}`"
-                    value="existing"
-                  />
-                  <FieldContent>
-                    <FieldLabel
-                      :for="`import-existing-${group.externalCategoryId || 'none'}`"
-                      class="cursor-pointer text-sm font-medium"
-                    >
-                      {{
-                        $t(
-                          "marketplace.connectionPage.dialogs.useExistingCategory",
-                        )
-                      }}
-                    </FieldLabel>
-                    <SearchableSelect
-                      v-if="
-                        categoryAssignments[importAssignmentKey(group)]
-                          ?.mode === 'existing'
-                      "
-                      :model-value="importLocalCategoryValue(group)"
-                      :options="importLocalCategoryOptions(group)"
-                      :placeholder="
-                        $t(
-                          'marketplace.connectionPage.dialogs.choosePlaceholder',
-                        )
-                      "
-                      @update:model-value="onImportLocalCategory(group, $event)"
-                    />
-                  </FieldContent>
-                </Field>
-
-                <Field orientation="horizontal">
-                  <RadioGroupItem
-                    :id="`import-new-${group.externalCategoryId || 'none'}`"
-                    value="new"
-                  />
-                  <FieldContent>
-                    <FieldLabel
-                      :for="`import-new-${group.externalCategoryId || 'none'}`"
-                      class="cursor-pointer text-sm font-medium"
-                    >
-                      <template v-if="group.externalCategoryId">
-                        {{
-                          $t(
-                            "marketplace.connectionPage.import.createNewFromAdapter",
-                            { name: group.displayName },
-                          )
-                        }}
-                      </template>
-                      <template v-else>
-                        {{
-                          $t(
-                            "marketplace.connectionPage.import.createNewCategory",
-                          )
-                        }}
-                      </template>
-                    </FieldLabel>
-                    <SettingsFormField
-                      v-if="
-                        !group.externalCategoryId &&
-                        categoryAssignments[importAssignmentKey(group)]
-                          ?.mode === 'new'
-                      "
-                      :label="
-                        $t(
-                          'marketplace.connectionPage.import.categoryNameLabel',
-                        )
-                      "
-                      :label-for="`import-new-cat-${group.externalCategoryId || 'none'}`"
-                    >
-                      <Input
-                        :id="`import-new-cat-${group.externalCategoryId || 'none'}`"
-                        :model-value="
-                          categoryAssignments[importAssignmentKey(group)]
-                            ?.newCategoryName || ''
-                        "
-                        :placeholder="
-                          $t(
-                            'marketplace.connectionPage.import.categoryNamePlaceholder',
-                          )
-                        "
-                        :maxlength="FIELD_LIMITS.categoryName"
-                        @update:model-value="
-                          setAssignmentNewName(
-                            importAssignmentKey(group),
-                            $event,
-                          )
-                        "
-                      />
-                    </SettingsFormField>
-                  </FieldContent>
-                </Field>
-
-                <Field orientation="horizontal">
-                  <RadioGroupItem
-                    :id="`import-none-${group.externalCategoryId || 'none'}`"
-                    value="none"
-                  />
-                  <FieldLabel
-                    :for="`import-none-${group.externalCategoryId || 'none'}`"
-                    class="cursor-pointer text-sm font-medium"
-                  >
-                    {{ $t("marketplace.connectionPage.import.noCategory") }}
-                  </FieldLabel>
-                </Field>
-              </RadioGroup>
+                @update:category-id="onImportLocalCategory(group, $event)"
+                @update:category-name="
+                  setAssignmentNewName(importAssignmentKey(group), $event)
+                "
+              />
             </FieldSet>
           </FieldGroup>
         </div>

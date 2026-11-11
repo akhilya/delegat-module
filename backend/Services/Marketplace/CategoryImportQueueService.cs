@@ -65,9 +65,9 @@ public sealed class CategoryImportQueueService
             .OrderByDescending(j => j.Id)
             .FirstOrDefaultAsync(ct);
 
-        var name = string.IsNullOrWhiteSpace(localCategoryName)
-            ? null
-            : StringClip.Clip(localCategoryName, Category.CATEGORY_NAME_MAX_LENGTH);
+        var name = StringClip.ClipOptional(
+            MarketplaceCategoryLabel.ForLocalCategory(extId, localCategoryName, externalCategoryName),
+            Category.CATEGORY_NAME_MAX_LENGTH);
         var extName = string.IsNullOrWhiteSpace(externalCategoryName)
             ? null
             : StringClip.Clip(externalCategoryName, CategoryMapping.EXTERNAL_CATEGORY_NAME_MAX_LENGTH);

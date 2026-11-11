@@ -279,6 +279,8 @@ Floating lists (dropdown, context menu, select, searchable select, combobox, pop
 ### Inset grouped lists
 iOS Settings / macOS source-list geometry on Catalog Workbench tokens. Primitive: `InsetGroup` / `InsetGroupItem` / `InsetGroupLabel` (`frontend/src/components/ui/inset-group`).
 
+- Product-import category choices use native inset row buttons with a trailing check for the single selected mode (existing / create / none), not radio discs. Render the selected mode's picker or name field below the group, never as an interactive descendant of a choice button.
+
 - **Shell:** `rounded-xl bg-card p-1` and one hairline ring (`ring-sidebar-border` on mist/sidebar; `ring-border/70` on paper pages). Space **between** groups, not between rows inside a group.
 - **Rows:** equal padding, inner `rounded-lg`, hover tonal. A hairline gap (`gap-0.5`) inside the group keeps those inner corners visible so adjacent rows do not fuse. Do not give each row its own card, border, or nested outline. Leading icon sits in the row (no bordered tile). Navigation rows use a trailing chevron; the whole row is the control.
 - **Current / selected:** primary ink fill + semibold only for a **single** current item (sidebar page, tools picker). Multi-select (roles, permission grants, store members) stays quiet paper + a trailing check — do not paint every chosen row primary.

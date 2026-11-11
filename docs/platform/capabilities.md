@@ -44,6 +44,7 @@
 - Visual field mapping editor (node graph, MappingCanvas); direct bindings and graph wires insert a reversible unit-conversion node for known compatible numeric units, and marketplace imports apply its inverse
 - Modifier pipeline: regex, template, calculation, value-map, reversible unit conversion
 - Category mapping (CategoryMapping) + background category import from marketplace (Operations)
+- Creating local products from the adapter Products tab queues new categories through the same category import service: normalized attribute labels/types, inferred units, and attachment semantics are shared with standalone imports. Automatically generated local category names use the breadcrumb leaf before length limits; mapping metadata keeps the full marketplace path, and explicit custom local names are preserved. The category-choice dialog uses selectable inset rows with a trailing check, not radio controls.
 - Two-way product sync (ProductSyncService). Import stores attribute values in local types (`.` decimals, JSON multiselect); marketplace required flags stay on the mapping graph, not on local category attributes. When the marketplace card has no selling price, import loads it from the prices API (Wildberries content cards never include price)
 - Linked products: Import photos (preview picker, append-only gallery). Already-imported URLs can be queued again as extra copies; in-flight URLs are skipped. Image download worker never replaces an occupied gallery slot; file/storage quota failures are not retried.
 - Price sync (PriceSyncService) and stock sync

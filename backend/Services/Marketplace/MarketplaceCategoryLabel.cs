@@ -1,4 +1,5 @@
 using Delegat.Models.Marketplace.DTOs;
+using System.Text.RegularExpressions;
 
 namespace Delegat.Services.Marketplace;
 
@@ -8,6 +9,20 @@ namespace Delegat.Services.Marketplace;
 /// </summary>
 public static class MarketplaceCategoryLabel
 {
+    /// <summary>Use the leaf of a breadcrumb only for generated local names, not custom names.</summary>
+    public static string? ForLocalCategory(string? externalCategoryId, string? requestedName, string? marketplaceName)
+    {
+        var requested = FirstReal(externalCategoryId, requestedName);
+        var source = FirstReal(externalCategoryId, marketplaceName);
+        if (requested != null && !string.Equals(requested, source, StringComparison.Ordinal))
+            return requested;
+        if (source == null)
+            return requested;
+        // Require whitespace around the separator so names such as AC/DC stay intact.
+        return Regex.Split(source, @"\s+/\s+", RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100)).Last(part => !string.IsNullOrWhiteSpace(part)).Trim();
+    }
+
     public static bool IsSynthetic(string? label, string? externalCategoryId)
     {
         if (string.IsNullOrWhiteSpace(label))

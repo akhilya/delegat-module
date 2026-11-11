@@ -6,6 +6,15 @@ namespace Delegat.Tests;
 public class MarketplaceCategoryLabelTests
 {
     [Theory]
+    [InlineData(null, "Hobbies / Board games / Accessories", "Accessories")]
+    [InlineData("Hobbies / Board games / Accessories", "Hobbies / Board games / Accessories", "Accessories")]
+    [InlineData("Custom / Name", "Hobbies / Accessories", "Custom / Name")]
+    [InlineData(null, "AC/DC accessories", "AC/DC accessories")]
+    [InlineData(null, "Toys", "Toys")]
+    public void ForLocalCategory_UsesLeafOnlyForAutomaticNames(string? requested, string source, string expected)
+        => Assert.Equal(expected, MarketplaceCategoryLabel.ForLocalCategory("236", requested, source));
+
+    [Theory]
     [InlineData(null, "17028973:115944384")]
     [InlineData("", "17028973:115944384")]
     [InlineData("17028973:115944384", "17028973:115944384")]

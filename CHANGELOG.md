@@ -245,6 +245,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Automatically created marketplace categories use the final breadcrumb title rather than the full path, before name-length limits; both product import category choices and standalone category import targets use shared inset rows while retaining the common attribute/unit normalization pipeline.
 - Photos and videos can be dragged between the Media tab's selected gallery and storage sections, including empty drop targets, without deleting storage files.
 - Clicking empty fields around an expanded product photo closes its preview again; media action buttons use opaque surfaces.
 - Full product media previews scale to the available viewport, photo thumbnails fill their tiles consistently, and the Media tab uses larger responsive tiles without a product-delete action.

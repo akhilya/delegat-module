@@ -1,4 +1,5 @@
 using Delegat.Models;
+using Delegat.Enums;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
@@ -13,6 +14,37 @@ namespace Delegat.Tests;
 
 public class CategoryImportBackgroundServiceTests
 {
+    [Fact]
+    public async Task ProductBatchCategoryJob_UsesNormalizedAttributesUnitsAndLeafName()
+    {
+        const string path = "Хобби и творчество / Настольные и карточные игры / Аксессуар для настольных игр";
+        var (worker, db, logger) = CreateWorker("batch-import", path,
+        [
+            new ExternalField("height", "Height (mm)", false, "number"),
+            new ExternalField("weight", "Gross weight", false, "number", Description: "Weight in kilograms"),
+            new ExternalField("video", "Озон.Видео: ссылка", false, "string"),
+        ]);
+        await worker.ProcessOnceAsync(CancellationToken.None);
+        db.ChangeTracker.Clear();
+        var job = await db.pendingCategoryImports.SingleAsync();
+        Assert.True(job.status == CategoryImportStatus.Completed, job.lastError);
+        var category = await db.categories.SingleAsync();
+        Assert.Equal("Аксессуар для настольных игр", category.name);
+        var height = await db.categoryAttributes.SingleAsync(a => a.key == "height");
+        Assert.Equal("Высота", height.name);
+        Assert.Equal("mm", height.unitCode);
+        Assert.Equal(AttributeType.Number, height.type);
+        var weight = await db.categoryAttributes.SingleAsync(a => a.key == "weight");
+        Assert.Equal("Вес брутто", weight.name);
+        Assert.Equal("kg", weight.unitCode);
+        var video = await db.categoryAttributes.SingleAsync(a => a.key == "video");
+        Assert.Equal("Видео", video.name);
+        Assert.Equal(AttributeType.File, video.type);
+        var mapping = await db.categoryMappings.SingleAsync();
+        Assert.Equal(path, mapping.externalCategoryName);
+        Assert.Null(logger.LastFinishStatus);
+    }
+
     [Fact]
     public async Task Worker_WritesMappingAndFinishesStandaloneOperation()
     {
@@ -63,7 +95,8 @@ public class CategoryImportBackgroundServiceTests
     private static (
         CategoryImportBackgroundService worker,
         DataContext db,
-        RecordingOperationLogger logger) CreateWorker(string operationType)
+        RecordingOperationLogger logger) CreateWorker(
+            string operationType, string categoryName = "Figurines", List<ExternalField>? fields = null)
     {
         var databaseName = Guid.NewGuid().ToString();
         var db = TestDbFactory.CreateDb(databaseName);
@@ -71,26 +104,17 @@ public class CategoryImportBackgroundServiceTests
         var store = data.AddStore();
         var connection = data.AddConnection(store.Id, adapterKey: "fake");
         var op = data.AddOperation(store.Id, type: operationType, status: "running", operationId: "op-cat");
-        db.pendingCategoryImports.Add(new PendingCategoryImport
-        {
-            connectionId = connection.Id,
-            storeId = store.Id,
-            authorUserId = 1,
-            operationId = op.operationId,
-            externalCategoryId = "236",
-            externalCategoryName = "Figurines",
-            localCategoryName = "Figurines",
-            status = CategoryImportStatus.Pending,
-            createdAt = DateTime.UtcNow,
-        });
         db.SaveChanges();
+        new CategoryImportQueueService(db).EnqueueIfNeededAsync(
+            connection, "236", categoryName, categoryName, null, null, op.operationId, 1)
+            .GetAwaiter().GetResult();
 
         var adapter = FakeCategoryAdapter.Create(
             root: [new ExternalCategory("236", "Figurines", HasChildren: false)],
             children: new Dictionary<string, List<ExternalCategory>>(StringComparer.Ordinal),
             fieldsByCategoryId: new Dictionary<string, List<ExternalField>>(StringComparer.Ordinal)
             {
-                ["236"] =
+                ["236"] = fields ??
                 [
                     new ExternalField("sku", "SKU", true, "string"),
                     new ExternalField("brand", "Brand", false, "string"),

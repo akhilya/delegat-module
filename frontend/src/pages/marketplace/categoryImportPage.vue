@@ -18,7 +18,13 @@ import {
   displaySonnerSuccess,
   extractResponseData,
 } from "@/store/sonnerHelper";
-import { ArrowLeft, ChevronRight, Download, FolderTree } from "lucide-vue-next";
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Download,
+  FolderTree,
+} from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +66,7 @@ export default {
     Download,
     FolderTree,
     ArrowLeft,
+    Check,
     ChevronRight,
     Dialog,
     DialogContent,
@@ -710,34 +717,52 @@ export default {
               <p id="category-import-target-label" class="sr-only">
                 {{ $t("marketplace.categoryImportPage.whereToImportTitle") }}
               </p>
-              <RadioGroup
-                :model-value="importMode"
+              <InsetGroup
+                role="group"
                 aria-labelledby="category-import-target-label"
-                orientation="horizontal"
-                class="flex flex-wrap gap-x-5 gap-y-1"
-                @update:model-value="setImportMode($event)"
+                class="sm:max-w-xl"
               >
-                <div class="flex min-h-9 items-center gap-2 text-sm">
-                  <RadioGroupItem id="category-import-mode-new" value="new" />
-                  <label for="category-import-mode-new" class="cursor-pointer">
-                    {{ $t("marketplace.categoryImportPage.createNewCategory") }}
-                  </label>
-                </div>
-                <div class="flex min-h-9 items-center gap-2 text-sm">
-                  <RadioGroupItem
-                    id="category-import-mode-existing"
-                    value="existing"
-                  />
-                  <label
-                    for="category-import-mode-existing"
-                    class="cursor-pointer"
-                  >
-                    {{
-                      $t("marketplace.categoryImportPage.intoExistingCategory")
-                    }}
-                  </label>
-                </div>
-              </RadioGroup>
+                <InsetGroupItem
+                  :selected="importMode === 'new'"
+                  :aria-pressed="importMode === 'new'"
+                  :disabled="isImporting"
+                  @click="setImportMode('new')"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <span>
+                      {{
+                        $t("marketplace.categoryImportPage.createNewCategory")
+                      }}
+                    </span>
+                    <Check
+                      v-if="importMode === 'new'"
+                      class="size-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </InsetGroupItem>
+                <InsetGroupItem
+                  :selected="importMode === 'existing'"
+                  :aria-pressed="importMode === 'existing'"
+                  :disabled="isImporting"
+                  @click="setImportMode('existing')"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <span>
+                      {{
+                        $t(
+                          "marketplace.categoryImportPage.intoExistingCategory",
+                        )
+                      }}
+                    </span>
+                    <Check
+                      v-if="importMode === 'existing'"
+                      class="size-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </InsetGroupItem>
+              </InsetGroup>
               <SettingsFormField
                 v-if="importMode === 'new'"
                 class="!gap-1.5 sm:max-w-xl"
