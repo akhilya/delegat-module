@@ -12,15 +12,17 @@ export const STORE_ATTRIBUTE_TYPES = {
   3: { i18nKey: "select", value: 3 },
   4: { i18nKey: "multiSelect", value: 4 },
   5: { i18nKey: "barcode", value: 5 },
+  6: { i18nKey: "file", value: 6 },
   Text: { i18nKey: "text", value: 0 },
   Number: { i18nKey: "number", value: 1 },
   Boolean: { i18nKey: "boolean", value: 2 },
   Select: { i18nKey: "select", value: 3 },
   MultiSelect: { i18nKey: "multiSelect", value: 4 },
   Barcode: { i18nKey: "barcode", value: 5 },
+  File: { i18nKey: "file", value: 6 },
 };
 
-export const STORE_ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4, 5];
+export const STORE_ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6];
 
 /**
  * @param {unknown} type
@@ -226,6 +228,7 @@ export function storeAttributeRowCaption(attribute, labels = {}) {
   const typeLabel = labels.typeLabel || "";
   const optionsWord = labels.optionsWord || "options";
   const parts = [typeLabel, attribute?.key].filter(Boolean);
+  if (attribute?.unitCode) parts.push(attribute.unitCode);
   const count = countAttributeOptions(attribute?.options);
   if (count > 0) {
     parts.push(`${count} ${optionsWord}`);
@@ -238,6 +241,8 @@ export function emptyStoreAttributeForm() {
     name: "",
     key: "",
     type: 0,
+    unitCode: "",
+    allowMultipleFiles: false,
     isRequired: false,
     isUnique: false,
     isMultiline: false,
@@ -268,6 +273,8 @@ export function formFromStoreAttribute(attribute) {
       name: attribute?.name || "",
       key: attribute?.key || "",
       type,
+      unitCode: attribute?.unitCode || "",
+      allowMultipleFiles: attribute?.allowMultipleFiles === true,
       isRequired: !!attribute?.isRequired,
       isUnique: attribute?.isUnique === true,
       isMultiline: attribute?.isMultiline ?? false,
@@ -316,10 +323,12 @@ export function storeAttributeSavePayload(form, extras = {}) {
     name: String(form.name ?? "").trim(),
     key: String(form.key ?? "").trim(),
     type,
+    unitCode: numberType ? String(form.unitCode ?? "").trim() : "",
     isRequired: !!form.isRequired,
     isUnique: !!form.isUnique,
     isMultiline: textType ? !!form.isMultiline : false,
     allowCustomValues: optionsType ? !!form.allowCustomValues : false,
+    allowMultipleFiles: type === 6 ? !!form.allowMultipleFiles : false,
     showOnProductPage: !!form.isRequired || !!form.showOnProductPage,
     options,
     defaultValue: String(form.defaultValue ?? "").trim() || null,

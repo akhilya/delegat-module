@@ -16,6 +16,9 @@ public sealed class FieldSpec
     public string? externalFieldType { get; set; }
     public string? externalFieldGroup { get; set; }
     public string? externalFieldDescription { get; set; }
+    public string? externalFieldUnit { get; set; }
+    public string? externalFieldUnitCode { get; set; }
+    public string? externalFieldUnitId { get; set; }
     public bool isRequired { get; set; }
     public bool isEnabled { get; set; } = true;
     public int sortOrder { get; set; }
@@ -144,6 +147,9 @@ public static class GraphGenerator
             var field = new AdapterField
             {
                 fieldKey = fm.externalFieldKey,
+                unit = fm.externalFieldUnit,
+                unitCode = fm.externalFieldUnitCode,
+                unitId = fm.externalFieldUnitId,
                 label = fm.externalFieldName ?? fm.externalFieldKey,
                 outputType = fm.externalFieldType ?? "string",
                 group = fm.externalFieldGroup,
@@ -235,11 +241,24 @@ public static class GraphGenerator
             specs.Where(f => f.isEnabled).ToList());
         foreach (var fm in incoming.OrderBy(f => f.sortOrder))
         {
-            if (string.IsNullOrEmpty(fm.externalFieldKey) || have.Contains(fm.externalFieldKey))
+            if (string.IsNullOrEmpty(fm.externalFieldKey))
                 continue;
+            var existing = adapter.data.fields.FirstOrDefault(f =>
+                string.Equals(f.fieldKey, fm.externalFieldKey, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                // Refresh schema metadata while preserving the operator's binding and wiring.
+                existing.unit = fm.externalFieldUnit;
+                existing.unitCode = fm.externalFieldUnitCode;
+                existing.unitId = fm.externalFieldUnitId;
+                continue;
+            }
             adapter.data.fields.Add(new AdapterField
             {
                 fieldKey = fm.externalFieldKey,
+                unit = fm.externalFieldUnit,
+                unitCode = fm.externalFieldUnitCode,
+                unitId = fm.externalFieldUnitId,
                 label = fm.externalFieldName ?? fm.externalFieldKey,
                 outputType = fm.externalFieldType ?? "string",
                 isRequired = fm.isRequired,
@@ -341,6 +360,9 @@ public static class GraphGenerator
                 existingField.outputType = fm.externalFieldType ?? "string";
                 existingField.group = fm.externalFieldGroup;
                 existingField.description = fm.externalFieldDescription;
+                existingField.unit = fm.externalFieldUnit;
+                existingField.unitCode = fm.externalFieldUnitCode;
+                existingField.unitId = fm.externalFieldUnitId;
                 existingField.sortOrder = fm.sortOrder;
                 existingField.isRequired = fm.isRequired;
                 continue;
@@ -349,6 +371,9 @@ public static class GraphGenerator
             priceNode.data.fields.Add(new AdapterField
             {
                 fieldKey = fm.externalFieldKey,
+                unit = fm.externalFieldUnit,
+                unitCode = fm.externalFieldUnitCode,
+                unitId = fm.externalFieldUnitId,
                 label = fm.externalFieldName ?? migratedLabel ?? fm.externalFieldKey,
                 outputType = fm.externalFieldType ?? migratedType ?? "string",
                 group = fm.externalFieldGroup,

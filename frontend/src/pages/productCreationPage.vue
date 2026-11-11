@@ -29,12 +29,13 @@ import {
   buildAttributesSchema,
   formRecordToAttributeValues,
   listMissingRequiredAttributes,
+  isAttributeType,
 } from "@/lib/productAttributeValidation";
 import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
+import { parseAttributeFileIds } from "@/lib/productAttributeFiles";
+import { isGalleryMedia } from "@/lib/mediaKind";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { t } from "@/i18n";
-import { http } from "@/main";
-import { mapPool } from "@/lib/runPool";
 import { confirm } from "@/composables/useConfirm";
 import AiDescriptionGenerator from "@/components/ai/AiDescriptionGenerator.vue";
 import { useSelectedStore } from "@/composables/useSelectedStore";
@@ -258,6 +259,7 @@ export default {
     const showCreateGroupDialog = ref(false);
     const descriptionRef = ref(null);
     const sortedImages = ref([]);
+    const pendingUploadFiles = ref([]);
     const galleryFileInput = ref(null);
     const isUploadingGallery = ref(false);
     const groupDetail = ref(null);
@@ -269,7 +271,20 @@ export default {
         ? t("ai.descriptionImprovingHint")
         : t("ai.descriptionGeneratingHint"),
     );
-    let pendingImageId = 0;
+    let nextPendingFileId = -1;
+
+    function addPendingUpload(file) {
+      const id = nextPendingFileId--;
+      const item = {
+        id,
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        length: file.size,
+        localFile: file,
+      };
+      pendingUploadFiles.value.push(item);
+      return item;
+    }
 
     function revokeImagePreview(img) {
       if (img?.previewUrl) URL.revokeObjectURL(img.previewUrl);
@@ -290,11 +305,19 @@ export default {
       if (!fileList?.length) return;
 
       for (const file of fileList) {
-        pendingImageId += 1;
+        if (!isGalleryMedia(file.type)) {
+          displaySonnerError(
+            t("pages.productCreationPage.gallery.unsupportedMedia"),
+          );
+          continue;
+        }
+        const pending = addPendingUpload(file);
         sortedImages.value.push({
-          fileId: `pending-${pendingImageId}`,
+          fileId: pending.id,
           localFile: file,
           previewUrl: URL.createObjectURL(file),
+          contentType: pending.contentType,
+          displayName: pending.fileName,
           index: sortedImages.value.length,
         });
       }
@@ -321,6 +344,9 @@ export default {
 
       const [removed] = sortedImages.value.splice(index, 1);
       revokeImagePreview(removed);
+      pendingUploadFiles.value = pendingUploadFiles.value.filter(
+        (file) => file.id !== removed?.fileId,
+      );
       reindexGalleryImages();
     }
 
@@ -330,46 +356,14 @@ export default {
       window.open(img.previewUrl, "_blank", "noopener,noreferrer");
     }
 
-    async function persistPendingImages(productId) {
-      if (!sortedImages.value.length) return true;
-
-      try {
-        const pending = sortedImages.value.filter((img) => img.localFile);
-        const idGroups = await mapPool(pending, async (img) => {
-          const formData = new FormData();
-          formData.append("files", img.localFile);
-          const response = await http({
-            url: `/products/${productId}/files`,
-            method: "PUT",
-            data: formData,
-            timeout: 60 * 60 * 1000,
-          });
-
-          const uploaded = Array.isArray(response.data)
-            ? response.data
-            : [response.data];
-          return uploaded.map((f) => f.id);
-        });
-        const fileIds = idGroups.flat();
-
-        if (!fileIds.length) return true;
-
-        let ok = false;
-        await store.dispatch("postProductImages", {
-          productId,
-          files: fileIds,
-          onSuccess: () => {
-            ok = true;
-          },
-          onError: (error) => {
-            displaySonnerError(error);
-          },
-        });
-        return ok;
-      } catch (error) {
-        displaySonnerError(error);
-        return false;
-      }
+    function handleFileAttributeUpload(files) {
+      const selected = Array.from(files || []);
+      const added = selected.map(addPendingUpload);
+      return added.map(({ id, fileName, contentType }) => ({
+        id,
+        fileName,
+        contentType,
+      }));
     }
 
     onMounted(async () => {
@@ -692,6 +686,10 @@ export default {
       }
     });
 
+    function fileIdsFromValue(raw) {
+      return parseAttributeFileIds(raw) || [];
+    }
+
     const onSubmit = form.handleSubmit(async (values) => {
       if (!selectedCategoryId.value) {
         categoryError.value = t(
@@ -711,57 +709,73 @@ export default {
         attributeValues: formRecordToAttributeValues(
           values.categoryAttributes,
           "attributeId",
+          visibleCategoryAttributes.value,
         ),
         storeAttributeValues: formRecordToAttributeValues(
           values.storeAttributes,
           "storeAttributeId",
+          visibleStoreAttributes.value,
         ),
       };
 
+      const galleryFileIds = sortedImages.value
+        .map((image) => Number(image.fileId))
+        .filter((id) => id < 0);
+      const usedTemporaryIds = new Set(galleryFileIds);
+      for (const attribute of visibleCategoryAttributes.value) {
+        if (!isAttributeType(attribute.type, "file")) continue;
+        for (const id of fileIdsFromValue(
+          values.categoryAttributes?.[attribute.id],
+        ))
+          if (id < 0) usedTemporaryIds.add(id);
+      }
+      for (const attribute of visibleStoreAttributes.value) {
+        if (!isAttributeType(attribute.type, "file")) continue;
+        for (const id of fileIdsFromValue(
+          values.storeAttributes?.[attribute.id],
+        ))
+          if (id < 0) usedTemporaryIds.add(id);
+      }
+      const filesToUpload = pendingUploadFiles.value.filter((file) =>
+        usedTemporaryIds.has(file.id),
+      );
+
       try {
-        if (sortedImages.value.length > 0) {
+        if (filesToUpload.length > 0) {
           isUploadingGallery.value = true;
         }
 
-        await store.dispatch("createProduct", {
-          input,
+        const createAction =
+          filesToUpload.length > 0 ? "createProductWithFiles" : "createProduct";
+        const createParams =
+          filesToUpload.length > 0
+            ? {
+                input,
+                files: filesToUpload,
+                galleryFileIds,
+              }
+            : { input };
+
+        await store.dispatch(createAction, {
+          ...createParams,
           onSuccess: async (response) => {
             const createdProduct = response.data.value;
-            let imagesFailed = false;
-            let successMessage = t(
+            const successMessage = t(
               "pages.productCreationPage.toast.createdSuccess",
             );
 
-            if (sortedImages.value.length > 0) {
-              const imagesOk = await persistPendingImages(createdProduct.id);
-              sortedImages.value.forEach(revokeImagePreview);
-              sortedImages.value = [];
-              if (!imagesOk) {
-                imagesFailed = true;
-                successMessage = t(
-                  "pages.productCreationPage.toast.createdImagesFailed",
-                );
-              }
-            }
+            sortedImages.value.forEach(revokeImagePreview);
+            sortedImages.value = [];
+            pendingUploadFiles.value = [];
 
             if (selectedGroupId.value && createdProduct.id) {
               await store.dispatch("addProductsToGroup", {
                 groupId: selectedGroupId.value,
                 productIds: [createdProduct.id],
                 onSuccess: () => {
-                  if (!imagesFailed) {
-                    displaySonnerSuccess(
-                      t(
-                        "pages.productCreationPage.toast.createdAndAddedToGroup",
-                      ),
-                    );
-                  } else {
-                    displaySonnerSuccess(
-                      t("pages.productCreationPage.toast.addedToGroupSuffix", {
-                        message: successMessage,
-                      }),
-                    );
-                  }
+                  displaySonnerSuccess(
+                    t("pages.productCreationPage.toast.createdAndAddedToGroup"),
+                  );
                 },
                 onError: () => {
                   displaySonnerSuccess(
@@ -833,10 +847,12 @@ export default {
       openCreateGroupDialogFromSelect,
       onGroupCreated,
       sortedImages,
+      pendingUploadFiles,
       galleryFileInput,
       isUploadingGallery,
       triggerGalleryUpload,
       handleGalleryUpload,
+      handleFileAttributeUpload,
       onGalleryDragChange,
       removeGalleryImage,
       openGalleryPreview,
@@ -864,7 +880,7 @@ export default {
       <input
         ref="galleryFileInput"
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         multiple
         class="hidden"
         @change="handleGalleryUpload"
@@ -1462,6 +1478,9 @@ export default {
                     selectedCategory && visibleCategoryAttributes.length > 0
                   "
                   :attributes="selectedCategory.attributes"
+                  :files="pendingUploadFiles"
+                  :category-id="selectedCategory.id"
+                  :on-file-upload="handleFileAttributeUpload"
                 >
                   <template #title>
                     {{
@@ -1503,7 +1522,11 @@ export default {
                       )
                     }}
                   </p>
-                  <StoreAttributeForm :attributes="storeAttributes" />
+                  <StoreAttributeForm
+                    :attributes="storeAttributes"
+                    :files="pendingUploadFiles"
+                    :on-file-upload="handleFileAttributeUpload"
+                  />
                 </div>
 
                 <div class="flex items-center justify-end pt-2 pb-6">

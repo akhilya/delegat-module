@@ -13,7 +13,8 @@ namespace Delegat.Services.Plugins;
 /// Wraps an IMarketplacePlugin to implement IMarketplaceAdapter.
 /// Handles conversion between MarketplaceConnection and ConnectionContext.
 /// </summary>
-public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdapter, IMarketplaceSandboxReadBrokerAdapter
+public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdapter,
+    IMarketplaceSandboxReadBrokerAdapter, IMarketplaceMediaCapabilities
 {
     private readonly IMarketplacePlugin _plugin;
     private readonly ILogger _logger;
@@ -77,6 +78,11 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
     }
 
     public RateLimitConfig? GetRateLimitConfig() => _plugin.GetRateLimitConfig();
+
+    /// <summary>Returns optional typed-media capabilities, defaulting old plugins to no video support.</summary>
+    public MediaCapabilities GetMediaCapabilities() => _plugin is IMarketplaceMediaCapabilities media
+        ? media.GetMediaCapabilities()
+        : new MediaCapabilities();
 
     public async Task<List<QuotaInfo>> GetQuotasAsync(
         MarketplaceConnection connection, CancellationToken ct = default)
@@ -251,7 +257,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
             f.SortOrder,
             f.IsAspect,
             f.AllowCustomValues,
-            f.MaxValues
+            f.MaxValues,
+            f.UnitCode,
+            f.UnitId
         )).ToList();
     }
 
@@ -276,7 +284,12 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
             f.MaxValue,
             f.ValidationPattern,
             f.Group,
-            f.SortOrder
+            f.SortOrder,
+            f.IsAspect,
+            f.AllowCustomValues,
+            f.MaxValues,
+            UnitCode: f.UnitCode,
+            UnitId: f.UnitId
         )).ToList();
     }
 
@@ -303,7 +316,10 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
                 Description = f.Description,
                 Group = f.Group,
                 SortOrder = f.SortOrder,
-                Options = f.Options?.Select(o => new Delegat.Marketplace.SDK.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList()
+                Options = f.Options?.Select(o => new Delegat.Marketplace.SDK.DTOs.ExternalFieldOption(o.Value, o.Label)).ToList(),
+                UnitCode = f.UnitCode,
+                Unit = f.Unit,
+                UnitId = f.UnitId
             }).ToList()
         };
 
@@ -328,7 +344,9 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
                 f.SortOrder,
                 f.IsAspect,
                 f.AllowCustomValues,
-                f.MaxValues
+                f.MaxValues,
+                f.UnitCode,
+                f.UnitId
             )).ToList(),
             result.ErrorMessage,
             result.Details);
@@ -446,7 +464,10 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
                 v.Price,
                 v.Quantity,
                 v.Extra)).ToList()
-        );
+        )
+        {
+            Media = p.Media
+        };
     }
 
     private async Task<List<Models.Marketplace.DTOs.ExternalProduct>> AttachMissingPricesAsync(

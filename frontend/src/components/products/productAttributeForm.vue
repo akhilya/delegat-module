@@ -85,6 +85,7 @@ function collectEmptyRequiredIds(attributes, valuesById) {
 }
 
 export default {
+  emits: ["files-uploaded"],
   components: {
     EmptyState,
     FieldGroup,
@@ -110,6 +111,10 @@ export default {
       type: String,
       default: "categoryAttributes",
     },
+    files: { type: Array, default: () => [] },
+    productId: { type: Number, default: null },
+    categoryId: { type: Number, default: null },
+    onFileUpload: { type: Function, default: null },
   },
   setup(props) {
     const formErrors = useFormErrors();
@@ -342,12 +347,17 @@ export default {
               <div
                 v-for="(attribute, colIndex) in row"
                 :key="'c-' + rowIndex + '-' + colIndex"
-                class="min-w-0 overflow-hidden"
+                class="min-w-0 overflow-x-clip"
               >
                 <AttributeFieldControl
                   v-if="attribute"
                   :attribute="attribute"
                   :field-prefix="fieldPrefix"
+                  :files="files"
+                  :product-id="productId"
+                  :category-id="categoryId"
+                  :on-file-upload="onFileUpload"
+                  @files-uploaded="$emit('files-uploaded', $event)"
                 />
                 <p v-else class="py-2 text-sm text-muted-foreground">
                   {{ $t("products.productAttributeForm.emptyCell") }}
@@ -398,7 +408,7 @@ export default {
                 <span class="min-w-0 truncate">{{ group.label }}</span>
               </span>
             </AccordionTrigger>
-            <AccordionContent>
+            <AccordionContent class="pt-1 pb-4">
               <FieldGroup class="gap-5">
                 <div
                   class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[repeat(2,minmax(0,1fr))]"
@@ -406,12 +416,17 @@ export default {
                   <div
                     v-for="attribute in group.attributes"
                     :key="attribute.id"
-                    class="min-w-0 overflow-hidden"
+                    class="min-w-0 overflow-x-clip"
                     :class="isFullWidthField(attribute) ? 'md:col-span-2' : ''"
                   >
                     <AttributeFieldControl
                       :attribute="attribute"
                       :field-prefix="fieldPrefix"
+                      :files="files"
+                      :product-id="productId"
+                      :category-id="categoryId"
+                      :on-file-upload="onFileUpload"
+                      @files-uploaded="$emit('files-uploaded', $event)"
                     />
                   </div>
                 </div>
@@ -433,12 +448,17 @@ export default {
                 <div
                   v-for="attribute in group.attributes"
                   :key="attribute.id"
-                  class="min-w-0 overflow-hidden"
+                  class="min-w-0 overflow-x-clip"
                   :class="isFullWidthField(attribute) ? 'md:col-span-2' : ''"
                 >
                   <AttributeFieldControl
                     :attribute="attribute"
                     :field-prefix="fieldPrefix"
+                    :files="files"
+                    :product-id="productId"
+                    :category-id="categoryId"
+                    :on-file-upload="onFileUpload"
+                    @files-uploaded="$emit('files-uploaded', $event)"
                   />
                 </div>
               </div>

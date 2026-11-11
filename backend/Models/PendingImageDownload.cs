@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Delegat.Models.Products;
 
 namespace Delegat.Models;
@@ -12,6 +13,13 @@ public enum ImageDownloadStatus
     Completed = 2,
     Failed = 3,
     Cancelled = 4
+}
+
+/// <summary>Expected media kind for a pending external download. Zero preserves legacy image rows.</summary>
+public enum PendingMediaKind
+{
+    Image = 0,
+    Video = 1
 }
 
 /// <summary>
@@ -48,6 +56,13 @@ public class PendingImageDownload
     /// Source URL of the image to download.
     /// </summary>
     public string imageUrl { get; set; } = string.Empty;
+
+    /// <summary>Expected content kind; existing queued rows default to Image.</summary>
+    public PendingMediaKind mediaKind { get; set; } = PendingMediaKind.Image;
+
+    /// <summary>Adapter-provided display name for typed media, if available.</summary>
+    [StringLength(255)]
+    public string? mediaFileName { get; set; }
 
     /// <summary>
     /// Order index of the image (for sorting).

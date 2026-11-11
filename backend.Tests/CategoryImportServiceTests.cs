@@ -71,6 +71,7 @@ public class CategoryImportServiceTests
                 "Material",
                 false,
                 "string",
+                Description: "Fiber and composition details",
                 MaxLength: 80,
                 ValidationPattern: "^[A-Za-z]+$"),
             new ExternalField(
@@ -105,6 +106,8 @@ public class CategoryImportServiceTests
         Assert.True(result.IsSuccess, result.ErrorMessage);
 
         var material = await db.categoryAttributes.SingleAsync(a => a.key == "material");
+        Assert.Equal("Fiber and composition details", material.description);
+        Assert.True(material.descriptionInTooltip);
         Assert.Equal(80, material.maxLength);
         Assert.Equal("^[A-Za-z]+$", material.validationPattern);
 
@@ -123,6 +126,314 @@ public class CategoryImportServiceTests
 
         var tags = await db.categoryAttributes.SingleAsync(a => a.key == "tags");
         Assert.Equal(3, tags.maxValues);
+    }
+
+    [Fact]
+    public async Task Import_InferUnitsFromNumericFieldNamesAndDescriptions()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("sku", "SKU", true, "string"),
+            new ExternalField("height", "height (mm)", false, "number"),
+            new ExternalField("width", "Package width (mm)", false, "number"),
+            new ExternalField("weight", "Gross weight", false, "number",
+                Description: "Enter the product weight in kilograms."),
+            new ExternalField("color_code", "Color C", false, "string"),
+        ]);
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", "Toys");
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var height = await db.categoryAttributes.SingleAsync(a => a.key == "height");
+        var width = await db.categoryAttributes.SingleAsync(a => a.key == "width");
+        var weight = await db.categoryAttributes.SingleAsync(a => a.key == "weight");
+        var color = await db.categoryAttributes.SingleAsync(a => a.key == "color_code");
+        Assert.Equal("Высота", height.name);
+        Assert.Equal("mm", height.unitCode);
+        Assert.Equal("mm", width.unitCode);
+        Assert.Equal("kg", weight.unitCode);
+        Assert.Null(color.unitCode);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var graph = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var importedFields = graph.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+        Assert.Equal("mm", importedFields["width"].GetProperty("unitCode").GetString());
+        Assert.Equal("мм", importedFields["width"].GetProperty("unit").GetString());
+        Assert.Equal("kg", importedFields["weight"].GetProperty("unitCode").GetString());
+        Assert.Equal("height (mm)", importedFields["height"].GetProperty("label").GetString());
+    }
+
+    [Fact]
+    public async Task Import_KeepsHeightWithPackagingSeparateWhenOzonDescriptionDisambiguatesName()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField(
+                "height", "Height (mm)", false, "number",
+                Description: "Product height in millimeters"),
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"
+                    + "Product height in millimeters (including packaging)"),
+        ]);
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", "Toys");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(2, result.AttributesCreated);
+        Assert.Equal("Высота", (await db.categoryAttributes.SingleAsync(a => a.key == "height")).name);
+        var packagedHeight = await db.categoryAttributes
+            .SingleAsync(a => a.key == "height_with_packaging");
+        Assert.Equal("Высота с упаковкой", packagedHeight.name);
+        Assert.Equal("mm", packagedHeight.unitCode);
+    }
+
+    [Fact]
+    public async Task Import_RequiresAnExplicitChoiceForLikelyDuplicateAndDoesNotMutateExistingAttribute()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Высота с упаковкой",
+            type: AttributeType.Number,
+            key: "height_with_packaging");
+        existing.unitCode = "mm";
+        existing.description = "Local description";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection, "leaf", localCategoryId: category.Id);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Choose whether to reuse, create, or skip", result.ErrorMessage);
+        Assert.Equal("Высота с упаковкой", existing.name);
+        Assert.Equal("mm", existing.unitCode);
+        Assert.Equal("Local description", existing.description);
+        Assert.Single(await db.categoryAttributes.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Import_ValidatesAllDuplicateChoicesBeforeTrackingAnyNewAttributes()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("material", "Material", false, "string"),
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Высота с упаковкой",
+            type: AttributeType.Number,
+            key: "height_with_packaging");
+        existing.unitCode = "mm";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            localCategoryId: category.Id);
+
+        Assert.False(result.IsSuccess);
+        Assert.DoesNotContain(
+            db.ChangeTracker.Entries<CategoryAttribute>(),
+            entry => entry.State == EntityState.Added);
+        Assert.DoesNotContain(
+            db.ChangeTracker.Entries<CategoryMapping>(),
+            entry => entry.State == EntityState.Added);
+        Assert.Single(await db.categoryAttributes.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Import_ExplicitReuseUsesChosenDuplicateWithoutChangingItsDefinition()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Высота с упаковкой",
+            type: AttributeType.Number,
+            key: "custom_height");
+        existing.unitCode = "mm";
+        existing.description = "Keep this text";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "height_with_packaging",
+                    action = "reuse",
+                    existingAttributeId = existing.Id,
+                },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        Assert.Equal("Высота с упаковкой", existing.name);
+        Assert.Equal("custom_height", existing.key);
+        Assert.Equal("mm", existing.unitCode);
+        Assert.Equal("Keep this text", existing.description);
+        Assert.Single(await db.categoryAttributes.ToListAsync());
+
+        var graph = await db.categoryMappings.SingleAsync();
+        Assert.Contains($"\"attributeId\":{existing.Id}", graph.graphJson);
+    }
+
+    [Fact]
+    public async Task Import_ExplicitCreateLeavesPossibleDuplicateUntouched()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Высота с упаковкой",
+            type: AttributeType.Number,
+            key: "custom_height");
+        existing.unitCode = "mm";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "height_with_packaging",
+                    action = "create",
+                },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(1, result.AttributesCreated);
+        Assert.Equal("custom_height", existing.key);
+        Assert.Equal("mm", existing.unitCode);
+        Assert.Equal(2, await db.categoryAttributes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Import_ExplicitSkipDoesNotCreateAnAttributeOrBindTheField()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField(
+                "height_with_packaging", "Height (mm)", false, "number",
+                Description: "Product height in millimeters (including packaging)"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Высота с упаковкой",
+            type: AttributeType.Number,
+            key: "height_with_packaging");
+        existing.unitCode = "mm";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "height_with_packaging",
+                    action = "skip",
+                },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        Assert.Single(await db.categoryAttributes.ToListAsync());
+        var mapping = await db.categoryMappings.SingleAsync();
+        Assert.DoesNotContain($"\"attributeId\":{existing.Id}", mapping.graphJson);
+    }
+
+    [Fact]
+    public async Task Import_RejectsReuseDecisionForNewCategoryBeforeCreatingIt()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("height", "Height", false, "string"),
+        ]);
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "height",
+                    action = "reuse",
+                    existingAttributeId = 42,
+                },
+            ]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(await db.categories.ToListAsync());
+        Assert.Empty(await db.categoryAttributes.ToListAsync());
+        Assert.Empty(await db.categoryMappings.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Import_EmptyFieldSelectionDoesNotBindUnselectedExistingAttributes()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("height", "Height", false, "string"),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(
+            category.Id,
+            name: "Height",
+            type: AttributeType.Text,
+            key: "height");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection,
+            "leaf",
+            localCategoryId: category.Id,
+            selectedFieldKeys: []);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        var mapping = await db.categoryMappings.SingleAsync();
+        Assert.DoesNotContain($"\"attributeId\":{existing.Id}", mapping.graphJson);
     }
 
     [Fact]

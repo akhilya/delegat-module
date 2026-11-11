@@ -3,6 +3,7 @@ using Delegat.Controllers;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Security;
+using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Marketplace;
@@ -18,6 +19,79 @@ namespace Delegat.Tests;
 
 public class CategoryMappingServiceRegistrationTests
 {
+    [Fact]
+    public async Task ExternalCategoryFields_IncludeNormalizedNamesAndImportSettings()
+    {
+        var adapter = new OrdersAdapterFake
+        {
+            Capabilities = MarketplaceCapabilities.GetCategoryFields,
+            CategoryFields =
+            [
+                new ExternalField(
+                    "height", "Height (mm)", false, "number",
+                    Description: "Product height in millimeters",
+                    MinValue: 1,
+                    MaxValue: 100,
+                    ValidationPattern: "^[0-9]+$"),
+                new ExternalField(
+                    "height_with_packaging", "Height (mm)", false, "number",
+                    Description: "Product height in millimeters (including packaging)"
+                        + "Product height in millimeters (including packaging)"),
+                new ExternalField(
+                    "brand", "Brand", true, "select",
+                    [new ExternalFieldOption("none", "No brand")],
+                    Description: "Choose a brand",
+                    MaxValues: 4,
+                    AllowCustomValues: true),
+            ],
+        };
+        await using var provider = CreateProvider(aiEnabled: false, adapter: adapter);
+        using var scope = provider.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<DataContext>();
+        var store = new TestDataBuilder(db).AddStore();
+        var connection = new TestDataBuilder(db).AddConnection(store.Id);
+        await db.SaveChangesAsync();
+        ((FakeCurrentUserService)sp.GetRequiredService<ICurrentUserService>()).SelectedStoreId = store.Id;
+
+        var controller = ActivatorUtilities.CreateInstance<CategoryMappingController>(sp);
+        var result = await controller.GetExternalCategoryFields(connection.Id, "remote-category");
+        var body = JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value);
+        var field = body.EnumerateArray()
+            .Single(item => item.GetProperty("key").GetString() == "height");
+
+        Assert.Equal("Height (mm)", field.GetProperty("name").GetString());
+        Assert.Equal("Высота", field.GetProperty("importName").GetString());
+        Assert.Equal("Number", field.GetProperty("importType").GetString());
+        Assert.Equal("mm", field.GetProperty("unitCode").GetString());
+        Assert.Equal(1, field.GetProperty("minValue").GetInt32());
+        Assert.Equal(100, field.GetProperty("maxValue").GetInt32());
+        Assert.Equal("^[0-9]+$", field.GetProperty("validationPattern").GetString());
+        Assert.True(field.GetProperty("descriptionInTooltip").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, field.GetProperty("options").ValueKind);
+
+        var packagedHeight = body.EnumerateArray()
+            .Single(item => item.GetProperty("key").GetString() == "height_with_packaging");
+        Assert.Equal("Высота с упаковкой", packagedHeight.GetProperty("importName").GetString());
+
+        var detailsResult = await controller.GetExternalCategoryFields(
+            connection.Id, "remote-category", "brand");
+        var detailsBody = JsonSerializer.SerializeToElement(
+            Assert.IsType<OkObjectResult>(detailsResult).Value);
+        var brand = Assert.Single(detailsBody.EnumerateArray());
+
+        Assert.Equal("Бренд", brand.GetProperty("importName").GetString());
+        Assert.Equal("brand", brand.GetProperty("attributeKey").GetString());
+        Assert.Equal("none", brand.GetProperty("defaultValue").GetString());
+        Assert.True(brand.GetProperty("allowCustomValues").GetBoolean());
+        Assert.Equal(4, brand.GetProperty("maxValues").GetInt32());
+        Assert.Equal("ozon", brand.GetProperty("attributeGroup").GetString());
+        Assert.Equal("adapter:ozon", brand.GetProperty("groupIcon").GetString());
+        var option = Assert.Single(brand.GetProperty("options").EnumerateArray());
+        Assert.Equal("none", option.GetProperty("value").GetString());
+        Assert.Equal("No brand", option.GetProperty("label").GetString());
+    }
+
     [Theory]
     [InlineData(false, "mappings")]
     [InlineData(false, "local-categories")]
@@ -112,7 +186,7 @@ public class CategoryMappingServiceRegistrationTests
             Assert.Null(first.ServiceProvider.GetService<AiChatService>());
     }
 
-    private static ServiceProvider CreateProvider(bool aiEnabled)
+    private static ServiceProvider CreateProvider(bool aiEnabled, OrdersAdapterFake? adapter = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -122,7 +196,7 @@ public class CategoryMappingServiceRegistrationTests
         services.AddScoped(_ => TestDbFactory.CreateDb());
         services.AddScoped<ICurrentUserService, FakeCurrentUserService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddSingleton<IMarketplaceAdapterRegistry>(new SingleAdapterRegistry(new OrdersAdapterFake
+        services.AddSingleton<IMarketplaceAdapterRegistry>(new SingleAdapterRegistry(adapter ?? new OrdersAdapterFake
         {
             Capabilities = MarketplaceCapabilities.GetCategories,
         }));

@@ -603,6 +603,9 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("allowMultipleFiles")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<int>("categoryId")
                         .HasColumnType("int");
 
@@ -675,6 +678,10 @@ namespace Delegat.Migrations
 
                     b.Property<int>("type")
                         .HasColumnType("int");
+
+                    b.Property<string>("unitCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("validationPattern")
                         .HasMaxLength(500)
@@ -1747,6 +1754,9 @@ namespace Delegat.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("attributeDecisionsJson")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("authorUserId")
                         .HasColumnType("int");
 
@@ -1919,6 +1929,15 @@ namespace Delegat.Migrations
 
                     b.Property<string>("lastError")
                         .HasColumnType("longtext");
+
+                    b.Property<string>("mediaFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("mediaKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("productId")
                         .HasColumnType("int");
@@ -2215,6 +2234,36 @@ namespace Delegat.Migrations
                     b.ToTable("pendingProductTransfers");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ProductAttributeFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("attributeValueId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("index")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("fileId");
+
+                    b.HasIndex("attributeValueId", "fileId")
+                        .IsUnique();
+
+                    b.HasIndex("attributeValueId", "index")
+                        .IsUnique();
+
+                    b.ToTable("productAttributeFiles");
+                });
+
             modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
                     b.Property<int>("Id")
@@ -2337,6 +2386,50 @@ namespace Delegat.Migrations
                         .IsUnique();
 
                     b.ToTable("productGroupMembers");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ProductMediaExportGrant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("revision")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime?>("revokedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("connectionId");
+
+                    b.HasIndex("token")
+                        .IsUnique();
+
+                    b.HasIndex("fileId", "connectionId")
+                        .IsUnique();
+
+                    b.ToTable("productMediaExportGrants");
                 });
 
             modelBuilder.Entity("Delegat.Models.Products.Product", b =>
@@ -2786,6 +2879,9 @@ namespace Delegat.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("allowMultipleFiles")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
@@ -2854,6 +2950,10 @@ namespace Delegat.Migrations
 
                     b.Property<int>("type")
                         .HasColumnType("int");
+
+                    b.Property<string>("unitCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("validationPattern")
                         .HasMaxLength(500)
@@ -3143,6 +3243,36 @@ namespace Delegat.Migrations
                         .IsUnique();
 
                     b.ToTable("storeFolderShareTokens");
+                });
+
+            modelBuilder.Entity("Delegat.Models.StoreProductAttributeFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("attributeValueId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("index")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("fileId");
+
+                    b.HasIndex("attributeValueId", "fileId")
+                        .IsUnique();
+
+                    b.HasIndex("attributeValueId", "index")
+                        .IsUnique();
+
+                    b.ToTable("storeProductAttributeFiles");
                 });
 
             modelBuilder.Entity("Delegat.Models.StoreProductAttributeValue", b =>
@@ -3804,6 +3934,25 @@ namespace Delegat.Migrations
                     b.Navigation("newProduct");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ProductAttributeFile", b =>
+                {
+                    b.HasOne("Delegat.Models.ProductAttributeValue", "attributeValue")
+                        .WithMany("files")
+                        .HasForeignKey("attributeValueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Delegat.Models.File", "file")
+                        .WithMany()
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("attributeValue");
+
+                    b.Navigation("file");
+                });
+
             modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
                 {
                     b.HasOne("Delegat.Models.CategoryAttribute", "attribute")
@@ -3869,6 +4018,25 @@ namespace Delegat.Migrations
                     b.Navigation("group");
 
                     b.Navigation("product");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ProductMediaExportGrant", b =>
+                {
+                    b.HasOne("Delegat.Models.Marketplace.MarketplaceConnection", "connection")
+                        .WithMany()
+                        .HasForeignKey("connectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Delegat.Models.File", "file")
+                        .WithMany()
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("connection");
+
+                    b.Navigation("file");
                 });
 
             modelBuilder.Entity("Delegat.Models.Products.Product", b =>
@@ -4093,6 +4261,25 @@ namespace Delegat.Migrations
                     b.Navigation("store");
                 });
 
+            modelBuilder.Entity("Delegat.Models.StoreProductAttributeFile", b =>
+                {
+                    b.HasOne("Delegat.Models.StoreProductAttributeValue", "attributeValue")
+                        .WithMany("files")
+                        .HasForeignKey("attributeValueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Delegat.Models.File", "file")
+                        .WithMany()
+                        .HasForeignKey("fileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("attributeValue");
+
+                    b.Navigation("file");
+                });
+
             modelBuilder.Entity("Delegat.Models.StoreProductAttributeValue", b =>
                 {
                     b.HasOne("Delegat.Models.Products.Product", "product")
@@ -4200,6 +4387,11 @@ namespace Delegat.Migrations
                     b.Navigation("productLinks");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ProductAttributeValue", b =>
+                {
+                    b.Navigation("files");
+                });
+
             modelBuilder.Entity("Delegat.Models.ProductFolder", b =>
                 {
                     b.Navigation("childFolders");
@@ -4269,6 +4461,11 @@ namespace Delegat.Migrations
                 {
                     b.Navigation("childFolders");
 
+                    b.Navigation("files");
+                });
+
+            modelBuilder.Entity("Delegat.Models.StoreProductAttributeValue", b =>
+                {
                     b.Navigation("files");
                 });
 #pragma warning restore 612, 618

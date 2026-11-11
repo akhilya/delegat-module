@@ -268,6 +268,28 @@ public class MarketplaceConnectionController : ControllerBase
         return Ok(new { success = true });
     }
 
+    /// <summary>Revoke all durable media URLs previously issued for this connection.</summary>
+    [HttpPost]
+    [Route("/marketplace/connections/{connectionId}/media-grants/revoke")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> RevokeMediaExportGrants(
+        int connectionId,
+        [FromServices] ProductMediaExportGrantService grants,
+        CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+
+        var exists = await _db.marketplaceConnections
+            .AnyAsync(c => c.Id == connectionId && c.storeId == selectedStoreId.Value, ct);
+        if (!exists)
+            throw ApiException.NotFound(code: "connection_not_found");
+
+        var revoked = await grants.RevokeForConnectionAsync(connectionId, ct);
+        return Ok(new { revoked });
+    }
+
     /// <summary>
     /// Test marketplace connection
     /// </summary>
@@ -363,12 +385,23 @@ public class MarketplaceConnectionController : ControllerBase
             throw ApiException.BadRequest($"Unknown adapter: {connection.adapterKey}");
 
         var capabilities = adapter.Capabilities;
+        var mediaCapabilities = adapter is Delegat.Marketplace.SDK.IMarketplaceMediaCapabilities mediaAdapter
+            ? mediaAdapter.GetMediaCapabilities()
+            : new Delegat.Marketplace.SDK.MediaCapabilities();
 
         return Ok(new
         {
             adapterKey = adapter.Key,
             displayName = adapter.DisplayName,
             productEditUrlTemplate = adapter.ProductEditUrlTemplate,
+            mediaCapabilities = new
+            {
+                importVideos = mediaCapabilities.CanImportVideos,
+                exportVideos = mediaCapabilities.CanExportVideos,
+                usesPermanentUrls = mediaCapabilities.UsesPermanentUrls,
+                maxVideos = mediaCapabilities.MaxVideos,
+                acceptedVideoContentTypes = mediaCapabilities.AcceptedVideoContentTypes
+            },
             capabilities = new
             {
                 getCategories = capabilities.HasFlag(MarketplaceCapabilities.GetCategories),

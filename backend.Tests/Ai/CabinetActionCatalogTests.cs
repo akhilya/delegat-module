@@ -120,6 +120,38 @@ public class CabinetActionCatalogTests
     }
 
     [Fact]
+    public void Search_UnitReadAndEdit_UsesRussianAliasesAndRealBodyFields()
+    {
+        var catalog = new CabinetActionCatalog();
+
+        var read = Assert.Single(catalog.Search("покажи единицы измерения характеристик категории", limit: 1));
+        Assert.Equal("GET", read.Method);
+        Assert.Equal("/categories/{categoryId}/attributes/summary", read.Path);
+        Assert.Contains("unitCode", read.Note);
+        Assert.Contains("without option dictionaries", read.Note);
+
+        var storeRead = Assert.Single(catalog.Search("покажи единицы измерения общих характеристик", limit: 1));
+        Assert.Equal("GET", storeRead.Method);
+        Assert.Equal("/store-attributes/summary", storeRead.Path);
+
+        var edit = Assert.Single(catalog.Search("измени единицу измерения характеристики категории", limit: 1));
+        Assert.Equal("PATCH", edit.Method);
+        Assert.Equal("/categories/{categoryId}/attributes/{attributeId}", edit.Path);
+        Assert.Contains("Accepted body fields:", edit.Note);
+        Assert.Contains("unitCode", edit.Note);
+        Assert.Contains("does not convert stored product values", edit.Note);
+
+        var update = Assert.Single(catalog.Search("обнови единицу измерения характеристики категории", limit: 1));
+        Assert.Equal("PATCH", update.Method);
+        Assert.Equal("/categories/{categoryId}/attributes/{attributeId}", update.Path);
+
+        var storeEdit = Assert.Single(catalog.Search("измени единицу измерения глобальной характеристики", limit: 1));
+        Assert.Equal("PATCH", storeEdit.Method);
+        Assert.Equal("/store-attributes/{attributeId}", storeEdit.Path);
+        Assert.Contains("unitCode", storeEdit.Note);
+    }
+
+    [Fact]
     public void Search_RaisePrices_FindsBulkDeltaAndShopExport()
     {
         var catalog = new CabinetActionCatalog();

@@ -2,6 +2,7 @@ using Delegat.Infrastructure.Interfaces;
 using Delegat.Models.Marketplace;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using static Delegat.Models.Products.Product;
 
 namespace Delegat.Models.Products;
@@ -220,6 +221,27 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         };
         files = this.files.Select(fileBuilder);
 
+        var productCategory = category?.ToDetailDTO(includeAttributeOptions: false);
+        if (productCategory.HasValue)
+        {
+            var selectedValues = attributeValues
+                .GroupBy(value => value.attributeId)
+                .ToDictionary(group => group.Key, group => group.Last().value);
+
+            var detail = productCategory.Value;
+            detail.attributes = detail.attributes.Select(attribute =>
+            {
+                if (selectedValues.TryGetValue(attribute.id, out var selected))
+                {
+                    var sourceOptions = category?.attributes
+                        .FirstOrDefault(source => source.Id == attribute.id)?.options;
+                    attribute.options = SelectedOptions(sourceOptions, selected);
+                }
+                return attribute;
+            }).ToList();
+            productCategory = detail;
+        }
+
         return new
         {
             Id,
@@ -228,9 +250,21 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
             name,
             description,
             store = store?.MapToDTO(serviceProvider),
-            category = category != null ? ((IMapToDTO<Category.CategoryDetailDTO>)category).MapToDTO(serviceProvider) : (object?)null,
+            // Dictionary options are loaded on demand by the product form. Sending every
+            // Ozon dictionary with every product can turn a small product request into MBs.
+            category = productCategory,
             files,
-            images = images.OrderBy(i => i.index).Select(i => i.MapToDTO(serviceProvider)),
+            images = images.Where(i => i.file == null || i.file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(i => i.index).Select(i => i.MapToDTO(serviceProvider)),
+            media = images.OrderBy(i => i.index).Select(i => new
+            {
+                fileId = i.fileId,
+                index = i.index,
+                kind = i.file?.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true ? "video" : "image",
+                contentType = i.file?.contentType,
+                fileName = i.file == null ? null : (i.file.displayName ?? Path.GetFileName(i.file.filePath)),
+                downloadUrl = i.file?.GetDownloadUrl()
+            }),
             attributeValues = attributeValues.Select(av => ((IMapToDTO<ProductAttributeValue.ValueDTO>)av).MapToDTO(serviceProvider)),
             storeAttributeValues = storeAttributeValues.Select(sav => ((IMapToDTO<StoreProductAttributeValue.ValueDTO>)sav).MapToDTO(serviceProvider)),
             notes = notes.Select(n => n.MapToDTO(serviceProvider)),
@@ -245,9 +279,50 @@ public class Product : IEntity, IMapToDTO<object>, IMapToDTO<ProductReviewDTO>, 
         };
     }
 
+    private static string? SelectedOptions(string? optionsJson, string? storedValue)
+    {
+        if (string.IsNullOrWhiteSpace(optionsJson) || string.IsNullOrWhiteSpace(storedValue))
+            return null;
+
+        try
+        {
+            using var options = JsonDocument.Parse(optionsJson);
+            using var selected = JsonDocument.Parse(
+                storedValue.TrimStart().StartsWith("[") ? storedValue : $"[{JsonSerializer.Serialize(storedValue)}]");
+
+            var selectedTokens = selected.RootElement.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (selectedTokens.Count == 0 || options.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var matches = options.RootElement.EnumerateArray()
+                .Where(option => option.ValueKind == JsonValueKind.Object)
+                .Where(option =>
+                {
+                    var value = option.TryGetProperty("value", out var valueProperty)
+                        ? valueProperty.ToString() : null;
+                    var label = option.TryGetProperty("label", out var labelProperty)
+                        ? labelProperty.ToString() : null;
+                    return (value != null && selectedTokens.Contains(value))
+                        || (label != null && selectedTokens.Contains(label));
+                })
+                .ToList();
+
+            return matches.Count == 0 ? null : JsonSerializer.Serialize(matches);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     ProductReviewDTO IMapToDTO<ProductReviewDTO>.MapToDTO(IServiceProvider serviceProvider)
     {
-        ImageReference? primaryImageRef = images.OrderBy(i => i.index).FirstOrDefault();
+        ImageReference? primaryImageRef = images
+            .Where(i => i.file == null || i.file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(i => i.index).FirstOrDefault();
         string? primaryImagePath = null;
         string? primaryImageThumbnail = null;
 

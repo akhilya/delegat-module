@@ -8,10 +8,7 @@ import Textarea from "@/components/ui/textarea/Textarea.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import SettingsFormSection from "@/components/settings/SettingsFormSection.vue";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 
 import {
@@ -44,6 +41,7 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import AttributeGroupIconPicker from "@/components/products/AttributeGroupIconPicker.vue";
+import AttributeUnitSelect from "@/components/products/AttributeUnitSelect.vue";
 import { suggestedGroupIcon } from "@/lib/attributeGroupIcon";
 import { setPageTitle } from "@/router";
 import {
@@ -61,16 +59,20 @@ const ATTRIBUTE_TYPES = {
   2: { i18nKey: "boolean", value: 2 },
   3: { i18nKey: "select", value: 3 },
   4: { i18nKey: "multiSelect", value: 4 },
+  5: { i18nKey: "barcode", value: 5 },
+  6: { i18nKey: "file", value: 6 },
   // String keys for JSON enum serialization (JsonStringEnumConverter)
   Text: { i18nKey: "text", value: 0 },
   Number: { i18nKey: "number", value: 1 },
   Boolean: { i18nKey: "boolean", value: 2 },
   Select: { i18nKey: "select", value: 3 },
   MultiSelect: { i18nKey: "multiSelect", value: 4 },
+  Barcode: { i18nKey: "barcode", value: 5 },
+  File: { i18nKey: "file", value: 6 },
 };
 
 // Unique list of type values for the dropdown (no duplicates); labels are resolved via i18n in the component
-const ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4];
+const ATTRIBUTE_TYPE_VALUES = [0, 1, 2, 3, 4, 5, 6];
 
 export default {
   components: {
@@ -98,6 +100,7 @@ export default {
     DialogFooter,
     DialogClose,
     AttributeDefinitionList,
+    AttributeUnitSelect,
     Save,
     Plus,
     Trash2,
@@ -127,6 +130,8 @@ export default {
         name: "",
         key: "",
         type: 0,
+        unitCode: "",
+        allowMultipleFiles: false,
         isRequired: false,
         isUnique: false,
         isMultiline: false,
@@ -181,6 +186,12 @@ export default {
         ATTRIBUTE_TYPES[this.attributeForm.type]?.value ??
         this.attributeForm.type;
       return typeValue === 0;
+    },
+    isFileAttributeType() {
+      const typeValue =
+        ATTRIBUTE_TYPES[this.attributeForm.type]?.value ??
+        this.attributeForm.type;
+      return typeValue === 6;
     },
     isNumberAttributeType() {
       const typeValue =
@@ -367,10 +378,12 @@ export default {
         name: "",
         key: "",
         type: 0,
+        unitCode: "",
         isRequired: false,
         isUnique: false,
         isMultiline: false,
         allowCustomValues: false,
+        allowMultipleFiles: false,
         showOnProductPage: true,
         options: "",
         defaultValue: "",
@@ -397,17 +410,25 @@ export default {
           categoryId: this.categoryId,
           attributeId: attribute.id,
           onSuccess: (response) => {
-            if (version === this.attributeLoadVersion && this.showAttributeDialog)
+            if (
+              version === this.attributeLoadVersion &&
+              this.showAttributeDialog
+            )
               this.fillAttributeDialog(response.data.value);
           },
           onError: (error) => {
-            if (version !== this.attributeLoadVersion || !this.showAttributeDialog) return;
+            if (
+              version !== this.attributeLoadVersion ||
+              !this.showAttributeDialog
+            )
+              return;
             displaySonnerError(error);
             this.showAttributeDialog = false;
           },
         });
       } finally {
-        if (version === this.attributeLoadVersion) this.isLoadingAttribute = false;
+        if (version === this.attributeLoadVersion)
+          this.isLoadingAttribute = false;
       }
     },
 
@@ -434,10 +455,12 @@ export default {
         name: attribute.name,
         key: attribute.key,
         type: normalizedType,
+        unitCode: attribute.unitCode || "",
         isRequired: attribute.isRequired,
         isUnique: attribute.isUnique === true,
         isMultiline: attribute.isMultiline ?? false,
         allowCustomValues: attribute.allowCustomValues === true,
+        allowMultipleFiles: attribute.allowMultipleFiles === true,
         showOnProductPage:
           attribute.isRequired || attribute.showOnProductPage !== false,
         options:
@@ -623,6 +646,9 @@ export default {
         name: this.attributeForm.name.trim(),
         key: this.attributeForm.key.trim(),
         type: this.attributeForm.type,
+        unitCode: this.isNumberAttributeType
+          ? this.attributeForm.unitCode.trim()
+          : "",
         isRequired: this.attributeForm.isRequired,
         isUnique: this.attributeForm.isUnique,
         isMultiline: this.isTextAttributeType
@@ -631,6 +657,10 @@ export default {
         allowCustomValues: this.showOptionsField
           ? !!this.attributeForm.allowCustomValues
           : false,
+        allowMultipleFiles:
+          this.attributeForm.type === 6
+            ? !!this.attributeForm.allowMultipleFiles
+            : false,
         showOnProductPage:
           this.attributeForm.isRequired || this.attributeForm.showOnProductPage,
         options: this.showOptionsField ? this.resolveOptionsForSave() : null,
@@ -1037,10 +1067,7 @@ export default {
             />
           </SettingsFormField>
           <template #footer>
-            <Button
-              @click="handleSaveCategory"
-              :disabled="isSaving"
-            >
+            <Button @click="handleSaveCategory" :disabled="isSaving">
               <Spinner v-if="isSaving" class="mr-2" />
               <Save v-else class="size-4 mr-2" />
               {{ $t("common.save") }}
@@ -1053,11 +1080,7 @@ export default {
           :description="$t('pages.categoryEditPage.attributesOrderHint')"
         >
           <template #actions>
-            <Button
-              variant="outline"
-              size="sm"
-              @click="openAddAttributeDialog"
-            >
+            <Button variant="outline" size="sm" @click="openAddAttributeDialog">
               <Plus class="size-4 mr-2" />
               {{ $t("common.add") }}
             </Button>
@@ -1119,56 +1142,83 @@ export default {
             class="!max-w-none"
             :title="$t('pages.categoryEditPage.basicSection')"
           >
-              <div class="grid gap-4 sm:grid-cols-2">
-                <SettingsFormField
-                  :label="$t('common.name')"
-                  label-for="attr-name"
-                >
-                  <Input
-                    id="attr-name"
-                    v-model="attributeForm.name"
-                    :placeholder="
-                      $t('pages.categoryEditPage.namePlaceholderExamples')
-                    "
-                    :maxlength="FIELD_LIMITS.attributeName"
-                    @input="!editingAttribute && generateKey()"
-                  />
-                </SettingsFormField>
-                <SettingsFormField
-                  :label="$t('pages.categoryEditPage.keyLabel')"
-                  label-for="attr-key"
-                >
-                  <template #description>{{
-                    $t("pages.categoryEditPage.keyDescription")
-                  }}</template>
-                  <Input
-                    id="attr-key"
-                    v-model="attributeForm.key"
-                    placeholder="color, size, brand"
-                    class="font-mono text-sm"
-                    :maxlength="FIELD_LIMITS.attributeKey"
-                  />
-                </SettingsFormField>
-              </div>
+            <div class="grid gap-4 sm:grid-cols-2">
               <SettingsFormField
-                :label="$t('pages.categoryEditPage.typeLabel')"
-                label-for="attr-type"
+                :label="$t('common.name')"
+                label-for="attr-name"
               >
-                <Select v-model="attributeForm.type">
-                  <SelectTrigger id="attr-type" class="w-full">
-                    <SelectValue :placeholder="attributeTypeLabel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="typeInfo in attributeTypeOptions"
-                      :key="typeInfo.value"
-                      :value="typeInfo.value"
-                    >
-                      {{ typeInfo.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="attr-name"
+                  v-model="attributeForm.name"
+                  :placeholder="
+                    $t('pages.categoryEditPage.namePlaceholderExamples')
+                  "
+                  :maxlength="FIELD_LIMITS.attributeName"
+                  @input="!editingAttribute && generateKey()"
+                />
               </SettingsFormField>
+              <SettingsFormField
+                :label="$t('pages.categoryEditPage.keyLabel')"
+                label-for="attr-key"
+              >
+                <template #description>{{
+                  $t("pages.categoryEditPage.keyDescription")
+                }}</template>
+                <Input
+                  id="attr-key"
+                  v-model="attributeForm.key"
+                  placeholder="color, size, brand"
+                  class="font-mono text-sm"
+                  :maxlength="FIELD_LIMITS.attributeKey"
+                />
+              </SettingsFormField>
+            </div>
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.typeLabel')"
+              label-for="attr-type"
+            >
+              <Select v-model="attributeForm.type">
+                <SelectTrigger id="attr-type" class="w-full">
+                  <SelectValue :placeholder="attributeTypeLabel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="typeInfo in attributeTypeOptions"
+                    :key="typeInfo.value"
+                    :value="typeInfo.value"
+                  >
+                    {{ typeInfo.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsFormField>
+            <SettingsFormField
+              v-if="isFileAttributeType"
+              :label="$t('pages.categoryEditPage.allowMultipleFilesLabel')"
+              label-for="attr-allow-multiple-files"
+              inline
+              :description="$t('pages.categoryEditPage.allowMultipleFilesHint')"
+            >
+              <Switch
+                id="attr-allow-multiple-files"
+                :model-value="attributeForm.allowMultipleFiles"
+                @update:model-value="attributeForm.allowMultipleFiles = $event"
+              />
+            </SettingsFormField>
+            <SettingsFormField
+              v-if="isNumberAttributeType"
+              :label="$t('pages.categoryEditPage.unitLabel')"
+              label-for="attr-unit-code"
+            >
+              <AttributeUnitSelect
+                id="attr-unit-code"
+                v-model="attributeForm.unitCode"
+                :placeholder="$t('pages.categoryEditPage.unitPlaceholder')"
+              />
+              <template #description>
+                {{ $t("pages.categoryEditPage.unitHint") }}
+              </template>
+            </SettingsFormField>
           </SettingsFormSection>
 
           <SettingsFormSection
@@ -1177,391 +1227,389 @@ export default {
             :title="$t('pages.categoryEditPage.optionsSection')"
           >
             <template #actions>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    :disabled="!editingOptionsCount"
-                    @click="exportAttributeOptions"
-                  >
-                    <Download class="size-3.5 mr-1.5" />
-                    {{ $t("pages.categoryEditPage.export") }}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    @click="triggerOptionsImport"
-                  >
-                    <Upload class="size-3.5 mr-1.5" />
-                    {{ $t("pages.categoryEditPage.import") }}
-                  </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                :disabled="!editingOptionsCount"
+                @click="exportAttributeOptions"
+              >
+                <Download class="size-3.5 mr-1.5" />
+                {{ $t("pages.categoryEditPage.export") }}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                @click="triggerOptionsImport"
+              >
+                <Upload class="size-3.5 mr-1.5" />
+                {{ $t("pages.categoryEditPage.import") }}
+              </Button>
             </template>
-              <input
-                ref="optionsFileInput"
-                type="file"
-                accept=".json,.csv,.txt,application/json,text/plain,text/csv"
-                class="hidden"
-                @change="handleOptionsImport"
-              />
+            <input
+              ref="optionsFileInput"
+              type="file"
+              accept=".json,.csv,.txt,application/json,text/plain,text/csv"
+              class="hidden"
+              @change="handleOptionsImport"
+            />
 
-              <InsetGroup v-if="hasLargeOptions">
-                <InsetGroupItem as="div">
-                  <p>
-                    <span class="tabular-nums font-medium">
-                      {{ editingOptionsCount.toLocaleString() }}
-                    </span>
-                    <span class="text-muted-foreground">
-                      {{ $t("pages.categoryEditPage.optionsWord") }}</span>
-                  </p>
-                  <p class="text-muted-foreground mt-0.5 text-xs font-normal">
-                    {{ $t("pages.categoryEditPage.largeOptionsHint") }}
-                  </p>
-                  <template #trailing>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      @click="clearAttributeOptions"
-                    >
-                      <Trash2 class="size-3.5 mr-1.5" />
-                      {{ $t("pages.categoryEditPage.clearOptions") }}
-                    </Button>
-                  </template>
-                </InsetGroupItem>
-              </InsetGroup>
-              <Textarea
-                v-else
-                v-model="attributeForm.options"
-                :placeholder="
-                  $t('pages.categoryEditPage.optionsPlaceholderExample')
-                "
-                class="min-h-24 resize-none font-mono text-sm"
-                @input="onOptionsTextInput"
-              />
-              <p class="text-xs text-muted-foreground">
-                {{ $t("pages.categoryEditPage.optionsFormatHint") }}
-              </p>
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.allowCustomValuesLabel')"
-                label-for="attr-allow-custom"
-                inline
-                :description="$t('pages.categoryEditPage.allowCustomValuesHint')"
-              >
-                <Switch
-                  id="attr-allow-custom"
-                  :model-value="attributeForm.allowCustomValues"
-                  @update:model-value="
-                    attributeForm.allowCustomValues = $event
-                  "
-                />
-              </SettingsFormField>
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.maxValuesLabel')"
-                label-for="attr-max-values"
-              >
-                <Input
-                  id="attr-max-values"
-                  v-model="attributeForm.maxValues"
-                  type="number"
-                  min="1"
-                  inputmode="numeric"
-                  :placeholder="
-                    $t('pages.categoryEditPage.maxValuesPlaceholder')
-                  "
-                />
-                <template #description>
-                  {{ $t("pages.categoryEditPage.maxValuesHint") }}
+            <InsetGroup v-if="hasLargeOptions">
+              <InsetGroupItem as="div">
+                <p>
+                  <span class="tabular-nums font-medium">
+                    {{ editingOptionsCount.toLocaleString() }}
+                  </span>
+                  <span class="text-muted-foreground">
+                    {{ $t("pages.categoryEditPage.optionsWord") }}</span
+                  >
+                </p>
+                <p class="text-muted-foreground mt-0.5 text-xs font-normal">
+                  {{ $t("pages.categoryEditPage.largeOptionsHint") }}
+                </p>
+                <template #trailing>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="clearAttributeOptions"
+                  >
+                    <Trash2 class="size-3.5 mr-1.5" />
+                    {{ $t("pages.categoryEditPage.clearOptions") }}
+                  </Button>
                 </template>
-              </SettingsFormField>
+              </InsetGroupItem>
+            </InsetGroup>
+            <Textarea
+              v-else
+              v-model="attributeForm.options"
+              :placeholder="
+                $t('pages.categoryEditPage.optionsPlaceholderExample')
+              "
+              class="min-h-24 resize-none font-mono text-sm"
+              @input="onOptionsTextInput"
+            />
+            <p class="text-xs text-muted-foreground">
+              {{ $t("pages.categoryEditPage.optionsFormatHint") }}
+            </p>
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.allowCustomValuesLabel')"
+              label-for="attr-allow-custom"
+              inline
+              :description="$t('pages.categoryEditPage.allowCustomValuesHint')"
+            >
+              <Switch
+                id="attr-allow-custom"
+                :model-value="attributeForm.allowCustomValues"
+                @update:model-value="attributeForm.allowCustomValues = $event"
+              />
+            </SettingsFormField>
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.maxValuesLabel')"
+              label-for="attr-max-values"
+            >
+              <Input
+                id="attr-max-values"
+                v-model="attributeForm.maxValues"
+                type="number"
+                min="1"
+                inputmode="numeric"
+                :placeholder="$t('pages.categoryEditPage.maxValuesPlaceholder')"
+              />
+              <template #description>
+                {{ $t("pages.categoryEditPage.maxValuesHint") }}
+              </template>
+            </SettingsFormField>
           </SettingsFormSection>
 
           <SettingsFormSection
             class="!max-w-none"
             :title="$t('pages.categoryEditPage.additionalSection')"
           >
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.defaultValueLabel')"
-                label-for="attr-default"
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.defaultValueLabel')"
+              label-for="attr-default"
+            >
+              <div
+                v-if="attributeForm.type === 2"
+                class="flex items-center gap-2 h-9"
               >
-                <div
-                  v-if="attributeForm.type === 2"
-                  class="flex items-center gap-2 h-9"
-                >
-                  <Switch
-                    id="attr-default"
-                    :model-value="attributeForm.defaultValue === 'true'"
-                    @update:model-value="
-                      attributeForm.defaultValue = $event ? 'true' : 'false'
-                    "
-                  />
-                  <span class="text-sm text-muted-foreground">
-                    {{
-                      attributeForm.defaultValue === "true"
-                        ? $t("common.yes")
-                        : $t("common.no")
-                    }}
-                  </span>
-                </div>
-                <div
-                  v-else-if="attributeForm.type === 3 && editingOptionsCount"
-                  class="space-y-1.5"
-                >
-                  <SearchableSelect
-                    id="attr-default"
-                    :model-value="attributeForm.defaultValue"
-                    @update:model-value="attributeForm.defaultValue = $event"
-                    :options="defaultValueSelectOptions"
-                    :disabled="isLoadingDefaultValueOptions"
-                    :placeholder="
-                      $t('pages.categoryEditPage.notSelectedPlaceholder')
-                    "
-                    :allow-create="!!attributeForm.allowCustomValues"
-                    class="w-full"
-                    @open="loadDefaultValueOptionsIfNeeded"
-                  />
-                  <p
-                    v-if="hasLargeOptions && !defaultValueOptionsReady"
-                    class="text-xs text-muted-foreground"
-                  >
-                    {{ $t("pages.categoryEditPage.lazyLoadHint") }}
-                  </p>
-                </div>
-                <Input
-                  v-else
+                <Switch
                   id="attr-default"
-                  v-model="attributeForm.defaultValue"
-                  :placeholder="
-                    attributeForm.type === 4
-                      ? $t('pages.categoryEditPage.multiValuePlaceholder')
-                      : $t('pages.categoryEditPage.optionalPlaceholder')
-                  "
-                  :type="attributeForm.type === 1 ? 'number' : 'text'"
-                  :maxlength="FIELD_LIMITS.attributeDefault"
-                />
-                <template
-                  v-if="attributeForm.type === 4 && editingOptionsCount"
-                  #description
-                >
-                  {{ $t("pages.categoryEditPage.multiValueHint") }}
-                </template>
-              </SettingsFormField>
-
-              <SettingsFormField
-                :label="$t('common.description')"
-                label-for="attr-description"
-              >
-                <Textarea
-                  id="attr-description"
-                  v-model="attributeForm.description"
-                  :placeholder="
-                    $t('pages.categoryEditPage.descriptionPlaceholder')
-                  "
-                  class="min-h-20 resize-none"
-                  :maxlength="FIELD_LIMITS.attributeDescription"
-                />
-              </SettingsFormField>
-
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.descriptionInTooltipLabel')"
-                label-for="attr-description-tooltip"
-                inline
-                :description="$t('pages.categoryEditPage.descriptionInTooltipHint')"
-              >
-                <Switch
-                  id="attr-description-tooltip"
-                  :model-value="attributeForm.descriptionInTooltip"
+                  :model-value="attributeForm.defaultValue === 'true'"
                   @update:model-value="
-                    attributeForm.descriptionInTooltip = $event
+                    attributeForm.defaultValue = $event ? 'true' : 'false'
                   "
                 />
-              </SettingsFormField>
-
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.groupLabel')"
-                label-for="attr-group"
+                <span class="text-sm text-muted-foreground">
+                  {{
+                    attributeForm.defaultValue === "true"
+                      ? $t("common.yes")
+                      : $t("common.no")
+                  }}
+                </span>
+              </div>
+              <div
+                v-else-if="attributeForm.type === 3 && editingOptionsCount"
+                class="space-y-1.5"
               >
-                <div class="flex min-w-0 items-start gap-2">
-                  <AttributeGroupIconPicker
-                    :model-value="attributeForm.groupIcon"
-                    :group-name="attributeForm.group"
-                    @update:model-value="attributeForm.groupIcon = $event"
-                  />
-                  <div class="min-w-0 flex-1">
-                    <Input
-                      v-if="customGroupMode"
-                      id="attr-group"
-                      v-model="attributeForm.group"
-                      :placeholder="
-                        $t('pages.categoryEditPage.groupNamePlaceholder')
-                      "
-                      :maxlength="FIELD_LIMITS.attributeGroup"
-                      @change="onGroupNameHint"
-                    />
-                    <SearchableSelect
-                      v-else
-                      id="attr-group"
-                      :model-value="attributeForm.group"
-                      :options="groupSelectOptions"
-                      :placeholder="
-                        $t('pages.categoryEditPage.noGroupPlaceholder')
-                      "
-                      class="w-full"
-                      @update:model-value="onGroupSelect"
-                    />
-                  </div>
-                </div>
-                <template #description>
-                  <Button
-                    type="button"
-                    variant="link"
-                    class="h-auto p-0 text-xs"
-                    @click="
-                      customGroupMode = !customGroupMode;
-                      if (!customGroupMode) {
-                        attributeForm.group = '';
-                        attributeForm.groupIcon = '';
-                      }
-                    "
-                  >
-                    {{
-                      customGroupMode
-                        ? $t("pages.categoryEditPage.chooseFromListLabel")
-                        : $t("pages.categoryEditPage.customGroupLabel")
-                    }}
-                  </Button>
-                </template>
-              </SettingsFormField>
-
-              <SettingsFormField
-                v-if="isTextAttributeType"
-                :label="$t('pages.categoryEditPage.multilineLabel')"
-                label-for="attr-multiline"
-                inline
-                :description="$t('pages.categoryEditPage.multilineHint')"
-              >
-                <Switch
-                  id="attr-multiline"
-                  :model-value="attributeForm.isMultiline"
-                  @update:model-value="attributeForm.isMultiline = $event"
-                />
-              </SettingsFormField>
-
-              <SettingsFormField
-                v-if="!isNumberAttributeType"
-                :label="$t('pages.categoryEditPage.valueMaxLengthLabel')"
-                label-for="attr-max-length"
-              >
-                <Input
-                  id="attr-max-length"
-                  v-model="attributeForm.maxLength"
-                  type="number"
-                  min="1"
-                  inputmode="numeric"
+                <SearchableSelect
+                  id="attr-default"
+                  :model-value="attributeForm.defaultValue"
+                  @update:model-value="attributeForm.defaultValue = $event"
+                  :options="defaultValueSelectOptions"
+                  :disabled="isLoadingDefaultValueOptions"
                   :placeholder="
-                    $t('pages.categoryEditPage.valueMaxLengthPlaceholder')
+                    $t('pages.categoryEditPage.notSelectedPlaceholder')
                   "
+                  :allow-create="!!attributeForm.allowCustomValues"
+                  class="w-full"
+                  @open="loadDefaultValueOptionsIfNeeded"
                 />
-                <template #description>
-                  {{ $t("pages.categoryEditPage.valueMaxLengthHint") }}
-                </template>
-              </SettingsFormField>
-
-              <template v-if="isNumberAttributeType">
-                <SettingsFormField
-                  :label="$t('pages.categoryEditPage.minValueLabel')"
-                  label-for="attr-min-value"
+                <p
+                  v-if="hasLargeOptions && !defaultValueOptionsReady"
+                  class="text-xs text-muted-foreground"
                 >
-                  <Input
-                    id="attr-min-value"
-                    v-model="attributeForm.minValue"
-                    type="text"
-                    inputmode="decimal"
-                    :placeholder="
-                      $t('pages.categoryEditPage.minValuePlaceholder')
-                    "
-                  />
-                </SettingsFormField>
-                <SettingsFormField
-                  :label="$t('pages.categoryEditPage.maxValueLabel')"
-                  label-for="attr-max-value"
-                >
-                  <Input
-                    id="attr-max-value"
-                    v-model="attributeForm.maxValue"
-                    type="text"
-                    inputmode="decimal"
-                    :placeholder="
-                      $t('pages.categoryEditPage.maxValuePlaceholder')
-                    "
-                  />
-                </SettingsFormField>
-              </template>
-
-              <SettingsFormField
-                v-if="isTextAttributeType"
-                :label="$t('pages.categoryEditPage.validationPatternLabel')"
-                label-for="attr-pattern"
-              >
-                <Input
-                  id="attr-pattern"
-                  v-model="attributeForm.validationPattern"
-                  :placeholder="
-                    $t('pages.categoryEditPage.validationPatternPlaceholder')
-                  "
-                  :maxlength="500"
-                />
-                <template #description>
-                  {{ $t("pages.categoryEditPage.validationPatternHint") }}
-                </template>
-              </SettingsFormField>
-
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.showOnProductPageLabel')"
-                label-for="attr-visible"
-                inline
-                :description="
-                  attributeForm.isRequired
-                    ? $t('pages.categoryEditPage.showOnProductPageRequiredHint')
-                    : $t('pages.categoryEditPage.showOnProductPageHint')
+                  {{ $t("pages.categoryEditPage.lazyLoadHint") }}
+                </p>
+              </div>
+              <Input
+                v-else
+                id="attr-default"
+                v-model="attributeForm.defaultValue"
+                :placeholder="
+                  attributeForm.type === 4
+                    ? $t('pages.categoryEditPage.multiValuePlaceholder')
+                    : $t('pages.categoryEditPage.optionalPlaceholder')
                 "
+                :type="attributeForm.type === 1 ? 'number' : 'text'"
+                :maxlength="FIELD_LIMITS.attributeDefault"
+              />
+              <template
+                v-if="attributeForm.type === 4 && editingOptionsCount"
+                #description
               >
-                <Switch
-                  id="attr-visible"
-                  :model-value="
-                    attributeForm.isRequired ||
-                    attributeForm.showOnProductPage
+                {{ $t("pages.categoryEditPage.multiValueHint") }}
+              </template>
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('common.description')"
+              label-for="attr-description"
+            >
+              <Textarea
+                id="attr-description"
+                v-model="attributeForm.description"
+                :placeholder="
+                  $t('pages.categoryEditPage.descriptionPlaceholder')
+                "
+                class="min-h-20 resize-none"
+                :maxlength="FIELD_LIMITS.attributeDescription"
+              />
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.descriptionInTooltipLabel')"
+              label-for="attr-description-tooltip"
+              inline
+              :description="
+                $t('pages.categoryEditPage.descriptionInTooltipHint')
+              "
+            >
+              <Switch
+                id="attr-description-tooltip"
+                :model-value="attributeForm.descriptionInTooltip"
+                @update:model-value="
+                  attributeForm.descriptionInTooltip = $event
+                "
+              />
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.groupLabel')"
+              label-for="attr-group"
+            >
+              <div class="flex min-w-0 items-start gap-2">
+                <AttributeGroupIconPicker
+                  :model-value="attributeForm.groupIcon"
+                  :group-name="attributeForm.group"
+                  @update:model-value="attributeForm.groupIcon = $event"
+                />
+                <div class="min-w-0 flex-1">
+                  <Input
+                    v-if="customGroupMode"
+                    id="attr-group"
+                    v-model="attributeForm.group"
+                    :placeholder="
+                      $t('pages.categoryEditPage.groupNamePlaceholder')
+                    "
+                    :maxlength="FIELD_LIMITS.attributeGroup"
+                    @change="onGroupNameHint"
+                  />
+                  <SearchableSelect
+                    v-else
+                    id="attr-group"
+                    :model-value="attributeForm.group"
+                    :options="groupSelectOptions"
+                    :placeholder="
+                      $t('pages.categoryEditPage.noGroupPlaceholder')
+                    "
+                    class="w-full"
+                    @update:model-value="onGroupSelect"
+                  />
+                </div>
+              </div>
+              <template #description>
+                <Button
+                  type="button"
+                  variant="link"
+                  class="h-auto p-0 text-xs"
+                  @click="
+                    customGroupMode = !customGroupMode;
+                    if (!customGroupMode) {
+                      attributeForm.group = '';
+                      attributeForm.groupIcon = '';
+                    }
                   "
-                  :disabled="attributeForm.isRequired"
-                  @update:model-value="setShowOnProductPage"
-                />
-              </SettingsFormField>
+                >
+                  {{
+                    customGroupMode
+                      ? $t("pages.categoryEditPage.chooseFromListLabel")
+                      : $t("pages.categoryEditPage.customGroupLabel")
+                  }}
+                </Button>
+              </template>
+            </SettingsFormField>
 
-              <SettingsFormField
-                :label="$t('pages.categoryEditPage.requiredFieldTitle')"
-                label-for="attr-required"
-                inline
-                :description="$t('pages.categoryEditPage.requiredFieldHint')"
-              >
-                <Switch
-                  id="attr-required"
-                  :model-value="attributeForm.isRequired"
-                  @update:model-value="setAttributeRequired"
-                />
-              </SettingsFormField>
+            <SettingsFormField
+              v-if="isTextAttributeType"
+              :label="$t('pages.categoryEditPage.multilineLabel')"
+              label-for="attr-multiline"
+              inline
+              :description="$t('pages.categoryEditPage.multilineHint')"
+            >
+              <Switch
+                id="attr-multiline"
+                :model-value="attributeForm.isMultiline"
+                @update:model-value="attributeForm.isMultiline = $event"
+              />
+            </SettingsFormField>
 
+            <SettingsFormField
+              v-if="!isNumberAttributeType"
+              :label="$t('pages.categoryEditPage.valueMaxLengthLabel')"
+              label-for="attr-max-length"
+            >
+              <Input
+                id="attr-max-length"
+                v-model="attributeForm.maxLength"
+                type="number"
+                min="1"
+                inputmode="numeric"
+                :placeholder="
+                  $t('pages.categoryEditPage.valueMaxLengthPlaceholder')
+                "
+              />
+              <template #description>
+                {{ $t("pages.categoryEditPage.valueMaxLengthHint") }}
+              </template>
+            </SettingsFormField>
+
+            <template v-if="isNumberAttributeType">
               <SettingsFormField
-                :label="$t('pages.categoryEditPage.uniqueFieldTitle')"
-                label-for="attr-unique"
-                inline
-                :description="$t('pages.categoryEditPage.uniqueFieldHint')"
+                :label="$t('pages.categoryEditPage.minValueLabel')"
+                label-for="attr-min-value"
               >
-                <Switch
-                  id="attr-unique"
-                  :model-value="attributeForm.isUnique"
-                  @update:model-value="attributeForm.isUnique = $event"
+                <Input
+                  id="attr-min-value"
+                  v-model="attributeForm.minValue"
+                  type="text"
+                  inputmode="decimal"
+                  :placeholder="
+                    $t('pages.categoryEditPage.minValuePlaceholder')
+                  "
                 />
               </SettingsFormField>
+              <SettingsFormField
+                :label="$t('pages.categoryEditPage.maxValueLabel')"
+                label-for="attr-max-value"
+              >
+                <Input
+                  id="attr-max-value"
+                  v-model="attributeForm.maxValue"
+                  type="text"
+                  inputmode="decimal"
+                  :placeholder="
+                    $t('pages.categoryEditPage.maxValuePlaceholder')
+                  "
+                />
+              </SettingsFormField>
+            </template>
+
+            <SettingsFormField
+              v-if="isTextAttributeType"
+              :label="$t('pages.categoryEditPage.validationPatternLabel')"
+              label-for="attr-pattern"
+            >
+              <Input
+                id="attr-pattern"
+                v-model="attributeForm.validationPattern"
+                :placeholder="
+                  $t('pages.categoryEditPage.validationPatternPlaceholder')
+                "
+                :maxlength="500"
+              />
+              <template #description>
+                {{ $t("pages.categoryEditPage.validationPatternHint") }}
+              </template>
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.showOnProductPageLabel')"
+              label-for="attr-visible"
+              inline
+              :description="
+                attributeForm.isRequired
+                  ? $t('pages.categoryEditPage.showOnProductPageRequiredHint')
+                  : $t('pages.categoryEditPage.showOnProductPageHint')
+              "
+            >
+              <Switch
+                id="attr-visible"
+                :model-value="
+                  attributeForm.isRequired || attributeForm.showOnProductPage
+                "
+                :disabled="attributeForm.isRequired"
+                @update:model-value="setShowOnProductPage"
+              />
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.requiredFieldTitle')"
+              label-for="attr-required"
+              inline
+              :description="$t('pages.categoryEditPage.requiredFieldHint')"
+            >
+              <Switch
+                id="attr-required"
+                :model-value="attributeForm.isRequired"
+                @update:model-value="setAttributeRequired"
+              />
+            </SettingsFormField>
+
+            <SettingsFormField
+              :label="$t('pages.categoryEditPage.uniqueFieldTitle')"
+              label-for="attr-unique"
+              inline
+              :description="$t('pages.categoryEditPage.uniqueFieldHint')"
+            >
+              <Switch
+                id="attr-unique"
+                :model-value="attributeForm.isUnique"
+                @update:model-value="attributeForm.isUnique = $event"
+              />
+            </SettingsFormField>
           </SettingsFormSection>
         </div>
 
@@ -1569,7 +1617,10 @@ export default {
           <DialogClose as-child>
             <Button variant="outline">{{ $t("common.cancel") }}</Button>
           </DialogClose>
-          <Button @click="handleSaveAttribute" :disabled="isAddingAttribute || isLoadingAttribute">
+          <Button
+            @click="handleSaveAttribute"
+            :disabled="isAddingAttribute || isLoadingAttribute"
+          >
             <Spinner v-if="isAddingAttribute" class="mr-2" />
             {{ editingAttribute ? $t("common.save") : $t("common.add") }}
           </Button>

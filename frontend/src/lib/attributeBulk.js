@@ -3,6 +3,7 @@ export const ATTRIBUTE_BULK_FIELDS = [
   "isRequired",
   "isUnique",
   "showOnProductPage",
+  "descriptionInTooltip",
 ];
 
 export function attributeBulkPatch(settings) {

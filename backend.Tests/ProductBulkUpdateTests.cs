@@ -58,6 +58,7 @@ public class ProductBulkUpdateTests
             new QuotaService(uow, db),
             new NoopOperationLogger(),
             uniqueness,
+            new ProductAttributeFileService(db),
             service);
         return (db, data, user, controller, service);
     }

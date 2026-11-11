@@ -342,6 +342,7 @@ public sealed class SqlReadonlyService
             "group" => src.Select(a => a.group).Distinct().CountAsync(ct),
             "defaultvalue" => src.Select(a => a.defaultValue).Distinct().CountAsync(ct),
             "description" => src.Select(a => a.description).Distinct().CountAsync(ct),
+            "unitcode" => src.Select(a => a.unitCode).Distinct().CountAsync(ct),
             "allowcustomvalues" => src.Select(a => a.allowCustomValues).Distinct().CountAsync(ct),
             _ => Task.FromResult(0),
         };
@@ -365,6 +366,7 @@ public sealed class SqlReadonlyService
             "name" => src.Select(a => a.name).Distinct().CountAsync(ct),
             "key" => src.Select(a => a.key).Distinct().CountAsync(ct),
             "type" => src.Select(a => a.type).Distinct().CountAsync(ct),
+            "unitcode" => src.Select(a => a.unitCode).Distinct().CountAsync(ct),
             "isrequired" => src.Select(a => a.isRequired).Distinct().CountAsync(ct),
             "sortorder" => src.Select(a => a.sortOrder).Distinct().CountAsync(ct),
             "description" => src.Select(a => a.description).Distinct().CountAsync(ct),
@@ -756,13 +758,14 @@ public sealed class SqlReadonlyService
         int storeId, AgentSqlQuery q, CancellationToken ct)
     {
         var list = await CategoryAttributeSource(storeId, q).OrderBy(a => a.sortOrder).Take(q.Limit).ToListAsync(ct);
-        return list.Select(a => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var rows = list.Select(a => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["id"] = a.Id,
             ["categoryid"] = a.categoryId,
             ["name"] = a.name,
             ["key"] = a.key,
             ["type"] = a.type.ToString(),
+            ["unitcode"] = a.unitCode,
             ["isrequired"] = a.isRequired,
             ["isunique"] = a.isUnique,
             ["sortorder"] = a.sortOrder,
@@ -771,6 +774,7 @@ public sealed class SqlReadonlyService
             ["description"] = a.description,
             ["allowcustomvalues"] = a.allowCustomValues,
         })).ToList();
+        return q.IsDistinct ? DistinctRows(rows, q) : rows;
     }
 
     private IQueryable<ProductAttributeValue> ProductAttributeValueSource(int storeId, AgentSqlQuery q)
@@ -818,16 +822,18 @@ public sealed class SqlReadonlyService
     {
         var src = StoreAttributeSource(storeId);
         var list = await src.OrderBy(a => a.sortOrder).Take(q.Limit).ToListAsync(ct);
-        return list.Select(a => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var rows = list.Select(a => Project(q.Columns, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["id"] = a.Id,
             ["name"] = a.name,
             ["key"] = a.key,
             ["type"] = a.type.ToString(),
+            ["unitcode"] = a.unitCode,
             ["isrequired"] = a.isRequired,
             ["sortorder"] = a.sortOrder,
             ["description"] = a.description,
         })).ToList();
+        return q.IsDistinct ? DistinctRows(rows, q) : rows;
     }
 
     private IQueryable<StoreProductAttributeValue> StoreProductAttributeValueSource(int storeId, AgentSqlQuery q)

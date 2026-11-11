@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using Delegat.Services;
 using Delegat.Services.PlatformLink;
+using Delegat.Infrastructure.Security;
 
 namespace Delegat.Infrastructure.Middleware;
 
@@ -43,15 +44,18 @@ public class ExceptionMiddleware
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            _logger.LogDebug("Request was canceled by client: {Method} {Path}", context.Request.Method, context.Request.Path);
+            _logger.LogDebug("Request was canceled by client: {Method} {Path}", context.Request.Method,
+                MediaExportGrantSecrets.RedactPath(context.Request.Path));
         }
         catch (Exception ex) when (IsClientDisconnect(ex, context))
         {
-            _logger.LogDebug(ex, "Client disconnected: {Method} {Path}", context.Request.Method, context.Request.Path);
+            _logger.LogDebug("Client disconnected: {Method} {Path}: {Error}", context.Request.Method,
+                MediaExportGrantSecrets.RedactPath(context.Request.Path), MediaExportGrantSecrets.Redact(ex.ToString()));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception occurred: {Message}", ex.Message);
+            _logger.LogError("Unhandled exception occurred at {Path}: {Error}",
+                MediaExportGrantSecrets.RedactPath(context.Request.Path), MediaExportGrantSecrets.Redact(ex.ToString()));
             await PersistErrorLogAsync(context, ex, (int)HttpStatusCode.InternalServerError);
             if (context.Response.HasStarted)
                 return;

@@ -32,7 +32,8 @@ public sealed class CategoryImportQueueService
         IReadOnlyList<string>? selectedFieldKeys,
         string operationId,
         int authorUserId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<CategoryImportAttributeDecision>? attributeDecisions = null)
     {
         var extId = (externalCategoryId ?? "").Trim();
         if (extId.Length == 0)
@@ -70,9 +71,12 @@ public sealed class CategoryImportQueueService
         var extName = string.IsNullOrWhiteSpace(externalCategoryName)
             ? null
             : StringClip.Clip(externalCategoryName, CategoryMapping.EXTERNAL_CATEGORY_NAME_MAX_LENGTH);
-        var keysJson = selectedFieldKeys is { Count: > 0 }
-            ? JsonSerializer.Serialize(selectedFieldKeys)
-            : null;
+        var keysJson = selectedFieldKeys == null
+            ? null
+            : JsonSerializer.Serialize(selectedFieldKeys);
+        var decisionsJson = attributeDecisions == null
+            ? null
+            : JsonSerializer.Serialize(attributeDecisions);
 
         if (failed != null)
         {
@@ -85,6 +89,7 @@ public sealed class CategoryImportQueueService
             failed.localCategoryId = localCategoryId;
             failed.externalCategoryName = extName;
             failed.selectedFieldKeysJson = keysJson;
+            failed.attributeDecisionsJson = decisionsJson;
             failed.lastAttemptAt = null;
             failed.completedAt = null;
             await _db.SaveChangesAsync(ct);
@@ -102,6 +107,7 @@ public sealed class CategoryImportQueueService
             localCategoryName = name,
             localCategoryId = localCategoryId,
             selectedFieldKeysJson = keysJson,
+            attributeDecisionsJson = decisionsJson,
             status = CategoryImportStatus.Pending,
             createdAt = DateTime.UtcNow,
         };

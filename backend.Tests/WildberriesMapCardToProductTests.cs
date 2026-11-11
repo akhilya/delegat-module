@@ -58,6 +58,25 @@ public class WildberriesMapCardToProductTests
     }
 
     [Fact]
+    public void MapCardToProduct_ExposesCardVideoAsTypedMediaWithoutPollutingImageUrls()
+    {
+        var product = WildberriesPlugin.MapCardToProduct(new WbCard
+        {
+            NmId = 11,
+            VendorCode = "ART-1",
+            Video = "https://media.example.test/item.mp4",
+        });
+
+        Assert.Empty(product.ImageUrls ?? []);
+        Assert.Collection(product.Media!, media =>
+        {
+            Assert.Equal("video", media.Kind);
+            Assert.Equal("https://media.example.test/item.mp4", media.Url);
+            Assert.Equal(0, media.Index);
+        });
+    }
+
+    [Fact]
     public void PackagingWeightCharacteristic_IsNotSent_AndCardWeightStaysKilograms()
     {
         Assert.True(WildberriesPlugin.IsPackagingWeightCharacteristic("charc:88952", null));

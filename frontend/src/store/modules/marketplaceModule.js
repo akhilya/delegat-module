@@ -38,15 +38,10 @@ export default {
      * @returns {Promise<void>}
      */
     async getPlugins(ctx, { onSuccess, onError }) {
-      return await useAxios(
-        `/plugins`,
-        { method: "GET", cache: false },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
+      return await useAxios(`/plugins`, { method: "GET", cache: false }, http, {
+        immediate: true,
+        abortPrevious: true,
+      })
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
     },
@@ -227,7 +222,9 @@ export default {
      */
     async deleteConnection(ctx, { connectionId, onSuccess, onError }) {
       try {
-        const response = await http.delete(`/marketplace/connections/${connectionId}`);
+        const response = await http.delete(
+          `/marketplace/connections/${connectionId}`,
+        );
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);
@@ -317,7 +314,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async clearConnectionMetadataCache(ctx, { connectionId, onSuccess, onError }) {
+    async clearConnectionMetadataCache(
+      ctx,
+      { connectionId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/clear-metadata-cache`,
         { method: "POST", cache: false },
@@ -344,7 +344,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getExternalCategories(ctx, { connectionId, parentId, search, onSuccess, onError }) {
+    async getExternalCategories(
+      ctx,
+      { connectionId, parentId, search, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (parentId) params.append("parentId", parentId);
       if (search) params.append("search", search);
@@ -420,7 +423,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createCategoryMapping(ctx, { connectionId, data, onSuccess, onError }) {
+    async createCategoryMapping(
+      ctx,
+      { connectionId, data, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/mappings`,
         {
@@ -449,7 +455,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createExternalCategoryMapping(ctx, { connectionId, data, onSuccess, onError }) {
+    async createExternalCategoryMapping(
+      ctx,
+      { connectionId, data, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/create-external-category`,
         {
@@ -478,10 +487,21 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteCategoryMapping(ctx, { connectionId, mappingId, reassignToMappingId = null, force = false, onSuccess, onError }) {
+    async deleteCategoryMapping(
+      ctx,
+      {
+        connectionId,
+        mappingId,
+        reassignToMappingId = null,
+        force = false,
+        onSuccess,
+        onError,
+      },
+    ) {
       try {
         const params = new URLSearchParams();
-        if (reassignToMappingId) params.set("reassignToMappingId", reassignToMappingId);
+        if (reassignToMappingId)
+          params.set("reassignToMappingId", reassignToMappingId);
         if (force) params.set("force", "true");
         const query = params.toString();
         const url = `/marketplace/connections/${connectionId}/mappings/${mappingId}${query ? `?${query}` : ""}`;
@@ -526,14 +546,14 @@ export default {
     async updateCategoryMapping(ctx, { connectionId, mappingId, data }) {
       const response = await http.patch(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}`,
-        data
+        data,
       );
       return response.data;
     },
 
     async duplicateCategoryMapping(ctx, { connectionId, mappingId }) {
       const response = await http.post(
-        `/marketplace/connections/${connectionId}/mappings/${mappingId}/duplicate`
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/duplicate`,
       );
       return response.data;
     },
@@ -557,7 +577,7 @@ export default {
     async saveMappingSelections(ctx, { connectionId, selections }) {
       const response = await http.post(
         `/marketplace/connections/${connectionId}/save-mapping-selections`,
-        { selections }
+        { selections },
       );
       return response.data;
     },
@@ -568,7 +588,7 @@ export default {
      */
     async getMappingGraph(ctx, { connectionId, mappingId }) {
       const response = await http.get(
-        `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`
+        `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
       );
       return response.data;
     },
@@ -600,7 +620,7 @@ export default {
     async saveMappingGraph(ctx, { connectionId, mappingId, graph, fields }) {
       const response = await http.put(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
-        { graph, fields }
+        { graph, fields },
       );
       return response.data;
     },
@@ -609,20 +629,39 @@ export default {
      * Previews a node graph against a product.
      * @returns {Promise<{outputs: object, fieldTypes: object}>}
      */
-    async previewMappingGraph(ctx, { connectionId, mappingId, productId, graph }) {
+    async previewMappingGraph(
+      ctx,
+      { connectionId, mappingId, productId, graph },
+    ) {
       const response = await http.post(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph/preview`,
-        { productId, graph }
+        { productId, graph },
       );
       return response.data;
     },
 
     /**
-     * Fetches external category fields for preview before import.
+     * Fetches external category fields and optional field details before import.
      */
-    async getExternalCategoryFields(ctx, { connectionId, externalCategoryId, onSuccess, onError }) {
+    async getExternalCategoryFields(
+      ctx,
+      {
+        connectionId,
+        externalCategoryId,
+        fieldKey,
+        localCategoryId,
+        onSuccess,
+        onError,
+      },
+    ) {
+      const params = new URLSearchParams({
+        externalCategoryId: String(externalCategoryId),
+      });
+      if (fieldKey != null) params.set("fieldKey", String(fieldKey));
+      if (localCategoryId != null)
+        params.set("localCategoryId", String(localCategoryId));
       return await useAxios(
-        `/marketplace/connections/${connectionId}/external-category-fields?externalCategoryId=${encodeURIComponent(externalCategoryId)}`,
+        `/marketplace/connections/${connectionId}/external-category-fields?${params}`,
         { method: "GET", cache: false },
         http,
         {
@@ -706,7 +745,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async saveFieldMappings(ctx, { mappingId, fieldMappings, onSuccess, onError }) {
+    async saveFieldMappings(
+      ctx,
+      { mappingId, fieldMappings, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/mappings/${mappingId}/field-mappings`,
         {
@@ -734,7 +776,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async toggleFieldMapping(ctx, { mappingId, fieldMappingId, onSuccess, onError }) {
+    async toggleFieldMapping(
+      ctx,
+      { mappingId, fieldMappingId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/mappings/${mappingId}/field-mappings/${fieldMappingId}/toggle`,
         {
@@ -762,7 +807,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateFieldMapping(ctx, { mappingId, fieldMappingId, data, onSuccess, onError }) {
+    async updateFieldMapping(
+      ctx,
+      { mappingId, fieldMappingId, data, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/mappings/${mappingId}/field-mappings/${fieldMappingId}`,
         {
@@ -829,7 +877,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async previewFieldMappings(ctx, { mappingId, productId, fieldMappings, onSuccess, onError }) {
+    async previewFieldMappings(
+      ctx,
+      { mappingId, productId, fieldMappings, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/mappings/${mappingId}/preview`,
         {
@@ -861,7 +912,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getProductLinks(ctx, { connectionId, startIndex, pageSize, status, onSuccess, onError }) {
+    async getProductLinks(
+      ctx,
+      { connectionId, startIndex, pageSize, status, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (startIndex !== undefined) params.append("startIndex", startIndex);
       if (pageSize !== undefined) params.append("pageSize", pageSize);
@@ -892,7 +946,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async exportProduct(ctx, { connectionId, productId, operationId, onSuccess, onError }) {
+    async exportProduct(
+      ctx,
+      { connectionId, productId, operationId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/${productId}/export`,
         {
@@ -911,7 +968,10 @@ export default {
         .catch((error) => onError(error));
     },
 
-    async linkProduct(ctx, { connectionId, productId, externalProductId, onSuccess, onError }) {
+    async linkProduct(
+      ctx,
+      { connectionId, productId, externalProductId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/${productId}/link`,
         { method: "POST", data: { externalProductId }, cache: false },
@@ -922,7 +982,10 @@ export default {
         .catch((error) => onError(error));
     },
 
-    async relinkProduct(ctx, { linkId, externalProductId, onSuccess, onError }) {
+    async relinkProduct(
+      ctx,
+      { linkId, externalProductId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/links/${linkId}/relink`,
         { method: "POST", data: { externalProductId }, cache: false },
@@ -976,7 +1039,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async exportProductsBulk(ctx, { connectionId, productIds, onSuccess, onError }) {
+    async exportProductsBulk(
+      ctx,
+      { connectionId, productIds, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/export-bulk`,
         {
@@ -997,7 +1063,10 @@ export default {
 
     // === Local Products for Export ===
 
-    async getLocalProductsForExport(ctx, { connectionId, searchQuery, startIndex, pageSize, onSuccess, onError }) {
+    async getLocalProductsForExport(
+      ctx,
+      { connectionId, searchQuery, startIndex, pageSize, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (searchQuery) params.append("searchQuery", searchQuery);
       if (startIndex !== undefined) params.append("startIndex", startIndex);
@@ -1029,7 +1098,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getImportPreview(ctx, { connectionId, pageSize, cursor, onSuccess, onError }) {
+    async getImportPreview(
+      ctx,
+      { connectionId, pageSize, cursor, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (pageSize) params.append("pageSize", pageSize);
       if (cursor) params.append("cursor", cursor);
@@ -1057,7 +1129,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importSelectedProducts(ctx, { connectionId, products, operationId, onSuccess, onError }) {
+    async importSelectedProducts(
+      ctx,
+      { connectionId, products, operationId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/import-selected`,
         {
@@ -1087,7 +1162,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importProduct(ctx, { connectionId, externalId, targetCategoryId, onSuccess, onError }) {
+    async importProduct(
+      ctx,
+      { connectionId, externalId, targetCategoryId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/import/${externalId}`,
         {
@@ -1117,7 +1195,17 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importAllProducts(ctx, { connectionId, targetCategoryId, pageSize, maxProducts, onSuccess, onError }) {
+    async importAllProducts(
+      ctx,
+      {
+        connectionId,
+        targetCategoryId,
+        pageSize,
+        maxProducts,
+        onSuccess,
+        onError,
+      },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/import-all`,
         {
@@ -1175,7 +1263,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateSku(ctx, { connectionId, productId, newSku, onSuccess, onError }) {
+    async updateSku(
+      ctx,
+      { connectionId, productId, newSku, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/connections/${connectionId}/products/${productId}/update-sku`,
         {
@@ -1369,7 +1460,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getAvailableConnectionsForProduct(ctx, { productId, onSuccess, onError }) {
+    async getAvailableConnectionsForProduct(
+      ctx,
+      { productId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/products/${productId}/available-connections`,
         { method: "GET", cache: false },
@@ -1394,12 +1488,18 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async importFromLink(ctx, { linkId, excludeFields, operationId, onSuccess, onError }) {
+    async importFromLink(
+      ctx,
+      { linkId, excludeFields, operationId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/links/${linkId}/import`,
         {
           method: "POST",
-          data: { excludeFields: excludeFields || null, operationId: operationId || null },
+          data: {
+            excludeFields: excludeFields || null,
+            operationId: operationId || null,
+          },
           cache: false,
         },
         http,
@@ -1446,7 +1546,10 @@ export default {
         .catch((error) => onError(error));
     },
 
-    async importImagesFromLink(ctx, { linkId, urls, operationId, onSuccess, onError }) {
+    async importImagesFromLink(
+      ctx,
+      { linkId, urls, operationId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/links/${linkId}/import-images`,
         {
@@ -1473,7 +1576,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async recreateProductOnMarketplace(ctx, { linkId, newSku, onSuccess, onError }) {
+    async recreateProductOnMarketplace(
+      ctx,
+      { linkId, newSku, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/links/${linkId}/recreate`,
         {
@@ -1511,7 +1617,10 @@ export default {
         .catch((error) => onError(error));
     },
 
-    async setLinkPreferredExportMode(ctx, { linkId, mode, onSuccess, onError }) {
+    async setLinkPreferredExportMode(
+      ctx,
+      { linkId, mode, onSuccess, onError },
+    ) {
       return await useAxios(
         `/marketplace/links/${linkId}/preferred-export-mode`,
         {
@@ -1529,7 +1638,10 @@ export default {
         .catch((error) => onError?.(error));
     },
 
-    async setProductPreferredExportAllMode(ctx, { productId, mode, onSuccess, onError }) {
+    async setProductPreferredExportAllMode(
+      ctx,
+      { productId, mode, onSuccess, onError },
+    ) {
       return await useAxios(
         `/products/${productId}/preferred-export-all-mode`,
         {
@@ -1561,7 +1673,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async getExternalProducts(ctx, { connectionId, pageSize, cursor, offerIdSearch, onSuccess, onError }) {
+    async getExternalProducts(
+      ctx,
+      { connectionId, pageSize, cursor, offerIdSearch, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (pageSize) params.append("pageSize", pageSize);
       if (cursor) params.append("cursor", cursor);
@@ -1672,7 +1787,7 @@ export default {
     async updateProductVariant(ctx, { productId, variantId, data }) {
       const response = await http.put(
         `/products/${productId}/variants/${variantId}`,
-        data
+        data,
       );
       return response.data;
     },
@@ -1681,7 +1796,10 @@ export default {
       await http.delete(`/products/${productId}/variants/${variantId}`);
     },
 
-    async importUnlinkedProducts(ctx, { connectionId, operationId, onSuccess, onError }) {
+    async importUnlinkedProducts(
+      ctx,
+      { connectionId, operationId, onSuccess, onError },
+    ) {
       try {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/products/import-unlinked`,
@@ -1696,14 +1814,19 @@ export default {
 
     async getCatalogConnectJobs(ctx, { onSuccess, onError }) {
       try {
-        const response = await http.get("/marketplace/catalog-connect/jobs", { cache: false });
+        const response = await http.get("/marketplace/catalog-connect/jobs", {
+          cache: false,
+        });
         onSuccess?.({ data: response.data });
       } catch (error) {
         onError?.(error);
       }
     },
 
-    async previewCatalogMatch(ctx, { connectionId, operationId, onSuccess, onError }) {
+    async previewCatalogMatch(
+      ctx,
+      { connectionId, operationId, onSuccess, onError },
+    ) {
       try {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/match/preview`,
@@ -1716,7 +1839,10 @@ export default {
       }
     },
 
-    async applyCatalogMatch(ctx, { connectionId, items, importUnmatched, operationId, onSuccess, onError }) {
+    async applyCatalogMatch(
+      ctx,
+      { connectionId, items, importUnmatched, operationId, onSuccess, onError },
+    ) {
       try {
         const response = await http.post(
           `/marketplace/connections/${connectionId}/match/apply`,
@@ -1729,7 +1855,10 @@ export default {
       }
     },
 
-    async searchCatalogScrape(ctx, { adapterKey, connectionId, query, pageSize, cursor, onSuccess, onError }) {
+    async searchCatalogScrape(
+      ctx,
+      { adapterKey, connectionId, query, pageSize, cursor, onSuccess, onError },
+    ) {
       try {
         const path = adapterKey
           ? `/marketplace/catalog-scrape/${encodeURIComponent(adapterKey)}/search`
@@ -1745,7 +1874,10 @@ export default {
       }
     },
 
-    async applyCatalogScrape(ctx, { adapterKey, connectionId, publicIds, operationId, onSuccess, onError }) {
+    async applyCatalogScrape(
+      ctx,
+      { adapterKey, connectionId, publicIds, operationId, onSuccess, onError },
+    ) {
       try {
         const path = adapterKey
           ? `/marketplace/catalog-scrape/${encodeURIComponent(adapterKey)}/apply`

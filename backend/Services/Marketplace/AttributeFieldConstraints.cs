@@ -5,15 +5,18 @@ using Delegat.Models.Marketplace.DTOs;
 namespace Delegat.Services.Marketplace;
 
 /// <summary>
-/// Normalizes marketplace <see cref="ExternalField"/> limits onto local category attributes.
+/// Normalizes marketplace <see cref="ExternalField"/> limits and unit metadata onto local category attributes.
 /// </summary>
 internal static class AttributeFieldConstraints
 {
     /// <summary>
-    /// Copy length / range / regex limits from an adapter field onto a new attribute form.
+    /// Copy limits and unit metadata from an adapter field onto a new attribute form.
     /// </summary>
     public static void ApplyTo(ref CategoryAttribute.AddForm form, ExternalField field)
     {
+        form.unitCode = form.type == Delegat.Enums.AttributeType.Number
+            ? ResolveUnitCode(field)
+            : null;
         form.maxLength = NormalizeMaxLength(field.MaxLength);
         (form.minValue, form.maxValue) = NormalizeRange(field.MinValue, field.MaxValue);
         form.maxValues = NormalizeMaxValues(field.MaxValues);
@@ -35,6 +38,16 @@ internal static class AttributeFieldConstraints
         var maxValues = NormalizeMaxValues(field.MaxValues);
         var pattern = UsableValidationPattern(field.ValidationPattern);
         var changed = false;
+
+        var unitCode = ResolveUnitCode(field);
+        if (attribute.type == Delegat.Enums.AttributeType.Number
+            && IsNumericField(field.Type)
+            && string.IsNullOrWhiteSpace(attribute.unitCode)
+            && !string.IsNullOrWhiteSpace(unitCode))
+        {
+            attribute.unitCode = unitCode;
+            changed = true;
+        }
 
         if (attribute.maxLength == null && maxLength != null)
         {
@@ -73,6 +86,34 @@ internal static class AttributeFieldConstraints
         }
 
         return changed;
+    }
+
+    internal static string? ResolveUnitCode(ExternalField field)
+    {
+        var declaredUnit = !string.IsNullOrWhiteSpace(field.UnitCode)
+            ? field.UnitCode
+            : field.Unit;
+        if (!string.IsNullOrWhiteSpace(declaredUnit))
+            return AttributeUnits.NormalizeCode(declaredUnit);
+
+        if (!IsNumericField(field.Type))
+            return null;
+
+        return AttributeUnits.InferCodeFromText(field.Name)
+            ?? AttributeUnits.InferCodeFromText(field.Description, field.Name);
+    }
+
+    internal static string? ResolveUnitLabel(ExternalField field)
+    {
+        if (!string.IsNullOrWhiteSpace(field.Unit))
+            return field.Unit;
+        if (!string.IsNullOrWhiteSpace(field.UnitCode))
+            return null;
+
+        var unitCode = ResolveUnitCode(field);
+        return unitCode == null
+            ? null
+            : AttributeUnits.Find(unitCode)?.Symbol ?? unitCode;
     }
 
     internal static int? NormalizeMaxLength(int? maxLength)
@@ -114,4 +155,7 @@ internal static class AttributeFieldConstraints
             return null;
         return StringClip.ClipOptional(trimmed, CategoryAttribute.ATTRIBUTE_VALIDATION_PATTERN_MAX_LENGTH);
     }
+
+    private static bool IsNumericField(string? type)
+        => type?.ToLowerInvariant() is "number" or "integer" or "decimal" or "float";
 }

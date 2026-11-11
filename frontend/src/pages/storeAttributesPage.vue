@@ -7,6 +7,7 @@ import Input from "@/components/ui/input/Input.vue";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import AttributeDefinitionList from "@/components/products/AttributeDefinitionList.vue";
+import AttributeUnitSelect from "@/components/products/AttributeUnitSelect.vue";
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ export default {
     SettingsFormField,
     FieldGroup,
     AttributeDefinitionList,
+    AttributeUnitSelect,
     Select,
     SelectContent,
     SelectItem,
@@ -72,6 +74,7 @@ export default {
       newAttributeName: "",
       newAttributeKey: "",
       newAttributeType: 0,
+      newAttributeUnitCode: "",
       FIELD_LIMITS,
       STORE_ATTRIBUTE_TYPE_VALUES,
       emptyListIcon: Settings2,
@@ -80,6 +83,9 @@ export default {
   computed: {
     createTypeLabel() {
       return this.getAttributeTypeLabel(this.newAttributeType);
+    },
+    isCreateNumberType() {
+      return resolveStoreAttributeTypeValue(this.newAttributeType) === 1;
     },
   },
   methods: {
@@ -125,6 +131,7 @@ export default {
       this.newAttributeName = "";
       this.newAttributeKey = "";
       this.newAttributeType = 0;
+      this.newAttributeUnitCode = "";
     },
 
     openAttribute(attributeId) {
@@ -173,6 +180,9 @@ export default {
           name: this.newAttributeName.trim(),
           key: this.newAttributeKey.trim(),
           type: resolveStoreAttributeTypeValue(this.newAttributeType),
+          unitCode: this.isCreateNumberType
+            ? this.newAttributeUnitCode.trim()
+            : "",
           isRequired: false,
           isUnique: false,
           isMultiline: false,
@@ -301,6 +311,22 @@ export default {
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                </SettingsFormField>
+                <SettingsFormField
+                  v-if="isCreateNumberType"
+                  :label="$t('pages.storeAttributesPage.dialog.unitLabel')"
+                  label-for="new-store-attr-unit-code"
+                >
+                  <AttributeUnitSelect
+                    id="new-store-attr-unit-code"
+                    v-model="newAttributeUnitCode"
+                    :placeholder="
+                      $t('pages.storeAttributesPage.dialog.unitPlaceholder')
+                    "
+                  />
+                  <template #description>
+                    {{ $t("pages.storeAttributesPage.dialog.unitHint") }}
+                  </template>
                 </SettingsFormField>
               </FieldGroup>
             </form>

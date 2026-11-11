@@ -5,6 +5,7 @@ import { isAttributeType } from "@/lib/productAttributeValidation";
 import AttributeFieldControl from "@/components/products/AttributeFieldControl.vue";
 
 export default {
+  emits: ["files-uploaded"],
   components: {
     FieldGroup,
     EmptyState,
@@ -19,6 +20,9 @@ export default {
       type: String,
       default: "storeAttributes",
     },
+    files: { type: Array, default: () => [] },
+    productId: { type: Number, default: null },
+    onFileUpload: { type: Function, default: null },
   },
   computed: {
     sortedAttributes() {
@@ -50,6 +54,10 @@ export default {
           :attribute="attribute"
           :field-prefix="fieldPrefix"
           id-prefix="store-attr-"
+          :files="files"
+          :product-id="productId"
+          :on-file-upload="onFileUpload"
+          @files-uploaded="$emit('files-uploaded', $event)"
         />
       </div>
     </div>

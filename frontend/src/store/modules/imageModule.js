@@ -26,6 +26,17 @@ export default {
         .then((response) => onSuccess(response))
         .catch((error) => onError(error));
     },
+
+    async postProductMedia(ctx, { productId, files, onSuccess, onError }) {
+      return await useAxios(
+        `/products/${productId}/media`,
+        { method: "POST", data: files },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
   },
   mutations: {},
   state: {},

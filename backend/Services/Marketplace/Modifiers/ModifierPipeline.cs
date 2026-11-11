@@ -26,6 +26,7 @@ public static class ModifierPipeline
             new LowercaseModifier(),
             new TrimModifier(),
             // Number
+            new UnitConversionModifier(),
             new MultiplyModifier(),
             new DivideModifier(),
             new AddModifier(),

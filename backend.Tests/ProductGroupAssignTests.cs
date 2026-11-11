@@ -51,6 +51,7 @@ public class ProductGroupAssignTests
             new QuotaService(uow, db),
             new NoopOperationLogger(),
             uniqueness,
+            new ProductAttributeFileService(db),
             new ProductBulkUpdateService(db, uow, uniqueness));
         return (db, data, user, controller);
     }

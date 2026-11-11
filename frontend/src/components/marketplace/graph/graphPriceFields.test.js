@@ -48,6 +48,9 @@ describe("price-field schema sync", () => {
         description: "Current price",
         sortOrder: 0,
         isRequired: true,
+        externalFieldUnit: "kilogram",
+        externalFieldUnitCode: "kg",
+        externalFieldUnitId: "701",
       },
     ]);
 
@@ -61,6 +64,9 @@ describe("price-field schema sync", () => {
     assert.equal(fields[0].isRequired, true);
     assert.equal(fields[0].group, "Prices");
     assert.equal(fields[0].description, "Current price");
+    assert.equal(fields[0].unit, "kilogram");
+    assert.equal(fields[0].unitCode, "kg");
+    assert.equal(fields[0].unitId, "701");
     assert.deepEqual(fields[0].source, {
       type: "productField",
       field: "price",
@@ -106,8 +112,10 @@ describe("price-field schema sync", () => {
         group: "Price values",
       },
     ];
+    const changedUnit = [{ ...current[0], unitCode: "g" }];
 
     assert.equal(samePriceFieldSchema(current, same), true);
     assert.equal(samePriceFieldSchema(current, changed), false);
+    assert.equal(samePriceFieldSchema(current, changedUnit), false);
   });
 });

@@ -121,6 +121,18 @@ public sealed class CabinetActionCatalog
         new("PATCH", "/products/{id}", true,
             "attributeValues replaces the whole list (GET the card first).",
             "patch product characteristics характеристики attributeValues"),
+        new("GET", "/categories/{categoryId}/attributes/summary", false,
+            "Lightweight category attribute definitions, including unitCode, without option dictionaries or editor payloads. Prefer this when reading characteristic units.",
+            "категория категории категорий характеристики характеристика атрибут атрибуты единица единицу единицы измерения измерений unit units measurement summary"),
+        new("GET", "/store-attributes/summary", false,
+            "Lightweight store-wide attribute definitions, including unitCode, without option dictionaries or editor payloads. Prefer this when reading characteristic units.",
+            "global store-wide глобальный глобальная глобальные глобальных общая общие общих общими характеристики атрибуты свойства единица единицу единицы измерения измерений unit units measurement summary"),
+        new("PATCH", "/categories/{categoryId}/attributes/{attributeId}", true,
+            "Update one category attribute definition, including unitCode. Changing unit metadata does not convert stored product values.",
+            "категория категории категорий характеристика характеристики атрибут атрибуты единица единицу единицы измерения измерений unit units measurement"),
+        new("PATCH", "/store-attributes/{attributeId}", true,
+            "Update one store-wide attribute definition, including unitCode. Changing unit metadata does not convert stored product values.",
+            "global store-wide глобальный глобальная глобальные глобальных общая общие общих общими характеристики атрибуты свойства единица единицу единицы измерения измерений unit units measurement"),
         new("PATCH", "/products/{id}/group", true,
             "Move a card into a group (groupId null removes).",
             "group группа productgroups"),
@@ -234,6 +246,10 @@ public sealed class CabinetActionCatalog
             .Concat(Tokens(hit.Capabilities))
             .Distinct().ToList();
         var score = 0;
+        var attributeUnitAction = hit.Path.Contains("/attributes", StringComparison.OrdinalIgnoreCase)
+            || hit.Path.Contains("store-attributes", StringComparison.OrdinalIgnoreCase);
+        var readIntent = tokens.Any(ReadIntentWords.Contains);
+        var writeIntent = tokens.Any(WriteIntentWords.Contains);
         foreach (var t in tokens)
         {
             // Concrete DTO fields and their translations outweigh generic verbs
@@ -252,6 +268,13 @@ public sealed class CabinetActionCatalog
                 score += 2;
         }
 
+        if (score > 0 && attributeUnitAction
+            && hit.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+            && (readIntent || !writeIntent))
+            score += 20;
+        if (score > 0 && attributeUnitAction && PlatformRequestPolicy.IsMutating(hit.Method) && writeIntent)
+            score += 20;
+
         return score;
     }
 
@@ -267,6 +290,20 @@ public sealed class CabinetActionCatalog
         ["currency"] = "currency валюта",
         ["attributeValues"] = "attributes characteristics характеристики атрибуты",
         ["storeAttributeValues"] = "global attributes глобальные характеристики",
+        ["unitCode"] = "unit units measurement unitcode единица единицу единицы измерения измерений ед измерения код единицы",
+    };
+
+    private static readonly HashSet<string> ReadIntentWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "show", "read", "lookup", "view", "get", "see", "display", "list", "check",
+        "посмотреть", "покажи", "показать", "прочитать", "узнать", "список", "проверь", "найти",
+    };
+
+    private static readonly HashSet<string> WriteIntentWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "change", "update", "edit", "patch", "set", "modify", "alter",
+        "измени", "изменить", "обнови", "обновить", "поменяй", "поменять",
+        "установи", "установить", "поставь", "поставить", "задать", "задай", "сменить",
     };
 
     private static bool RelatedWord(string query, string word) =>

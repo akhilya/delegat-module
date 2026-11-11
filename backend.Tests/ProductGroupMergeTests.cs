@@ -95,26 +95,38 @@ public class ProductGroupMergeTests
         Assert.All(links, l => Assert.Equal(ProductMarketplaceStatus.Modified, l.status));
     }
 
-    [Fact]
-    public async Task Merge_ConflictingMarketplaceLinksDoesNotMutateAnything()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Merge_DifferentMarketplaceGroupsKeepsTargetLinkOrOldestSourceLink(bool targetHasLink)
     {
         using var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
         var store = data.AddStore();
         var target = data.AddGroup(store.Id, "Target", data.AddProduct(store.Id));
         var source = data.AddGroup(store.Id, "Source", data.AddProduct(store.Id));
+        var otherSource = data.AddGroup(store.Id, "Other source");
         var connection = data.AddConnection(store.Id);
-        db.productGroupMarketplaceLinks.AddRange(Link(target.Id, connection.Id, "a"), Link(source.Id, connection.Id, "b"));
+        // Insert the source first to ensure target priority does not depend on link order.
+        db.productGroupMarketplaceLinks.Add(Link(source.Id, connection.Id, "b"));
         await db.SaveChangesAsync();
+        db.productGroupMarketplaceLinks.Add(Link(otherSource.Id, connection.Id, "c"));
+        if (targetHasLink)
+            db.productGroupMarketplaceLinks.Add(Link(target.Id, connection.Id, "a"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
 
-        var error = await Assert.ThrowsAsync<ApiException>(() => ProductGroupMerge.MergeAsync(db, store.Id, target.Id, [source.Id]));
+        var result = await ProductGroupMerge.MergeAsync(db, store.Id, target.Id, [source.Id, otherSource.Id]);
 
-        Assert.Equal("group_merge_marketplace_conflict", error.Code);
-        Assert.Equal(409, error.StatusCode);
-        Assert.All(db.ChangeTracker.Entries(), e => Assert.Equal(EntityState.Unchanged, e.State));
-        Assert.Equal(2, await db.productGroups.CountAsync());
-        Assert.Equal(1, await db.productGroupMembers.CountAsync(m => m.groupId == source.Id));
-        Assert.Equal(2, await db.productGroupMarketplaceLinks.CountAsync());
+        Assert.Equal(2, result.mergedGroupCount);
+        Assert.Equal(1, result.movedProductCount);
+        Assert.Single(await db.productGroups.ToListAsync());
+        Assert.Equal(2, await db.productGroupMembers.CountAsync(m => m.groupId == target.Id));
+        Assert.Equal(2, await db.products.CountAsync());
+        var retained = Assert.Single(await db.productGroupMarketplaceLinks.ToListAsync());
+        Assert.Equal(target.Id, retained.productGroupId);
+        Assert.Equal(targetHasLink ? "a" : "b", retained.externalGroupId);
+        Assert.Equal(ProductMarketplaceStatus.Modified, retained.status);
     }
 
     [Fact]

@@ -11,17 +11,24 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Product groups support confirmed merging into an explicitly selected target group. Products, ordering, and compatible adapter links are preserved; conflicting marketplace group links block the entire merge without changes. No export is started by merging.
+- Product categories and store attributes support File values with ordered, product-owned attachments; the product gallery can mix images and downloaded videos. Wildberries and Yandex Market video imports are typed separately from image URLs. Yandex Market exports up to six gallery videos through stable, revocable HTTPS grants; other video export paths remain disabled until their contracts are verified.
+
+- Adding a category now offers a reusable choice dialog for manual creation or marketplace import, with connection selection when multiple marketplaces are configured.
+
+- Product groups support confirmed merging into an explicitly selected target group. Products and ordering are preserved. Different marketplace group links no longer block merging: each connection keeps the target's link, or the oldest source link if absent, and removes redundant local group links without changing marketplace cards or individual product links. No export is started by merging.
+
+- Selected product groups can be deleted in one all-or-nothing request; their memberships and marketplace links are removed while products remain in the catalog.
 
 - Bulk edit includes a permission-gated Mappings tab, using the same category-mapping picker as bulk adapter actions. Assigning mappings keeps unsaved product fields and attributes intact and does not start export.
 - Catalog bulk adapter actions can assign category mappings to selected products without exporting. Choose one compatible mapping per local category; products without mappings are explicitly counted and skipped.
 - Assistant chat accepts drag-and-drop file attachments using the same drop target as the file manager. Files stay in the draft until sent; folder drops show a localized hint.
 - Product editing supports Ctrl+S (Cmd+S on macOS), including while typing in fields, with save notifications and protection against duplicate submissions. Browser page saving is suppressed for this shortcut.
 - Categories support confirmed bulk deletion with store-scoped, all-or-nothing validation. Categories containing active products block the whole selection; trashed products remain in the trash.
-- Category and global attribute lists share multi-selection, bulk required/unique/visibility editing, and confirmed deletion. Bulk changes preserve other definition settings and product values; deletion removes the selected definitions and their values atomically.
+- Category and global attribute lists share multi-selection, bulk required/unique/visibility/description-tooltip editing, and confirmed deletion. Bulk changes preserve other definition settings and product values; deletion removes the selected definitions and their values atomically.
 - Optional Platform AI for linked instances, using the Control Plane's organization-wide monthly token quota and provider proxy; existing customer-connected (BYOK) models remain independent.
 - Optional sampled Sentry traces for AI turns, with model/tool spans and aggregate usage measurements. Export is disabled without `SENTRY_DSN` and does not include prompts, tool arguments/results, or request data.
 - Cabinet assistant remembers user-stated, non-sensitive preferences and useful facts across chats. Memories are scoped to the user and store, can be searched/saved/forgotten through assistant tools, are injected as untrusted context, and are capped at 40 entries.
+- Cabinet assistant can read category and store attribute units through lightweight summaries or read-only SQL, distinguishes `unitCode` metadata from stored string values, and will not silently convert product data when a unit changes.
 
 - Add store-scoped recurring task schedules with execution history and a persistent background worker. Scheduled actions remain unavailable until explicitly registered.
 
@@ -29,6 +36,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - A watch prompt lists each marketplace adapter and the official API news and documentation pages to read for upcoming, legacy, and breaking changes. Adding or removing an adapter requires a new copy of that prompt.
 - Partners can list a connection’s category mappings and assign a product to one of them when a local category exports to several marketplace categories (`GET …/mappings`, `POST …/product-mappings/resolve`, `POST …/product-mappings`). The cabinet assistant uses the same choice (`resolve-mappings`, then `save-mapping-selections`) and does not edit the field canvas for it.
 - Public API Swagger splits marketplace commerce into Prices, Orders, Fulfillment, Shipments, and Promotions. Paths are unchanged. Sections start collapsed, each operation is one line, and the longer contract sits inside it. Errors share one `{ error: { code, message, details } }` schema.
+
+- Numeric category and store attributes can declare a unit. Category imports infer known units from numeric field names and descriptions when adapters omit explicit unit metadata, and imported field descriptions default to tooltip display. Marketplace field units are retained in mapping graphs, mismatches are explained in the mapping editor, and known compatible units get a reversible conversion node whose inverse is applied on import; unknown and incompatible units remain unchanged and do not block export. Unit selection uses a searchable shadcn-vue combobox, accepts custom codes, and product forms show localized unit names and configured field constraints.
+- Category import localizes common marketplace attribute labels to Russian and moves recognized unit suffixes from the label into the separate unit field; for known measurements, descriptions preserve qualifiers such as “with packaging” when the marketplace name is generic. Importing into an existing category surfaces likely duplicate attributes and requires an explicit reuse/create/skip choice; reusing an attribute leaves its definition unchanged.
+- Category import presents fields in the category attribute-list style, with selection checkboxes and a read-only details window for imported attribute settings.
 
 - Medusa 0.2.3 downloads the Ozon Delivery packing-label PDF from the shop after assemble (`GET /orders/{id}/label`).
 - Cabinet assistant `search_actions` looks up allowed cabinet HTTP (MVC routes plus operator aliases) so export/import/match do not need a prompt paragraph each, and Tools is not treated as the write catalog.
@@ -232,7 +243,17 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Product attribute forms preserve scalar values when attachment IDs are present in API DTOs, instead of overwriting values with `[]`. Mixed-gallery previews expose the media classifier correctly.
+- Product details send only selected dictionary labels; complete selector options load on opening, including keyboard activation. Large category dictionaries no longer inflate every product response.
+- Interrupted feature migrations fail immediately with a reconciliation error instead of repeatedly attempting duplicate DDL or automatically stamping incomplete schemas.
+
+- Bulk category deletion preserves EF's dependent-delete ordering when categories contain saved attribute values, avoiding concurrency errors from database cascades.
+
 - Exporting from the product editor now saves pending product and image-order changes first, waits for an in-progress save, and stops if saving fails. Full, price, stock, and recreate exports refresh available mappings after saving rather than using stale category data.
+
+- Numeric marketplace fields no longer infer inches from a quote in prose or an article title; the quote must be adjacent to a number.
+
+- Product attribute tooltip triggers are no longer clipped in constrained form layouts, and unit labels use the error color when their numeric field is invalid.
 
 - Adapter HTTP logs retain request/response details for 24 hours and at most 5,000 recent records, while keeping searchable summaries for seven days. New payloads are smaller, cleanup runs every ten minutes, and detail previews/downloads avoid loading unnecessary full bodies. The cabinet explains when detailed data is no longer available.
 - Adapter log pagination no longer stops before the last page. New searches and detail selections cancel preceding requests and ignore late responses, preventing stale results, spurious errors, and incorrect loading states.

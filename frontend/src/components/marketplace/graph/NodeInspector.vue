@@ -1014,6 +1014,17 @@ function resolvePreview(fieldKey, raw) {
 
       <!-- Modifier params -->
       <template v-else-if="type === 'modifier'">
+        <p
+          v-if="data.modifierType === 'unitConversion'"
+          class="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+        >
+          {{
+            t("marketplace.graph.unitConversion.inspectorHint", {
+              from: data.params?.fromUnit || "?",
+              to: data.params?.toUnit || "?",
+            })
+          }}
+        </p>
         <div v-if="isLlmGenerate" class="mb-4 space-y-2 rounded-md border p-3">
           <Label class="text-xs font-medium">{{
             t("marketplace.graph.inspector.additionalInputs")
@@ -1198,7 +1209,12 @@ function resolvePreview(fieldKey, raw) {
             @update:model-value="setParam(p.key, $event)"
           />
         </div>
-        <p v-if="!modifierParams.length" class="text-xs text-muted-foreground">
+        <p
+          v-if="
+            !modifierParams.length && data.modifierType !== 'unitConversion'
+          "
+          class="text-xs text-muted-foreground"
+        >
           {{ t("marketplace.graph.inspector.noModifierParams") }}
         </p>
       </template>

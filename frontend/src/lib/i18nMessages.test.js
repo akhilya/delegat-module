@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { baseCompile } from "@intlify/message-compiler";
 import en from "../locales/en.json" with { type: "json" };
 import ru from "../locales/ru.json" with { type: "json" };
+import { ATTRIBUTE_UNITS } from "./attributeUnits.js";
 
 function walkStrings(value, prefix = "") {
   /** @type {Array<[string, string]>} */
@@ -61,6 +62,114 @@ describe("locale message catalogs", () => {
     );
   });
 
+  it("localizes file attributes in the category editor", () => {
+    for (const [locale, messages] of [
+      ["en", en],
+      ["ru", ru],
+    ]) {
+      const category = messages.pages.categoryEditPage;
+      assert.equal(
+        typeof category.attributeTypes.file,
+        "string",
+        `${locale}.pages.categoryEditPage.attributeTypes.file`,
+      );
+      assert.equal(
+        typeof category.allowMultipleFilesLabel,
+        "string",
+        `${locale}.pages.categoryEditPage.allowMultipleFilesLabel`,
+      );
+      assert.equal(
+        typeof category.allowMultipleFilesHint,
+        "string",
+        `${locale}.pages.categoryEditPage.allowMultipleFilesHint`,
+      );
+    }
+  });
+
+  it("localizes every known attribute unit and category unit field", () => {
+    for (const [locale, messages] of [
+      ["en", en],
+      ["ru", ru],
+    ]) {
+      const unitMessages = messages.components.attributeUnitSelect.units;
+      for (const unit of ATTRIBUTE_UNITS) {
+        assert.equal(
+          typeof unitMessages[unit.code],
+          "string",
+          `${locale}.components.attributeUnitSelect.units.${unit.code}`,
+        );
+        assert.ok(
+          unitMessages[unit.code].trim(),
+          `${locale}.components.attributeUnitSelect.units.${unit.code} is non-empty`,
+        );
+      }
+
+      for (const key of ["pattern"]) {
+        assert.equal(
+          typeof messages.components.attributeFieldControl.constraints[key],
+          "string",
+          `${locale}.components.attributeFieldControl.constraints.${key}`,
+        );
+      }
+
+      for (const key of ["unitLabel", "unitPlaceholder", "unitHint"]) {
+        assert.equal(
+          typeof messages.pages.categoryEditPage[key],
+          "string",
+          `${locale}.pages.categoryEditPage.${key}`,
+        );
+      }
+    }
+  });
+
+  it("localizes the bulk attribute tooltip setting", () => {
+    for (const [locale, messages] of [
+      ["en", en],
+      ["ru", ru],
+    ]) {
+      assert.equal(
+        typeof messages.components.attributeDefinitions.descriptionInTooltip,
+        "string",
+        `${locale}.components.attributeDefinitions.descriptionInTooltip`,
+      );
+    }
+  });
+
+  it("localizes category creation and marketplace import choices", () => {
+    const keys = [
+      "addChoiceTitle",
+      "addChoiceDescription",
+      "createManually",
+      "createManuallyDescription",
+      "importFromMarketplace",
+      "importFromMarketplaceDescription",
+      "loadingMarketplaceConnections",
+      "chooseImportConnectionTitle",
+      "chooseImportConnectionDescription",
+      "noImportConnectionsTitle",
+      "noImportConnectionsDescription",
+      "openMarketplaceConnections",
+      "openMarketplaceConnectionsDescription",
+    ];
+
+    for (const [locale, messages] of [
+      ["en", en],
+      ["ru", ru],
+    ]) {
+      for (const key of keys) {
+        assert.equal(
+          typeof messages.pages.categoriesPage[key],
+          "string",
+          `${locale}.pages.categoriesPage.${key}`,
+        );
+        assert.ok(
+          messages.pages.categoriesPage[key].trim(),
+          `${locale}.pages.categoriesPage.${key} is non-empty`,
+        );
+      }
+    }
+  });
+
   it("localizes migrated API error codes in both supported languages", () => {
     const codes = [
       "categories_selection_invalid",
@@ -71,6 +180,7 @@ describe("locale message catalogs", () => {
       "attribute_name_taken",
       "attribute_key_taken",
       "attribute_not_found",
+      "attribute_unit_requires_number",
       "log_entry_not_found",
       "log_details_unavailable",
       "authenticator_key_failed",
@@ -101,6 +211,7 @@ describe("locale message catalogs", () => {
       "link_not_found",
       "file_name_required",
       "files_required",
+      "groups_selection_invalid",
       "group_name_taken",
       "group_merge_selection_invalid",
       "group_merge_marketplace_conflict",
@@ -192,7 +303,44 @@ describe("locale message catalogs", () => {
       "store_required",
       "multipart_content_type_invalid",
       "multipart_boundary_missing",
+      "product_metadata_required",
+      "product_metadata_duplicate",
+      "product_metadata_too_large",
+      "product_metadata_invalid",
+      "upload_file_reference_missing",
+      "invalid_uploaded_file_reference",
+      "duplicate_uploaded_file_reference",
+      "unreferenced_uploaded_file",
+      "too_many_uploaded_files",
+      "too_many_gallery_media_items",
+      "unsupported_media_file",
+      "duplicate_media_files",
+      "required_attribute_file",
+      "invalid_attribute_file_value",
+      "conflicting_attribute_file_values",
+      "attribute_multiple_files_disabled",
+      "duplicate_attribute_files",
+      "too_many_attribute_files",
+      "file_ids_require_file_attribute",
+      "file_in_use",
+      "image_file_required",
+      "product_name_required",
+      "product_name_too_long",
+      "multiple_files_requires_file_attribute",
+      "file_attribute_cannot_be_unique",
+      "file_attribute_default_unsupported",
+      "attribute_type_change_with_values",
+      "attribute_multiple_files_in_use",
+      "files_not_supported_on_product_create",
       "storage_upload_failed",
+      "media_export_video_limit_exceeded",
+      "media_export_public_url_required",
+      "media_export_public_url_invalid",
+      "media_export_public_url_not_public",
+      "media_export_connection_mismatch",
+      "media_export_file_not_found",
+      "media_export_file_not_video",
+      "media_export_grants_unavailable",
       "cannot_change_own_access",
       "owner_role_required",
       "owner_role_assignment_forbidden",

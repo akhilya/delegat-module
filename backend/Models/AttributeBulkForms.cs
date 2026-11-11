@@ -8,6 +8,8 @@ public interface IAttributeDefinitionSettings
     bool isRequired { get; set; }
     bool isUnique { get; set; }
     bool showOnProductPage { get; set; }
+    bool descriptionInTooltip { get; set; }
+    bool allowMultipleFiles { get; set; }
 }
 
 /// <summary>An explicit, bounded selection; never expands to the entire catalog.</summary>
@@ -32,10 +34,12 @@ public class AttributeBulkUpdateForm : AttributeBulkSelectionForm
     public bool? isRequired { get; set; }
     public bool? isUnique { get; set; }
     public bool? showOnProductPage { get; set; }
+    public bool? descriptionInTooltip { get; set; }
 
     public void ValidateChanges()
     {
-        if (!isRequired.HasValue && !isUnique.HasValue && !showOnProductPage.HasValue)
+        if (!isRequired.HasValue && !isUnique.HasValue && !showOnProductPage.HasValue &&
+            !descriptionInTooltip.HasValue)
             throw ApiException.BadRequest(code: "attributes_changes_required");
     }
 
@@ -45,5 +49,6 @@ public class AttributeBulkUpdateForm : AttributeBulkSelectionForm
         attribute.isUnique = isUnique ?? attribute.isUnique;
         attribute.showOnProductPage = attribute.isRequired ||
             (showOnProductPage ?? attribute.showOnProductPage);
+        attribute.descriptionInTooltip = descriptionInTooltip ?? attribute.descriptionInTooltip;
     }
 }

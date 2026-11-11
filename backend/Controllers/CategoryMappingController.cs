@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Enums;
+using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Middleware;
@@ -281,7 +282,9 @@ public class CategoryMappingController : ControllerBase
                     Description = a.description,
                     Group = a.group,
                     SortOrder = a.sortOrder,
-                    Options = ParseAttributeOptions(a.options)
+                     Options = ParseAttributeOptions(a.options),
+                     Unit = a.unitCode == null ? null : AttributeUnits.Find(a.unitCode)?.Symbol ?? a.unitCode,
+                     UnitCode = a.unitCode
                 })
                 .ToList()
         };
@@ -451,6 +454,11 @@ public class CategoryMappingController : ControllerBase
                                 externalFieldKey = field.Key,
                                 externalFieldName = field.Name,
                                 externalFieldType = field.Type,
+                                externalFieldUnit = field.Unit,
+                                externalFieldUnitCode = AttributeUnits.NormalizeCode(field.UnitCode ?? field.Unit),
+                                externalFieldUnitId = field.UnitId,
+                                externalFieldGroup = field.Group,
+                                externalFieldDescription = field.Description,
                                 isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                                 isEnabled = true,
                                 sortOrder = index,
@@ -949,7 +957,8 @@ public class CategoryMappingController : ControllerBase
             input.selectedFieldKeys,
             operationId,
             userId,
-            ct);
+            ct,
+            input.attributeDecisions ?? new List<CategoryImportAttributeDecision>());
 
         if (queued == null)
         {
@@ -990,13 +999,15 @@ public class CategoryMappingController : ControllerBase
     }
 
     /// <summary>
-    /// Preview external category fields before import
+    /// Get external category fields and optional per-field details before import.
     /// </summary>
     [HttpGet]
     [Route("/marketplace/connections/{connectionId}/external-category-fields")]
     public async Task<IActionResult> GetExternalCategoryFields(
         int connectionId,
         [FromQuery] string externalCategoryId,
+        [FromQuery] string? fieldKey = null,
+        [FromQuery] int? localCategoryId = null,
         CancellationToken ct = default)
     {
         var connection = await GetConnectionAsync(connectionId);
@@ -1008,6 +1019,24 @@ public class CategoryMappingController : ControllerBase
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.GetCategoryFields))
             throw ApiException.BadRequest(code: "adapter_capability_missing");
 
+        List<CategoryAttribute>? localAttributes = null;
+        if (localCategoryId.HasValue)
+        {
+            var localCategory = await _context.categories
+                .AsNoTracking()
+                .Where(category => category.Id == localCategoryId.Value
+                    && category.storeId == connection.storeId)
+                .Select(category => new { category.Id })
+                .FirstOrDefaultAsync(ct);
+            if (localCategory == null)
+                throw ApiException.NotFound(code: "category_not_found");
+
+            localAttributes = await _context.categoryAttributes
+                .AsNoTracking()
+                .Where(attribute => attribute.categoryId == localCategory.Id)
+                .ToListAsync(ct);
+        }
+
         try
         {
             var cacheKey = MarketplaceMetadataCache.CategoryFieldsKey(
@@ -1018,17 +1047,88 @@ public class CategoryMappingController : ControllerBase
                 _metadataCache.Set(cacheKey, fields, MarketplaceMetadataCache.CategoryFieldsTtl);
             }
 
-            var result = fields.OrderBy(f => f.SortOrder).Select(f => new
+            var selectedFields = string.IsNullOrWhiteSpace(fieldKey)
+                ? fields.OrderBy(f => f.SortOrder)
+                : fields
+                    .Where(f => string.Equals(f.Key, fieldKey, StringComparison.Ordinal))
+                    .OrderBy(f => f.SortOrder);
+
+            var result = selectedFields.Select(f =>
             {
-                key = f.Key,
-                name = f.Name,
-                isRequired = f.IsRequired,
-                type = f.Type,
-                optionsCount = f.Options?.Count ?? 0,
-                description = f.Description,
-                group = f.Group,
-                sortOrder = f.SortOrder,
-                isBaseField = CategoryImportService.IsBaseOrSpecialField(f)
+                var importType = CategoryImportService.MapExternalFieldType(f.Type);
+                var unitCode = importType == AttributeType.Number
+                    ? AttributeFieldConstraints.ResolveUnitCode(f)
+                    : null;
+                var duplicateCandidates = localAttributes == null || CategoryImportService.IsBaseOrSpecialField(f)
+                    ? Array.Empty<AttributeDuplicateCandidate>()
+                    : AttributeDuplicateMatcher.FindCandidates(
+                        f,
+                        importType,
+                        unitCode,
+                        localAttributes).ToArray();
+                var attributeKey = CategoryImportService.SanitizeKey(f.Key);
+                var maxLength = AttributeFieldConstraints.NormalizeMaxLength(f.MaxLength);
+                var (minValue, maxValue) = AttributeFieldConstraints.NormalizeRange(
+                    f.MinValue, f.MaxValue);
+                var defaultValue = StringClip.ClipOptional(
+                    CategoryImportService.DetermineDefaultValue(f),
+                    CategoryAttribute.ATTRIBUTE_DEFAULT_MAX_LENGTH);
+                if (defaultValue != null && maxLength.HasValue)
+                    defaultValue = StringClip.ClipOptional(defaultValue, maxLength.Value);
+
+                return new
+                {
+                    key = f.Key,
+                    attributeKey,
+                    name = f.Name,
+                    importName = StringClip.ClipRequired(
+                        AttributeImportNameNormalizer.Normalize(f.Name, unitCode, f.Description),
+                        CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH,
+                        attributeKey),
+                    importType = importType.ToString(),
+                    unitCode,
+                    isRequired = f.IsRequired,
+                    attributeIsRequired = false,
+                    isUnique = false,
+                    isMultiline = false,
+                    showOnProductPage = true,
+                    allowCustomValues = f.AllowCustomValues,
+                    type = f.Type,
+                    optionsCount = f.Options?.Count ?? 0,
+                    options = string.IsNullOrWhiteSpace(fieldKey)
+                        ? null
+                        : f.Options?.Select(o => new { value = o.Value, label = o.Label }).ToList(),
+                    defaultValue,
+                    description = StringClip.ClipOptional(
+                        f.Description,
+                        CategoryAttribute.ATTRIBUTE_DESCRIPTION_MAX_LENGTH),
+                    descriptionInTooltip = !string.IsNullOrWhiteSpace(f.Description),
+                    group = f.Group,
+                    attributeGroup = StringClip.ClipOptional(
+                        adapter.DisplayName,
+                        CategoryAttribute.ATTRIBUTE_GROUP_MAX_LENGTH),
+                    groupIcon = StringClip.ClipOptional(
+                        AttributeGroupIconValue.ForAdapter(adapter.Key),
+                        CategoryAttribute.ATTRIBUTE_GROUP_ICON_MAX_LENGTH),
+                    sortOrder = f.SortOrder,
+                    maxLength,
+                    minValue,
+                    maxValue,
+                    maxValues = AttributeFieldConstraints.NormalizeMaxValues(f.MaxValues),
+                    validationPattern = AttributeFieldConstraints.UsableValidationPattern(
+                        f.ValidationPattern),
+                    potentialDuplicates = duplicateCandidates.Select(candidate => new
+                    {
+                        id = candidate.Attribute.Id,
+                        name = candidate.Attribute.name,
+                        type = candidate.Attribute.type.ToString(),
+                        unitCode = candidate.Attribute.unitCode,
+                        description = candidate.Attribute.description,
+                        score = candidate.Score,
+                        matchedBy = candidate.MatchedBy,
+                    }),
+                    isBaseField = CategoryImportService.IsBaseOrSpecialField(f)
+                };
             });
 
             return Ok(result);
@@ -1176,6 +1276,9 @@ public class CategoryMappingController : ControllerBase
                 externalFieldKey = field.Key,
                 externalFieldName = field.Name,
                 externalFieldType = field.Type,
+                externalFieldUnit = field.Unit,
+                externalFieldUnitCode = AttributeUnits.NormalizeCode(field.UnitCode ?? field.Unit),
+                externalFieldUnitId = field.UnitId,
                 isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                 isEnabled = true,
                 sortOrder = sortOrder++,
@@ -1483,6 +1586,7 @@ public class CategoryMappingController : ControllerBase
         public string? localCategoryName { get; set; }
         public int? localCategoryId { get; set; }
         public List<string>? selectedFieldKeys { get; set; }
+        public List<CategoryImportAttributeDecision>? attributeDecisions { get; set; }
         public string? operationId { get; set; }
     }
 

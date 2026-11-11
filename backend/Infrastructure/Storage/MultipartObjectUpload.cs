@@ -16,7 +16,10 @@ namespace Delegat.Infrastructure.Storage;
 /// </summary>
 internal static class MultipartObjectUpload
 {
+    public const int MaxProductCreateFiles = 500;
     public readonly record struct SavedObject(string FileName, string ContentType, string Path, long Length);
+    public readonly record struct NamedSavedObject(string FieldName, SavedObject Object);
+    public sealed record ProductCreateUpload(string Metadata, IReadOnlyList<NamedSavedObject> Files);
 
     public static async Task<List<SavedObject>> SaveAsync(
         HttpRequest request,
@@ -80,6 +83,110 @@ internal static class MultipartObjectUpload
             throw new IOException(detail, ex);
         }
     }
+
+    /// <summary>
+    /// Reads a product-create metadata field and streams named files to object storage.
+    /// File field names are retained so the JSON payload can reference uploads by a
+    /// client-generated temporary ID without relying on filenames being unique.
+    /// </summary>
+    public static async Task<ProductCreateUpload> SaveProductCreateAsync(
+        HttpRequest request,
+        IStorageService storage,
+        Func<string, string, string> pathForFile,
+        CancellationToken ct,
+        Func<string, CancellationToken, Task>? validateMetadataAsync = null)
+    {
+        if (!request.HasFormContentType)
+            throw ApiException.BadRequest(code: "multipart_content_type_invalid");
+
+        var boundary = request.GetMultipartBoundary();
+        if (string.IsNullOrEmpty(boundary))
+            throw ApiException.BadRequest(code: "multipart_boundary_missing");
+
+        const int maxMetadataBytes = 1_048_576;
+        string? metadata = null;
+        var seenFileFields = new HashSet<string>(StringComparer.Ordinal);
+        var saved = new List<NamedSavedObject>();
+        try
+        {
+            var reader = new MultipartReader(boundary, request.Body);
+            MultipartSection? section;
+            var firstPart = true;
+            while ((section = await reader.ReadNextSectionAsync(ct)) != null)
+            {
+                if (string.IsNullOrEmpty(section.ContentDisposition))
+                    continue;
+
+                var disposition = ContentDispositionHeaderValue.Parse(section.ContentDisposition);
+                var fieldName = Unquote(disposition.Name.HasValue ? disposition.Name.Value : null);
+                if (firstPart && (disposition.IsFileDisposition() || fieldName != "product"))
+                    throw ApiException.BadRequest(code: "product_metadata_required");
+                firstPart = false;
+
+                if (disposition.IsFileDisposition())
+                {
+                    if (saved.Count >= MaxProductCreateFiles)
+                        throw ApiException.BadRequest(code: "too_many_uploaded_files");
+                    if (string.IsNullOrWhiteSpace(fieldName))
+                        throw ApiException.BadRequest(code: "upload_file_reference_missing");
+                    if (!seenFileFields.Add(fieldName))
+                        throw ApiException.BadRequest(code: "duplicate_uploaded_file_reference");
+
+                    var rawName = disposition.FileName.HasValue ? disposition.FileName.Value : null;
+                    var fileName = FileNameSafety.Sanitize(rawName);
+                    var contentType = string.IsNullOrWhiteSpace(section.ContentType)
+                        ? "application/octet-stream"
+                        : section.ContentType;
+                    var path = pathForFile(fieldName, fileName);
+                    var result = await storage.UploadStreamAsync(
+                        section.Body, path, contentType, ReadPartLength(section), ct);
+                    if (result == null)
+                    {
+                        await storage.DeleteAsync(path, CancellationToken.None);
+                        throw ApiException.InternalServerError(code: "storage_upload_failed");
+                    }
+
+                    saved.Add(new NamedSavedObject(
+                        fieldName,
+                        new SavedObject(fileName, result.ContentType, path, result.Length)));
+                    continue;
+                }
+
+                if (!string.Equals(fieldName, "product", StringComparison.Ordinal))
+                    continue;
+                if (metadata != null)
+                    throw ApiException.BadRequest(code: "product_metadata_duplicate");
+
+                await using var buffer = new MemoryStream();
+                var chunk = new byte[16 * 1024];
+                while (true)
+                {
+                    var read = await section.Body.ReadAsync(chunk, ct);
+                    if (read == 0) break;
+                    if (buffer.Length + read > maxMetadataBytes)
+                        throw ApiException.BadRequest(code: "product_metadata_too_large");
+                    await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
+                }
+                metadata = System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+                if (validateMetadataAsync != null)
+                    await validateMetadataAsync(metadata, ct);
+            }
+
+            if (string.IsNullOrWhiteSpace(metadata))
+                throw ApiException.BadRequest(code: "product_metadata_required");
+
+            return new ProductCreateUpload(metadata, saved);
+        }
+        catch
+        {
+            foreach (var file in saved)
+                await storage.DeleteAsync(file.Object.Path, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private static string Unquote(string? value)
+        => value?.Trim().Trim('"') ?? string.Empty;
 
     private static bool IsIncompleteMultipart(Exception ex)
     {

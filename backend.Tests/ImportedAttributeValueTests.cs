@@ -36,6 +36,15 @@ public class ImportedAttributeValueTests
     }
 
     [Fact]
+    public void ScalarTypes_DoNotPersistEmptyJsonArrays()
+    {
+        Assert.Null(ImportedAttributeValue.ToStoredString("[]", AttributeType.Number));
+        Assert.Null(ImportedAttributeValue.ToStoredString("[]", AttributeType.Text));
+        Assert.Null(ImportedAttributeValue.ToStoredString("[]", AttributeType.Select));
+        Assert.Null(ImportedAttributeValue.ToStoredString("[]", AttributeType.MultiSelect));
+    }
+
+    [Fact]
     public void Boolean_NormalizesToTrueFalse()
     {
         Assert.Equal("true", ImportedAttributeValue.ToStoredString(true, AttributeType.Boolean));

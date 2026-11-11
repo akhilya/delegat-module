@@ -16,7 +16,17 @@ export default {
      */
     async getAllProducts(
       ctx,
-      { searchQuery, startIndex, pageSize, categoryId, sort, sortBy, sortDesc, onSuccess, onError },
+      {
+        searchQuery,
+        startIndex,
+        pageSize,
+        categoryId,
+        sort,
+        sortBy,
+        sortDesc,
+        onSuccess,
+        onError,
+      },
     ) {
       const params = new URLSearchParams();
       if (searchQuery) params.set("searchQuery", searchQuery);
@@ -24,9 +34,7 @@ export default {
       params.set("pageSize", pageSize);
       if (categoryId != null) params.set("categoryId", categoryId);
       if (sort) {
-        const parts = Array.isArray(sort)
-          ? sort
-          : String(sort).split(/[,;|]/);
+        const parts = Array.isArray(sort) ? sort : String(sort).split(/[,;|]/);
         for (const part of parts) {
           const trimmed = part?.trim();
           if (trimmed) params.append("sort", trimmed);
@@ -94,6 +102,33 @@ export default {
         .catch((error) => onError(error));
     },
 
+    async createProductWithFiles(
+      ctx,
+      { input, files = [], galleryFileIds = [], onSuccess, onError },
+    ) {
+      const data = new FormData();
+      data.append(
+        "product",
+        JSON.stringify({ product: input, galleryFileIds }),
+      );
+      for (const file of files) {
+        data.append(`file_${file.id}`, file.localFile, file.fileName);
+      }
+
+      return await useAxios(
+        "/products/with-files",
+        {
+          method: "POST",
+          data,
+          timeout: 60 * 60 * 1000,
+        },
+        http,
+        { immediate: true },
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
+
     /**
      * Updates an existing product by its ID.
      * @param {Object} ctx - Vuex action context.
@@ -127,7 +162,10 @@ export default {
      * @param {Function} params.onSuccess
      * @param {Function} params.onError
      */
-    async getTransferPreview(ctx, { productId, targetStoreId, onSuccess, onError }) {
+    async getTransferPreview(
+      ctx,
+      { productId, targetStoreId, onSuccess, onError },
+    ) {
       return await useAxios(
         `/products/${productId}/transfer-preview?targetStoreId=${targetStoreId}`,
         { method: "GET", cache: false },
@@ -274,7 +312,9 @@ export default {
 
     async getProductGroup(ctx, { productId, onSuccess, onError }) {
       try {
-        const response = await http.get(`/products/${productId}/group`, { cache: false });
+        const response = await http.get(`/products/${productId}/group`, {
+          cache: false,
+        });
         onSuccess({ data: { value: response.data } });
       } catch (error) {
         onError(error);
@@ -324,7 +364,10 @@ export default {
       }
     },
 
-    async getTrashProducts(ctx, { searchQuery, startIndex, pageSize, onSuccess, onError }) {
+    async getTrashProducts(
+      ctx,
+      { searchQuery, startIndex, pageSize, onSuccess, onError },
+    ) {
       const params = new URLSearchParams();
       if (searchQuery) params.set("searchQuery", searchQuery);
       params.set("startIndex", startIndex);

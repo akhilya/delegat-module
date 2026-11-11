@@ -10,6 +10,8 @@ public sealed class AttributeDefinitionSummary
     public string name { get; set; } = "";
     public string key { get; set; } = "";
     public AttributeType type { get; set; }
+    public string? unitCode { get; set; }
+    public bool allowMultipleFiles { get; set; }
     public bool isRequired { get; set; }
     public bool isUnique { get; set; }
     public bool showOnProductPage { get; set; }
@@ -19,7 +21,7 @@ public sealed class AttributeDefinitionSummary
 
     public static readonly Expression<Func<CategoryAttribute, AttributeDefinitionSummary>> FromCategory = a => new()
     {
-        id = a.Id, name = a.name, key = a.key, type = a.type,
+        id = a.Id, name = a.name, key = a.key, type = a.type, unitCode = a.unitCode, allowMultipleFiles = a.type == AttributeType.File && a.allowMultipleFiles,
         isRequired = a.isRequired, isUnique = a.isUnique,
         showOnProductPage = a.isRequired || a.showOnProductPage, sortOrder = a.sortOrder,
         group = a.group, groupIcon = a.groupIcon,
@@ -27,7 +29,7 @@ public sealed class AttributeDefinitionSummary
 
     public static readonly Expression<Func<StoreAttribute, AttributeDefinitionSummary>> FromStore = a => new()
     {
-        id = a.Id, name = a.name, key = a.key, type = a.type,
+        id = a.Id, name = a.name, key = a.key, type = a.type, unitCode = a.unitCode, allowMultipleFiles = a.type == AttributeType.File && a.allowMultipleFiles,
         isRequired = a.isRequired, isUnique = a.isUnique,
         showOnProductPage = a.isRequired || a.showOnProductPage, sortOrder = a.sortOrder,
     };

@@ -234,6 +234,42 @@ public class YandexParameterHelpersTests
     }
 
     [Fact]
+    public void BuildUpdateOfferMapping_UsesGraphUnitIdAndSendsOriginalNumber()
+    {
+        var productData = new Dictionary<string, object>
+        {
+            ["sku"] = "unit-test-sku",
+            ["name"] = "Unit test product",
+            ["1001"] = "12.75",
+            ["_fieldTypes"] = new Dictionary<string, string> { ["1001"] = "number" },
+            ["_fieldUnitIds"] = new Dictionary<string, string> { ["1001"] = "7002" },
+        };
+
+        var mapping = YandexMarketPlugin.BuildUpdateOfferMapping(productData, null, out var warnings);
+
+        var parameter = Assert.Single(mapping.Offer.ParameterValues!);
+        Assert.Equal(1001, parameter.ParameterId);
+        Assert.Equal("12.75", parameter.Value);
+        Assert.Equal(7002, parameter.UnitId);
+        Assert.Empty(warnings);
+        Assert.DoesNotContain("_fieldUnitIds", productData.Keys);
+    }
+
+    [Fact]
+    public void BuildUpdateOfferMapping_MapsProvidedDurableVideosWithoutMixingThemIntoPictures()
+    {
+        var mapping = YandexMarketPlugin.BuildUpdateOfferMapping(new Dictionary<string, object>
+        {
+            ["sku"] = "video-disabled-sku",
+            ["name"] = "Video test product",
+            ["videos"] = new List<string> { "https://media.example.test/api/pub/media-export/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
+        }, null, out _);
+
+        Assert.Single(mapping.Offer.Videos!);
+        Assert.Empty(mapping.Offer.Pictures ?? []);
+    }
+
+    [Fact]
     public void ResolveMappedParameterValue_SelectMissingLabel_ReturnsNullWithWarning()
     {
         var entry = YandexParameterHelpers.ResolveMappedParameterValue(

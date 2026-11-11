@@ -3,9 +3,15 @@ import { http } from "@/main";
 
 export default {
   actions: {
-    async mergeProductGroups(ctx, { targetGroupId, sourceGroupIds, onSuccess, onError }) {
+    async mergeProductGroups(
+      ctx,
+      { targetGroupId, sourceGroupIds, onSuccess, onError },
+    ) {
       try {
-        const response = await http.post(`/productgroups/${targetGroupId}/merge`, { sourceGroupIds });
+        const response = await http.post(
+          `/productgroups/${targetGroupId}/merge`,
+          { sourceGroupIds },
+        );
         onSuccess?.(response);
       } catch (error) {
         onError?.(error);
@@ -69,7 +75,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async createGroup(ctx, { name, description, productIds, onSuccess, onError }) {
+    async createGroup(
+      ctx,
+      { name, description, productIds, onSuccess, onError },
+    ) {
       return await useAxios(
         `/productgroups`,
         {
@@ -134,6 +143,28 @@ export default {
       }
     },
 
+    /**
+     * Deletes selected product groups in one all-or-nothing request.
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {Array<string|number>} params.groupIds - The product group IDs to delete.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async deleteGroups(ctx, { groupIds, onSuccess, onError }) {
+      try {
+        const response = await http.post(
+          "/productgroups/bulk-delete",
+          { groupIds },
+          { cache: false },
+        );
+        onSuccess({ data: response.data });
+      } catch (error) {
+        onError(error);
+      }
+    },
+
     // Group Membership
 
     /**
@@ -174,9 +205,14 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async removeProductFromGroup(ctx, { groupId, productId, onSuccess, onError }) {
+    async removeProductFromGroup(
+      ctx,
+      { groupId, productId, onSuccess, onError },
+    ) {
       try {
-        const response = await http.delete(`/productgroups/${groupId}/products/${productId}`);
+        const response = await http.delete(
+          `/productgroups/${groupId}/products/${productId}`,
+        );
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);
@@ -194,7 +230,10 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async updateGroupMember(ctx, { groupId, productId, sortOrder, onSuccess, onError }) {
+    async updateGroupMember(
+      ctx,
+      { groupId, productId, sortOrder, onSuccess, onError },
+    ) {
       return await useAxios(
         `/productgroups/${groupId}/products/${productId}`,
         {
@@ -300,9 +339,14 @@ export default {
      * @param {Function} params.onError - Callback on error.
      * @returns {Promise<void>}
      */
-    async deleteMarketplaceGroup(ctx, { groupId, connectionId, onSuccess, onError }) {
+    async deleteMarketplaceGroup(
+      ctx,
+      { groupId, connectionId, onSuccess, onError },
+    ) {
       try {
-        const response = await http.delete(`/productgroups/${groupId}/marketplace/${connectionId}`);
+        const response = await http.delete(
+          `/productgroups/${groupId}/marketplace/${connectionId}`,
+        );
         onSuccess({ data: response.data });
       } catch (error) {
         onError(error);

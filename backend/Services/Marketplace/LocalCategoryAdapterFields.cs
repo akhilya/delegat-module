@@ -40,8 +40,10 @@ public static class LocalCategoryAdapterFields
                 MapType(attribute.type),
                 ParseOptions(attribute.options),
                 attribute.description,
+                Unit: AttributeUnits.Find(attribute.unitCode)?.Symbol ?? attribute.unitCode,
                 Group: string.IsNullOrWhiteSpace(attribute.group) ? "Attributes" : attribute.group,
-                SortOrder: attribute.sortOrder > 0 ? attribute.sortOrder : nextSort++));
+                SortOrder: attribute.sortOrder > 0 ? attribute.sortOrder : nextSort++,
+                UnitCode: attribute.unitCode));
         }
 
         return fields;

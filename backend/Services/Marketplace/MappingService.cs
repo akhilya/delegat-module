@@ -993,10 +993,10 @@ public class MappingService
         {
             // Use the file navigation property directly if available
             var file = imageRef.file ?? product.files?.FirstOrDefault(f => f.Id == imageRef.fileId);
-            if (file != null)
+            if (IsImageMediaFile(file))
             {
                 var storageService = _serviceProvider.GetRequiredService<IStorageService>();
-                var url = await storageService.GetPublicPresignedUrlAsync(file.filePath, 7200);
+                var url = await storageService.GetPublicPresignedUrlAsync(file!.filePath, 7200);
                 if (!string.IsNullOrEmpty(url))
                 {
                     urls.Add(url);
@@ -1019,13 +1019,18 @@ public class MappingService
         foreach (var imageRef in product.images.OrderBy(i => i.index))
         {
             var file = imageRef.file ?? product.files?.FirstOrDefault(f => f.Id == imageRef.fileId);
-            if (file == null || string.IsNullOrWhiteSpace(file.filePath))
+            if (!IsImageMediaFile(file) || string.IsNullOrWhiteSpace(file!.filePath))
                 continue;
             paths.Add(file.filePath);
         }
 
         return paths;
     }
+
+    internal static bool IsImageMediaFile(Models.File? file)
+        => file != null
+            && !string.IsNullOrWhiteSpace(file.contentType)
+            && file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Get category attribute value

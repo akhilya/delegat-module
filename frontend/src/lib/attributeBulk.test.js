@@ -13,10 +13,15 @@ describe("attribute definition bulk actions", () => {
         isRequired: "false",
         isUnique: "keep",
         showOnProductPage: "true",
+        descriptionInTooltip: "false",
         name: "Never bulk rename",
         options: null,
       }),
-      { isRequired: false, showOnProductPage: true },
+      {
+        isRequired: false,
+        showOnProductPage: true,
+        descriptionInTooltip: false,
+      },
     );
     assert.deepEqual(attributeBulkPatch({}), {});
     assert.deepEqual(

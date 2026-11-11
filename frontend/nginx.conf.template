@@ -27,6 +27,30 @@ server {
         return 200 "OK";
     }
 
+    # The path contains a 256-bit bearer capability. Do not write it to nginx access logs.
+    location ~* "^/api/pub/media-export/[0-9a-f]{64}$" {
+        access_log off;
+        log_not_found off;
+        resolver 127.0.0.11 valid=10s;
+        set $upstream_api http://${API_UPSTREAM}:5000;
+        proxy_pass $upstream_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering on;
+        proxy_buffer_size 16k;
+        proxy_buffers 16 512k;
+        proxy_busy_buffers_size 1024k;
+        proxy_max_temp_file_size 0;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 86400s;
+        proxy_read_timeout 86400s;
+        send_timeout 86400s;
+    }
+
     # Swagger UI + OpenAPI — must use ^~ so regex static-asset location
     # does not steal /swagger/*.js|/swagger/*.css and 404 from the SPA root.
     # API_UPSTREAM is unique per stack (envsubst); never share short names like

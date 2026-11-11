@@ -237,6 +237,167 @@ public class MinIOStorageService : IStorageService
         return null;
     }
 
+    /// <summary>Safely downloads a direct video asset with redirect and size limits.</summary>
+    public async Task<FileUploadResult?> UploadVideoFromUriWithMetadataAsync(
+        string uri,
+        string path,
+        long maxBytes,
+        CancellationToken ct = default)
+    {
+        if (maxBytes <= 0 || !UrlSafety.TryValidateHttpUrl(uri, out var currentUri, out _))
+            return null;
+
+        const int maxRedirects = 5;
+        try
+        {
+            using var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+            for (var redirect = 0; redirect <= maxRedirects; redirect++)
+            {
+                // Validate every hop; the named client has automatic redirects disabled.
+                if (!UrlSafety.TryValidateHttpUrl(currentUri.AbsoluteUri, out currentUri, out _))
+                    return null;
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+                using var response = await httpClient.SendAsync(
+                    request, HttpCompletionOption.ResponseHeadersRead, ct);
+
+                if (IsRedirect(response.StatusCode))
+                {
+                    if (redirect == maxRedirects || response.Headers.Location == null)
+                        return null;
+                    currentUri = response.Headers.Location.IsAbsoluteUri
+                        ? response.Headers.Location
+                        : new Uri(currentUri, response.Headers.Location);
+                    continue;
+                }
+
+                response.EnsureSuccessStatusCode();
+                var declaredLength = response.Content.Headers.ContentLength;
+                if (declaredLength > maxBytes)
+                    return null;
+
+                await using var responseStream = await response.Content.ReadAsStreamAsync(ct);
+                await using var bounded = new MaxBytesReadStream(responseStream, maxBytes);
+                var signature = new byte[16];
+                var signatureLength = 0;
+                while (signatureLength < signature.Length)
+                {
+                    var read = await bounded.ReadAsync(signature.AsMemory(signatureLength), ct);
+                    if (read == 0) break;
+                    signatureLength += read;
+                }
+
+                if (!TryGetVideoContentType(
+                        response.Content.Headers.ContentType?.MediaType,
+                        signature.AsSpan(0, signatureLength),
+                        out var contentType))
+                    return null;
+
+                await using var replay = new PrefixReadStream(signature.AsMemory(0, signatureLength).ToArray(), bounded);
+                var uploaded = await UploadStreamAsync(replay, path, contentType, declaredLength, ct);
+                if (uploaded == null)
+                    await DeleteAsync(path, CancellationToken.None);
+                return uploaded;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await DeleteAsync(path, CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Safe video download failed for storage object {Path}", path);
+            await DeleteAsync(path, CancellationToken.None);
+        }
+
+        return null;
+    }
+
+    private static bool IsRedirect(HttpStatusCode statusCode)
+        => statusCode is HttpStatusCode.MovedPermanently
+            or HttpStatusCode.Found
+            or HttpStatusCode.SeeOther
+            or HttpStatusCode.TemporaryRedirect
+            or HttpStatusCode.PermanentRedirect;
+
+    internal static bool TryGetVideoContentType(string? declared, ReadOnlySpan<byte> prefix, out string contentType)
+    {
+        contentType = "";
+        if (prefix.Length >= 12 && prefix[..4].SequenceEqual("RIFF"u8) && prefix.Slice(8, 4).SequenceEqual("AVI "u8))
+            contentType = "video/x-msvideo";
+        else if (prefix.Length >= 8 && prefix.Slice(4, 4).SequenceEqual("ftyp"u8))
+            contentType = "video/mp4";
+        else if (prefix.Length >= 4 && prefix[..4].SequenceEqual(new byte[] { 0x1A, 0x45, 0xDF, 0xA3 }))
+            contentType = "video/webm";
+
+        if (contentType.Length == 0)
+            return false;
+        return string.IsNullOrWhiteSpace(declared)
+            || declared.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+            || declared.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class MaxBytesReadStream(Stream inner, long maxBytes) : Stream
+    {
+        private long _read;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => _read; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count)
+            => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (buffer.Length == 0) return 0;
+            if (_read == maxBytes)
+            {
+                var probe = new byte[1];
+                if (await inner.ReadAsync(probe, cancellationToken) > 0)
+                    throw new InvalidDataException("Video exceeds the configured download limit.");
+                return 0;
+            }
+            var allowed = (int)Math.Min(buffer.Length, maxBytes - _read);
+            var count = await inner.ReadAsync(buffer[..allowed], cancellationToken);
+            _read += count;
+            return count;
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing) { if (disposing) inner.Dispose(); base.Dispose(disposing); }
+        public override async ValueTask DisposeAsync() { await inner.DisposeAsync(); GC.SuppressFinalize(this); }
+    }
+
+    private sealed class PrefixReadStream(byte[] prefix, Stream remainder) : Stream
+    {
+        private int _offset;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => _offset; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count)
+            => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_offset < prefix.Length)
+            {
+                var count = Math.Min(buffer.Length, prefix.Length - _offset);
+                prefix.AsMemory(_offset, count).CopyTo(buffer);
+                _offset += count;
+                return ValueTask.FromResult(count);
+            }
+            return remainder.ReadAsync(buffer, cancellationToken);
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     /// <summary>
     /// Server-side copy from one object key to another in the same bucket.
     /// Uses MinIO CopyObject API - payload doesn't transit our backend.

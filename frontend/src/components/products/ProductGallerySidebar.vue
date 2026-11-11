@@ -1,12 +1,19 @@
 <script setup>
 import { Button } from "@/components/ui/button";
-import { Plus, X } from "lucide-vue-next";
+import { Play, Plus, X } from "lucide-vue-next";
+import { computed } from "vue";
 import { Spinner } from "@/components/ui/spinner";
 import AppImage from "@/components/AppImage.vue";
 import draggable from "vuedraggable";
 import { t } from "@/i18n";
+import { getMediaKind } from "@/lib/mediaKind";
 
 const images = defineModel("images", { type: Array, required: true });
+const mainImageFileId = computed(
+  () =>
+    images.value.find((item) => getMediaKind(item.contentType) === "image")
+      ?.fileId,
+);
 
 defineProps({
   isUploading: { type: Boolean, default: false },
@@ -21,7 +28,23 @@ defineProps({
 const emit = defineEmits(["drag-change", "remove", "upload", "preview"]);
 
 function thumbSrc(element) {
-  return element.previewUrl || `/api/files/${element.fileId}/thumbnail?w=256`;
+  return (
+    element.previewUrl ||
+    (isVideo(element)
+      ? `/api/files/${element.fileId}/download`
+      : `/api/files/${element.fileId}/thumbnail?w=256`)
+  );
+}
+
+function isVideo(element) {
+  return getMediaKind(element?.contentType) === "video";
+}
+
+function isMainImage(element) {
+  return (
+    mainImageFileId.value != null &&
+    Number(mainImageFileId.value) === Number(element?.fileId)
+  );
 }
 </script>
 
@@ -63,34 +86,63 @@ function thumbSrc(element) {
               layout === 'sidebar'
                 ? 'aspect-square w-full'
                 : 'size-28 sm:size-32',
-              index === 0 ? 'ring-2 ring-primary' : '',
+              isMainImage(element) ? 'ring-2 ring-primary' : '',
             ]"
-            @click="emit('preview', index)"
           >
-            <!-- Blurred fill so letterboxed contain never shows empty muted bands -->
-            <AppImage
-              :src="thumbSrc(element)"
-              :alt="
-                element.displayName ||
-                t('products.productGallerySidebar.productPhotoAlt')
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="media-preview-button absolute inset-0 z-10 flex size-full items-center justify-center overflow-hidden rounded-lg border-0 bg-transparent p-0 text-inherit"
+              :aria-label="
+                t(
+                  isVideo(element)
+                    ? 'products.productGallerySidebar.openVideo'
+                    : 'products.productGallerySidebar.openPhoto',
+                )
               "
-              blur-backdrop
-              spinner-size="sm"
-              class="pointer-events-none absolute inset-0 size-full"
-              img-class="pointer-events-none relative z-10 size-full object-contain"
-            />
-            <div
-              v-if="index === 0"
-              class="absolute top-1.5 left-1.5 z-20 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
+              @click="emit('preview', index)"
             >
-              {{ t("products.productGallerySidebar.mainBadge") }}
-            </div>
+              <div
+                v-if="isVideo(element)"
+                class="pointer-events-none absolute inset-0 flex size-full items-center justify-center bg-muted"
+                aria-hidden="true"
+              >
+                <Play class="size-8 fill-current text-muted-foreground" />
+              </div>
+              <AppImage
+                v-else
+                :src="thumbSrc(element)"
+                :alt="
+                  element.displayName ||
+                  t('products.productGallerySidebar.productPhotoAlt')
+                "
+                blur-backdrop
+                spinner-size="sm"
+                class="pointer-events-none absolute inset-0 size-full"
+                img-class="pointer-events-none relative z-10 size-full object-contain"
+              />
+              <div
+                v-if="isVideo(element)"
+                class="pointer-events-none absolute bottom-1.5 left-1.5 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                aria-hidden="true"
+              >
+                {{ t("products.productGallerySidebar.videoBadge") }}
+              </div>
+              <div
+                v-if="isMainImage(element)"
+                class="pointer-events-none absolute top-1.5 left-1.5 z-20 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
+                aria-hidden="true"
+              >
+                {{ t("products.productGallerySidebar.mainBadge") }}
+              </div>
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               :disabled="disabled"
-              class="absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100"
+              class="gallery-remove absolute top-1.5 right-1.5 z-20 size-6 rounded-md bg-black/60 text-white hover:bg-destructive"
               :aria-label="t('products.productGallerySidebar.removePhoto')"
               @click.stop="emit('remove', index)"
             >
@@ -144,6 +196,18 @@ function thumbSrc(element) {
 <style scoped>
 .product-gallery-sidebar {
   width: clamp(10rem, 14vw, 14rem);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gallery-remove {
+    opacity: 0;
+    transition: opacity 150ms cubic-bezier(0.25, 1, 0.5, 1);
+  }
+
+  .gallery-item:hover .gallery-remove,
+  .gallery-remove:focus-visible {
+    opacity: 1;
+  }
 }
 </style>
 

@@ -22,6 +22,7 @@ import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { Save, Trash2, Download, Upload, Settings2 } from "lucide-vue-next";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/ui/empty-state";
+import AttributeUnitSelect from "@/components/products/AttributeUnitSelect.vue";
 import { PAGE_STORE_ATTRIBUTES, setPageTitle } from "@/router";
 import {
   LARGE_OPTIONS_THRESHOLD,
@@ -63,6 +64,7 @@ export default {
     Upload,
     Settings2,
     SearchableSelect,
+    AttributeUnitSelect,
     EmptyState,
   },
   data() {
@@ -99,6 +101,9 @@ export default {
     },
     isNumberType() {
       return isNumberAttributeType(this.typeValue);
+    },
+    isFileType() {
+      return this.typeValue === 6;
     },
     hasLargeOptions() {
       return this.cachedOptionsCount > LARGE_OPTIONS_THRESHOLD;
@@ -494,6 +499,39 @@ export default {
                 </SelectItem>
               </SelectContent>
             </Select>
+          </SettingsFormField>
+          <SettingsFormField
+            v-if="isFileType"
+            :label="
+              $t('pages.storeAttributesPage.dialog.allowMultipleFilesLabel')
+            "
+            label-for="store-attr-allow-multiple-files"
+            inline
+            :description="
+              $t('pages.storeAttributesPage.dialog.allowMultipleFilesHint')
+            "
+          >
+            <Switch
+              id="store-attr-allow-multiple-files"
+              :model-value="attributeForm.allowMultipleFiles"
+              @update:model-value="attributeForm.allowMultipleFiles = $event"
+            />
+          </SettingsFormField>
+          <SettingsFormField
+            v-if="isNumberType"
+            :label="$t('pages.storeAttributesPage.dialog.unitLabel')"
+            label-for="store-attr-unit-code"
+          >
+            <AttributeUnitSelect
+              id="store-attr-unit-code"
+              v-model="attributeForm.unitCode"
+              :placeholder="
+                $t('pages.storeAttributesPage.dialog.unitPlaceholder')
+              "
+            />
+            <template #description>
+              {{ $t("pages.storeAttributesPage.dialog.unitHint") }}
+            </template>
           </SettingsFormField>
           <template #footer>
             <Button @click="handleSaveAttribute" :disabled="isSaving">

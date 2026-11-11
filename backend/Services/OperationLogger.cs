@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Delegat.Hubs;
 using Delegat.Models;
 using Delegat.Services.Ai.Agent;
+using Delegat.Infrastructure.Security;
 
 namespace Delegat.Services;
 
@@ -83,6 +84,7 @@ public class OperationLogger : IOperationLogger
 
     public async Task LogAsync(string operationId, int storeId, string level, string message)
     {
+        message = MediaExportGrantSecrets.Redact(message);
         var timestamp = DateTime.UtcNow;
 
         try

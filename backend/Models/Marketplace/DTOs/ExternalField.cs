@@ -27,8 +27,10 @@ public record ExternalFieldOption(
 /// <param name="Group">Field group/section for the UI.</param>
 /// <param name="SortOrder">Sort order for display.</param>
 /// <param name="IsAspect">Whether this is an aspect attribute (size, color) - e.g. Ozon is_aspect.</param>
-    /// <param name="AllowCustomValues">When true, values outside Options are allowed (typed custom values).</param>
-    /// <param name="MaxValues">Maximum number of selected values for select/multiselect. Null means unlimited.</param>
+/// <param name="AllowCustomValues">When true, values outside Options are allowed (typed custom values).</param>
+/// <param name="MaxValues">Maximum number of selected values for select/multiselect. Null means unlimited.</param>
+/// <param name="UnitCode">Canonical unit code or preserved adapter-specific unit code.</param>
+/// <param name="UnitId">Marketplace-specific unit identifier.</param>
 public record ExternalField(
     string Key,
     string Name,
@@ -45,5 +47,7 @@ public record ExternalField(
     int SortOrder = 0,
     bool IsAspect = false,
     bool AllowCustomValues = false,
-    int? MaxValues = null
+    int? MaxValues = null,
+    string? UnitCode = null,
+    string? UnitId = null
 );

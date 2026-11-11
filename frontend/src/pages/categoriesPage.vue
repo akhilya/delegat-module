@@ -8,9 +8,17 @@ import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { FieldGroup } from "@/components/ui/field";
 import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import { mapActions } from "vuex";
-import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import {
+  displaySonnerError,
+  displaySonnerSuccess,
+  extractResponseData,
+} from "@/store/sonnerHelper";
 import { Plus, FolderOpen, Trash2 } from "lucide-vue-next";
-import { PAGE_PRODUCTS } from "@/router";
+import {
+  PAGE_MARKETPLACE,
+  PAGE_MARKETPLACE_CATEGORY_IMPORT,
+  PAGE_PRODUCTS,
+} from "@/router";
 import { FIELD_LIMITS, fieldLimitIssue } from "@/lib/fieldLimits";
 import {
   Dialog,
@@ -18,7 +26,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -38,6 +45,7 @@ import {
 import { http } from "@/main";
 import { canAct, PERMS } from "@/lib/permissions";
 import { getCachedMe } from "@/lib/meCache";
+import ChoiceDialog from "@/components/ChoiceDialog.vue";
 
 export default {
   components: {
@@ -57,9 +65,9 @@ export default {
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
     DialogClose,
+    ChoiceDialog,
     ConfirmDialog,
     ListSelectAllRow,
     ListBulkActions,
@@ -82,6 +90,11 @@ export default {
       newCategoryName: "",
       newCategoryDescription: "",
       showCreateDialog: false,
+      showChoiceDialog: false,
+      categoryChoiceMode: "method",
+      marketplaceConnections: [],
+      connectionsLoaded: false,
+      isLoadingConnections: false,
       categoryToDelete: null,
       selectedIds: [],
       showBulkDeleteDialog: false,
@@ -93,6 +106,69 @@ export default {
     canManageCatalog() {
       return canAct(getCachedMe(), PERMS.CatalogManage);
     },
+    canImportCategories() {
+      return canAct(getCachedMe(), PERMS.MarketplaceManage);
+    },
+    categoryChoiceTitle() {
+      if (this.categoryChoiceMode === "connection")
+        return this.$t("pages.categoriesPage.chooseImportConnectionTitle");
+      if (this.categoryChoiceMode === "noConnections")
+        return this.$t("pages.categoriesPage.noImportConnectionsTitle");
+      return this.$t("pages.categoriesPage.addChoiceTitle");
+    },
+    categoryChoiceDescription() {
+      if (this.categoryChoiceMode === "connection")
+        return this.$t(
+          "pages.categoriesPage.chooseImportConnectionDescription",
+        );
+      if (this.categoryChoiceMode === "noConnections")
+        return this.$t("pages.categoriesPage.noImportConnectionsDescription");
+      return this.$t("pages.categoriesPage.addChoiceDescription");
+    },
+    categoryChoiceOptions() {
+      if (this.categoryChoiceMode === "connection") {
+        return this.marketplaceConnections.map((connection) => ({
+          value: connection.id,
+          label: connection.name,
+          description: connection.adapterKey || "",
+        }));
+      }
+
+      if (this.categoryChoiceMode === "noConnections") {
+        return [
+          {
+            value: "connect",
+            label: this.$t("pages.categoriesPage.openMarketplaceConnections"),
+            description: this.$t(
+              "pages.categoriesPage.openMarketplaceConnectionsDescription",
+            ),
+          },
+        ];
+      }
+
+      const options = [
+        {
+          value: "manual",
+          label: this.$t("pages.categoriesPage.createManually"),
+          description: this.$t(
+            "pages.categoriesPage.createManuallyDescription",
+          ),
+        },
+      ];
+
+      if (this.canImportCategories) {
+        options.push({
+          value: "marketplace",
+          label: this.$t("pages.categoriesPage.importFromMarketplace"),
+          description: this.isLoadingConnections
+            ? this.$t("pages.categoriesPage.loadingMarketplaceConnections")
+            : this.$t("pages.categoriesPage.importFromMarketplaceDescription"),
+          disabled: this.isLoadingConnections,
+        });
+      }
+
+      return options;
+    },
     selectionState() {
       return this.categories.length > 0 &&
         this.selectedIds.length === this.categories.length
@@ -103,7 +179,86 @@ export default {
     },
   },
   methods: {
-    ...mapActions(["getAllCategories", "createCategory", "deleteCategory"]),
+    ...mapActions([
+      "getAllCategories",
+      "createCategory",
+      "deleteCategory",
+      "getConnections",
+    ]),
+
+    openCategoryChoice() {
+      this.categoryChoiceMode = "method";
+      this.showChoiceDialog = true;
+    },
+
+    async fetchMarketplaceConnections() {
+      if (this.connectionsLoaded) return true;
+      if (this.isLoadingConnections) return false;
+
+      this.isLoadingConnections = true;
+      let succeeded = false;
+      try {
+        await this.getConnections({
+          onSuccess: (response) => {
+            const connections = extractResponseData(response, []);
+            this.marketplaceConnections = Array.isArray(connections)
+              ? connections
+              : [];
+            this.connectionsLoaded = true;
+            succeeded = true;
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+          },
+        });
+      } catch (error) {
+        displaySonnerError(error);
+      } finally {
+        this.isLoadingConnections = false;
+      }
+      return succeeded;
+    },
+
+    async handleCategoryChoice(value) {
+      if (this.categoryChoiceMode === "method") {
+        if (value === "manual") {
+          this.showChoiceDialog = false;
+          await this.$nextTick();
+          this.showCreateDialog = true;
+          return;
+        }
+
+        if (value !== "marketplace" || !this.canImportCategories) return;
+        if (!(await this.fetchMarketplaceConnections())) return;
+
+        if (this.marketplaceConnections.length === 1) {
+          this.showChoiceDialog = false;
+          this.goToCategoryImport(this.marketplaceConnections[0].id);
+          return;
+        }
+
+        this.categoryChoiceMode = this.marketplaceConnections.length
+          ? "connection"
+          : "noConnections";
+        return;
+      }
+
+      this.showChoiceDialog = false;
+      if (this.categoryChoiceMode === "noConnections") {
+        if (value === "connect") this.$router.push(PAGE_MARKETPLACE);
+        return;
+      }
+
+      this.goToCategoryImport(value);
+    },
+
+    goToCategoryImport(connectionId) {
+      const path = PAGE_MARKETPLACE_CATEGORY_IMPORT.replace(
+        ":connId",
+        encodeURIComponent(String(connectionId)),
+      );
+      this.$router.push(path);
+    },
 
     async fetchCategories() {
       this.isLoading = true;
@@ -248,13 +403,19 @@ export default {
   <AppPageChrome>
     <div class="flex w-full max-w-xl flex-col">
       <div class="mb-6 flex flex-wrap items-center justify-start gap-2">
+        <Button @click="openCategoryChoice">
+          <Plus class="size-4 mr-2" />
+          {{ $t("pages.categoriesPage.addCategory") }}
+        </Button>
+        <ChoiceDialog
+          v-model:open="showChoiceDialog"
+          :title="categoryChoiceTitle"
+          :description="categoryChoiceDescription"
+          :options="categoryChoiceOptions"
+          :close-on-select="false"
+          @select="handleCategoryChoice"
+        />
         <Dialog v-model:open="showCreateDialog">
-          <DialogTrigger as-child>
-            <Button>
-              <Plus class="size-4 mr-2" />
-              {{ $t("pages.categoriesPage.addCategory") }}
-            </Button>
-          </DialogTrigger>
           <DialogContent
             size="md"
             class="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
@@ -326,7 +487,7 @@ export default {
         :empty-description="$t('pages.categoriesPage.emptyDescription')"
       >
         <template #empty-action>
-          <Button @click="showCreateDialog = true">
+          <Button @click="openCategoryChoice">
             <Plus class="size-4 mr-2" />
             {{ $t("pages.categoriesPage.addCategory") }}
           </Button>

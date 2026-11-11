@@ -39,6 +39,8 @@ public class CategoryImportService
     /// <param name="localCategoryId">Optional existing local category to update instead of creating a new one.</param>
     /// <param name="selectedFieldKeys">Optional subset of marketplace field keys to import.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="attributeDecisions">Explicit choices for likely duplicate local attributes.</param>
+    /// <param name="requireDuplicateDecisions">Require a choice when likely duplicates exist; false only for jobs queued before decisions were introduced.</param>
     /// <returns>Result of the category import operation.</returns>
     public async Task<CategoryImportResult> ImportExternalCategoryAsync(
         MarketplaceConnection connection,
@@ -47,7 +49,9 @@ public class CategoryImportService
         string? externalCategoryName = null,
         int? localCategoryId = null,
         List<string>? selectedFieldKeys = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<CategoryImportAttributeDecision>? attributeDecisions = null,
+        bool requireDuplicateDecisions = true)
     {
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -87,12 +91,37 @@ public class CategoryImportService
         var fieldsForAttributes = fields.Where(f => !IsBaseOrSpecialField(f)).ToList();
 
         // Filter by selectedFieldKeys if provided
-        if (selectedFieldKeys != null && selectedFieldKeys.Count > 0)
+        var unselectedAttributeFieldKeys = new HashSet<string>(StringComparer.Ordinal);
+        if (selectedFieldKeys != null)
         {
+            var selectedKeys = selectedFieldKeys.ToHashSet(StringComparer.Ordinal);
+            unselectedAttributeFieldKeys = fieldsForAttributes
+                .Where(field => !selectedKeys.Contains(field.Key))
+                .Select(field => field.Key)
+                .ToHashSet(StringComparer.Ordinal);
             fieldsForAttributes = fieldsForAttributes
-                .Where(f => selectedFieldKeys.Contains(f.Key))
+                .Where(f => selectedKeys.Contains(f.Key))
                 .ToList();
         }
+
+        var decisionsByFieldKey = new Dictionary<string, CategoryImportAttributeDecision>(StringComparer.Ordinal);
+        foreach (var decision in attributeDecisions ?? [])
+        {
+            if (decision == null
+                || string.IsNullOrWhiteSpace(decision.fieldKey)
+                || !decisionsByFieldKey.TryAdd(decision.fieldKey, decision))
+            {
+                return CategoryImportResult.Failure("Duplicate attribute decisions are invalid");
+            }
+        }
+
+        var selectedAttributeFieldKeys = fieldsForAttributes
+            .Select(field => field.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        if (decisionsByFieldKey.Keys.Any(key => !selectedAttributeFieldKeys.Contains(key)))
+            return CategoryImportResult.Failure("A duplicate attribute decision refers to an unselected field");
+        if (!localCategoryId.HasValue && decisionsByFieldKey.Count > 0)
+            return CategoryImportResult.Failure("Duplicate attribute decisions require an existing category");
 
         // Load existing category or create new one
         Category category;
@@ -150,6 +179,62 @@ public class CategoryImportService
             await _context.SaveChangesAsync(ct);
         }
 
+        // Resolve every duplicate choice against the category as it existed before this import.
+        // This prevents an earlier newly-created field from becoming a false candidate for a
+        // later field, and validates the whole request before tracking any new attributes.
+        var existingAttributes = category.attributes?.ToList() ?? [];
+        var duplicateCandidatesByFieldKey = new Dictionary<string, AttributeDuplicateCandidate[]>(StringComparer.Ordinal);
+        var unitCodesByFieldKey = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var field in fieldsForAttributes)
+        {
+            var unitCode = MapExternalFieldType(field.Type) == AttributeType.Number
+                ? AttributeFieldConstraints.ResolveUnitCode(field)
+                : null;
+            unitCodesByFieldKey[field.Key] = unitCode;
+            var duplicateCandidates = AttributeDuplicateMatcher.FindCandidates(
+                field,
+                MapExternalFieldType(field.Type),
+                unitCode,
+                existingAttributes).ToArray();
+            duplicateCandidatesByFieldKey[field.Key] = duplicateCandidates;
+
+            decisionsByFieldKey.TryGetValue(field.Key, out var decision);
+            if (decision == null && duplicateCandidates.Length > 0)
+            {
+                if (requireDuplicateDecisions)
+                {
+                    return CategoryImportResult.Failure(
+                        $"Choose whether to reuse, create, or skip an attribute for field '{field.Key}'");
+                }
+
+                // Preserve already-enqueued legacy imports from before the choice UI existed.
+                decision = new CategoryImportAttributeDecision
+                {
+                    fieldKey = field.Key,
+                    action = "reuse",
+                    existingAttributeId = duplicateCandidates[0].Attribute.Id,
+                };
+                decisionsByFieldKey[field.Key] = decision;
+            }
+
+            if (decision == null)
+                continue;
+
+            var action = decision.action?.Trim().ToLowerInvariant();
+            var isValid = action switch
+            {
+                "reuse" => decision.existingAttributeId.HasValue
+                    && duplicateCandidates.Any(candidate => candidate.Attribute.Id == decision.existingAttributeId.Value),
+                "create" or "skip" => decision.existingAttributeId == null,
+                _ => false,
+            };
+            if (!isValid)
+            {
+                return CategoryImportResult.Failure(
+                    $"The duplicate attribute decision for field '{field.Key}' is invalid or no longer compatible");
+            }
+        }
+
         externalCategoryName = StringClip.ClipRequired(
             MarketplaceCategoryLabel.FirstReal(
                 externalCategoryId, marketplaceName, localCategoryName),
@@ -164,34 +249,45 @@ public class CategoryImportService
         // (excluding base product fields: sku, barcode, name, description, price, stock)
         int attributesCreated = 0;
         var pendingAttributes = new List<(ExternalField Field, CategoryAttribute Attribute, string SanitizedKey)>();
+        var skippedAttributeFieldKeys = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
         {
             var sanitizedKey = SanitizeKey(field.Key);
+            var unitCode = unitCodesByFieldKey[field.Key];
+            var importedName = AttributeImportNameNormalizer.Normalize(
+                field.Name, unitCode, field.Description);
 
-            // Skip if attribute with this key already exists
-            if (attributeMap.TryGetValue(sanitizedKey, out var existingId))
-            {
-                var existingByKey = category.attributes?.FirstOrDefault(a => a.Id == existingId);
-                if (existingByKey != null)
-                    AttributeFieldConstraints.ApplyIfEmpty(existingByKey, field);
-                continue;
-            }
+            var duplicateCandidates = duplicateCandidatesByFieldKey[field.Key];
+            decisionsByFieldKey.TryGetValue(field.Key, out var decision);
 
-            // Reuse existing attribute with the same display name (prevents duplicate "Material" / "Material")
-            var existingByName = category.attributes?
-                .FirstOrDefault(a => string.Equals(a.name, field.Name, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(
-                        a.name,
-                        StringClip.Clip(field.Name, CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH),
-                        StringComparison.OrdinalIgnoreCase));
-            if (existingByName != null)
+            if (decision != null)
             {
-                AttributeFieldConstraints.ApplyIfEmpty(existingByName, field);
-                attributeMap[field.Key] = existingByName.Id;
-                if (!attributeMap.ContainsKey(sanitizedKey))
-                    attributeMap[sanitizedKey] = existingByName.Id;
-                continue;
+                switch (decision.action.Trim().ToLowerInvariant())
+                {
+                    case "reuse":
+                    {
+                        var selectedCandidate = duplicateCandidates.FirstOrDefault(candidate =>
+                            candidate.Attribute.Id == decision.existingAttributeId);
+                        if (selectedCandidate == null)
+                        {
+                            return CategoryImportResult.Failure(
+                                $"The selected existing attribute is no longer a compatible duplicate for field '{field.Key}'");
+                        }
+
+                        attributeMap[field.Key] = selectedCandidate.Attribute.Id;
+                        attributeMap[sanitizedKey] = selectedCandidate.Attribute.Id;
+                        continue;
+                    }
+                    case "create" when decision.existingAttributeId == null:
+                        break;
+                    case "skip" when decision.existingAttributeId == null:
+                        skippedAttributeFieldKeys.Add(field.Key);
+                        continue;
+                    default:
+                        return CategoryImportResult.Failure(
+                            $"The duplicate attribute decision for field '{field.Key}' is invalid");
+                }
             }
 
             // Determine the default value for certain field types
@@ -204,11 +300,14 @@ public class CategoryImportService
             var addForm = new CategoryAttribute.AddForm
             {
                 name = StringClip.ClipRequired(
-                    field.Name,
+                    importedName,
                     CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH,
                     sanitizedKey),
                 key = sanitizedKey,
                 type = MapExternalFieldType(field.Type),
+                unitCode = MapExternalFieldType(field.Type) == AttributeType.Number
+                    ? AttributeUnits.NormalizeCode(field.UnitCode ?? field.Unit)
+                    : null,
                 isRequired = false,
                 sortOrder = sortOrder++,
                 options = field.Options != null ? SerializeOptions(field.Options) : null,
@@ -218,6 +317,7 @@ public class CategoryImportService
                 description = StringClip.ClipOptional(
                     field.Description,
                     CategoryAttribute.ATTRIBUTE_DESCRIPTION_MAX_LENGTH),
+                descriptionInTooltip = !string.IsNullOrWhiteSpace(field.Description),
                 group = StringClip.ClipOptional(
                     adapter.DisplayName,
                     CategoryAttribute.ATTRIBUTE_GROUP_MAX_LENGTH),
@@ -292,12 +392,19 @@ public class CategoryImportService
             .OrderBy(f => f.SortOrder)
             .Select(field =>
             {
-                var (sourceType, sourceField, sourceAttributeId) = DetermineAutoMapping(field, attributeMap);
+                var (sourceType, sourceField, sourceAttributeId) =
+                    unselectedAttributeFieldKeys.Contains(field.Key)
+                    || skippedAttributeFieldKeys.Contains(field.Key)
+                        ? (FieldMappingSourceType.Static, null, (int?)null)
+                        : DetermineAutoMapping(field, attributeMap);
                 return new FieldSpec
                 {
                     externalFieldKey = field.Key,
                     externalFieldName = field.Name,
                     externalFieldType = field.Type,
+                    externalFieldUnit = AttributeFieldConstraints.ResolveUnitLabel(field),
+                    externalFieldUnitCode = AttributeFieldConstraints.ResolveUnitCode(field),
+                    externalFieldUnitId = field.UnitId,
                     // Product-field-fed columns are not required (data comes from the local product).
                     isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                     isEnabled = true,
@@ -540,6 +647,9 @@ public class CategoryImportService
                     externalFieldKey = field.Key,
                     externalFieldName = field.Name,
                     externalFieldType = field.Type,
+                    externalFieldUnit = AttributeFieldConstraints.ResolveUnitLabel(field),
+                    externalFieldUnitCode = AttributeFieldConstraints.ResolveUnitCode(field),
+                    externalFieldUnitId = field.UnitId,
                     externalFieldGroup = field.Group,
                     externalFieldDescription = field.Description,
                     isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
@@ -710,7 +820,7 @@ public class CategoryImportService
     /// Determine a default value for a field based on its name and available options.
     /// For example, for "Brand" fields looks for "No brand" options.
     /// </summary>
-    private string? DetermineDefaultValue(ExternalField field)
+    internal static string? DetermineDefaultValue(ExternalField field)
     {
         if (field.Options == null || field.Options.Count == 0)
             return null;
@@ -843,7 +953,7 @@ public class CategoryImportService
     /// <summary>
     /// Sanitize an attribute key by removing special characters.
     /// </summary>
-    private string SanitizeKey(string key)
+    internal static string SanitizeKey(string key)
     {
         // Keep only letters, digits, and underscores
         var sanitized = new string(key.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
@@ -862,7 +972,7 @@ public class CategoryImportService
     /// <summary>
     /// Map an external field type string to a local <see cref="AttributeType"/> enum value.
     /// </summary>
-    private AttributeType MapExternalFieldType(string externalType)
+    internal static AttributeType MapExternalFieldType(string externalType)
     {
         return externalType.ToLowerInvariant() switch
         {

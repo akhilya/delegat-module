@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Delegat.Infrastructure.Configuration;
+using Delegat.Infrastructure.Security;
 
 namespace Delegat.Services.PlatformLink;
 
@@ -38,7 +39,7 @@ public sealed class PlatformErrorReporter : IPlatformErrorReporter
         if (!_options.IsEnabled || statusCode < 500)
             return;
 
-        var path = context.Request.Path.Value;
+        var path = MediaExportGrantSecrets.RedactPath(context.Request.Path);
         var method = context.Request.Method;
         var fingerprint = Fingerprint(exception, method, path);
 
@@ -61,7 +62,7 @@ public sealed class PlatformErrorReporter : IPlatformErrorReporter
             StatusCode = statusCode,
             Path = Truncate(path, 500),
             Method = method,
-            Message = Truncate(exception.Message, 1000),
+            Message = Truncate(MediaExportGrantSecrets.Redact(exception.Message), 1000),
             ExceptionType = exception.GetType().FullName,
             Fingerprint = fingerprint,
             PlatformVersion = GetPlatformVersion(),

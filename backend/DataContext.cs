@@ -17,6 +17,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<StoreFile> storeFiles { get; set; }
     public DbSet<StoreFolder> storeFolders { get; set; }
     public DbSet<StoreFileTag> storeFileTags { get; set; }
+    public DbSet<ProductMediaExportGrant> productMediaExportGrants { get; set; }
     public DbSet<ImageReference> images { get; set; }
     public DbSet<PendingImageDownload> pendingImageDownloads { get; set; }
     public DbSet<PendingProductImport> pendingProductImports { get; set; }
@@ -37,9 +38,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<Category> categories { get; set; }
     public DbSet<CategoryAttribute> categoryAttributes { get; set; }
     public DbSet<ProductAttributeValue> productAttributeValues { get; set; }
+    public DbSet<ProductAttributeFile> productAttributeFiles { get; set; }
 
     public DbSet<StoreAttribute> storeAttributes { get; set; }
     public DbSet<StoreProductAttributeValue> storeProductAttributeValues { get; set; }
+    public DbSet<StoreProductAttributeFile> storeProductAttributeFiles { get; set; }
 
     // Marketplace integration
     public DbSet<MarketplaceConnection> marketplaceConnections { get; set; }
@@ -351,8 +354,46 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .Property(x => x.value)
             .HasColumnType("longtext");
 
+        builder.Entity<PendingImageDownload>()
+            .Property(x => x.mediaKind)
+            .HasDefaultValue(PendingMediaKind.Image);
+
+        builder.Entity<ProductAttributeFile>()
+            .HasIndex(x => new { x.attributeValueId, x.fileId })
+            .IsUnique();
+        builder.Entity<ProductAttributeFile>()
+            .HasIndex(x => new { x.attributeValueId, x.index })
+            .IsUnique();
+        builder.Entity<ProductAttributeFile>()
+            .HasOne(x => x.attributeValue)
+            .WithMany(x => x.files)
+            .HasForeignKey(x => x.attributeValueId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ProductAttributeFile>()
+            .HasOne(x => x.file)
+            .WithMany()
+            .HasForeignKey(x => x.fileId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Entity<StoreProductAttributeValue>()
             .HasIndex(spav => spav.productId);
+
+        builder.Entity<StoreProductAttributeFile>()
+            .HasIndex(x => new { x.attributeValueId, x.fileId })
+            .IsUnique();
+        builder.Entity<StoreProductAttributeFile>()
+            .HasIndex(x => new { x.attributeValueId, x.index })
+            .IsUnique();
+        builder.Entity<StoreProductAttributeFile>()
+            .HasOne(x => x.attributeValue)
+            .WithMany(x => x.files)
+            .HasForeignKey(x => x.attributeValueId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<StoreProductAttributeFile>()
+            .HasOne(x => x.file)
+            .WithMany()
+            .HasForeignKey(x => x.fileId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<Models.File>()
             .HasIndex(f => f.productId);
@@ -363,6 +404,26 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<Models.File>()
             .Property(f => f.sourceUrl)
             .HasMaxLength(Models.File.SourceUrlMaxLength);
+
+        builder.Entity<ProductMediaExportGrant>()
+            .HasIndex(g => g.token)
+            .IsUnique();
+        builder.Entity<ProductMediaExportGrant>()
+            .HasIndex(g => new { g.fileId, g.connectionId })
+            .IsUnique();
+        builder.Entity<ProductMediaExportGrant>()
+            .HasOne(g => g.file)
+            .WithMany()
+            .HasForeignKey(g => g.fileId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ProductMediaExportGrant>()
+            .HasOne(g => g.connection)
+            .WithMany()
+            .HasForeignKey(g => g.connectionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ProductMediaExportGrant>()
+            .Property(g => g.revision)
+            .IsConcurrencyToken();
 
         builder.Entity<StoreFile>()
             .HasIndex(f => f.storeId);

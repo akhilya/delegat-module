@@ -27,6 +27,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
     public Exception? GetOrdersException { get; set; }
     public CancellationTokenSource? CancelOnGetOrders { get; set; }
     public Dictionary<string, ExternalOrder> OrdersById { get; } = new(StringComparer.Ordinal);
+    public List<ExternalField> CategoryFields { get; set; } = [];
 
     public void EnqueuePages(string status, params PagedResult<ExternalOrder>[] pages)
     {
@@ -57,7 +58,7 @@ public sealed class OrdersAdapterFake : IMarketplaceAdapter
     public Task<List<ExternalCategory>> GetCategoriesAsync(MarketplaceConnection connection, string? parentId = null, string? searchQuery = null, CancellationToken ct = default)
         => Task.FromResult(new List<ExternalCategory>());
     public Task<List<ExternalField>> GetCategoryFieldsAsync(MarketplaceConnection connection, string externalCategoryId, CancellationToken ct = default)
-        => Task.FromResult(new List<ExternalField>());
+        => Task.FromResult(CategoryFields);
     public Task<List<ExternalField>> GetPriceFieldsAsync(MarketplaceConnection connection, string externalCategoryId, CancellationToken ct = default)
         => Task.FromResult(new List<ExternalField>());
     public Task<CreateCategoryResult> CreateCategoryAsync(MarketplaceConnection connection, CreateCategoryRequest request, CancellationToken ct = default)

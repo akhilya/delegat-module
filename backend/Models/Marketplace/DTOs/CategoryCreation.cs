@@ -27,6 +27,9 @@ public sealed record CreateCategoryField
     public string? Group { get; init; }
     public int SortOrder { get; init; }
     public List<ExternalFieldOption>? Options { get; init; }
+    public string? Unit { get; init; }
+    public string? UnitCode { get; init; }
+    public string? UnitId { get; init; }
 }
 
 /// <summary>

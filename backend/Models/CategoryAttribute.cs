@@ -33,6 +33,14 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
     /// </summary>
     public AttributeType type { get; set; }
 
+    /// <summary>Canonical or marketplace-specific unit code for numeric values.</summary>
+    [StringLength(ATTRIBUTE_UNIT_CODE_MAX_LENGTH)]
+    public string? unitCode { get; set; }
+
+    /// <summary>For File attributes, allows more than one attachment.</summary>
+    /// <summary>When true on a File attribute, product values may reference multiple attached files.</summary>
+    public bool allowMultipleFiles { get; set; } = false;
+
     /// <summary>
     /// Whether a value is required for this attribute.
     /// </summary>
@@ -147,6 +155,8 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         name = form.name;
         key = form.key;
         type = form.type;
+        unitCode = AttributeUnits.NormalizeCode(form.unitCode);
+        allowMultipleFiles = type == AttributeType.File && form.allowMultipleFiles;
         isRequired = form.isRequired;
         isUnique = form.isUnique;
         isMultiline = form.isMultiline;
@@ -175,7 +185,17 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         if (!string.IsNullOrEmpty(form.key))
             key = form.key;
         if (form.type.HasValue)
+        {
             type = form.type.Value;
+            if (type != AttributeType.Number && form.unitCode == null)
+                unitCode = null;
+        }
+        if (form.unitCode != null)
+            unitCode = AttributeUnits.NormalizeCode(form.unitCode);
+        if (form.allowMultipleFiles.HasValue)
+            allowMultipleFiles = form.allowMultipleFiles.Value;
+        if (type != AttributeType.File)
+            allowMultipleFiles = false;
         if (form.isRequired.HasValue)
             isRequired = form.isRequired.Value;
         if (form.isUnique.HasValue)
@@ -207,7 +227,7 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         return true;
     }
 
-    AttributeDTO IMapToDTO<AttributeDTO>.MapToDTO(IServiceProvider serviceProvider)
+    public AttributeDTO ToAttributeDTO(bool includeOptions = true)
     {
         return new AttributeDTO
         {
@@ -215,13 +235,16 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
             name = name,
             key = key,
             type = type,
+            unitCode = unitCode,
+            allowMultipleFiles = type == AttributeType.File && allowMultipleFiles,
             isRequired = isRequired,
             isUnique = isUnique,
             isMultiline = isMultiline,
             allowCustomValues = allowCustomValues,
             showOnProductPage = isRequired || showOnProductPage,
             sortOrder = sortOrder,
-            options = options,
+            options = includeOptions ? options : null,
+            optionsPartial = !includeOptions,
             defaultValue = defaultValue,
             description = description,
             descriptionInTooltip = descriptionInTooltip,
@@ -235,6 +258,9 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         };
     }
 
+    AttributeDTO IMapToDTO<AttributeDTO>.MapToDTO(IServiceProvider serviceProvider)
+        => ToAttributeDTO();
+
     /// <summary>
     /// Maximum length for attribute name.
     /// </summary>
@@ -244,6 +270,8 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
     /// Maximum length for attribute key.
     /// </summary>
     public const int ATTRIBUTE_KEY_MAX_LENGTH = 50;
+
+    public const int ATTRIBUTE_UNIT_CODE_MAX_LENGTH = 64;
 
     /// <summary>
     /// Maximum length for attribute options.
@@ -296,6 +324,12 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         /// Data type of the attribute.
         /// </summary>
         public AttributeType type { get; set; }
+
+        /// <summary>Canonical or marketplace-specific unit code for numeric values.</summary>
+        [StringLength(ATTRIBUTE_UNIT_CODE_MAX_LENGTH)]
+        public string? unitCode { get; set; }
+        /// <summary>Allow multiple attached files when <see cref="type"/> is File; otherwise only one is allowed.</summary>
+        public bool allowMultipleFiles { get; set; }
 
         /// <summary>
         /// Whether a value is required.
@@ -416,6 +450,12 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         /// </summary>
         public AttributeType type { get; set; }
 
+        /// <summary>Canonical or marketplace-specific unit code for numeric values.</summary>
+        [StringLength(ATTRIBUTE_UNIT_CODE_MAX_LENGTH)]
+        public string? unitCode { get; set; }
+        /// <summary>Allow multiple attached files when <see cref="type"/> is File; otherwise only one is allowed.</summary>
+        public bool allowMultipleFiles { get; set; }
+
         /// <summary>
         /// Whether a value is required.
         /// </summary>
@@ -524,6 +564,12 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         /// </summary>
         public AttributeType? type { get; set; }
 
+        /// <summary>Canonical or marketplace-specific unit code; set to an empty string to clear it.</summary>
+        [StringLength(ATTRIBUTE_UNIT_CODE_MAX_LENGTH)]
+        public string? unitCode { get; set; }
+        /// <summary>Update whether this File attribute accepts multiple attachments.</summary>
+        public bool? allowMultipleFiles { get; set; }
+
         /// <summary>
         /// Updated required flag.
         /// </summary>
@@ -620,6 +666,8 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
     /// </summary>
     public struct AttributeDTO
     {
+        /// <summary>Only selected dictionary entries are included; load the full definition when opening a selector.</summary>
+        public bool optionsPartial { get; set; }
         /// <summary>
         /// Unique attribute identifier.
         /// </summary>
@@ -639,6 +687,11 @@ public class CategoryAttribute : IEntity, IAttributeDefinitionSettings, IMapToDT
         /// Data type of the attribute.
         /// </summary>
         public AttributeType type { get; set; }
+
+        /// <summary>Canonical unit code for numeric attributes, when set.</summary>
+        public string? unitCode { get; set; }
+        /// <summary>Whether a File attribute accepts multiple attachments.</summary>
+        public bool allowMultipleFiles { get; set; }
 
         /// <summary>
         /// Whether a value is required.

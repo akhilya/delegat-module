@@ -3,10 +3,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import NavSearchField from "@/components/NavSearchField.vue";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  InsetGroup,
-  InsetGroupItem,
-} from "@/components/ui/inset-group";
+import { InsetGroup, InsetGroupItem } from "@/components/ui/inset-group";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,11 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import {
-  ChevronRight,
-  Home,
-  Search,
-} from "lucide-vue-next";
+import { ChevronRight, Home, Search } from "lucide-vue-next";
 import { cn } from "@/lib/utils";
 
 const SEARCH_IDLE_MS = 1000;
@@ -60,13 +53,7 @@ export default {
     emptyTitle: { type: String, default: "" },
     emptyDescription: { type: String, default: "" },
   },
-  emits: [
-    "update:search",
-    "search",
-    "select",
-    "navigate",
-    "path-index",
-  ],
+  emits: ["update:search", "search", "select", "navigate", "path-index"],
   data() {
     return {
       searchIdleTimer: null,
@@ -80,10 +67,27 @@ export default {
       return cn("flex min-h-0 flex-1 flex-col gap-2", this.$attrs.class);
     },
   },
+  watch: {
+    path: {
+      deep: true,
+      handler() {
+        this.scrollBreadcrumbToEnd();
+      },
+    },
+    showPath(visible) {
+      if (visible) this.scrollBreadcrumbToEnd();
+    },
+  },
   beforeUnmount() {
     this.clearSearchIdleTimer();
   },
   methods: {
+    scrollBreadcrumbToEnd() {
+      this.$nextTick(() => {
+        const scroller = this.$refs.categoryBreadcrumbScroller;
+        if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+      });
+    },
     clearSearchIdleTimer() {
       if (this.searchIdleTimer != null) {
         clearTimeout(this.searchIdleTimer);
@@ -135,49 +139,56 @@ export default {
       </Button>
     </div>
 
-    <Breadcrumb v-if="showPath" class="shrink-0 !mb-0">
-      <BreadcrumbList>
-        <BreadcrumbItem>
-          <BreadcrumbLink as-child>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7"
-              :aria-label="$t('components.breadcrumbs.homeAriaLabel')"
-              @click="$emit('path-index', -1)"
-            >
-              <Home class="size-4" />
-            </Button>
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-        <template v-for="(pathItem, index) in path" :key="pathItem.id">
-          <BreadcrumbSeparator>
-            <ChevronRight class="size-4" />
-          </BreadcrumbSeparator>
+    <div
+      v-if="showPath"
+      ref="categoryBreadcrumbScroller"
+      class="min-w-0 max-w-full shrink-0 overflow-x-auto no-scrollbar scroll-fade-x"
+    >
+      <Breadcrumb class="!mb-0">
+        <BreadcrumbList class="w-max min-w-full flex-nowrap whitespace-nowrap">
           <BreadcrumbItem>
-            <BreadcrumbLink v-if="index < path.length - 1" as-child>
+            <BreadcrumbLink as-child>
               <Button
-                variant="link"
-                class="h-auto max-w-[14rem] truncate px-0 text-muted-foreground font-normal"
-                :title="pathItem.name"
-                @click="$emit('path-index', index)"
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                :aria-label="$t('components.breadcrumbs.homeAriaLabel')"
+                @click="$emit('path-index', -1)"
               >
-                {{ pathItem.name }}
+                <Home class="size-4" />
               </Button>
             </BreadcrumbLink>
-            <BreadcrumbPage v-else class="max-w-[16rem] truncate" :title="pathItem.name">
-              {{ pathItem.name }}
-            </BreadcrumbPage>
           </BreadcrumbItem>
-        </template>
-      </BreadcrumbList>
-    </Breadcrumb>
+          <template v-for="(pathItem, index) in path" :key="pathItem.id">
+            <BreadcrumbSeparator>
+              <ChevronRight class="size-4" />
+            </BreadcrumbSeparator>
+            <BreadcrumbItem>
+              <BreadcrumbLink v-if="index < path.length - 1" as-child>
+                <Button
+                  variant="link"
+                  class="h-auto max-w-[14rem] truncate px-0 text-muted-foreground font-normal"
+                  :title="pathItem.name"
+                  @click="$emit('path-index', index)"
+                >
+                  {{ pathItem.name }}
+                </Button>
+              </BreadcrumbLink>
+              <BreadcrumbPage
+                v-else
+                class="max-w-[16rem] truncate"
+                :title="pathItem.name"
+              >
+                {{ pathItem.name }}
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </template>
+        </BreadcrumbList>
+      </Breadcrumb>
+    </div>
 
     <InsetGroup scrollable class="min-h-[12rem] flex-1">
-      <div
-        v-if="loading"
-        class="flex flex-1 items-center justify-center py-10"
-      >
+      <div v-if="loading" class="flex flex-1 items-center justify-center py-10">
         <Spinner size="2xl" class="text-muted-foreground" />
       </div>
       <div

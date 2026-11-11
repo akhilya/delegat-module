@@ -14,7 +14,8 @@
     "test:api-errors": "node --test src/lib/apiErrorText.test.js",
     "test:adapter-logs": "node --test src/lib/adapterLogs.test.js",
     "test:product-actions": "node --test src/lib/productActions.test.js",
-    "pretest:unit": "node --test src/lib/adapterLogs.test.js src/lib/productActions.test.js",
+    "pretest:unit": "node --test src/lib/adapterLogs.test.js src/lib/productActions.test.js src/lib/attributeUnits.test.js src/lib/mappingUnitWarnings.test.js src/lib/productAttributeFiles.test.js src/lib/mediaKind.test.js src/lib/productAttributeRoundTrip.test.js",
+    "test:product-attribute-files": "node --test src/lib/productAttributeFiles.test.js src/lib/mediaKind.test.js",
     "ui:diff": "npx shadcn-vue@latest diff",
     "ui:add": "npx shadcn-vue@latest add",
     "ui:audit": "node scripts/ui-audit.mjs"

@@ -95,6 +95,11 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
 
     CategoryDetailDTO IMapToDTO<CategoryDetailDTO>.MapToDTO(IServiceProvider serviceProvider)
     {
+        return ToDetailDTO(includeAttributeOptions: true);
+    }
+
+    public CategoryDetailDTO ToDetailDTO(bool includeAttributeOptions)
+    {
         return new CategoryDetailDTO
         {
             id = Id,
@@ -102,7 +107,7 @@ public class Category : IEntity, IMapToDTO<Category.CategoryDTO>, IMapToDTO<Cate
             description = description,
             hasSizes = hasSizes,
             createdAt = createdAt,
-            attributes = attributes?.OrderBy(a => a.sortOrder).Select(a => ((IMapToDTO<CategoryAttribute.AttributeDTO>)a).MapToDTO(serviceProvider)).ToList() ?? new List<CategoryAttribute.AttributeDTO>(),
+            attributes = attributes?.OrderBy(a => a.sortOrder).Select(a => a.ToAttributeDTO(includeAttributeOptions)).ToList() ?? new List<CategoryAttribute.AttributeDTO>(),
             productsCount = products?.Count ?? 0
         };
     }

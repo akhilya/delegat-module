@@ -45,6 +45,9 @@ public class PendingCategoryImport
     /// <summary>JSON array of marketplace field keys, or null for all fields.</summary>
     public string? selectedFieldKeysJson { get; set; }
 
+    /// <summary>JSON array of explicit duplicate-attribute decisions.</summary>
+    public string? attributeDecisionsJson { get; set; }
+
     public CategoryImportStatus status { get; set; } = CategoryImportStatus.Pending;
 
     public string? lastError { get; set; }

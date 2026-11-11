@@ -137,6 +137,7 @@ public class FileController : ControllerBase
     /// Downloads a file by id, proxying through backend with JWT authorization.
     /// </summary>
     [HttpGet]
+    [HttpHead]
     [Route("/files/{id}/download")]
     public async Task DownloadFile(int id, CancellationToken ct)
     {
@@ -162,9 +163,17 @@ public class FileController : ControllerBase
             throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = file.displayName ?? Path.GetFileName(file.filePath);
-        StorageDownloadHttp.Prepare(
-            Response, file.contentType, fileName, inline: file.contentType.StartsWith("image/"), file.length);
-        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
+        await StorageDownloadHttp.StreamAsync(
+            Request,
+            Response,
+            _storageService,
+            file.filePath,
+            file.contentType,
+            fileName,
+            inline: file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase),
+            file.length,
+            ct);
     }
 
     /// <summary>
@@ -426,6 +435,11 @@ public class FileController : ControllerBase
 
         if (file == null)
             throw ApiException.NotFound(code: "file_not_found");
+        if (file.productId != productId)
+            throw ApiException.NotFound(code: "file_not_found");
+        if (await _context.productAttributeFiles.AnyAsync(x => x.fileId == id)
+            || await _context.storeProductAttributeFiles.AnyAsync(x => x.fileId == id))
+            throw ApiException.Conflict(code: "file_in_use");
 
         // Delete tags before file (FK constraint)
         await _context.tags.Where(t => t.fileId == id).ExecuteDeleteAsync();
@@ -466,6 +480,12 @@ public class FileController : ControllerBase
 
         var fileRepo = _unitOfWork.Repository<Models.File>();
         var files = await fileRepo.FindAllAsync(f => request.fileIds.Contains(f.Id) && f.productId == productId);
+        if (files.Count != request.fileIds.Distinct().Count())
+            throw ApiException.NotFound(code: "file_not_found");
+        var fileIdsForUseCheck = files.Select(f => f.Id).ToArray();
+        if (await _context.productAttributeFiles.AnyAsync(x => fileIdsForUseCheck.Contains(x.fileId))
+            || await _context.storeProductAttributeFiles.AnyAsync(x => fileIdsForUseCheck.Contains(x.fileId)))
+            throw ApiException.Conflict(code: "file_in_use");
         var deletedCount = 0;
 
         // Delete tags before files (FK constraint)
@@ -625,6 +645,7 @@ public class SharedFileController : ControllerBase
     }
 
     [HttpGet]
+    [HttpHead]
     [Route("/shared/{token}")]
     public async Task GetSharedFile(string token, CancellationToken ct)
     {
@@ -640,13 +661,12 @@ public class SharedFileController : ControllerBase
             throw ApiException.NotFound(code: "file_not_found");
 
         var fileName = shareToken.file.displayName ?? Path.GetFileName(shareToken.file.filePath);
-        StorageDownloadHttp.Prepare(
-            Response,
-            shareToken.file.contentType,
-            fileName,
-            inline: shareToken.file.contentType.StartsWith("image/"),
-            shareToken.file.length);
-        await _storageService.StreamToAsync(shareToken.file.filePath, Response.Body, ct);
+        await StorageDownloadHttp.StreamAsync(
+            Request, Response, _storageService, shareToken.file.filePath,
+            shareToken.file.contentType, fileName,
+            inline: shareToken.file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || shareToken.file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase),
+            shareToken.file.length, ct);
     }
 }
 
@@ -669,6 +689,7 @@ public class PublicFileController : ControllerBase
     }
 
     [HttpGet]
+    [HttpHead]
     [Route("/pub/files/{token}/{filename}")]
     public async Task GetPublicFile(string token, string filename, CancellationToken ct)
     {
@@ -684,13 +705,17 @@ public class PublicFileController : ControllerBase
             throw ApiException.NotFound(code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
-        StorageDownloadHttp.Prepare(
-            Response, file.contentType, actualName, inline: file.contentType.StartsWith("image/"), file.length);
         Response.Headers["Cache-Control"] = "private, max-age=3600";
-        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
+        await StorageDownloadHttp.StreamAsync(
+            Request, Response, _storageService, file.filePath,
+            file.contentType, actualName,
+            inline: file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase),
+            file.length, ct);
     }
 
     [HttpGet]
+    [HttpHead]
     [Route("/pub/store-files/{token}/{filename}")]
     public async Task GetPublicStoreFile(string token, string filename, CancellationToken ct)
     {
@@ -706,9 +731,12 @@ public class PublicFileController : ControllerBase
             throw ApiException.NotFound(code: "file_not_found");
 
         var actualName = file.displayName ?? Path.GetFileName(file.filePath);
-        StorageDownloadHttp.Prepare(
-            Response, file.contentType, actualName, inline: file.contentType.StartsWith("image/"), file.length);
         Response.Headers["Cache-Control"] = "private, max-age=3600";
-        await _storageService.StreamToAsync(file.filePath, Response.Body, ct);
+        await StorageDownloadHttp.StreamAsync(
+            Request, Response, _storageService, file.filePath,
+            file.contentType, actualName,
+            inline: file.contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase),
+            file.length, ct);
     }
 }

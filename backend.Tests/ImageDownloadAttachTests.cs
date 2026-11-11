@@ -5,6 +5,7 @@ using Delegat.Services;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
@@ -12,6 +13,25 @@ namespace Delegat.Tests;
 [Collection("EnvVars")]
 public class ImageDownloadAttachTests
 {
+    [Fact]
+    public async Task Worker_DownloadsTypedVideoIntoMixedGalleryAsNonImageFile()
+    {
+        var (worker, db, storage, pending, _) = await SeedPendingAsync();
+        pending.mediaKind = PendingMediaKind.Video;
+        pending.mediaFileName = "demo.mp4";
+        await db.SaveChangesAsync();
+
+        await worker.ProcessSingleImageAsync(db, storage, Quota(db), pending, CancellationToken.None);
+
+        Assert.Equal(1, storage.VideoUploadCalls);
+        Assert.Equal(ImageDownloadStatus.Completed, pending.status);
+        var file = await db.files.SingleAsync(f => f.contentType == "video/mp4");
+        Assert.Equal(FileType.Other, file.fileType);
+        Assert.Equal("demo.mp4", file.displayName);
+        var reference = await db.images.SingleAsync(i => i.fileId == file.Id);
+        Assert.Equal(pending.imageIndex, reference.index);
+    }
+
     [Fact]
     public async Task Worker_DoesNotReplaceOccupiedGallerySlot()
     {
@@ -85,6 +105,60 @@ public class ImageDownloadAttachTests
         Assert.Equal(1, await db.files.CountAsync());
     }
 
+    [Fact]
+    public async Task Worker_DatabaseFailureAfterDownload_CleansObjectAndDoesNotAttachFile()
+    {
+        var interceptor = new FailNextFileSaveInterceptor();
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .AddInterceptors(interceptor)
+            .Options;
+        var db = new DataContext(options);
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var product = data.AddProduct(store.Id);
+        var existing = new Models.File
+        {
+            Id = 1,
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "stores/1/products/1/images/old.jpg",
+            contentType = "image/jpeg",
+            length = 10,
+            fileType = FileType.Image,
+            uploadDateTime = DateTime.UtcNow,
+            sourceUrl = "https://cdn.example.test/old.jpg"
+        };
+        db.files.Add(existing);
+        var pending = new PendingImageDownload
+        {
+            productId = product.Id,
+            storeId = store.Id,
+            authorUserId = user.Id,
+            imageUrl = "https://cdn.example.test/new.jpg",
+            imageIndex = 0,
+            status = ImageDownloadStatus.Pending,
+            createdAt = DateTime.UtcNow
+        };
+        db.pendingImageDownloads.Add(pending);
+        await db.SaveChangesAsync();
+        interceptor.FailNextFileSave = true;
+
+        var worker = new ImageDownloadBackgroundService(
+            scopeFactory: null!,
+            NullLogger<ImageDownloadBackgroundService>.Instance,
+            new NoopOperationLogger());
+        var storage = new FakeStorage();
+        await worker.ProcessSingleImageAsync(db, storage, Quota(db), pending, CancellationToken.None);
+
+        Assert.Equal(ImageDownloadStatus.Failed, pending.status);
+        Assert.Single(await db.files.ToListAsync());
+        Assert.Empty(await db.images.ToListAsync());
+        Assert.True(storage.DeleteCalled);
+    }
+
     private static async Task<(
         ImageDownloadBackgroundService worker,
         DataContext db,
@@ -150,6 +224,7 @@ public class ImageDownloadAttachTests
     private sealed class FakeStorage : IStorageService
     {
         public int UploadCalls { get; private set; }
+        public int VideoUploadCalls { get; private set; }
         public bool DeleteCalled { get; private set; }
         public string Bucket => "test";
 
@@ -157,6 +232,14 @@ public class ImageDownloadAttachTests
         {
             UploadCalls++;
             return Task.FromResult<FileUploadResult?>(new FileUploadResult("image/jpeg", 1024));
+        }
+
+        public Task<FileUploadResult?> UploadVideoFromUriWithMetadataAsync(
+            string uri, string path, long maxBytes, CancellationToken ct = default)
+        {
+            VideoUploadCalls++;
+            Assert.True(maxBytes > 0);
+            return Task.FromResult<FileUploadResult?>(new FileUploadResult("video/mp4", 2048));
         }
 
         public Task<bool> DeleteAsync(string path, CancellationToken ct = default)
@@ -176,6 +259,27 @@ public class ImageDownloadAttachTests
         public Task<string> GetPresignedUrlAsync(string path, int expirySeconds = 3600) => throw new NotImplementedException();
         public Task<string> GetPublicPresignedUrlAsync(string path, int expirySeconds = 3600) => throw new NotImplementedException();
         public Task<List<string>> ListObjectsByPrefixAsync(string prefix, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class FailNextFileSaveInterceptor : SaveChangesInterceptor
+    {
+        public bool FailNextFileSave { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (FailNextFileSave
+                && eventData.Context?.ChangeTracker.Entries<Models.File>()
+                    .Any(entry => entry.State == EntityState.Added) == true)
+            {
+                FailNextFileSave = false;
+                throw new InvalidOperationException("Injected file row persistence failure");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     private sealed class NoopOperationLogger : IOperationLogger

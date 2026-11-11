@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Delegat.Services.Marketplace;
 using Delegat.Services.Marketplace.Graph;
 using Delegat.Services.Marketplace.Modifiers;
 
@@ -80,6 +81,26 @@ public class GraphEvaluatorModifierTests
             .Eval();
 
         GraphAssert.Output(result, "out", 10m, "number");
+    }
+
+    [Fact]
+    public void UnitConversion_ExportsInTargetUnitAndReverseImportRestoresSourceUnit()
+    {
+        var graph = new GraphEvalHarness();
+        graph.CategoryAttributes[7] = "2";
+        graph.Attribute("source", 7, "number")
+            .Modifier("convert", "unitConversion", P(("fromUnit", "kg"), ("toUnit", "g")))
+            .Edge("source", "convert")
+            .Field("weight", "number")
+            .WireToField("convert", "weight");
+
+        var result = graph.Eval();
+        GraphAssert.Output(result, "weight", 2000m, "number");
+
+        var projected = MappingService.ProjectGraphForImport(JsonSerializer.Serialize(graph.Graph));
+        var importField = Assert.Single(projected);
+        var reversed = ModifierPipeline.ApplyModifiersReverse("2000", importField.modifiersJson);
+        Assert.Equal(2m, Assert.IsType<decimal>(reversed));
     }
 
     [Fact]
@@ -224,6 +245,8 @@ public class GraphEvaluatorModifierTests
         new("uppercase", "Ab", null, "string", "AB", P()),
         new("lowercase", "Ab", null, "string", "ab", P()),
         new("trim", "  x  ", null, "string", "x", P()),
+        new("unitConversion", "1", "number", "number", 1000m,
+            P(("fromUnit", "kg"), ("toUnit", "g"))),
         new("multiply", "10", "number", "number", 20m, P(("factor", 2m))),
         new("divide", "10", "number", "number", 5m, P(("divisor", 2m))),
         new("add", "10", "number", "number", 13m, P(("addend", 3m))),

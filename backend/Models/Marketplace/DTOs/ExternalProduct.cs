@@ -36,4 +36,8 @@ public record ExternalProduct(
     string? GroupId = null,
     string? GroupName = null,
     List<ExternalProductVariant>? Variants = null
-);
+)
+{
+    /// <summary>Typed media separate from the legacy image URL list.</summary>
+    public List<Delegat.Marketplace.SDK.DTOs.ExternalMedia>? Media { get; init; }
+}

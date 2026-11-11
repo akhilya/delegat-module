@@ -69,7 +69,8 @@ public class AttributeSummaryTests
         await data.SaveAsync();
         db.ChangeTracker.Clear();
         var current = new FakeCurrentUserService { SelectedStoreId = store.Id };
-        var controller = new StoreAttributeController(current, TestDbFactory.CreateUnitOfWork(db), null!, NullLogger<StoreAttributeController>.Instance);
+        var controller = new StoreAttributeController(
+            current, TestDbFactory.CreateUnitOfWork(db), null!, NullLogger<StoreAttributeController>.Instance, db);
 
         var summaries = Assert.IsType<List<AttributeDefinitionSummary>>(Assert.IsType<OkObjectResult>(
             await controller.GetStoreAttributeSummaries()).Value);

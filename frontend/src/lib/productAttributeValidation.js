@@ -1,12 +1,19 @@
 import { z } from "zod";
 import { t } from "@/i18n";
+import { parseAttributeFileIds } from "@/lib/productAttributeFiles";
 
 export const TYPE_TEXT = [0, "Text", "text"];
 export const TYPE_NUMBER = [1, "Number", "number"];
 export const TYPE_BOOLEAN = [2, "Boolean", "boolean"];
 export const TYPE_SELECT = [3, "Select", "select"];
-export const TYPE_MULTISELECT = [4, "MultiSelect", "multiSelect", "multiselect"];
+export const TYPE_MULTISELECT = [
+  4,
+  "MultiSelect",
+  "multiSelect",
+  "multiselect",
+];
 export const TYPE_BARCODE = [5, "Barcode", "barcode"];
+export const TYPE_FILE = [6, "File", "file"];
 
 const TYPE_MAP = {
   text: TYPE_TEXT,
@@ -15,6 +22,7 @@ const TYPE_MAP = {
   select: TYPE_SELECT,
   multiselect: TYPE_MULTISELECT,
   barcode: TYPE_BARCODE,
+  file: TYPE_FILE,
 };
 
 export function isAttributeType(attrType, typeName) {
@@ -24,6 +32,30 @@ export function isAttributeType(attrType, typeName) {
 function buildSingleAttributeSchema(attr) {
   if (isAttributeType(attr.type, "boolean")) {
     return z.enum(["true", "false"]).default("false");
+  }
+
+  if (isAttributeType(attr.type, "file")) {
+    let schema = z
+      .string()
+      .optional()
+      .default("")
+      .refine((value) => {
+        if (value === "") return true;
+        return parseAttributeFileIds(value) !== null;
+      }, t("lib.productAttributeValidation.invalidFileSelection"));
+
+    if (attr.isRequired) {
+      schema = schema.refine(
+        (value) => (parseAttributeFileIds(value)?.length ?? 0) > 0,
+        t("lib.productAttributeValidation.requiredField"),
+      );
+    }
+
+    const maxFiles = attr.allowMultipleFiles === true ? 100 : 1;
+    return schema.refine(
+      (value) => (parseAttributeFileIds(value)?.length ?? 0) <= maxFiles,
+      t("lib.productAttributeValidation.tooManyValues", { max: maxFiles }),
+    );
   }
 
   if (isAttributeType(attr.type, "multiselect")) {
@@ -58,38 +90,47 @@ function buildSingleAttributeSchema(attr) {
     !isAttributeType(attr.type, "multiselect")
   ) {
     schema = schema.refine(
-      (value) => value === "" || value === undefined || String(value).length <= maxLen,
+      (value) =>
+        value === "" || value === undefined || String(value).length <= maxLen,
       t("lib.productAttributeValidation.tooLong", { max: maxLen }),
     );
   }
 
   if (isAttributeType(attr.type, "number")) {
     schema = schema.refine(
-      (value) => value === "" || value === undefined || /^-?\d+(\.\d+)?$/.test(String(value)),
+      (value) =>
+        value === "" ||
+        value === undefined ||
+        /^-?\d+(\.\d+)?$/.test(String(value)),
       t("lib.productAttributeValidation.enterNumber"),
     );
     const min = optionalNumber(attr.minValue);
     const max = optionalNumber(attr.maxValue);
     if (min != null || max != null) {
-      schema = schema.refine((value) => {
-        if (value === "" || value === undefined) return true;
-        const n = Number(value);
-        if (!Number.isFinite(n)) return true;
-        if (min != null && n < min) return false;
-        if (max != null && n > max) return false;
-        return true;
-      }, numberRangeMessage(min, max));
+      schema = schema.refine(
+        (value) => {
+          if (value === "" || value === undefined) return true;
+          const n = Number(value);
+          if (!Number.isFinite(n)) return true;
+          if (min != null && n < min) return false;
+          if (max != null && n > max) return false;
+          return true;
+        },
+        numberRangeMessage(min, max),
+      );
     }
   }
 
-  const pattern = typeof attr.validationPattern === "string"
-    ? attr.validationPattern.trim()
-    : "";
+  const pattern =
+    typeof attr.validationPattern === "string"
+      ? attr.validationPattern.trim()
+      : "";
   if (pattern && !isAttributeType(attr.type, "boolean")) {
     try {
       const re = new RegExp(pattern);
       schema = schema.refine(
-        (value) => value === "" || value === undefined || re.test(String(value)),
+        (value) =>
+          value === "" || value === undefined || re.test(String(value)),
         t("lib.productAttributeValidation.patternMismatch"),
       );
     } catch {
@@ -137,7 +178,9 @@ function numberRangeMessage(min, max) {
 }
 
 export function buildAttributesSchema(attributes) {
-  const visible = (attributes || []).filter((attr) => attr.showOnProductPage !== false);
+  const visible = (attributes || []).filter(
+    (attr) => attr.showOnProductPage !== false,
+  );
   if (visible.length === 0) {
     return z.record(z.string()).optional().default({});
   }
@@ -153,6 +196,9 @@ export function buildAttributesSchema(attributes) {
 export function isEmptyAttributeValue(attr, raw) {
   if (isAttributeType(attr.type, "boolean")) return false;
   if (raw === "" || raw == null) return true;
+  if (isAttributeType(attr.type, "file")) {
+    return (parseAttributeFileIds(raw)?.length ?? 0) === 0;
+  }
   if (isAttributeType(attr.type, "multiselect")) {
     return countMultiselectValues(raw) === 0;
   }
@@ -173,12 +219,22 @@ export function listMissingRequiredAttributes(attributes, formRecord) {
   return missing;
 }
 
-export function attributesToFormRecord(attributes, existingValues = [], idKey = "attributeId") {
+export function attributesToFormRecord(
+  attributes,
+  existingValues = [],
+  idKey = "attributeId",
+) {
   const valueMap = {};
 
   if (Array.isArray(existingValues)) {
     for (const item of existingValues) {
-      valueMap[item[idKey]] = item.value;
+      const attribute = (attributes || []).find(
+        (attr) => Number(attr.id) === Number(item[idKey]),
+      );
+      valueMap[item[idKey]] =
+        isAttributeType(attribute?.type, "file") && Array.isArray(item.fileIds)
+          ? JSON.stringify(item.fileIds)
+          : item.value;
     }
   } else if (existingValues && typeof existingValues === "object") {
     for (const [id, value] of Object.entries(existingValues)) {
@@ -187,11 +243,17 @@ export function attributesToFormRecord(attributes, existingValues = [], idKey = 
   }
 
   const record = {};
-  for (const attr of (attributes || []).filter((item) => item.showOnProductPage !== false)) {
-    const existing = valueMap[attr.id];
-    const hasExistingValue = existing !== undefined
-      && existing !== null
-      && (existing !== "" || isAttributeType(attr.type, "boolean"));
+  for (const attr of (attributes || []).filter(
+    (item) => item.showOnProductPage !== false,
+  )) {
+    const rawExisting = valueMap[attr.id];
+    const existing = isEmptyScalarAttributeValue(attr, rawExisting)
+      ? ""
+      : rawExisting;
+    const hasExistingValue =
+      existing !== undefined &&
+      existing !== null &&
+      (existing !== "" || isAttributeType(attr.type, "boolean"));
 
     if (hasExistingValue) {
       record[String(attr.id)] = String(existing);
@@ -211,15 +273,41 @@ function isPresentAttributeValue(value) {
   return value !== "" && value !== null && value !== undefined;
 }
 
-export function formRecordToAttributeValues(record, idKey = "attributeId") {
+function isEmptyScalarAttributeValue(attr, value) {
+  return (
+    typeof value === "string" &&
+    value.trim() === "[]" &&
+    !isAttributeType(attr?.type, "multiselect") &&
+    !isAttributeType(attr?.type, "file")
+  );
+}
+
+export function formRecordToAttributeValues(
+  record,
+  idKey = "attributeId",
+  attributes = [],
+) {
   const idField = idKey === "attributeId" ? "attributeId" : "storeAttributeId";
+  const fileAttributeIds = new Set(
+    (attributes || [])
+      .filter((attr) => isAttributeType(attr.type, "file"))
+      .map((attr) => Number(attr.id)),
+  );
 
   return Object.entries(record || {})
-    .filter(([, value]) => isPresentAttributeValue(value))
-    .map(([id, value]) => ({
-      [idField]: Number(id),
-      value: String(value),
-    }));
+    .filter(([id, value]) => {
+      if (!isPresentAttributeValue(value)) return false;
+      const attr = (attributes || []).find(
+        (item) => Number(item.id) === Number(id),
+      );
+      return !isEmptyScalarAttributeValue(attr, value);
+    })
+    .map(([id, value]) => {
+      const item = { [idField]: Number(id), value: String(value) };
+      if (fileAttributeIds.has(Number(id)))
+        item.fileIds = parseAttributeFileIds(String(value)) || [];
+      return item;
+    });
 }
 
 export function mergeCategoryAttributesIntoCache(cache, formRecord) {
@@ -237,11 +325,24 @@ export function mergeCategoryAttributesIntoCache(cache, formRecord) {
   return next;
 }
 
-export function categoryAttributeCacheToValues(cache) {
+export function categoryAttributeCacheToValues(cache, attributes = []) {
+  const fileAttributeIds = new Set(
+    (attributes || [])
+      .filter((attr) => isAttributeType(attr.type, "file"))
+      .map((attr) => Number(attr.id)),
+  );
   return Object.entries(cache || {})
-    .filter(([, value]) => isPresentAttributeValue(value))
-    .map(([id, value]) => ({
-      attributeId: Number(id),
-      value: String(value),
-    }));
+    .filter(([id, value]) => {
+      if (!isPresentAttributeValue(value)) return false;
+      const attr = (attributes || []).find(
+        (item) => Number(item.id) === Number(id),
+      );
+      return !isEmptyScalarAttributeValue(attr, value);
+    })
+    .map(([id, value]) => {
+      const item = { attributeId: Number(id), value: String(value) };
+      if (fileAttributeIds.has(Number(id)))
+        item.fileIds = parseAttributeFileIds(String(value)) || [];
+      return item;
+    });
 }

@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 
 namespace Delegat.Controllers;
 
@@ -279,13 +280,15 @@ public class CategoryController : ControllerBase
                 p.categoryId != null && ids.Contains(p.categoryId.Value)).ToListAsync();
         foreach (var product in trashed) product.categoryId = null;
 
-        // Select keys only: category dictionaries may be very large, even for empty categories.
+        // Keep the FK values on delete stubs so EF orders dependent deletes before parent
+        // deletes; otherwise the database cascade can remove a row before EF's DELETE runs.
+        // Select only keys and FKs: category dictionaries may be very large.
         var values = await _context.productAttributeValues.AsNoTracking()
             .Where(v => ids.Contains(v.attribute.categoryId))
-            .Select(v => new ProductAttributeValue { Id = v.Id }).ToListAsync();
+            .Select(v => new ProductAttributeValue { Id = v.Id, attributeId = v.attributeId }).ToListAsync();
         var attributes = await _context.categoryAttributes.AsNoTracking()
             .Where(a => ids.Contains(a.categoryId))
-            .Select(a => new CategoryAttribute { Id = a.Id }).ToListAsync();
+            .Select(a => new CategoryAttribute { Id = a.Id, categoryId = a.categoryId }).ToListAsync();
         _context.productAttributeValues.RemoveRange(values);
         _context.categoryAttributes.RemoveRange(attributes);
         _context.categories.RemoveRange(categories);
@@ -389,11 +392,17 @@ public class CategoryController : ControllerBase
             : -1;
 
         var attribute = new CategoryAttribute();
+        if (!string.IsNullOrWhiteSpace(input.unitCode) && input.type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
+        AttributeDefinitionFileRules.Validate(
+            input.type, input.allowMultipleFiles, input.isUnique, input.defaultValue);
         attribute.AddFill(new CategoryAttribute.AddForm
         {
             name = input.name,
             key = input.key,
             type = input.type,
+            unitCode = input.unitCode,
+            allowMultipleFiles = input.allowMultipleFiles,
             isRequired = input.isRequired,
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
@@ -426,11 +435,16 @@ public class CategoryController : ControllerBase
     /// <param name="categoryId">The category identifier.</param>
     /// <param name="attributeId">The attribute identifier.</param>
     /// <param name="input">The fields to update.</param>
+    /// <param name="ct">Cancels the update.</param>
     /// <returns>A success indicator.</returns>
     [HttpPatch]
     [Route("/categories/{categoryId}/attributes/{attributeId}")]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
-    public async Task<IActionResult> UpdateAttribute(int categoryId, int attributeId, [FromBody] CategoryAttribute.UpdateForm input)
+    public async Task<IActionResult> UpdateAttribute(
+        int categoryId,
+        int attributeId,
+        [FromBody] CategoryAttribute.UpdateForm input,
+        CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -461,11 +475,19 @@ public class CategoryController : ControllerBase
                 throw ApiException.BadRequest(code: "attribute_key_taken");
         }
 
+        await AttributeDefinitionFileRules.ValidateCategoryUpdateAsync(_context, attribute, input, ct);
         attribute.UpdateFill(input);
+        ValidateAttributeUnit(attribute.type, attribute.unitCode);
         await attrRepo.UpdateAsync(attribute);
         await SyncAttributeGroupIconAsync(categoryId, attribute.group, attribute.groupIcon);
 
         return Ok(new { success = true });
+    }
+
+    private static void ValidateAttributeUnit(Delegat.Enums.AttributeType type, string? unitCode)
+    {
+        if (!string.IsNullOrWhiteSpace(unitCode) && type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
     }
 
     /// <summary>
@@ -566,6 +588,11 @@ public class CategoryController : ControllerBase
 
         foreach (var attribute in attributes)
         {
+            AttributeDefinitionFileRules.Validate(
+                attribute.type,
+                attribute.type == Delegat.Enums.AttributeType.File && attribute.allowMultipleFiles,
+                input.isUnique ?? attribute.isUnique,
+                attribute.defaultValue);
             input.ApplyTo(attribute);
         }
         await _unitOfWork.SaveChangesAsync();

@@ -214,6 +214,45 @@ public class ProductGroupController : ControllerBase
         return Ok(new { success = true });
     }
 
+    /// <summary>Deletes selected product groups atomically without deleting their products.</summary>
+    [HttpPost("/productgroups/bulk-delete")]
+    [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
+    public async Task<IActionResult> BulkDeleteGroups(
+        [FromBody] BulkDeleteGroupsRequest? input,
+        CancellationToken ct = default)
+    {
+        var requestedIds = input?.groupIds;
+        if (requestedIds == null || requestedIds.Length == 0 || requestedIds.Length > 1000 ||
+            requestedIds.Any(id => id <= 0))
+            throw ApiException.BadRequest(code: "groups_selection_invalid");
+
+        var ids = requestedIds.Distinct().ToArray();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+
+        var groups = await _db.productGroups
+            .Where(group => group.storeId == storeId.Value && ids.Contains(group.Id))
+            .Include(group => group.members)
+            .Include(group => group.marketplaceLinks)
+            .AsSplitQuery()
+            .ToListAsync(ct);
+        if (groups.Count != ids.Length)
+            throw ApiException.NotFound(code: "group_not_found");
+
+        // Loaded dependent collections are removed with the groups in one SaveChanges call.
+        // Product rows are principals of memberships and are never deleted by this operation.
+        _db.productGroups.RemoveRange(groups);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return Ok(new { deletedCount = groups.Count });
+    }
+
+    public sealed class BulkDeleteGroupsRequest
+    {
+        public int[]? groupIds { get; set; }
+    }
+
     #region Group Membership
 
     /// <summary>Merge local source groups into this group. No marketplace requests are made.</summary>

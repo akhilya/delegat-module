@@ -51,6 +51,9 @@ using var aiTelemetrySink = AiTelemetrySink.TryInitialize(builder.Configuration)
 // Suppress EF Core SQL command logging (noisy in console)
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+// ASP.NET's request-start log includes the full path. Marketplace media URLs carry a
+// bearer token in that path, so keep request-path logging disabled while retaining warnings/errors.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
 // Configure Kestrel for large file uploads and slow downloads.
 builder.WebHost.ConfigureKestrel(options =>
@@ -297,7 +300,10 @@ builder.Services.AddScoped<StoreStorageController>();
 
 // Excel import/export
 builder.Services.AddScoped<ExcelProductService>();
-builder.Services.AddScoped<AttributeUniquenessService>();
+    builder.Services.AddScoped<AttributeUniquenessService>();
+builder.Services.AddScoped<ProductAttributeFileService>();
+builder.Services.AddSingleton<IPublicMediaExportBaseUrlValidator, PublicMediaExportBaseUrlValidator>();
+builder.Services.AddScoped<ProductMediaExportGrantService>();
 
 // Cross-store product clone/move
 builder.Services.AddScoped<ProductTransferService>();
@@ -1092,6 +1098,13 @@ static async Task ApplyMigrationsWithRetryAsync(
                         "Failed to recover from interrupted Baseline apply: {Message}",
                         recoverEx.InnerException?.Message ?? recoverEx.Message);
                 }
+
+                // Repeating DDL cannot repair a partially committed MySQL migration.
+                // Never stamp feature history based only on object names: column types,
+                // unique indexes and foreign-key delete rules must also match exactly.
+                throw new InvalidOperationException(
+                    "Database schema and EF migration history are out of sync. Back up the database " +
+                    "and reconcile the interrupted migration before restarting. No feature migration was automatically stamped.", ex);
             }
             else
             {

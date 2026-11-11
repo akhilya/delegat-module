@@ -42,9 +42,6 @@ public static class ProductGroupMerge
             if (await db.marketplaceConnections.CountAsync(c => connectionIds.Contains(c.Id) &&
                     c.storeId == storeId, ct) != connectionIds.Count)
                 throw ApiException.BadRequest(code: "group_merge_selection_invalid");
-            if (links.GroupBy(l => l.connectionId).Any(g =>
-                    g.Select(l => l.externalGroupId).Distinct(StringComparer.Ordinal).Count() > 1))
-                throw ApiException.Conflict(code: "group_merge_marketplace_conflict");
 
             // Validate everything before mutating tracked entities, including in unit tests.
             // Original FK values also make a rolled-back execution-strategy retry
@@ -79,6 +76,10 @@ public static class ProductGroupMerge
 
             foreach (var group in links.GroupBy(l => l.connectionId))
             {
+                // One local group can retain only one external group per connection.
+                // Prefer the chosen target, otherwise the oldest source link (query order).
+                // Removing redundant local group links never invokes a remote adapter
+                // and does not affect individual product marketplace links.
                 var retained = group.FirstOrDefault(l =>
                     db.Entry(l).Property(x => x.productGroupId).OriginalValue == targetGroupId) ?? group.First();
                 db.productGroupMarketplaceLinks.RemoveRange(group.Where(l => l != retained));

@@ -10,7 +10,7 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatPromptVersion_IsBumpedForGroundedDocumentationAnswers()
     {
-        Assert.Equal("chat-v17", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v18", AiPrompts.ChatPromptVersion);
     }
 
     [Fact]
@@ -33,6 +33,24 @@ public class AiPromptsChatTests
         Assert.Contains("unrelated hits are not permission to guess", prompt);
         Assert.Contains("Native server generation/validation does not require Python", prompt);
         Assert.Contains("Keep separate steps when required by semantics", prompt);
+    }
+
+    [Fact]
+    public void ChatSystem_TreatsUnitsAsSeparateMetadataAndNeverConvertsSilently()
+    {
+        var prompt = NormalizeWhitespace(Prompt());
+        Assert.Contains("lightweight GET /categories/<id>/attributes/summary", prompt, StringComparison.Ordinal);
+        Assert.Contains("GET /store-attributes/summary", prompt, StringComparison.Ordinal);
+        Assert.Contains("unitCode is metadata on the attribute definition, separate from each product's string value",
+            prompt, StringComparison.Ordinal);
+        Assert.Contains("Changing unitCode with PATCH only changes metadata; it never recalculates or rewrites saved product values",
+            prompt, StringComparison.Ordinal);
+        Assert.Contains("Never silently convert values, change unit metadata, or infer a conversion from an unknown/custom unit code",
+            prompt, StringComparison.Ordinal);
+        Assert.Contains("carry the existing code forward as returned, and do not infer its dimension or conversion", prompt,
+            StringComparison.Ordinal);
+        Assert.Contains("clarify first", prompt, StringComparison.Ordinal);
+        Assert.Contains("A marketplace mapping transform changes exported output only", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

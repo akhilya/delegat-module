@@ -22,6 +22,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 ## Current instance reference
 
 - [Capabilities and roadmap](platform/capabilities.md) — feature overview; roadmap items are proposals and require verification
+- [Product files and marketplace media](platform/media.md) — File attributes, mixed galleries, Yandex durable video grants, and adapter verification status
 - [Releasing](platform/releasing.md) — `VERSION`, `CHANGELOG.md`, SemVer, release process
 - [Adapter HTTP log operations](operations/adapter-http-logs.md) — retention policy, performance/root-cause review, deployment verification, and safe space reclamation
 - [SaaS distribution architecture](architecture/saas-architecture.md) — **technical draft**; provisioning and Control Plane product decisions are maintained in the sibling repo

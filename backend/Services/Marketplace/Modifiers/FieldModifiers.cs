@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Delegat.Models;
 using static Delegat.Services.Marketplace.Modifiers.ModifierHelpers;
 
 namespace Delegat.Services.Marketplace.Modifiers;
@@ -170,6 +171,43 @@ public class RegexExtractModifier : IFieldModifier
 }
 
 // ===== Number Modifiers =====
+
+/// <summary>
+/// Converts a numeric value between compatible attribute units. The graph stores
+/// the source and target unit codes so reverse import applies the inverse conversion.
+/// </summary>
+public sealed class UnitConversionModifier : IFieldModifier
+{
+    public string Type => "unitConversion";
+    public bool IsReversible => true;
+
+    public object? Apply(object? value, Dictionary<string, object> parameters)
+        => Convert(value, parameters, reverse: false);
+
+    public object? ReverseApply(object? value, Dictionary<string, object> parameters)
+        => Convert(value, parameters, reverse: true);
+
+    private static object? Convert(
+        object? value,
+        Dictionary<string, object> parameters,
+        bool reverse)
+    {
+        var number = ToDecimal(value);
+        var fromUnit = GetString(parameters, "fromUnit", null);
+        var toUnit = GetString(parameters, "toUnit", null);
+        if (number == null || !AttributeUnits.TryGetConversion(fromUnit, toUnit, out var conversion))
+            return value;
+
+        try
+        {
+            return reverse ? conversion.Reverse(number.Value) : conversion.Convert(number.Value);
+        }
+        catch (OverflowException)
+        {
+            return value;
+        }
+    }
+}
 
 public class MultiplyModifier : IFieldModifier
 {

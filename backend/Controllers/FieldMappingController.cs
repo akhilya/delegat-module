@@ -234,6 +234,7 @@ public class FieldMappingController : ControllerBase
                 key = a.key,
                 name = a.name,
                 type = a.type.ToString(),
+                unitCode = a.unitCode,
                 isRequired = a.isRequired,
                 options = a.type is AttributeType.Select or AttributeType.MultiSelect
                     ? Delegat.Services.Marketplace.Mapping.OptionAlignmentHelper.ParseAttributeOptions(a.options)
@@ -247,6 +248,7 @@ public class FieldMappingController : ControllerBase
                 key = sa.key,
                 name = sa.name,
                 type = sa.type.ToString(),
+                unitCode = sa.unitCode,
                 isRequired = sa.isRequired,
                 options = sa.type is AttributeType.Select or AttributeType.MultiSelect
                     ? Delegat.Services.Marketplace.Mapping.OptionAlignmentHelper.ParseAttributeOptions(sa.options)

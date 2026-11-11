@@ -1,7 +1,13 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Target, AlertTriangle, ArrowLeft, ArrowLeftRight, Plus } from "lucide-vue-next";
+import {
+  Target,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowLeftRight,
+  Plus,
+} from "lucide-vue-next";
 import {
   ADD_ADAPTER_FIELD_HANDLE,
   mergeProductFieldSources,
@@ -12,6 +18,7 @@ import {
   localizeStandardSourceName,
 } from "../fieldLabels.js";
 import { t } from "@/i18n";
+import UnitMismatchNotice from "../UnitMismatchNotice.vue";
 
 const props = defineProps({
   id: String,
@@ -39,12 +46,19 @@ function boundLabel(f) {
   if (s.type === "productField")
     return localizeStandardSourceName(
       s.field,
-      productFields.value.find((x) => x.key === s.field)?.displayName || s.field,
+      productFields.value.find((x) => x.key === s.field)?.displayName ||
+        s.field,
     );
   if (s.type === "attribute")
-    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
+    return (
+      categoryAttributes.value.find((x) => x.id === s.attributeId)?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
+    );
   if (s.type === "storeAttribute")
-    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
+    return (
+      storeAttributes.value.find((x) => x.id === s.attributeId)?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
+    );
   return "";
 }
 
@@ -76,8 +90,12 @@ function fieldTooltip(f) {
   if (f.unit) parts.push(t("marketplace.graph.unitLabel", { unit: f.unit }));
   if (f.minValue != null || f.maxValue != null) {
     const range = [
-      f.minValue != null ? t("marketplace.graph.rangeFrom", { value: f.minValue }) : null,
-      f.maxValue != null ? t("marketplace.graph.rangeTo", { value: f.maxValue }) : null,
+      f.minValue != null
+        ? t("marketplace.graph.rangeFrom", { value: f.minValue })
+        : null,
+      f.maxValue != null
+        ? t("marketplace.graph.rangeTo", { value: f.maxValue })
+        : null,
     ]
       .filter(Boolean)
       .join(" ");
@@ -98,7 +116,10 @@ function fieldTooltip(f) {
 
 function fieldLabel(f) {
   const base = localizeExternalFieldName(f.fieldKey, f.label || f.fieldKey);
-  if (f.unit && !String(base).toLowerCase().includes(String(f.unit).toLowerCase())) {
+  if (
+    f.unit &&
+    !String(base).toLowerCase().includes(String(f.unit).toLowerCase())
+  ) {
     return `${base}, ${f.unit}`;
   }
   return base;
@@ -114,7 +135,9 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 </script>
 
 <template>
-  <div :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']">
+  <div
+    :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
+  >
     <Handle
       v-for="(f, i) in fields"
       :key="f.fieldKey"
@@ -142,7 +165,9 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
     <div class="vf-adapter__head">
       <Target class="size-3.5 text-primary" />
-      <span class="vf-card__kind">{{ t("marketplace.graph.adapterHeader") }}</span>
+      <span class="vf-card__kind">{{
+        t("marketplace.graph.adapterHeader")
+      }}</span>
       <span class="vf-pin-label">{{ fields.length }}</span>
     </div>
 
@@ -158,12 +183,18 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
         </span>
 
+        <UnitMismatchNotice
+          v-if="f.source"
+          :warning="data.unitWarnings?.[f.fieldKey]"
+        />
+
         <span
           v-if="f.omit"
           class="vf-adapter__pill vf-adapter__pill--omit"
           :title="t('marketplace.graph.omitFieldTitle')"
           @click.stop="data.openField?.(f.fieldKey)"
-        >{{ t("marketplace.graph.omitFieldShort") }}</span>
+          >{{ t("marketplace.graph.omitFieldShort") }}</span
+        >
 
         <span
           v-if="f.aliasOf"
@@ -177,7 +208,12 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         <component
           v-if="f.source"
           :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
-          :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
+          :class="[
+            'vf-adapter__dir',
+            analysis[f.fieldKey]?.importable
+              ? 'vf-adapter__dir--import'
+              : 'vf-adapter__dir--export',
+          ]"
         />
 
         <AlertTriangle
@@ -192,7 +228,8 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           :style="pillStyle(f.outputType)"
           :title="sourceTitle(f)"
           @click.stop="data.openField?.(f.fieldKey)"
-        >{{ boundLabel(f) }}</span>
+          >{{ boundLabel(f) }}</span
+        >
       </div>
       <div
         class="vf-adapter__row vf-adapter__row--add cursor-pointer"

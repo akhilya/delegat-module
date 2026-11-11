@@ -91,7 +91,7 @@ export default {
     },
   },
   methods: {
-    ...mapActions(["getAllGroups", "deleteGroup"]),
+    ...mapActions(["getAllGroups", "deleteGroup", "deleteGroups"]),
 
     async fetchGroups() {
       this.isLoading = true;
@@ -173,36 +173,33 @@ export default {
 
     async handleBulkDelete() {
       if (!this.canManageCatalog || this.isDeleting || this.isMerging) return;
-      const ids = Object.keys(this.selectedIds);
-      if (ids.length === 0) return;
+      const groupIds = this.selectedGroups.map((group) => group.id);
+      if (groupIds.length === 0) return;
 
       this.isDeleting = true;
-      let deleted = 0;
-      let stopped = false;
-      for (const id of ids) {
-        await this.deleteGroup({
-          id,
+      try {
+        await this.deleteGroups({
+          groupIds,
           onSuccess: () => {
-            deleted += 1;
+            const deletedIds = new Set(groupIds.map(String));
             this.groups = this.groups.filter(
-              (group) => String(group.id) !== id,
+              (group) => !deletedIds.has(String(group.id)),
             );
-            this.removeFromSelection(id);
+            this.selectedIds = {};
+            this.isBulkDeleteDialogOpen = false;
+            displaySonnerSuccess(
+              this.$t("pages.productGroupsPage.deletedCount", {
+                count: groupIds.length,
+              }),
+            );
           },
           onError: (error) => {
             displaySonnerError(error);
-            stopped = true;
           },
         });
-        if (stopped) break;
+      } finally {
+        this.isDeleting = false;
       }
-      if (deleted > 0) {
-        displaySonnerSuccess(
-          this.$t("pages.productGroupsPage.deletedCount", { count: deleted }),
-        );
-      }
-      this.isBulkDeleteDialogOpen = false;
-      this.isDeleting = false;
     },
 
     openGroup(groupId) {
@@ -212,7 +209,9 @@ export default {
 
     onGroupsMerged({ sourceGroupIds }) {
       const removed = new Set(sourceGroupIds.map(String));
-      this.groups = this.groups.filter((group) => !removed.has(String(group.id)));
+      this.groups = this.groups.filter(
+        (group) => !removed.has(String(group.id)),
+      );
       this.selectedIds = {};
       this.fetchGroups();
     },
@@ -349,9 +348,15 @@ export default {
               variant="outline"
               size="sm"
               class="h-8"
-              :disabled="selectedCount < 2 || selectedCount > 101 || isDeleting || isMerging"
+              :disabled="
+                selectedCount < 2 ||
+                selectedCount > 101 ||
+                isDeleting ||
+                isMerging
+              "
               @click="showMergeDialog = true"
-            >{{ $t("pages.productGroupsPage.mergeAction") }}</Button>
+              >{{ $t("pages.productGroupsPage.mergeAction") }}</Button
+            >
           </ListBulkActions>
         </div>
       </PageSection>

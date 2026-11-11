@@ -6,6 +6,7 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 
 namespace Delegat.Controllers.PublicApi;
 
@@ -67,6 +68,8 @@ public class PublicStoreAttributesController : ControllerBase
         return Ok(((IMapToDTO<StoreAttribute.AttributeDTO>)attribute).MapToDTO(_sp));
     }
 
+    /// <summary>Create a global attribute. File attributes support the optional <c>allowMultipleFiles</c> setting.</summary>
+    /// <remarks>File attributes cannot be unique or have a default value. <c>allowMultipleFiles</c> is valid only when <c>type</c> is File (6).</remarks>
     [HttpPost]
     public async Task<IActionResult> Create(int storeId, [FromBody] StoreAttribute.UserAddForm input, CancellationToken ct)
     {
@@ -83,11 +86,17 @@ public class PublicStoreAttributesController : ControllerBase
             .MaxAsync(ct) ?? -1;
 
         var attribute = new StoreAttribute();
+        if (!string.IsNullOrWhiteSpace(input.unitCode) && input.type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
+        AttributeDefinitionFileRules.Validate(
+            input.type, input.allowMultipleFiles, input.isUnique, input.defaultValue);
         attribute.AddFill(new StoreAttribute.AddForm
         {
             name = input.name,
             key = input.key,
             type = input.type,
+            unitCode = input.unitCode,
+            allowMultipleFiles = input.allowMultipleFiles,
             isRequired = input.isRequired,
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
@@ -110,6 +119,7 @@ public class PublicStoreAttributesController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, new { id = attribute.Id });
     }
 
+    /// <summary>Update a global attribute. Set <c>unitCode</c> to an empty string to clear it.</summary>
     [HttpPatch("{attributeId:int}")]
     public async Task<IActionResult> Update(int storeId, int attributeId, [FromBody] StoreAttribute.UpdateForm input, CancellationToken ct)
     {
@@ -121,7 +131,10 @@ public class PublicStoreAttributesController : ControllerBase
         if (attribute == null)
             throw ApiException.NotFound(code: "store_attribute_not_found");
 
+        await AttributeDefinitionFileRules.ValidateStoreUpdateAsync(_db, attribute, input, ct);
         attribute.UpdateFill(input);
+        if (!string.IsNullOrWhiteSpace(attribute.unitCode) && attribute.type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
         await _uow.SaveChangesAsync();
         return Ok(new { id = attribute.Id, success = true });
     }

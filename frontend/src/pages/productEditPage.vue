@@ -86,6 +86,7 @@ import {
 } from "@/lib/productAttributeValidation";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
 import { applyAttributeUniquenessError } from "@/lib/attributeUniquenessError";
+import { getMediaKind, isGalleryMedia } from "@/lib/mediaKind";
 import { t } from "@/i18n";
 import { http, router } from "@/main";
 import { mapPool } from "@/lib/runPool";
@@ -230,6 +231,23 @@ export default {
     const productSKU = ref("");
     const files = ref([]);
     const productId = computed(() => parseInt(String(route.params.id)));
+
+    function onAttributeFilesUploaded(uploadedFiles) {
+      const knownIds = new Set(
+        files.value.map((file) => Number(file.id ?? file.Id)),
+      );
+      const normalized = (uploadedFiles || [])
+        .map((file) => ({
+          ...file,
+          id: file.id ?? file.Id,
+          fileName: file.fileName ?? file.displayName ?? file.name ?? "",
+        }))
+        .filter(
+          (file) =>
+            Number.isInteger(Number(file.id)) && !knownIds.has(Number(file.id)),
+        );
+      files.value = [...files.value, ...normalized];
+    }
     const images = ref(undefined);
     const notes = ref([]);
     const noteSheetOpen = ref(false);
@@ -367,7 +385,10 @@ export default {
         "categoryAttributes",
         attributesToFormRecord(
           category.value?.attributes,
-          categoryAttributeCacheToValues(allCategoryAttributeValues.value),
+          categoryAttributeCacheToValues(
+            allCategoryAttributeValues.value,
+            category.value?.attributes,
+          ),
           "attributeId",
         ),
       );
@@ -638,7 +659,7 @@ export default {
             if (a.contentType > b.contentType) return 1;
             return 0;
           });
-          images.value = product.images;
+          images.value = product.media || product.images;
           category.value = product.category;
           selectedCategoryId.value = product.category?.id ?? null;
           savedCategoryId.value = selectedCategoryId.value;
@@ -711,7 +732,7 @@ export default {
     async function persistImages() {
       const fileIds = sortedImages.value.map((img) => img.fileId);
       let ok = false;
-      await store.dispatch("postProductImages", {
+      await store.dispatch("postProductMedia", {
         productId: productId.value,
         files: fileIds,
         onSuccess: () => {
@@ -803,12 +824,13 @@ export default {
 
         syncCategoryAttributesCacheFromForm();
 
-        const draftFingerprint = () => JSON.stringify([
-          form.values,
-          selectedCategoryId.value,
-          allCategoryAttributeValues.value,
-          sortedImages.value.map((image) => image.fileId),
-        ]);
+        const draftFingerprint = () =>
+          JSON.stringify([
+            form.values,
+            selectedCategoryId.value,
+            allCategoryAttributeValues.value,
+            sortedImages.value.map((image) => image.fileId),
+          ]);
         const savingDraft = draftFingerprint();
 
         const values = form.values;
@@ -819,10 +841,12 @@ export default {
             : {}),
           attributeValues: categoryAttributeCacheToValues(
             allCategoryAttributeValues.value,
+            category.value?.attributes,
           ),
           storeAttributeValues: formRecordToAttributeValues(
             values.storeAttributes,
             "storeAttributeId",
+            storeAttributes.value,
           ),
         };
 
@@ -848,7 +872,9 @@ export default {
         // Do not replace a newer draft with the saved version or export that older version.
         if (draftFingerprint() !== savingDraft) {
           hasUnsavedChanges.value = true;
-          displaySonnerError(t("pages.productEditPage.toast.changedDuringSave"));
+          displaySonnerError(
+            t("pages.productEditPage.toast.changedDuringSave"),
+          );
           return false;
         }
 
@@ -1207,15 +1233,23 @@ export default {
       images.value = sortedImages.value.map((img) => ({ ...img }));
     }
 
-    // All image files for lightbox (attached first, then unattached)
-    const lightboxImages = computed(() => {
+    // Gallery media comes first; unattached image files remain previewable from Files.
+    const lightboxItems = computed(() => {
+      const attached = sortedImages.value.filter((item) => {
+        return isGalleryMedia(item.contentType);
+      });
+      const attachedIds = new Set(attached.map((item) => Number(item.fileId)));
       const imageFiles =
-        files.value?.filter((f) => f.contentType?.includes("image")) ?? [];
-      const attachedIds = new Set(sortedImages.value.map((img) => img.fileId));
-      const attached = sortedImages.value.map((img) => img.fileId);
+        files.value?.filter((f) => getMediaKind(f.contentType) === "image") ??
+        [];
       const unattached = imageFiles
-        .filter((f) => !attachedIds.has(f.id))
-        .map((f) => f.id);
+        .filter((file) => !attachedIds.has(Number(file.id)))
+        .map((file) => ({
+          fileId: file.id,
+          contentType: file.contentType,
+          displayName: file.fileName,
+          kind: "image",
+        }));
       return [...attached, ...unattached];
     });
 
@@ -1231,6 +1265,18 @@ export default {
       const fileList = event.target.files;
       if (!fileList?.length) return;
 
+      const mediaFiles = Array.from(fileList).filter((file) =>
+        isGalleryMedia(file.type),
+      );
+      if (mediaFiles.length !== fileList.length)
+        displaySonnerError(
+          t("pages.productCreationPage.gallery.unsupportedMedia"),
+        );
+      if (!mediaFiles.length) {
+        if (galleryFileInput.value) galleryFileInput.value.value = "";
+        return;
+      }
+
       isUploadingGallery.value = true;
       // Freeze productId at the moment the upload starts. If the user
       // navigates to a different product during the upload, all subsequent steps
@@ -1238,9 +1284,9 @@ export default {
       // and the final fetchProduct only runs if the user hasn't navigated away.
       const targetProductId = productId.value;
       try {
-        const idGroups = await mapPool(Array.from(fileList), async (file) => {
+        const idGroups = await mapPool(mediaFiles, async (file) => {
           const formData = new FormData();
-          formData.append("files", file);
+          formData.append("files", file, file.name);
           const response = await http({
             url: `/products/${targetProductId}/files`,
             method: "PUT",
@@ -1264,7 +1310,7 @@ export default {
         if (targetProductId === productId.value) {
           const existingFileIds = sortedImages.value.map((img) => img.fileId);
           const allFileIds = [...existingFileIds, ...newFileIds];
-          await store.dispatch("postProductImages", {
+          await store.dispatch("postProductMedia", {
             productId: targetProductId,
             files: allFileIds,
             onSuccess: () => {},
@@ -1282,7 +1328,7 @@ export default {
               .slice()
               .sort((a, b) => a.index - b.index)
               .map((img) => img.fileId);
-            await store.dispatch("postProductImages", {
+            await store.dispatch("postProductMedia", {
               productId: targetProductId,
               files: [...existing, ...newFileIds],
               onSuccess: () => {},
@@ -1310,17 +1356,20 @@ export default {
     }
 
     function openLightbox(idx) {
-      lightboxIndex.value = idx;
+      if (idx >= 0 && idx < sortedImages.value.length)
+        lightboxIndex.value = idx;
     }
     function openLightboxByFileId(fileId) {
-      const idx = lightboxImages.value.indexOf(fileId);
+      const idx = lightboxItems.value.findIndex(
+        (item) => Number(item.fileId) === Number(fileId),
+      );
       if (idx !== -1) lightboxIndex.value = idx;
     }
     function closeLightbox() {
       lightboxIndex.value = null;
     }
     function nextImage() {
-      if (lightboxIndex.value < lightboxImages.value.length - 1)
+      if (lightboxIndex.value < lightboxItems.value.length - 1)
         lightboxIndex.value++;
     }
     function prevImage() {
@@ -1426,6 +1475,7 @@ export default {
       canManageCatalog,
       isProductLoading,
       files,
+      onAttributeFilesUploaded,
       aiEnabled,
       deleteFile,
       productId,
@@ -1498,7 +1548,7 @@ export default {
       getDuplicateUrl,
       lightboxIndex,
       sortedImages,
-      lightboxImages,
+      lightboxItems,
       openLightbox,
       openLightboxByFileId,
       closeLightbox,
@@ -1510,6 +1560,7 @@ export default {
       isUploadingGallery,
       triggerGalleryUpload,
       handleGalleryUpload,
+      getMediaKind,
     };
   },
 };
@@ -1582,7 +1633,7 @@ export default {
       <input
         ref="galleryFileInput"
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         multiple
         class="hidden"
         @change="handleGalleryUpload"
@@ -2287,6 +2338,10 @@ export default {
                 <ProductAttributeForm
                   v-if="category && visibleCategoryAttributes.length > 0"
                   :attributes="category.attributes"
+                  :files="files"
+                  :product-id="productId"
+                  :category-id="selectedCategoryId"
+                  @files-uploaded="onAttributeFilesUploaded"
                 >
                   <template #title>
                     {{
@@ -2329,7 +2384,12 @@ export default {
                       )
                     }}
                   </p>
-                  <StoreAttributeForm :attributes="storeAttributes" />
+                  <StoreAttributeForm
+                    :attributes="storeAttributes"
+                    :files="files"
+                    :product-id="productId"
+                    @files-uploaded="onAttributeFilesUploaded"
+                  />
                 </div>
               </div>
             </form>
@@ -2524,7 +2584,7 @@ export default {
     <!-- Lightbox overlay -->
     <Teleport to="body">
       <div
-        v-if="lightboxIndex != null"
+        v-if="lightboxIndex != null && lightboxItems[lightboxIndex]"
         class="fixed inset-0 z-[var(--z-overlay)] flex items-center justify-center bg-black/50 backdrop-blur-xs"
         @click.self="closeLightbox"
       >
@@ -2549,9 +2609,21 @@ export default {
         >
           <ChevronLeft class="size-6" />
         </Button>
-        <!-- Image -->
+        <!-- Native playback streams through the authenticated same-origin endpoint. -->
+        <video
+          v-if="
+            getMediaKind(lightboxItems[lightboxIndex].contentType) === 'video'
+          "
+          :key="lightboxItems[lightboxIndex].fileId"
+          :src="`/api/files/${lightboxItems[lightboxIndex].fileId}/download`"
+          controls
+          preload="metadata"
+          class="max-h-[90vh] max-w-[90vw]"
+        />
         <AppImage
-          :src="`/api/files/${lightboxImages[lightboxIndex]}/download`"
+          v-else
+          :key="lightboxItems[lightboxIndex].fileId"
+          :src="`/api/files/${lightboxItems[lightboxIndex].fileId}/download`"
           :alt="$t('pages.productEditPage.lightbox.productPhotoAlt')"
           spinner-size="xl"
           class="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
@@ -2559,7 +2631,7 @@ export default {
         />
         <!-- Next -->
         <Button
-          v-if="lightboxIndex < lightboxImages.length - 1"
+          v-if="lightboxIndex < lightboxItems.length - 1"
           variant="outline"
           size="icon-lg"
           class="absolute right-4 rounded-md bg-background/90 supports-backdrop-filter:backdrop-blur-xs"
@@ -2572,7 +2644,7 @@ export default {
         <div
           class="absolute bottom-4 rounded-md border bg-background/90 px-3 py-1 text-sm tabular-nums text-foreground shadow-xs supports-backdrop-filter:backdrop-blur-xs"
         >
-          {{ lightboxIndex + 1 }} / {{ lightboxImages.length }}
+          {{ lightboxIndex + 1 }} / {{ lightboxItems.length }}
         </div>
       </div>
     </Teleport>

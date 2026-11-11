@@ -4,6 +4,7 @@ using Delegat.Enums;
 using Delegat.Infrastructure;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
+using Delegat.Infrastructure.Security;
 using Delegat.Models;
 using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
@@ -26,6 +27,7 @@ public class ProductSyncService
     private readonly ILogger<ProductSyncService> _logger;
     private readonly IOperationLogger _operationLogger;
     private readonly QuotaService _quotaService;
+    private readonly ProductMediaExportGrantService? _mediaExportGrants;
 
     /// <summary>
     /// Checks whether selected products have the category mapping and required mapped
@@ -186,7 +188,8 @@ public class ProductSyncService
         IStorageService storageService,
         ILogger<ProductSyncService> logger,
         IOperationLogger operationLogger,
-        QuotaService quotaService)
+        QuotaService quotaService,
+        ProductMediaExportGrantService? mediaExportGrants = null)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
@@ -195,6 +198,26 @@ public class ProductSyncService
         _logger = logger;
         _operationLogger = operationLogger;
         _quotaService = quotaService;
+        _mediaExportGrants = mediaExportGrants;
+    }
+
+    private static void AddMarketplaceUnitIds(
+        Dictionary<string, object?> exportData,
+        CategoryMapping mapping,
+        string adapterKey)
+    {
+        // Yandex needs marketplace unit IDs on numeric parameters. The saved graph is
+        // authoritative; the adapter's runtime metadata cache is only a legacy fallback.
+        if (!string.Equals(adapterKey, "yandex", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var unitIds = MappingService.SchemaFields(mapping.graphJson)
+            .Where(field => !string.IsNullOrWhiteSpace(field.fieldKey)
+                && !string.IsNullOrWhiteSpace(field.unitId))
+            .GroupBy(field => field.fieldKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().unitId!, StringComparer.OrdinalIgnoreCase);
+        if (unitIds.Count > 0)
+            exportData["_fieldUnitIds"] = unitIds;
     }
 
     /// <summary>
@@ -328,6 +351,7 @@ public class ProductSyncService
             // Build the export data
             await Log("info", "Preparing export data");
             var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
+            AddMarketplaceUnitIds(exportData, categoryMapping, adapter.Key);
 
             // Adapter plumbing (not a mapping field): Woo archive import keys attachments by this id.
             exportData["_localProductId"] = product.Id;
@@ -456,8 +480,6 @@ public class ProductSyncService
             }
             catch { /* serialization failure shouldn't block export */ }
 
-            await Log("info", "Sending to the marketplace");
-
             // Export via the adapter
             // "pending:*" placeholders are not real marketplace IDs - treat as null (new product)
             var realExternalId = existingLink?.externalProductId;
@@ -509,6 +531,12 @@ public class ProductSyncService
                     "Wildberries confirms a new card asynchronously. This export stays running until the article is in the catalog or the draft error list names it (up to 30 minutes).");
             }
 
+            var mediaWarning = await PrepareGalleryVideoExportAsync(
+                adapter, connection, product, exportDataNonNull, ct);
+            if (mediaWarning != null)
+                await Log("warning", mediaWarning);
+            await Log("info", "Sending to the marketplace");
+
             var result = await adapter.ExportProductAsync(
                 connection,
                 exportDataNonNull,
@@ -518,8 +546,9 @@ public class ProductSyncService
             if (!result.Success)
             {
                 var level = result.Retryable ? "error" : "warning";
-                await Log(level, $"Marketplace returned an error: {result.ErrorMessage ?? "unknown"}");
-                var detailsMessage = FormatExportDetails(result.Details);
+                var safeErrorMessage = MediaExportGrantSecrets.Redact(result.ErrorMessage ?? "unknown");
+                await Log(level, $"Marketplace returned an error: {safeErrorMessage}");
+                var detailsMessage = MediaExportGrantSecrets.Redact(FormatExportDetails(result.Details));
                 if (detailsMessage != null)
                     await Log(level, detailsMessage);
 
@@ -529,13 +558,13 @@ public class ProductSyncService
                     existingLink.UpdateFill(new ProductMarketplaceLink.UpdateForm
                     {
                         status = ProductMarketplaceStatus.SyncError,
-                        lastErrorMessage = result.ErrorMessage,
+                        lastErrorMessage = safeErrorMessage,
                         lastSyncAt = DateTime.UtcNow
                     });
                     await _context.SaveChangesAsync(ct);
                 }
 
-                return ProductExportResult.Failure(result.ErrorMessage ?? "Export error", result.Retryable);
+                return ProductExportResult.Failure(safeErrorMessage, result.Retryable);
             }
 
             await Log("success", $"Marketplace responded: ExternalID = {result.ExternalProductId}");
@@ -718,10 +747,17 @@ public class ProductSyncService
                 isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace"
             );
         }
+        catch (ApiException ex)
+        {
+            var message = $"{ex.Code ?? "media_export_failed"}: {ex.Message}";
+            await Log("error", message);
+            return ProductExportResult.Failure(message, retryable: false);
+        }
         catch (Exception ex)
         {
-            await Log("error", $"Export error: {ex.Message}");
-            return ProductExportResult.Failure($"Export error: {ex.Message}");
+            var safeError = MediaExportGrantSecrets.Redact(ex.Message);
+            await Log("error", $"Export error: {safeError}");
+            return ProductExportResult.Failure($"Export error: {safeError}");
         }
     }
 
@@ -891,6 +927,7 @@ public class ProductSyncService
             try
             {
                 var exportData = await _mappingService.BuildExportDataAsync(product, categoryMapping, ct);
+                AddMarketplaceUnitIds(exportData, categoryMapping, adapter.Key);
                 exportData["_localProductId"] = product.Id;
                 if (!exportData.ContainsKey("delegat_product_id") && !exportData.ContainsKey("delegatProductId"))
                     exportData["delegat_product_id"] = product.Id.ToString();
@@ -984,6 +1021,32 @@ public class ProductSyncService
             }
         }
 
+        // Grants are created only after every item has passed local validation and
+        // immediately before the real bulk adapter call.
+        foreach (var item in bulkItems.ToList())
+        {
+            if (!productDict.TryGetValue(item.LocalProductId, out var itemProduct))
+                continue;
+
+            try
+            {
+                var warning = await PrepareGalleryVideoExportAsync(
+                    adapter, connection, itemProduct, item.ProductData, ct);
+                if (warning != null && progress != null)
+                    await progress($"Product {item.LocalProductId}: {warning}", ct);
+            }
+            catch (ApiException ex)
+            {
+                bulkItems.Remove(item);
+                failedProductIds.Add(item.LocalProductId);
+                itemResults.Add(new BulkProductExportItemResult(
+                    item.LocalProductId,
+                    false,
+                    ErrorMessage: $"{ex.Code ?? "media_export_failed"}: {ex.Message}",
+                    Retryable: false));
+            }
+        }
+
         // Call adapter bulk export
         if (bulkItems.Count > 0)
         {
@@ -1020,8 +1083,8 @@ public class ProductSyncService
                         {
                             itemResults.Add(new BulkProductExportItemResult(
                                 exportItemResult.LocalProductId, false,
-                                ErrorMessage: exportItemResult.ErrorMessage ?? "Export error",
-                                Details: exportItemResult.Details,
+                                ErrorMessage: MediaExportGrantSecrets.Redact(exportItemResult.ErrorMessage ?? "Export error"),
+                                Details: MediaExportGrantSecrets.RedactDetails(exportItemResult.Details),
                                 Retryable: exportItemResult.Retryable));
                             continue;
                         }
@@ -1132,9 +1195,9 @@ public class ProductSyncService
                         itemResults.Add(new BulkProductExportItemResult(
                             pid, true,
                             ExternalProductId: exportItemResult.ExternalProductId,
-                            ErrorMessage: exportItemResult.ErrorMessage,
+                            ErrorMessage: MediaExportGrantSecrets.Redact(exportItemResult.ErrorMessage),
                             IsNewProduct: isNew,
-                            Details: exportItemResult.Details));
+                            Details: MediaExportGrantSecrets.RedactDetails(exportItemResult.Details)));
                         await ApplyExportedVariantIdsAsync(
                             pid, connectionId, exportItemResult.Details, ct);
                     }
@@ -1142,7 +1205,8 @@ public class ProductSyncService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Bulk export failed for connectionId={ConnectionId}", connectionId);
+                var safeError = MediaExportGrantSecrets.Redact(ex.ToString());
+                _logger.LogError("Bulk export failed for connectionId={ConnectionId}: {Error}", connectionId, safeError);
                 // Do not overwrite items already recorded as successful — WP may have created them
                 var reportedIds = itemResults.Select(r => r.ProductId).ToHashSet();
                 foreach (var item in bulkItems)
@@ -1150,7 +1214,7 @@ public class ProductSyncService
                     if (reportedIds.Contains(item.LocalProductId) || failedProductIds.Contains(item.LocalProductId))
                         continue;
                     itemResults.Add(new BulkProductExportItemResult(
-                        item.LocalProductId, false, ErrorMessage: $"Export error: {ex.Message}"));
+                        item.LocalProductId, false, ErrorMessage: $"Export error: {MediaExportGrantSecrets.Redact(ex.Message)}"));
                 }
             }
 
@@ -1175,6 +1239,71 @@ public class ProductSyncService
     /// Its evaluated value is stripped from export data and drives post-export group sync.
     /// </summary>
     public const string SyntheticGroupFieldKey = "__group__";
+
+    private async Task<string?> PrepareGalleryVideoExportAsync(
+        IMarketplaceAdapter adapter,
+        MarketplaceConnection connection,
+        Product product,
+        Dictionary<string, object> exportData,
+        CancellationToken ct)
+    {
+        var videoFileIds = GetGalleryVideoFileIds(product);
+        var mediaCapabilities = adapter is Delegat.Marketplace.SDK.IMarketplaceMediaCapabilities mediaAdapter
+            ? mediaAdapter.GetMediaCapabilities()
+            : new Delegat.Marketplace.SDK.MediaCapabilities();
+
+        // Video URLs are not an established export field for legacy adapters. Strip graph
+        // values for every adapter unless its optional capability explicitly permits safe,
+        // permanent-URL export; only then replace them with host-issued gallery grants.
+        var hasUntrustedVideoMapping = exportData.ContainsKey("videos") || exportData.ContainsKey("_videoUrls");
+        exportData.Remove("videos");
+        exportData.Remove("_videoUrls");
+
+        if (!mediaCapabilities.CanExportVideos || !mediaCapabilities.UsesPermanentUrls)
+            return videoFileIds.Length == 0
+                ? null
+                : $"{adapter.DisplayName} does not support video export with permanent URLs; gallery videos were not sent.";
+
+        // Yandex accepts permanent URLs only. Arbitrary graph URLs are not equivalent to
+        // a host-issued grant, so the built-in video field is populated from owned gallery files.
+        if (videoFileIds.Length == 0)
+            return hasUntrustedVideoMapping
+                ? "Mapped video URLs were ignored; add downloadable video files to the product gallery to export them safely."
+                : null;
+
+        if (mediaCapabilities.MaxVideos is int maxVideos && videoFileIds.Length > maxVideos)
+        {
+            throw new ApiException(
+                $"{adapter.DisplayName} accepts at most {maxVideos} videos; this product has {videoFileIds.Length}.",
+                StatusCodes.Status400BadRequest,
+                code: "media_export_video_limit_exceeded");
+        }
+        if (_mediaExportGrants == null)
+            throw ApiException.InternalServerError(code: "media_export_grants_unavailable");
+
+        exportData["videos"] = (await _mediaExportGrants.GetOrCreateUrlsAsync(
+            connection.Id,
+            product.Id,
+            videoFileIds,
+            ct)).ToList();
+        return null;
+    }
+
+    private static int[] GetGalleryVideoFileIds(Product product)
+    {
+        if (product.images == null || product.images.Count == 0)
+            return [];
+
+        return product.images
+            .OrderBy(image => image.index)
+            .Select(image => image.file ?? product.files?.FirstOrDefault(file => file.Id == image.fileId))
+            .Where(file => file != null
+                && !string.IsNullOrWhiteSpace(file.contentType)
+                && file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+            .Select(file => file!.Id)
+            .Distinct()
+            .ToArray();
+    }
 
     /// <summary>
     /// The mapping field that controls card grouping for this adapter:
@@ -1552,18 +1681,10 @@ public class ProductSyncService
             }
 
             // Import images
-            if (externalProduct.ImageUrls?.Any() == true && importByUserId.HasValue)
-            {
-                await Log("info", $"Queuing {externalProduct.ImageUrls.Count} photos for download...");
-                await ImportProductImagesAsync(
-                    product.Id,
-                    connection.storeId,
-                    importByUserId.Value,
-                    externalProduct.ImageUrls,
-                    ct,
-                    imageBatchId: imageBatchId);
-                await Log("info", $"Photos queued");
-            }
+            if (importByUserId.HasValue)
+                await QueueImportedMediaAsync(
+                    product.Id, connection.storeId, importByUserId.Value,
+                    externalProduct, ct, imageBatchId, Log);
 
             // Create the link (bind category mapping when importing into a mapped category)
             int? importCategoryMappingId = null;
@@ -1714,18 +1835,10 @@ public class ProductSyncService
                 }
             }
 
-            if (externalProduct.ImageUrls?.Any() == true && userId > 0)
-            {
-                await Log("info", $"Queuing {externalProduct.ImageUrls.Count} photos for download...");
-                await ImportProductImagesAsync(
-                    product.Id,
-                    connection.storeId,
-                    userId,
-                    externalProduct.ImageUrls,
-                    ct,
-                    imageBatchId: operationId);
-                await Log("info", "Photos queued");
-            }
+            if (userId > 0)
+                await QueueImportedMediaAsync(
+                    product.Id, connection.storeId, userId,
+                    externalProduct, ct, operationId, Log);
 
             if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
             {
@@ -2628,6 +2741,97 @@ public class ProductSyncService
     {
         await QueueImportImagesAsync(
             productId, storeId, authorUserId, imageUrls, imageUrls, imageBatchId, ct);
+    }
+
+    private async Task QueueImportedMediaAsync(
+        int productId,
+        int storeId,
+        int authorUserId,
+        ExternalProduct externalProduct,
+        CancellationToken ct,
+        string? batchId,
+        Func<string, string, Task> log)
+    {
+        var imageUrls = new List<string>();
+        var seenImages = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var url in (externalProduct.ImageUrls ?? [])
+            .Concat((externalProduct.Media ?? [])
+                .Where(m => string.Equals(m.Kind, "image", StringComparison.OrdinalIgnoreCase))
+                .Select(m => m.Url)))
+        {
+            if (string.IsNullOrWhiteSpace(url)) continue;
+            var key = ImageSourceUrl.Normalize(url) ?? url.Trim();
+            if (seenImages.Add(key)) imageUrls.Add(url.Trim());
+        }
+
+        if (imageUrls.Count > 0)
+        {
+            await log("info", $"Queuing {imageUrls.Count} photos for download...");
+            await ImportProductImagesAsync(productId, storeId, authorUserId, imageUrls, ct, batchId);
+            await log("info", "Photos queued");
+        }
+
+        var videos = new List<Delegat.Marketplace.SDK.DTOs.ExternalMedia>();
+        var seenVideos = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var media in externalProduct.Media ?? [])
+        {
+            if (!string.Equals(media.Kind, "video", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(media.Url))
+                continue;
+            if (!UrlSafety.TryValidateHttpUrl(media.Url, out _, out var error))
+            {
+                await log("warning", $"Skipped a marketplace video with an unsafe or invalid URL ({error}).");
+                continue;
+            }
+            var key = ImageSourceUrl.Normalize(media.Url) ?? media.Url.Trim();
+            if (seenVideos.Add(key)) videos.Add(media);
+        }
+
+        if (videos.Count == 0) return;
+        if (videos.Count > 100)
+        {
+            await log("warning", "The marketplace product exposed more than 100 videos; only the first 100 are queued.");
+            videos = videos.Take(100).ToList();
+        }
+
+        var state = await LoadImageImportStateAsync(productId, ct);
+        var nextIndex = await NextGalleryIndexAsync(productId, ct);
+        var queued = 0;
+        foreach (var media in videos)
+        {
+            var key = ImageSourceUrl.Normalize(media.Url);
+            if (key != null && state.QueuedKeys.Contains(key)) continue;
+
+            _context.pendingImageDownloads.Add(new PendingImageDownload
+            {
+                productId = productId,
+                storeId = storeId,
+                authorUserId = authorUserId,
+                imageUrl = media.Url,
+                imageIndex = nextIndex++,
+                mediaKind = PendingMediaKind.Video,
+                mediaFileName = SafeMediaFileName(media.FileName),
+                status = ImageDownloadStatus.Pending,
+                createdAt = DateTime.UtcNow,
+                batchId = batchId
+            });
+            if (key != null) state.QueuedKeys.Add(key);
+            queued++;
+        }
+
+        if (queued > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+            await log("info", $"Queued {queued} directly hosted videos for download.");
+        }
+    }
+
+    private static string? SafeMediaFileName(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+        var name = Path.GetFileName(fileName.Trim());
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        return name.Length <= 255 ? name : name[..255];
     }
 
     /// <summary>

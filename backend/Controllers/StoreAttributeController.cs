@@ -5,6 +5,7 @@ using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
+using Delegat.Services;
 
 namespace Delegat.Controllers;
 
@@ -16,17 +17,20 @@ public class StoreAttributeController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StoreAttributeController> _logger;
+    private readonly DataContext _context;
 
     public StoreAttributeController(
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IServiceProvider serviceProvider,
-        ILogger<StoreAttributeController> logger)
+        ILogger<StoreAttributeController> logger,
+        DataContext context)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _context = context;
     }
 
     [HttpGet]
@@ -105,11 +109,17 @@ public class StoreAttributeController : ControllerBase
         var maxSortOrder = allAttrs.Count > 0 ? allAttrs.Max(a => a.sortOrder) : -1;
 
         var attribute = new StoreAttribute();
+        if (!string.IsNullOrWhiteSpace(input.unitCode) && input.type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
+        AttributeDefinitionFileRules.Validate(
+            input.type, input.allowMultipleFiles, input.isUnique, input.defaultValue);
         attribute.AddFill(new StoreAttribute.AddForm
         {
             name = input.name,
             key = input.key,
             type = input.type,
+            unitCode = input.unitCode,
+            allowMultipleFiles = input.allowMultipleFiles,
             isRequired = input.isRequired,
             isUnique = input.isUnique,
             isMultiline = input.isMultiline,
@@ -136,7 +146,10 @@ public class StoreAttributeController : ControllerBase
     [HttpPatch]
     [Route("/store-attributes/{attributeId}")]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
-    public async Task<IActionResult> UpdateStoreAttribute(int attributeId, [FromBody] StoreAttribute.UpdateForm input)
+    public async Task<IActionResult> UpdateStoreAttribute(
+        int attributeId,
+        [FromBody] StoreAttribute.UpdateForm input,
+        CancellationToken ct)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -159,7 +172,10 @@ public class StoreAttributeController : ControllerBase
                 throw ApiException.BadRequest(code: "store_attribute_key_taken");
         }
 
+        await AttributeDefinitionFileRules.ValidateStoreUpdateAsync(_context, attribute, input, ct);
         attribute.UpdateFill(input);
+        if (!string.IsNullOrWhiteSpace(attribute.unitCode) && attribute.type != Delegat.Enums.AttributeType.Number)
+            throw ApiException.BadRequest(code: "attribute_unit_requires_number");
         await attrRepo.UpdateAsync(attribute);
 
         return Ok(new { success = true });
@@ -213,6 +229,11 @@ public class StoreAttributeController : ControllerBase
 
         foreach (var attribute in attributes)
         {
+            AttributeDefinitionFileRules.Validate(
+                attribute.type,
+                attribute.type == Delegat.Enums.AttributeType.File && attribute.allowMultipleFiles,
+                input.isUnique ?? attribute.isUnique,
+                attribute.defaultValue);
             input.ApplyTo(attribute);
         }
         await _unitOfWork.SaveChangesAsync();

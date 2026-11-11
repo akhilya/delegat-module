@@ -62,7 +62,9 @@ const PIN_TYPE_LABEL_KEYS = {
 };
 
 export const pinTypeLabel = (type) =>
-  t(`marketplace.graph.pinTypes.${PIN_TYPE_LABEL_KEYS[type] || PIN_TYPE_LABEL_KEYS.any}`);
+  t(
+    `marketplace.graph.pinTypes.${PIN_TYPE_LABEL_KEYS[type] || PIN_TYPE_LABEL_KEYS.any}`,
+  );
 
 /** Walk upstream from a node to find the value type feeding its input. */
 export function upstreamOutputType(nodeId, nodes, edges) {
@@ -266,6 +268,9 @@ export function autoMigrate(fieldMappings, sources = {}) {
       fieldKey: fm.externalFieldKey,
       label: fm.externalFieldName || fm.externalFieldKey,
       outputType: fm.externalFieldType || "string",
+      unit: fm.externalFieldUnit ?? null,
+      unitCode: fm.externalFieldUnitCode ?? null,
+      unitId: fm.externalFieldUnitId ?? null,
       isRequired: !!fm.isRequired,
     };
 
@@ -389,7 +394,9 @@ function makeEdge(source, target, targetHandle = "in") {
 
 function attributeLabel(id, list) {
   const found = (list || []).find((a) => a.id === id);
-  return found ? found.name : t("marketplace.graph.attributeFallback", { id: id ?? "?" });
+  return found
+    ? found.name
+    : t("marketplace.graph.attributeFallback", { id: id ?? "?" });
 }
 
 export function mergeProductFieldSources(sources) {
@@ -423,6 +430,7 @@ export function createSourceNode(kind, position, payload = {}) {
         attributeId: payload.id,
         label: payload.name,
         valueType: payload.valueType || "any",
+        unitCode: payload.unitCode || null,
       });
     case "productField":
       return node("productField", position, {
@@ -451,13 +459,15 @@ export function createSourceNode(kind, position, payload = {}) {
     case "productFileByName":
       return node("productFileByName", position, {
         fileName: payload.fileName || "",
-        label: payload.fileName || t("marketplace.graph.productFileByNameLabel"),
+        label:
+          payload.fileName || t("marketplace.graph.productFileByNameLabel"),
         valueType: "string",
       });
     case "productFileContentByName":
       return node("productFileContentByName", position, {
         fileName: payload.fileName || "",
-        label: payload.fileName || t("marketplace.graph.productFileByNameLabel"),
+        label:
+          payload.fileName || t("marketplace.graph.productFileByNameLabel"),
         valueType: "string",
       });
     case "productFilesByExtension":
@@ -580,7 +590,9 @@ export function ensurePriceNode(nodes, edges, priceFieldMappings) {
   const edgeList = [...(edges || [])];
   const priceKeys = new Set([
     ...MIGRATABLE_PRICE_KEYS,
-    ...(priceFieldMappings || []).map((fm) => fm.externalFieldKey).filter(Boolean),
+    ...(priceFieldMappings || [])
+      .map((fm) => fm.externalFieldKey)
+      .filter(Boolean),
   ]);
 
   let priceNode = list.find((n) => n.type === "adapterPriceFields");
@@ -614,7 +626,9 @@ export function ensurePriceNode(nodes, edges, priceFieldMappings) {
     }
     if (move.length) {
       adapter.data = { ...(adapter.data || {}), fields: keep };
-      const have = new Set((priceNode.data?.fields || []).map((f) => f.fieldKey));
+      const have = new Set(
+        (priceNode.data?.fields || []).map((f) => f.fieldKey),
+      );
       const merged = [...(priceNode.data?.fields || [])];
       for (const f of move) {
         if (!have.has(f.fieldKey)) {
@@ -725,7 +739,9 @@ export function validateGraph(nodes, edges) {
       issues.push({
         level: "error",
         nodeId: n.id,
-        message: t("marketplace.graph.validation.unknownModifier", { type: n.data?.modifierType }),
+        message: t("marketplace.graph.validation.unknownModifier", {
+          type: n.data?.modifierType,
+        }),
       });
     }
   });
@@ -943,163 +959,192 @@ export function analyzeFields(nodes, edges) {
   };
 
   for (const adapter of sinks) {
-  for (const f of adapter.data?.fields || []) {
-    const key = f.fieldKey;
+    for (const f of adapter.data?.fields || []) {
+      const key = f.fieldKey;
 
-    // Explicitly omitted from export/import — no projection, no pin analysis.
-    if (f.omit) {
-      putEntry(adapter.id, key, {
-        importable: false,
-        reversible: false,
-        connected: false,
-        omitted: true,
-      });
-      continue;
-    }
-
-    // Merged duplicate of another adapter field — value copied at eval time.
-    if (f.aliasOf) {
-      putEntry(adapter.id, key, {
-        importable: false,
-        reversible: false,
-        connected: true,
-        aliasOf: f.aliasOf,
-      });
-      continue;
-    }
-
-    // A field bound directly to a standard source (dropdown in the adapter) has no pin/edge.
-    if (f.source?.type) {
-      const s = f.source;
-      if (s.type === "attribute" || s.type === "storeAttribute") {
+      // Explicitly omitted from export/import — no projection, no pin analysis.
+      if (f.omit) {
         putEntry(adapter.id, key, {
-          importable: true, reversible: true, connected: true,
-          _sk: `${s.type}:${s.attributeId}`,
+          importable: false,
+          reversible: false,
+          connected: false,
+          omitted: true,
         });
-        projections.push({
-          externalFieldKey: key,
-          sourceType:
-            s.type === "attribute" ? "CategoryAttribute" : "StoreAttribute",
-          sourceAttributeId: s.attributeId ?? null,
-          modifiersJson: null,
+        continue;
+      }
+
+      // Merged duplicate of another adapter field — value copied at eval time.
+      if (f.aliasOf) {
+        putEntry(adapter.id, key, {
+          importable: false,
+          reversible: false,
+          connected: true,
+          aliasOf: f.aliasOf,
         });
-      } else {
-        const sk = s.type === "productField"
-          ? `productField:${s.field}`
-          : s.type === "groupName"
-          ? "groupName"
-          : `${s.type}:${JSON.stringify(s)}`;
-        if (s.type === "productField") {
-          // productField bindings are bidirectional by default.
-          // explicitImport=true lets the fan-out detector pick this one as the "winner",
-          // even if other graph paths to the same productField are explicitly export-only.
-          putEntry(adapter.id, key, { importable: true, reversible: true, connected: true, _sk: sk, explicitImport: true });
+        continue;
+      }
+
+      // A field bound directly to a standard source (dropdown in the adapter) has no pin/edge.
+      if (f.source?.type) {
+        const s = f.source;
+        if (s.type === "attribute" || s.type === "storeAttribute") {
+          putEntry(adapter.id, key, {
+            importable: true,
+            reversible: true,
+            connected: true,
+            _sk: `${s.type}:${s.attributeId}`,
+          });
           projections.push({
             externalFieldKey: key,
-            sourceType: "ProductField",
-            sourceField: s.field,
+            sourceType:
+              s.type === "attribute" ? "CategoryAttribute" : "StoreAttribute",
+            sourceAttributeId: s.attributeId ?? null,
             modifiersJson: null,
           });
         } else {
-          putEntry(adapter.id, key, { importable: false, reversible: false, connected: true, _sk: sk });
-          projections.push(exportOnly(key));
+          const sk =
+            s.type === "productField"
+              ? `productField:${s.field}`
+              : s.type === "groupName"
+                ? "groupName"
+                : `${s.type}:${JSON.stringify(s)}`;
+          if (s.type === "productField") {
+            // productField bindings are bidirectional by default.
+            // explicitImport=true lets the fan-out detector pick this one as the "winner",
+            // even if other graph paths to the same productField are explicitly export-only.
+            putEntry(adapter.id, key, {
+              importable: true,
+              reversible: true,
+              connected: true,
+              _sk: sk,
+              explicitImport: true,
+            });
+            projections.push({
+              externalFieldKey: key,
+              sourceType: "ProductField",
+              sourceField: s.field,
+              modifiersJson: null,
+            });
+          } else {
+            putEntry(adapter.id, key, {
+              importable: false,
+              reversible: false,
+              connected: true,
+              _sk: sk,
+            });
+            projections.push(exportOnly(key));
+          }
         }
+        continue;
       }
-      continue;
-    }
 
-    const inEdge = (incoming.get(adapter.id) || []).find(
-      (e) => e.targetHandle === `f:${key}`,
-    );
+      const inEdge = (incoming.get(adapter.id) || []).find(
+        (e) => e.targetHandle === `f:${key}`,
+      );
 
-    let importable = false;
-    let reversible = false;
-    let projection = exportOnly(key);
-    let terminalSk = null;
-    let explicitImport = false;
+      let importable = false;
+      let reversible = false;
+      let projection = exportOnly(key);
+      let terminalSk = null;
+      let explicitImport = false;
 
-    if (inEdge) {
-      const mods = [];
-      const seen = new Set();
-      let cur = byId.get(inEdge.source);
-      let ok = true;
-      while (cur && !seen.has(cur.id)) {
-        seen.add(cur.id);
-        const ins = incoming.get(cur.id) || [];
-        if (cur.type === "modifier") {
-          if (!MODIFIER_CATALOG[cur.data?.modifierType] || ins.length !== 1) {
-            ok = false;
+      if (inEdge) {
+        const mods = [];
+        const seen = new Set();
+        let cur = byId.get(inEdge.source);
+        let ok = true;
+        while (cur && !seen.has(cur.id)) {
+          seen.add(cur.id);
+          const ins = incoming.get(cur.id) || [];
+          if (cur.type === "modifier") {
+            if (!MODIFIER_CATALOG[cur.data?.modifierType] || ins.length !== 1) {
+              ok = false;
+              break;
+            }
+            mods.unshift({
+              type: cur.data.modifierType,
+              params: cur.data.params || {},
+              enabled: true,
+            });
+            cur = byId.get(ins[0].source);
+          } else if (cur.type === "reroute") {
+            // Reroute is a transparent pass-through - step through it without affecting the lane.
+            if (ins.length !== 1) {
+              ok = false;
+              break;
+            }
+            cur = byId.get(ins[0].source);
+          } else if (
+            cur.type === "attribute" ||
+            cur.type === "storeAttribute"
+          ) {
+            if (cur.data?.attributeId != null) {
+              const forcedExport = cur.data?.importable === false;
+              const forcedImport = cur.data?.importable === true;
+              const modsReversible =
+                ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
+              importable = !forcedExport && (forcedImport || ok);
+              reversible = importable && modsReversible;
+              if (importable) {
+                projection = {
+                  externalFieldKey: key,
+                  sourceType:
+                    cur.type === "attribute"
+                      ? "CategoryAttribute"
+                      : "StoreAttribute",
+                  sourceAttributeId: cur.data.attributeId,
+                  modifiersJson: mods.length ? JSON.stringify(mods) : null,
+                };
+                terminalSk = `${cur.type}:${cur.data.attributeId}`;
+                if (forcedImport || modsReversible) explicitImport = true;
+              }
+            }
             break;
-          }
-          mods.unshift({
-            type: cur.data.modifierType,
-            params: cur.data.params || {},
-            enabled: true,
-          });
-          cur = byId.get(ins[0].source);
-        } else if (cur.type === "reroute") {
-          // Reroute is a transparent pass-through - step through it without affecting the lane.
-          if (ins.length !== 1) {
-            ok = false;
-            break;
-          }
-          cur = byId.get(ins[0].source);
-        } else if (cur.type === "attribute" || cur.type === "storeAttribute") {
-          if (cur.data?.attributeId != null) {
-            const forcedExport = cur.data?.importable === false;
-            const forcedImport = cur.data?.importable === true;
+          } else if (
+            SOURCE_NODE_TYPES.includes(cur.type) &&
+            cur.type !== "static"
+          ) {
+            // Non-attribute source (productField, groupName, file types): importable for
+            // animation purposes when the modifier chain is fully reversible.
+            // Backend projection stays exportOnly - no actual write-back for these types.
+            // productField / attribute / storeAttribute: importable=false forces export-only;
+            // importable=true can win fan-out resolution (attribute lanes also affect import projection).
+            const forcedExport =
+              cur.type === "productField" && cur.data?.importable === false;
+            const forcedImport =
+              cur.type === "productField" && cur.data?.importable === true;
             const modsReversible =
               ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
-            importable = !forcedExport && (forcedImport || ok);
-            reversible = importable && modsReversible;
+            importable = !forcedExport && (forcedImport || modsReversible);
+            // Only mark as explicit winner when modifier chain is reversible - a path through an
+            // irreversible modifier (e.g. truncate) must never be explicitImport=true, otherwise
+            // two paths to the same _sk both become explicit and neither wins fan-out resolution.
+            if (importable && modsReversible) explicitImport = true;
             if (importable) {
-              projection = {
-                externalFieldKey: key,
-                sourceType:
-                  cur.type === "attribute"
-                    ? "CategoryAttribute"
-                    : "StoreAttribute",
-                sourceAttributeId: cur.data.attributeId,
-                modifiersJson: mods.length ? JSON.stringify(mods) : null,
-              };
-              terminalSk = `${cur.type}:${cur.data.attributeId}`;
-              if (forcedImport || modsReversible) explicitImport = true;
+              terminalSk =
+                cur.type === "productField"
+                  ? `productField:${cur.data?.field ?? cur.id}`
+                  : `${cur.type}:${cur.id}`;
             }
+            break;
+          } else {
+            // static value or op nodes (fan-in / lossy) ⇒ always export-only
+            ok = false;
+            break;
           }
-          break;
-        } else if (SOURCE_NODE_TYPES.includes(cur.type) && cur.type !== "static") {
-          // Non-attribute source (productField, groupName, file types): importable for
-          // animation purposes when the modifier chain is fully reversible.
-          // Backend projection stays exportOnly - no actual write-back for these types.
-          // productField / attribute / storeAttribute: importable=false forces export-only;
-          // importable=true can win fan-out resolution (attribute lanes also affect import projection).
-          const forcedExport = cur.type === "productField" && cur.data?.importable === false;
-          const forcedImport = cur.type === "productField" && cur.data?.importable === true;
-          const modsReversible = ok && mods.every((m) => MODIFIER_CATALOG[m.type]?.reversible);
-          importable = !forcedExport && (forcedImport || modsReversible);
-          // Only mark as explicit winner when modifier chain is reversible - a path through an
-          // irreversible modifier (e.g. truncate) must never be explicitImport=true, otherwise
-          // two paths to the same _sk both become explicit and neither wins fan-out resolution.
-          if (importable && modsReversible) explicitImport = true;
-          if (importable) {
-            terminalSk =
-              cur.type === "productField"
-                ? `productField:${cur.data?.field ?? cur.id}`
-                : `${cur.type}:${cur.id}`;
-          }
-          break;
-        } else {
-          // static value or op nodes (fan-in / lossy) ⇒ always export-only
-          ok = false;
-          break;
         }
+        if (!importable) projection = exportOnly(key);
       }
-      if (!importable) projection = exportOnly(key);
-    }
 
-    putEntry(adapter.id, key, { importable, reversible, connected: !!inEdge, _sk: terminalSk, explicitImport });
-    projections.push(projection);
-  }
+      putEntry(adapter.id, key, {
+        importable,
+        reversible,
+        connected: !!inEdge,
+        _sk: terminalSk,
+        explicitImport,
+      });
+      projections.push(projection);
+    }
   }
 
   // Detect fan-out: if 2+ fields share the same logical source (via wires or direct bindings),
@@ -1118,7 +1163,9 @@ export function analyzeFields(nodes, edges) {
     if (refs.length > 1) {
       // If exactly one path was explicitly marked importable by the user, let it win.
       // When several price-API fields bind to the same product field, prefer canonical "price".
-      const explicit = refs.filter(({ sinkId, key }) => analysisBySink[sinkId][key].explicitImport);
+      const explicit = refs.filter(
+        ({ sinkId, key }) => analysisBySink[sinkId][key].explicitImport,
+      );
       let winner = explicit.length === 1 ? explicit[0] : null;
       if (!winner && explicit.length > 1) {
         winner = explicit.find(({ key }) => key === "price") ?? null;

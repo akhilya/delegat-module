@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
+using Delegat.Infrastructure.Security;
 using Delegat.Marketplace.SDK;
 using Delegat.Models.Marketplace;
 using Delegat.Services;
@@ -409,7 +410,7 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     public static string TruncateBody(string? body)
     {
         if (string.IsNullOrEmpty(body)) return body ?? "";
-        var redacted = RedactBody(body);
+        var redacted = MediaExportGrantSecrets.Redact(RedactBody(body));
         if (redacted.Length <= MaxStoredBodyChars) return redacted;
         return redacted[..MaxStoredBodyChars] + TruncationMarker;
     }
@@ -443,9 +444,10 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
 
     public static string RedactBody(string body)
     {
+        string redacted;
         try
         {
-            return SensitiveJsonValue.Replace(body, m =>
+            redacted = SensitiveJsonValue.Replace(body, m =>
             {
                 var colon = m.Value.IndexOf(':');
                 if (colon < 0) return m.Value;
@@ -455,8 +457,9 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         }
         catch
         {
-            return body;
+            redacted = body;
         }
+        return MediaExportGrantSecrets.Redact(redacted);
     }
 
     private static AdapterHttpLogEntry Sanitize(AdapterHttpLogEntry e) => new()
@@ -465,15 +468,15 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
         ConnectionId = e.ConnectionId,
         AdapterKey = e.AdapterKey ?? "",
         Method = e.Method ?? "",
-        Url = Truncate(e.Url, 2000),
-        Path = Truncate(e.Path, 1000),
+        Url = Truncate(MediaExportGrantSecrets.Redact(e.Url), 2000),
+        Path = Truncate(MediaExportGrantSecrets.Redact(e.Path), 1000),
         StatusCode = e.StatusCode,
         DurationMs = e.DurationMs,
-        RequestHeadersJson = Truncate(e.RequestHeadersJson, MaxStoredHeadersChars),
+        RequestHeadersJson = Truncate(MediaExportGrantSecrets.Redact(e.RequestHeadersJson), MaxStoredHeadersChars),
         RequestBody = TruncateBody(e.RequestBody),
-        ResponseHeadersJson = Truncate(e.ResponseHeadersJson, MaxStoredHeadersChars),
+        ResponseHeadersJson = Truncate(MediaExportGrantSecrets.Redact(e.ResponseHeadersJson), MaxStoredHeadersChars),
         ResponseBody = TruncateBody(e.ResponseBody),
-        ErrorMessage = Truncate(e.ErrorMessage, 2000),
+        ErrorMessage = Truncate(MediaExportGrantSecrets.Redact(e.ErrorMessage), 2000),
         OperationId = Truncate(e.OperationId, 64)
     };
 

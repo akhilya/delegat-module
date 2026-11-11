@@ -83,6 +83,14 @@ const categoryBrowser = readFileSync(
   ),
   "utf8",
 );
+const choiceDialog = readFileSync(
+  new URL("../components/ChoiceDialog.vue", import.meta.url),
+  "utf8",
+);
+const categoriesPage = readFileSync(
+  new URL("../pages/categoriesPage.vue", import.meta.url),
+  "utf8",
+);
 const input = readFileSync(
   new URL("../components/ui/input/Input.vue", import.meta.url),
   "utf8",
@@ -281,6 +289,27 @@ describe("shared list search", () => {
     }
     assert.match(categoryBrowser, /NavSearchField/);
     assert.doesNotMatch(orders, /relative h-9 min-w-0 flex-1 sm:max-w-sm/);
+  });
+
+  it("keeps adapter category breadcrumbs on one scrollable row", () => {
+    assert.match(categoryBrowser, /overflow-x-auto no-scrollbar scroll-fade-x/);
+    assert.match(
+      categoryBrowser,
+      /<BreadcrumbList\s+class="w-max min-w-full flex-nowrap whitespace-nowrap"/,
+    );
+    assert.match(categoryBrowser, /scrollBreadcrumbToEnd/);
+  });
+
+  it("uses a reusable choice dialog for category creation and marketplace import", () => {
+    assert.match(choiceDialog, /title: \{ type: String, required: true \}/);
+    assert.match(choiceDialog, /description: \{ type: String, default: "" \}/);
+    assert.match(choiceDialog, /options: \{ type: Array/);
+    assert.match(choiceDialog, /v-for="option in options"/);
+    assert.match(choiceDialog, /this\.\$emit\("select", option\.value\)/);
+    assert.match(categoriesPage, /PERMS\.MarketplaceManage/);
+    assert.match(categoriesPage, /value: "manual"/);
+    assert.match(categoriesPage, /value: "marketplace"/);
+    assert.match(categoriesPage, /PAGE_MARKETPLACE_CATEGORY_IMPORT\.replace/);
   });
 
   it("uses standard dropdown menu primitives without custom popup chrome", () => {

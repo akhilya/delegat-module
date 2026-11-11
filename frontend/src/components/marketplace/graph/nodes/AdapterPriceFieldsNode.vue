@@ -1,7 +1,12 @@
 <script setup>
 import { computed } from "vue";
 import { Handle, Position } from "@vue-flow/core";
-import { Banknote, AlertTriangle, ArrowLeft, ArrowLeftRight } from "lucide-vue-next";
+import {
+  Banknote,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowLeftRight,
+} from "lucide-vue-next";
 import { mergeProductFieldSources, pinColor } from "../graphModel.js";
 import {
   localizeExternalFieldName,
@@ -12,6 +17,7 @@ import {
   priceFieldGroupCount,
 } from "../graphPriceFields.js";
 import { t } from "@/i18n";
+import UnitMismatchNotice from "../UnitMismatchNotice.vue";
 
 const props = defineProps({
   id: String,
@@ -39,12 +45,19 @@ function boundLabel(f) {
   if (s.type === "productField")
     return localizeStandardSourceName(
       s.field,
-      productFields.value.find((x) => x.key === s.field)?.displayName || s.field,
+      productFields.value.find((x) => x.key === s.field)?.displayName ||
+        s.field,
     );
   if (s.type === "attribute")
-    return categoryAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
+    return (
+      categoryAttributes.value.find((x) => x.id === s.attributeId)?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
+    );
   if (s.type === "storeAttribute")
-    return storeAttributes.value.find((x) => x.id === s.attributeId)?.name || t("marketplace.graph.attributeFallback", { id: s.attributeId });
+    return (
+      storeAttributes.value.find((x) => x.id === s.attributeId)?.name ||
+      t("marketplace.graph.attributeFallback", { id: s.attributeId })
+    );
   return "";
 }
 
@@ -64,7 +77,10 @@ function fieldTooltip(f) {
 
 function fieldLabel(f) {
   const base = localizeExternalFieldName(f.fieldKey, f.label || f.fieldKey);
-  if (f.unit && !String(base).toLowerCase().includes(String(f.unit).toLowerCase())) {
+  if (
+    f.unit &&
+    !String(base).toLowerCase().includes(String(f.unit).toLowerCase())
+  ) {
     return `${base}, ${f.unit}`;
   }
   return base;
@@ -90,15 +106,20 @@ function isGroupStart(index) {
 }
 
 function groupLabel(group) {
-  const normalized = String(group || "").trim().toLowerCase();
+  const normalized = String(group || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "prices") return t("marketplace.graph.priceGroupValues");
-  if (normalized === "price strategy") return t("marketplace.graph.priceGroupStrategy");
+  if (normalized === "price strategy")
+    return t("marketplace.graph.priceGroupStrategy");
   return group;
 }
 </script>
 
 <template>
-  <div :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']">
+  <div
+    :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
+  >
     <Handle
       v-for="(f, i) in fields"
       :key="f.fieldKey"
@@ -116,7 +137,9 @@ function groupLabel(group) {
 
     <div class="vf-adapter__head">
       <Banknote class="size-3.5 text-primary" />
-      <span class="vf-card__kind">{{ t("marketplace.graph.priceHeader") }}</span>
+      <span class="vf-card__kind">{{
+        t("marketplace.graph.priceHeader")
+      }}</span>
       <span class="vf-pin-label">{{ fields.length }}</span>
     </div>
 
@@ -134,20 +157,31 @@ function groupLabel(group) {
           @click.stop="data.openField?.(f.fieldKey)"
         >
           <span class="vf-adapter__label" :title="fieldTooltip(f)">
-            {{ fieldLabel(f) }}<span v-if="f.isRequired" class="vf-req"> *</span>
+            {{ fieldLabel(f)
+            }}<span v-if="f.isRequired" class="vf-req"> *</span>
           </span>
+
+          <UnitMismatchNotice
+            v-if="f.source"
+            :warning="data.unitWarnings?.[f.fieldKey]"
+          />
 
           <span
             v-if="f.omit"
             class="vf-adapter__pill vf-adapter__pill--omit"
             :title="t('marketplace.graph.omitFieldTitle')"
             @click.stop="data.openField?.(f.fieldKey)"
-          >{{ t("marketplace.graph.omitFieldShort") }}</span>
+            >{{ t("marketplace.graph.omitFieldShort") }}</span
+          >
 
           <span
             v-if="f.aliasOf"
             class="vf-adapter__pill vf-adapter__pill--alias"
-            :title="t('marketplace.graph.aliasMergedShortTitle', { primary: aliasPrimaryLabel(f) })"
+            :title="
+              t('marketplace.graph.aliasMergedShortTitle', {
+                primary: aliasPrimaryLabel(f),
+              })
+            "
             @click.stop="data.openField?.(f.fieldKey)"
           >
             = {{ aliasPrimaryLabel(f) }}
@@ -156,7 +190,12 @@ function groupLabel(group) {
           <component
             v-if="f.source"
             :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
-            :class="['vf-adapter__dir', analysis[f.fieldKey]?.importable ? 'vf-adapter__dir--import' : 'vf-adapter__dir--export']"
+            :class="[
+              'vf-adapter__dir',
+              analysis[f.fieldKey]?.importable
+                ? 'vf-adapter__dir--import'
+                : 'vf-adapter__dir--export',
+            ]"
           />
 
           <AlertTriangle
@@ -169,9 +208,12 @@ function groupLabel(group) {
             v-if="f.source"
             class="vf-adapter__pill"
             :style="pillStyle(f.outputType)"
-            :title="t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })"
+            :title="
+              t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })
+            "
             @click.stop="data.openField?.(f.fieldKey)"
-          >{{ boundLabel(f) }}</span>
+            >{{ boundLabel(f) }}</span
+          >
         </div>
       </template>
     </div>

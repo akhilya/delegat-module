@@ -25,16 +25,32 @@ public class CategoryBulkDeleteTests
         var second = data.AddCategory(store.Id);
         var retained = data.AddCategory(store.Id);
         var attr = data.AddCategoryAttribute(first.Id, options: new string('x', 100000));
-        data.AddCategoryAttribute(second.Id);
+        var secondAttr = data.AddCategoryAttribute(second.Id);
         var retainedAttr = data.AddCategoryAttribute(retained.Id);
         var trashed = data.AddProduct(store.Id, categoryId: first.Id, deletedAt: DateTime.UtcNow);
         var active = data.AddProduct(store.Id, categoryId: retained.Id);
-        db.productAttributeValues.Add(new ProductAttributeValue { productId = trashed.Id, attributeId = attr.Id, value = "Saved value" });
+        var savedValue = new ProductAttributeValue { productId = trashed.Id, attributeId = attr.Id, value = "Saved value" };
+        db.productAttributeValues.Add(savedValue);
         await data.SaveAsync();
         db.ChangeTracker.Clear();
 
+        var deletedValueAttributeIds = new Dictionary<int, int>();
+        var deletedAttributeCategoryIds = new Dictionary<int, int>();
+        db.SavingChanges += (_, _) =>
+        {
+            foreach (var entry in db.ChangeTracker.Entries<ProductAttributeValue>()
+                .Where(entry => entry.State == EntityState.Deleted))
+                deletedValueAttributeIds[entry.Entity.Id] = entry.Property(value => value.attributeId).CurrentValue;
+            foreach (var entry in db.ChangeTracker.Entries<CategoryAttribute>()
+                .Where(entry => entry.State == EntityState.Deleted))
+                deletedAttributeCategoryIds[entry.Entity.Id] = entry.Property(attribute => attribute.categoryId).CurrentValue;
+        };
+
         Assert.IsType<OkObjectResult>(await Controller(db, store.Id).BulkDeleteCategories(
             new Category.BulkDeleteForm { categoryIds = [first.Id, second.Id, first.Id] }));
+        Assert.Equal(attr.Id, deletedValueAttributeIds[savedValue.Id]);
+        Assert.Equal(first.Id, deletedAttributeCategoryIds[attr.Id]);
+        Assert.Equal(second.Id, deletedAttributeCategoryIds[secondAttr.Id]);
         db.ChangeTracker.Clear();
         Assert.Equal(retained.Id, (await db.categories.SingleAsync()).Id);
         Assert.Equal(retainedAttr.Id, (await db.categoryAttributes.SingleAsync()).Id);

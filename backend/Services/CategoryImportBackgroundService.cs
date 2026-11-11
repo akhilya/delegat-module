@@ -114,6 +114,13 @@ public sealed class CategoryImportBackgroundService : BackgroundService
                 selectedKeys = JsonSerializer.Deserialize<List<string>>(job.selectedFieldKeysJson);
             }
 
+            List<CategoryImportAttributeDecision>? attributeDecisions = null;
+            if (job.attributeDecisionsJson != null)
+            {
+                attributeDecisions = JsonSerializer.Deserialize<List<CategoryImportAttributeDecision>>(
+                    job.attributeDecisionsJson) ?? [];
+            }
+
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var watcher = OperationStopWatcher.WatchAsync(_scopeFactory, job.operationId, linked);
             CategoryImportResult result;
@@ -126,7 +133,9 @@ public sealed class CategoryImportBackgroundService : BackgroundService
                     job.externalCategoryName,
                     job.localCategoryId,
                     selectedKeys,
-                    linked.Token);
+                    linked.Token,
+                    attributeDecisions,
+                    requireDuplicateDecisions: job.attributeDecisionsJson != null);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {

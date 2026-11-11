@@ -53,6 +53,45 @@ public class AttributeFieldConstraintsTests
     }
 
     [Fact]
+    public void ApplyTo_NormalizesNumericUnitMetadata()
+    {
+        var form = new CategoryAttribute.AddForm
+        {
+            name = "Width",
+            key = "width",
+            type = Delegat.Enums.AttributeType.Number,
+        };
+
+        AttributeFieldConstraints.ApplyTo(
+            ref form,
+            new ExternalField("width", "Width", false, "number", Unit: "сантиметр"));
+
+        Assert.Equal("cm", form.unitCode);
+    }
+
+    [Fact]
+    public void ResolveUnitCode_DoesNotTreatQuotedArticleTitleAsInches()
+    {
+        var field = new ExternalField(
+            "purchase_multiple",
+            "\u041A\u0440\u0430\u0442\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u043A\u0443\u043F\u043A\u0438",
+            false,
+            "number",
+            Description: "\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u0442\u043E\u0432\u0430\u0440\u043E\u0432 \u0432 \u0441\u0442\u0430\u0442\u044C\u0435 \"\u041A\u0440\u0430\u0442\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u043A\u0443\u043F\u043A\u0438\".");
+
+        Assert.Null(AttributeFieldConstraints.ResolveUnitCode(field));
+    }
+
+    [Fact]
+    public void ResolveUnitCode_RecognizesInchesWhenQuoteFollowsNumber()
+    {
+        var field = new ExternalField(
+            "screen_size", "Screen size", false, "number", Description: "Enter a size such as 4\"");
+
+        Assert.Equal("in", AttributeFieldConstraints.ResolveUnitCode(field));
+    }
+
+    [Fact]
     public void ApplyTo_CopiesAllowCustomValues()
     {
         var form = new CategoryAttribute.AddForm { name = "Color", key = "color" };
@@ -98,6 +137,33 @@ public class AttributeFieldConstraintsTests
             attribute,
             new ExternalField("color", "Color", false, "multiselect", MaxValues: 2)));
         Assert.Equal(5, attribute.maxValues);
+    }
+
+    [Fact]
+    public void ApplyIfEmpty_FillsMissingNumericUnitButPreservesExistingAndCustomValues()
+    {
+        var attribute = new CategoryAttribute { type = Delegat.Enums.AttributeType.Number };
+        Assert.True(AttributeFieldConstraints.ApplyIfEmpty(
+            attribute,
+            new ExternalField("weight", "Weight", false, "number", Unit: "кг")));
+        Assert.Equal("kg", attribute.unitCode);
+
+        Assert.False(AttributeFieldConstraints.ApplyIfEmpty(
+            attribute,
+            new ExternalField("weight", "Weight", false, "number", Unit: "г")));
+        Assert.Equal("kg", attribute.unitCode);
+
+        var nonNumeric = new CategoryAttribute { type = Delegat.Enums.AttributeType.Text };
+        Assert.False(AttributeFieldConstraints.ApplyIfEmpty(
+            nonNumeric,
+            new ExternalField("name", "Name", false, "string", Unit: "kg")));
+        Assert.Null(nonNumeric.unitCode);
+
+        var inferred = new CategoryAttribute { type = Delegat.Enums.AttributeType.Number };
+        Assert.True(AttributeFieldConstraints.ApplyIfEmpty(
+            inferred,
+            new ExternalField("width", "Width (mm)", false, "number")));
+        Assert.Equal("mm", inferred.unitCode);
     }
 
     [Fact]

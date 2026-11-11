@@ -224,6 +224,49 @@ public class GraphGeneratorSyncPreservesCollapsedTests
     }
 
     [Fact]
+    public void BuildAndSyncGraph_PreserveMarketplaceUnitMetadata()
+    {
+        var graph = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "width",
+                externalFieldName = "Width",
+                externalFieldType = "number",
+                externalFieldUnit = "centimeter",
+                externalFieldUnitCode = "cm",
+                externalFieldUnitId = "502",
+                isEnabled = true,
+                sourceType = FieldMappingSourceType.Static,
+            },
+        ]);
+
+        var synced = GraphGenerator.SyncAdapterFields(graph,
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "width",
+                externalFieldName = "Width",
+                externalFieldType = "number",
+                externalFieldUnit = "millimeter",
+                externalFieldUnitCode = "mm",
+                externalFieldUnitId = "503",
+                isEnabled = true,
+                sourceType = FieldMappingSourceType.Static,
+            },
+        ]);
+
+        using var doc = JsonDocument.Parse(synced);
+        var field = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(node => node.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray().Single();
+
+        Assert.Equal("millimeter", field.GetProperty("unit").GetString());
+        Assert.Equal("mm", field.GetProperty("unitCode").GetString());
+        Assert.Equal("503", field.GetProperty("unitId").GetString());
+    }
+
+    [Fact]
     public void BuildPriceFieldSpecs_OmitsDiscountedPriceWhenExtendedOff()
     {
         var fields = new List<ExternalField>

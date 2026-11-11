@@ -57,11 +57,7 @@ import {
 } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  SplitterGroup,
-  SplitterPanel,
-  SplitterResizeHandle,
-} from "reka-ui";
+import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from "reka-ui";
 import {
   displaySonnerError,
   displaySonnerSuccess,
@@ -109,9 +105,13 @@ import { layoutGraph, sinksOverlap } from "./graphLayout.js";
 import {
   localizeExternalFieldDescription,
   localizeExternalFieldName,
-  localizeStandardSourceName,
 } from "./fieldLabels.js";
 import { samePriceFieldSchema } from "./graphPriceFields.js";
+import {
+  analyzeUnitWarnings,
+  resolveTerminalUnit,
+} from "@/lib/mappingUnitWarnings";
+import { getUnitConversion, normalizeUnitCode } from "@/lib/attributeUnits";
 
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
@@ -175,7 +175,6 @@ const flowWrap = ref(null);
 const flowPaneReady = ref(false);
 let pendingLoadOptions = null;
 let loadGeneration = 0;
-let previewGeneration = 0;
 
 /** Snap node moves to a fixed grid (toggle in bottom-left Controls). */
 const snapToGrid = ref(false);
@@ -245,6 +244,7 @@ const TRANSIENT_NODE_DATA_KEYS = new Set([
   "setFieldSource",
   "setFieldMode",
   "openField",
+  "unitWarnings",
 ]);
 
 /**
@@ -371,9 +371,6 @@ const issues = computed(() => validateGraph(nodes.value, edges.value));
 const errorCount = computed(
   () => issues.value.filter((i) => i.level === "error").length,
 );
-const warningCount = computed(
-  () => issues.value.filter((i) => i.level === "warning").length,
-);
 function waitForPaint() {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
@@ -419,6 +416,8 @@ function enrichFieldsWithDefs(fields, defs) {
       description: localizeExternalFieldDescription(f.fieldKey, apiDesc),
       sortOrder: def?.sortOrder ?? f.sortOrder ?? null,
       unit: def?.unit ?? f.unit ?? null,
+      unitCode: def?.unitCode ?? f.unitCode ?? null,
+      unitId: def?.unitId ?? f.unitId ?? null,
       minValue: def?.minValue ?? f.minValue ?? null,
       maxValue: def?.maxValue ?? f.maxValue ?? null,
       maxLength: def?.maxLength ?? f.maxLength ?? null,
@@ -433,13 +432,19 @@ function applyFieldDefEnrichment() {
   const adapterNode = findNode(ADAPTER_NODE_ID);
   if (adapterNode) {
     updateNodeData(ADAPTER_NODE_ID, {
-      fields: enrichFieldsWithDefs(adapterNode.data?.fields, props.externalFieldDefs),
+      fields: enrichFieldsWithDefs(
+        adapterNode.data?.fields,
+        props.externalFieldDefs,
+      ),
     });
   }
   const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
   if (priceNode) {
     updateNodeData(ADAPTER_PRICE_NODE_ID, {
-      fields: enrichFieldsWithDefs(priceNode.data?.fields, props.priceFieldDefs),
+      fields: enrichFieldsWithDefs(
+        priceNode.data?.fields,
+        props.priceFieldDefs,
+      ),
     });
   }
 }
@@ -447,6 +452,12 @@ function applyFieldDefEnrichment() {
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
   const { analysisBySink } = analyzeFields(nodes.value, edges.value);
+  const unitWarnings = analyzeUnitWarnings(
+    nodes.value,
+    edges.value,
+    props.availableSources,
+  );
+  syncUnitWarningEdges(unitWarnings.edgeWarnings);
   const fieldOptionsMap = {};
   for (const [key, def] of Object.entries(props.externalFieldDefs)) {
     if (def.options?.length) fieldOptionsMap[key] = def.options;
@@ -460,6 +471,7 @@ function refreshAnalysis(options = {}) {
     setFieldMode,
     openField: openAdapterField,
     addCustomField: addCustomAdapterField,
+    unitWarnings: unitWarnings.directWarnings[ADAPTER_NODE_ID] || {},
   });
 
   const priceFieldOptionsMap = {};
@@ -473,9 +485,14 @@ function refreshAnalysis(options = {}) {
     for (const f of priceNode.data?.fields || []) {
       if (!f.fieldKey) continue;
       priceAnalysis[f.fieldKey] = sinkAnalysis[f.fieldKey] ?? {
-        connected: !!(f.source || (edges.value || []).some(
-          (e) => e.target === ADAPTER_PRICE_NODE_ID && e.targetHandle === `f:${f.fieldKey}`,
-        )),
+        connected: !!(
+          f.source ||
+          (edges.value || []).some(
+            (e) =>
+              e.target === ADAPTER_PRICE_NODE_ID &&
+              e.targetHandle === `f:${f.fieldKey}`,
+          )
+        ),
         importable: false,
       };
     }
@@ -487,10 +504,26 @@ function refreshAnalysis(options = {}) {
       setFieldSource: setPriceFieldSource,
       setFieldMode: setPriceFieldMode,
       openField: openPriceField,
+      unitWarnings: unitWarnings.directWarnings[ADAPTER_PRICE_NODE_ID] || {},
     });
   }
 
   if (updateLanes) applyEdgeLaneTypes(analysisBySink);
+}
+
+function syncUnitWarningEdges(warnings) {
+  let changed = false;
+  const updated = edges.value.map((edge) => {
+    const unitWarning = warnings.get(edge.id) || null;
+    const current = edge.data?.unitWarning || null;
+    if (JSON.stringify(current) === JSON.stringify(unitWarning)) return edge;
+    changed = true;
+    const data = { ...(edge.data || {}) };
+    if (unitWarning) data.unitWarning = unitWarning;
+    else delete data.unitWarning;
+    return { ...edge, data };
+  });
+  if (changed) setEdges(updated);
 }
 
 // Mark edges by lane type: importable (bidirectional) vs export-only (one-way).
@@ -514,7 +547,8 @@ function pruneSourceBoundEdges() {
 }
 
 function applyEdgeLaneTypes(analysisBySink = null) {
-  const sinkAnalysis = analysisBySink ?? analyzeFields(nodes.value, edges.value).analysisBySink;
+  const sinkAnalysis =
+    analysisBySink ?? analyzeFields(nodes.value, edges.value).analysisBySink;
   const importableIds = new Set();
   const exportOnlyIds = new Set();
   const adapterIncoming = edges.value.filter(
@@ -541,13 +575,21 @@ function applyEdgeLaneTypes(analysisBySink = null) {
     }
   }
   const laneType = (e) =>
-    exportOnlyIds.has(e.id) ? "vf-export" : importableIds.has(e.id) ? "vf-import" : "default";
-  const needsUpdate = edges.value.some((e) => (e.type || "default") !== laneType(e));
+    exportOnlyIds.has(e.id)
+      ? "vf-export"
+      : importableIds.has(e.id)
+        ? "vf-import"
+        : "default";
+  const needsUpdate = edges.value.some(
+    (e) => (e.type || "default") !== laneType(e),
+  );
   if (needsUpdate) {
     setEdges(
       edges.value.map((e) => {
         const type = laneType(e);
-        return (e.type || "default") === type ? e : { ...e, type, animated: false };
+        return (e.type || "default") === type
+          ? e
+          : { ...e, type, animated: false };
       }),
     );
   }
@@ -569,7 +611,9 @@ function parseSourceValue(v) {
 function setSinkFieldMode(sinkId, fieldKey, mode) {
   const adapter = findNode(sinkId);
   if (!adapter) return;
-  const current = (adapter.data?.fields || []).find((f) => f.fieldKey === fieldKey);
+  const current = (adapter.data?.fields || []).find(
+    (f) => f.fieldKey === fieldKey,
+  );
   // Required marketplace fields must be sent — omit is not allowed.
   if (mode === "omit" && current?.isRequired) return;
   const fields = (adapter.data?.fields || []).map((f) => {
@@ -607,9 +651,58 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
   if (!adapter) return;
   // "m:<primaryKey>" merges this field into a duplicate: it exports the primary's
   // value under its own key and is skipped on import. Any other selection un-merges.
-  const mergeWith = typeof value === "string" && value.startsWith("m:") ? value.slice(2) : null;
+  const mergeWith =
+    typeof value === "string" && value.startsWith("m:") ? value.slice(2) : null;
   if (mergeWith === fieldKey) return;
   const src = mergeWith ? null : parseSourceValue(value);
+  const currentField = (adapter.data?.fields || []).find(
+    (f) => f.fieldKey === fieldKey,
+  );
+  const sourceList =
+    src?.type === "attribute"
+      ? props.availableSources.categoryAttributes
+      : src?.type === "storeAttribute"
+        ? props.availableSources.storeAttributes
+        : [];
+  const sourceDefinition = sourceList?.find(
+    (item) => Number(item.id) === Number(src?.attributeId),
+  );
+  const sourceUnit = sourceDefinition?.unitCode ?? null;
+  const targetUnit = currentField?.unitCode ?? currentField?.unit ?? null;
+  const normalizedSourceUnit = normalizeUnitCode(sourceUnit);
+  const normalizedTargetUnit = normalizeUnitCode(targetUnit);
+  const conversion =
+    normalizedSourceUnit &&
+    normalizedTargetUnit &&
+    normalizedSourceUnit.toLowerCase() !== normalizedTargetUnit.toLowerCase()
+      ? getUnitConversion(normalizedSourceUnit, normalizedTargetUnit)
+      : null;
+  let conversionNodes = null;
+  if (src && conversion) {
+    const x = adapter.position?.x ?? 700;
+    const y = (adapter.position?.y ?? 0) + 40;
+    const sourceNode = createSourceNode(
+      src.type,
+      { x: x - 520, y },
+      {
+        id: src.attributeId,
+        name: sourceDefinition?.name,
+        valueType:
+          sourceDefinition?.type?.toLowerCase() === "number" ? "number" : "any",
+        unitCode: normalizedSourceUnit,
+      },
+    );
+    const conversionNode = createModifierNode("unitConversion", {
+      x: x - 260,
+      y,
+    });
+    conversionNode.data = {
+      ...conversionNode.data,
+      collapsed: true,
+      params: { fromUnit: normalizedSourceUnit, toUnit: normalizedTargetUnit },
+    };
+    conversionNodes = { sourceNode, conversionNode };
+  }
   const fields = (adapter.data?.fields || []).map((f) => {
     if (f.fieldKey !== fieldKey) return f;
     const nf = { ...f };
@@ -619,7 +712,7 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
       delete nf.source;
     } else {
       delete nf.aliasOf;
-      if (src) nf.source = src;
+      if (src && !conversionNodes) nf.source = src;
       else delete nf.source;
     }
     return nf;
@@ -630,6 +723,25 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
       (e) => e.target === sinkId && e.targetHandle === `f:${fieldKey}`,
     );
     if (dead.length) removeEdges(dead.map((e) => e.id));
+  }
+  if (conversionNodes) {
+    addNodes([conversionNodes.sourceNode, conversionNodes.conversionNode]);
+    addEdges([
+      {
+        id: genId("e"),
+        source: conversionNodes.sourceNode.id,
+        sourceHandle: "out",
+        target: conversionNodes.conversionNode.id,
+        targetHandle: "in",
+      },
+      {
+        id: genId("e"),
+        source: conversionNodes.conversionNode.id,
+        sourceHandle: "out",
+        target: sinkId,
+        targetHandle: `f:${fieldKey}`,
+      },
+    ]);
   }
   dirty.value = true;
   refreshAnalysis();
@@ -863,7 +975,10 @@ function normalizeAiModelOption(m) {
   const id = m?.id ?? m?.Id;
   if (id == null) return null;
   const name = m?.name ?? m?.Name ?? m?.modelId ?? m?.ModelId;
-  return { value: id, label: name || t("marketplace.canvas.aiModelFallback", { id }) };
+  return {
+    value: id,
+    label: name || t("marketplace.canvas.aiModelFallback", { id }),
+  };
 }
 
 const aiModelOptions = computed(() =>
@@ -884,9 +999,17 @@ async function loadPickerModels() {
 }
 
 const templateFieldRefs = computed(() => {
-  const refs = [{ group: "value", label: t("marketplace.canvas.sourceValueLabel"), snippet: "{{value}}" }];
+  const refs = [
+    {
+      group: "value",
+      label: t("marketplace.canvas.sourceValueLabel"),
+      snippet: "{{value}}",
+    },
+  ];
   for (const pf of mergeProductFieldSources(props.availableSources)) {
-    const group = (props.availableSources.stockFields || []).some((f) => f.key === pf.key)
+    const group = (props.availableSources.stockFields || []).some(
+      (f) => f.key === pf.key,
+    )
       ? "stock"
       : (props.availableSources.priceFields || []).some((f) => f.key === pf.key)
         ? "price"
@@ -894,10 +1017,21 @@ const templateFieldRefs = computed(() => {
     refs.push({ group, label: pf.displayName, snippet: `{{${pf.key}}}` });
   }
   for (const ca of props.availableSources.categoryAttributes || [])
-    refs.push({ group: "category", label: ca.name, snippet: `{{attr:${ca.id}}}` });
+    refs.push({
+      group: "category",
+      label: ca.name,
+      snippet: `{{attr:${ca.id}}}`,
+    });
   for (const sa of props.availableSources.storeAttributes || [])
-    refs.push({ group: "store", label: sa.name, snippet: `{{storeAttr:${sa.id}}}` });
-  if (selected.value?.type === "modifier" && selected.value?.data?.modifierType === "llmGenerate") {
+    refs.push({
+      group: "store",
+      label: sa.name,
+      snippet: `{{storeAttr:${sa.id}}}`,
+    });
+  if (
+    selected.value?.type === "modifier" &&
+    selected.value?.data?.modifierType === "llmGenerate"
+  ) {
     for (const pin of selected.value.data.fieldPins || []) {
       if (!pin?.id) continue;
       refs.push({
@@ -949,7 +1083,10 @@ function preloadMapModifierOptions() {
     const cacheKey = `${attr.kind}:${attr.id}`;
     const fromSources = resolveSourceOptionsFromAvailable(attr);
     if (fromSources.length && !attrOptionsCache.value[cacheKey]?.length) {
-      attrOptionsCache.value = { ...attrOptionsCache.value, [cacheKey]: fromSources };
+      attrOptionsCache.value = {
+        ...attrOptionsCache.value,
+        [cacheKey]: fromSources,
+      };
     }
     loadSourceOptions(attr.kind, attr.id);
   }
@@ -994,12 +1131,79 @@ onConnect((conn) => {
     (e) => e.target === next.target && (e.targetHandle || "in") === handle,
   );
   if (dupes.length) removeEdges(dupes.map((e) => e.id));
-  addEdges([{ ...next, id: genId("e") }]);
+  const sink = nodes.value.find((node) => node.id === next.target);
+  const fieldKey = next.targetHandle?.startsWith("f:")
+    ? next.targetHandle.slice(2)
+    : null;
+  const sinkField = fieldKey
+    ? (sink?.data?.fields || []).find((field) => field.fieldKey === fieldKey)
+    : null;
+  let conversionNode = null;
+  if (
+    sinkField &&
+    (sink?.type === "adapterFields" || sink?.type === "adapterPriceFields")
+  ) {
+    const nodesById = new Map(nodes.value.map((node) => [node.id, node]));
+    const incomingByTarget = new Map();
+    for (const edge of edges.value) {
+      const list = incomingByTarget.get(edge.target) || [];
+      list.push(edge);
+      incomingByTarget.set(edge.target, list);
+    }
+    const sourceUnit = resolveTerminalUnit(
+      next.source,
+      nodesById,
+      incomingByTarget,
+      props.availableSources,
+    );
+    const targetUnit = sinkField.unitCode ?? sinkField.unit ?? null;
+    const normalizedSourceUnit = normalizeUnitCode(sourceUnit);
+    const normalizedTargetUnit = normalizeUnitCode(targetUnit);
+    const conversion =
+      normalizedSourceUnit &&
+      normalizedTargetUnit &&
+      normalizedSourceUnit.toLowerCase() !== normalizedTargetUnit.toLowerCase()
+        ? getUnitConversion(normalizedSourceUnit, normalizedTargetUnit)
+        : null;
+    if (conversion) {
+      const position = sink.position || { x: 700, y: 0 };
+      conversionNode = createModifierNode("unitConversion", {
+        x: position.x - 260,
+        y: position.y + 40,
+      });
+      conversionNode.data = {
+        ...conversionNode.data,
+        collapsed: true,
+        params: {
+          fromUnit: normalizedSourceUnit,
+          toUnit: normalizedTargetUnit,
+        },
+      };
+      addNodes([conversionNode]);
+      addEdges([
+        {
+          ...next,
+          id: genId("e"),
+          target: conversionNode.id,
+          targetHandle: "in",
+        },
+        {
+          id: genId("e"),
+          source: conversionNode.id,
+          sourceHandle: "out",
+          target: next.target,
+          targetHandle: next.targetHandle,
+        },
+      ]);
+    }
+  }
+  if (!conversionNode) addEdges([{ ...next, id: genId("e") }]);
 
   // When a "standard value" node connects to an adapter field that has predefined
   // options, auto-populate the node's options and valueType from the field definition.
   if (
-    (next.target === ADAPTER_NODE_ID || next.target === ADAPTER_PRICE_NODE_ID) &&
+    (next.target === ADAPTER_NODE_ID ||
+      next.target === ADAPTER_PRICE_NODE_ID) &&
     next.targetHandle?.startsWith("f:")
   ) {
     const fieldKey = next.targetHandle.slice(2);
@@ -1106,7 +1310,10 @@ onMounted(() => {
   document.addEventListener("pointerdown", onPointerDown, true);
   document.addEventListener("pointermove", onPointerMove, true);
   // Capture + non-passive so we can preventDefault for trackpad horizontal pan.
-  flowWrap.value?.addEventListener("wheel", onWheelGesture, { capture: true, passive: false });
+  flowWrap.value?.addEventListener("wheel", onWheelGesture, {
+    capture: true,
+    passive: false,
+  });
   if (vf.viewport?.value?.viewportInitialized) {
     flowPaneReady.value = true;
   }
@@ -1125,9 +1332,14 @@ onBeforeUnmount(() => {
   window.removeEventListener("beforeunload", onBeforeUnload);
   document.removeEventListener("pointerdown", onPointerDown, true);
   document.removeEventListener("pointermove", onPointerMove, true);
-  flowWrap.value?.removeEventListener("wheel", onWheelGesture, { capture: true });
+  flowWrap.value?.removeEventListener("wheel", onWheelGesture, {
+    capture: true,
+  });
 });
-watch(() => props.mappingId, () => requestLoad());
+watch(
+  () => props.mappingId,
+  () => requestLoad(),
+);
 watch(
   () => props.previewProductId,
   (id) => (id ? schedulePreview() : clearNodePreview()),
@@ -1164,18 +1376,26 @@ watch(
         : { ...n.data },
     }));
     syncAdapterPriceFields(copy, mappings);
-    const next = copy.find((n) => n.id === ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
+    const next =
+      copy.find((n) => n.id === ADAPTER_PRICE_NODE_ID)?.data?.fields || [];
     const enrichedNext = enrichFieldsWithDefs(next, props.priceFieldDefs);
     if (!samePriceFieldSchema(cur, enrichedNext)) {
       const kept = new Set(next.map((f) => f.fieldKey));
-      setEdges(edges.value.filter((e) => {
-        if (e.target !== ADAPTER_PRICE_NODE_ID) return true;
-        const handle = String(e.targetHandle || "");
-        if (!handle.startsWith("f:")) return true;
-        const key = handle.slice(2);
-        if (key !== "discountedPrice" && key !== "sale_price" && key !== "salePrice") return true;
-        return kept.has(key);
-      }));
+      setEdges(
+        edges.value.filter((e) => {
+          if (e.target !== ADAPTER_PRICE_NODE_ID) return true;
+          const handle = String(e.targetHandle || "");
+          if (!handle.startsWith("f:")) return true;
+          const key = handle.slice(2);
+          if (
+            key !== "discountedPrice" &&
+            key !== "sale_price" &&
+            key !== "salePrice"
+          )
+            return true;
+          return kept.has(key);
+        }),
+      );
       updateNodeData(ADAPTER_PRICE_NODE_ID, {
         fields: enrichedNext,
       });
@@ -1211,7 +1431,10 @@ onNodesChange((changes) => {
     schedulePreview();
   }
   // Mark dirty on structural changes or on drag-end (position change, dragging===false).
-  if (!loading.value && (structural || cs.some((c) => c.type === "position" && !c.dragging))) {
+  if (
+    !loading.value &&
+    (structural || cs.some((c) => c.type === "position" && !c.dragging))
+  ) {
     dirty.value = true;
     scheduleHistory();
   }
@@ -1259,7 +1482,8 @@ onEdgeDoubleClick(({ event, edge }) => {
 // its collapsed "pill" form.
 onNodeDoubleClick(({ node }) => {
   if (!node) return;
-  if (node.type === "adapterFields" || node.type === "adapterPriceFields") return;
+  if (node.type === "adapterFields" || node.type === "adapterPriceFields")
+    return;
   if (node.type !== "reroute") {
     // Always toggle against the live store node so inspector edits (staticValue/params)
     // are not clobbered by a stale event snapshot.
@@ -1314,12 +1538,14 @@ async function load(options = {}) {
   loadingPhase.value = "graph";
   await waitForPaint();
   try {
-    const data = await loadStep("load:api:getMappingGraph", () =>
-      store.dispatch("getMappingGraph", {
-        connectionId: props.connectionId,
-        mappingId: props.mappingId,
-      }),
-    stepCtx,
+    const data = await loadStep(
+      "load:api:getMappingGraph",
+      () =>
+        store.dispatch("getMappingGraph", {
+          connectionId: props.connectionId,
+          mappingId: props.mappingId,
+        }),
+      stepCtx,
     );
 
     let graph;
@@ -1336,20 +1562,27 @@ async function load(options = {}) {
       migrated = true;
     }
 
-    await loadStep("load:prepareGraph", async () => {
-      const ensured = ensurePriceNode(
-        graph.nodes,
-        graph.edges,
-        props.priceFieldMappings,
-      );
-      graph.nodes = syncAdapterFields(
-        syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
-        props.fieldMappings,
-      );
-      graph.edges = ensured.edges;
-      graph.nodes = syncAdapterPriceFields(graph.nodes, props.priceFieldMappings);
-      ensureModifierParamDefaults(graph.nodes);
-    }, { ...stepCtx, migrated });
+    await loadStep(
+      "load:prepareGraph",
+      async () => {
+        const ensured = ensurePriceNode(
+          graph.nodes,
+          graph.edges,
+          props.priceFieldMappings,
+        );
+        graph.nodes = syncAdapterFields(
+          syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
+          props.fieldMappings,
+        );
+        graph.edges = ensured.edges;
+        graph.nodes = syncAdapterPriceFields(
+          graph.nodes,
+          props.priceFieldMappings,
+        );
+        ensureModifierParamDefaults(graph.nodes);
+      },
+      { ...stepCtx, migrated },
+    );
 
     const { nodes: safeNodes } = sanitizeGraphNodes(graph.nodes);
 
@@ -1366,60 +1599,91 @@ async function load(options = {}) {
       ? layoutGraph(safeNodes, safeEdges)
       : safeNodes;
 
-    await loadStep("load:setNodes", async () => {
-      setNodes(nodesToSet);
-      await nextTick();
-    }, { ...stepCtx, needsLayout, nodeCount: nodesToSet.length });
+    await loadStep(
+      "load:setNodes",
+      async () => {
+        setNodes(nodesToSet);
+        await nextTick();
+      },
+      { ...stepCtx, needsLayout, nodeCount: nodesToSet.length },
+    );
 
-    await loadStep("load:setEdges", async () => {
-      setEdges(safeEdges);
-      await nextTick();
-    }, { ...stepCtx, edgeCount: safeEdges.length });
+    await loadStep(
+      "load:setEdges",
+      async () => {
+        setEdges(safeEdges);
+        await nextTick();
+      },
+      { ...stepCtx, edgeCount: safeEdges.length },
+    );
 
     if (needsLayout) {
-      await loadStep("load:relayoutMeasured", async () => {
-        const measured = collectMeasuredSizes(nodes.value);
-        if (measured.size > 0) {
-          const obj = toObject();
-          setNodes(layoutGraph(obj.nodes, obj.edges, measured));
-          await nextTick();
-        }
-      }, stepCtx);
+      await loadStep(
+        "load:relayoutMeasured",
+        async () => {
+          const measured = collectMeasuredSizes(nodes.value);
+          if (measured.size > 0) {
+            const obj = toObject();
+            setNodes(layoutGraph(obj.nodes, obj.edges, measured));
+            await nextTick();
+          }
+        },
+        stepCtx,
+      );
     }
 
-    await loadStep("load:finalizeNodes", async () => {
-      const adNode = findNode(ADAPTER_NODE_ID);
-      if (adNode) adNode.deletable = false;
-      const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
-      if (priceNode) priceNode.deletable = false;
-      pruneSourceBoundEdges();
-      await nextTick();
-    }, stepCtx);
+    await loadStep(
+      "load:finalizeNodes",
+      async () => {
+        const adNode = findNode(ADAPTER_NODE_ID);
+        if (adNode) adNode.deletable = false;
+        const priceNode = findNode(ADAPTER_PRICE_NODE_ID);
+        if (priceNode) priceNode.deletable = false;
+        pruneSourceBoundEdges();
+        await nextTick();
+      },
+      stepCtx,
+    );
 
-    await loadStep("load:refreshAnalysis", async () => {
-      applyFieldDefEnrichment();
-      refreshAnalysis({ updateLanes: false });
-      await waitForPaint();
-    }, stepCtx);
+    await loadStep(
+      "load:refreshAnalysis",
+      async () => {
+        applyFieldDefEnrichment();
+        refreshAnalysis({ updateLanes: false });
+        await waitForPaint();
+      },
+      stepCtx,
+    );
 
-    await loadStep("load:applyEdgeLaneTypes", async () => {
-      applyEdgeLaneTypes();
-      await nextTick();
-    }, stepCtx);
+    await loadStep(
+      "load:applyEdgeLaneTypes",
+      async () => {
+        applyEdgeLaneTypes();
+        await nextTick();
+      },
+      stepCtx,
+    );
 
     if (!preserveLayout && flowWrap.value?.clientHeight > 0) {
-      await loadStep("load:fitView", async () => {
-        fitView({ padding: 0.2 });
-        await nextTick();
-      }, stepCtx);
+      await loadStep(
+        "load:fitView",
+        async () => {
+          fitView({ padding: 0.2 });
+          await nextTick();
+        },
+        stepCtx,
+      );
     }
 
     dirty.value = false;
-    await loadStep("load:historySnapshot", async () => {
-      history.value = [makeSnapshot()];
-      histIdx.value = 0;
-    }, stepCtx);
-
+    await loadStep(
+      "load:historySnapshot",
+      async () => {
+        history.value = [makeSnapshot()];
+        histIdx.value = 0;
+      },
+      stepCtx,
+    );
   } catch {
     // loadStep already reported the error
   } finally {
@@ -1546,8 +1810,11 @@ function onKeydown(e) {
   if (e.ctrlKey || e.metaKey) {
     if (e.code === "KeyZ") {
       e.preventDefault();
-      if (e.shiftKey) { if (canRedo.value) restoreAt(histIdx.value + 1); }
-      else            { if (canUndo.value) restoreAt(histIdx.value - 1); }
+      if (e.shiftKey) {
+        if (canRedo.value) restoreAt(histIdx.value + 1);
+      } else {
+        if (canUndo.value) restoreAt(histIdx.value - 1);
+      }
     } else if (e.code === "KeyY") {
       e.preventDefault();
       if (canRedo.value) restoreAt(histIdx.value + 1);
@@ -1575,7 +1842,8 @@ function onKeydown(e) {
     const rect = flowWrap.value?.getBoundingClientRect();
     if (!rect) return;
     const { x, y } = lastMouse.value;
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom)
+      return;
     e.preventDefault();
     const p = toFlow({ x, y });
     const rr = createRerouteNode({ x: p.x - 7, y: p.y - 7 });
@@ -1692,12 +1960,16 @@ function onInspectorUpdate(patch) {
 
 function openAdapterField(fieldKey) {
   selected.value = findNode(ADAPTER_NODE_ID) ?? selected.value;
-  nextTick(() => { focusAdapterField.value = fieldKey; });
+  nextTick(() => {
+    focusAdapterField.value = fieldKey;
+  });
 }
 
 function openPriceField(fieldKey) {
   selected.value = findNode(ADAPTER_PRICE_NODE_ID) ?? selected.value;
-  nextTick(() => { focusAdapterField.value = fieldKey; });
+  nextTick(() => {
+    focusAdapterField.value = fieldKey;
+  });
 }
 function onInspectorDelete() {
   if (!selected.value || selected.value.deletable === false) return;
@@ -1894,7 +2166,6 @@ async function runPreview() {
     return;
   if (loading.value) return;
   await nextTick();
-  const gen = ++previewGeneration;
   const token = ++previewToken;
   previewing.value = true;
   try {
@@ -1948,7 +2219,9 @@ function exportMappingFile() {
     connectionId: props.connectionId,
     graph: buildGraph(),
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -1990,10 +2263,16 @@ async function importMappingFile(event) {
       syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
       props.fieldMappings,
     );
-    importedNodes = syncAdapterPriceFields(importedNodes, props.priceFieldMappings);
+    importedNodes = syncAdapterPriceFields(
+      importedNodes,
+      props.priceFieldMappings,
+    );
     const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
     const importIds = new Set(importSafeNodes.map((n) => n.id));
-    const { edges: importSafeEdges } = sanitizeGraphEdges(ensured.edges, importIds);
+    const { edges: importSafeEdges } = sanitizeGraphEdges(
+      ensured.edges,
+      importIds,
+    );
     setNodes(layoutGraph(importSafeNodes, importSafeEdges));
     setEdges(importSafeEdges);
     await nextTick();
@@ -2029,370 +2308,469 @@ async function importMappingFile(event) {
         class="relative min-w-0 h-full w-full"
         @contextmenu="onContextMenu"
       >
-      <div
-        class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
-      >
-        <ButtonGroup>
-          <Button
-            size="sm"
-            :disabled="saving || errorCount > 0"
-            @click="save"
-          >
-            <Spinner v-if="saving" />
-            <Save v-else class="size-4" />
-            {{ t("marketplace.canvas.save") }}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <Button
-                size="sm"
-                class="px-2"
-                :aria-label="t('marketplace.canvas.actions')"
-              >
-                <ChevronDown class="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" class="w-56">
-              <DropdownMenuItem @select="showAutoArrangeConfirm = true">
-                <LayoutGrid class="size-4" />
-                {{ t("marketplace.fieldMappingPage.autoArrange") }}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                :disabled="syncingFields"
-                @select="syncAdapterFieldSchema"
-              >
-                <Spinner v-if="syncingFields" class="size-4" />
-                <RefreshCw v-else class="size-4" />
-                {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem @select="exportMappingFile">
-                <Download class="size-4" />
-                {{ t("marketplace.fieldMappingPage.export") }}
-              </DropdownMenuItem>
-              <DropdownMenuItem @select="triggerImportFile">
-                <Upload class="size-4" />
-                {{ t("marketplace.fieldMappingPage.import") }}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </ButtonGroup>
-
-        <div class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full">
-          <SearchableSelect
-            class="h-8 w-full bg-card dark:bg-card"
-            content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
-            remote
-            :loading="previewProductsLoading"
-            :options="previewProducts"
-            :model-value="previewProductId ? String(previewProductId) : ''"
-            @update:modelValue="emit('select-preview', $event)"
-            @search="emit('search-preview', $event)"
-            :placeholder="t('marketplace.canvas.previewPlaceholder')"
-          />
-        </div>
-
-        <ButtonGroup v-if="previewProductId">
-          <Button size="sm" as-child>
-            <RouterLink
-              :to="`/products/${previewProductId}/edit`"
-              :title="t('marketplace.canvas.openPreviewProductTitle')"
-            >
-              <ExternalLink class="size-4" />
-              {{ t("marketplace.canvas.openPreviewProduct") }}
-            </RouterLink>
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            @click="emit('clear-preview')"
-            :title="t('marketplace.canvas.resetPreviewTitle')"
-          >
-            <EyeOff class="size-4" />
-            {{ t("marketplace.canvas.resetPreview") }}
-          </Button>
-        </ButtonGroup>
-
-        <span
-          v-if="previewing"
-          class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+        <div
+          class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
         >
-          <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
-        </span>
-        <input
-          ref="importFileInput"
-          type="file"
-          accept="application/json,.json"
-          class="hidden"
-          @change="importMappingFile"
-        />
-        <Badge v-if="errorCount" variant="destructive" class="gap-1">
-          <AlertTriangle class="size-3" /> {{ errorCount }}
-        </Badge>
-      </div>
+          <ButtonGroup>
+            <Button
+              size="sm"
+              :disabled="saving || errorCount > 0"
+              @click="save"
+            >
+              <Spinner v-if="saving" />
+              <Save v-else class="size-4" />
+              {{ t("marketplace.canvas.save") }}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button
+                  size="sm"
+                  class="px-2"
+                  :aria-label="t('marketplace.canvas.actions')"
+                >
+                  <ChevronDown class="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" class="w-56">
+                <DropdownMenuItem @select="showAutoArrangeConfirm = true">
+                  <LayoutGrid class="size-4" />
+                  {{ t("marketplace.fieldMappingPage.autoArrange") }}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  :disabled="syncingFields"
+                  @select="syncAdapterFieldSchema"
+                >
+                  <Spinner v-if="syncingFields" class="size-4" />
+                  <RefreshCw v-else class="size-4" />
+                  {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem @select="exportMappingFile">
+                  <Download class="size-4" />
+                  {{ t("marketplace.fieldMappingPage.export") }}
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="triggerImportFile">
+                  <Upload class="size-4" />
+                  {{ t("marketplace.fieldMappingPage.import") }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </ButtonGroup>
 
-      <div v-if="debugMode" class="vf-debug-panel">
-        <div class="vf-debug-section">
-          <b>{{ t("marketplace.canvas.fieldsAnalysis") }}</b>
           <div
-            v-for="(v, k) in debugInfo.analysis"
-            :key="k"
-            :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
+            class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
           >
-            <span class="badge">{{ v.importable ? "IMPORT" : "EXPORT" }}</span>
-            {{ k }}: connected={{ v.connected }}, rev={{ v.reversible }}<span v-if="v.fanOut" style="color:#f59e0b;margin-left:4px">⚠ fan-out</span>
+            <SearchableSelect
+              class="h-8 w-full bg-card dark:bg-card"
+              content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
+              remote
+              :loading="previewProductsLoading"
+              :options="previewProducts"
+              :model-value="previewProductId ? String(previewProductId) : ''"
+              @update:modelValue="emit('select-preview', $event)"
+              @search="emit('search-preview', $event)"
+              :placeholder="t('marketplace.canvas.previewPlaceholder')"
+            />
           </div>
-          <div v-if="!Object.keys(debugInfo.analysis).length" class="text-xs opacity-50">{{ t("marketplace.canvas.noFields") }}</div>
-        </div>
-        <div class="vf-debug-section">
-          <b>{{ t("marketplace.canvas.edges") }} ({{ debugInfo.edges.length }})</b>
-          <div
-            v-for="e in debugInfo.edges"
-            :key="e.id"
-            :class="['vf-debug-row', e.type === 'vf-import' ? 'ok' : e.type === 'vf-export' ? 'no' : '']"
-          >
-            <span class="badge">{{ e.type }}</span>
-            <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
-          </div>
-        </div>
-        <div class="vf-debug-hint">{{ t("marketplace.canvas.hideDebug") }}</div>
-      </div>
 
-      <VueFlow
-        :min-zoom="0.2"
-        :max-zoom="1.75"
-        :delete-key-code="['Delete', 'Backspace']"
-        :selection-key-code="true"
-        :pan-on-drag="[1, 2]"
-        :only-render-visible-elements="false"
-        :elevate-edges-on-select="true"
-        :is-valid-connection="isValidConnection"
-        :snap-to-grid="snapToGrid"
-        :snap-grid="SNAP_GRID"
-        class="vf-canvas"
-      >
-        <Background
-          :variant="snapToGrid ? 'lines' : 'dots'"
-          :gap="snapToGrid ? SNAP_GRID[0] : 16"
-          :size="snapToGrid ? 1 : 1"
-          :line-width="1"
-          color="var(--vf-grid-color)"
-        />
-        <HelperLinesOverlay
-          v-if="showGuidelines"
-          :horizontal="helperLineHorizontal"
-          :vertical="helperLineVertical"
-        />
-        <MiniMap pannable zoomable node-color="var(--muted-foreground)" mask-color="var(--muted)" />
-        <TooltipProvider :delay-duration="300">
-          <Controls position="bottom-left" :show-interactive="false">
-            <template #control-zoom-in>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button
-                    type="button"
-                    class="vue-flow__controls-button vue-flow__controls-zoomin"
-                    @click="zoomIn()"
-                  >
-                    <Plus class="size-3.5" aria-hidden="true" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {{ t("marketplace.canvas.zoomIn") }}
-                </TooltipContent>
-              </Tooltip>
-            </template>
-            <template #control-zoom-out>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button
-                    type="button"
-                    class="vue-flow__controls-button vue-flow__controls-zoomout"
-                    @click="zoomOut()"
-                  >
-                    <Minus class="size-3.5" aria-hidden="true" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {{ t("marketplace.canvas.zoomOut") }}
-                </TooltipContent>
-              </Tooltip>
-            </template>
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <button
-                  class="vue-flow__controls-button"
-                  type="button"
-                  :aria-pressed="snapToGrid"
-                  :style="snapToGrid ? {} : { opacity: 0.4 }"
-                  @click="snapToGrid = !snapToGrid"
-                >
-                  <!-- Snap-to-grid: cell grid + block on an intersection -->
-                  <svg class="vf-ctrl-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path class="vf-ctrl-icon__soft" d="M4 9h16M4 15h16M9 4v16M15 4v16" />
-                    <rect class="vf-ctrl-icon__solid" x="9" y="9" width="6" height="6" rx="1" />
-                  </svg>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {{ snapToGrid ? t("marketplace.canvas.disableSnapToGrid") : t("marketplace.canvas.enableSnapToGrid") }}
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <button
-                  class="vue-flow__controls-button"
-                  type="button"
-                  :aria-pressed="showGuidelines"
-                  :style="showGuidelines ? {} : { opacity: 0.4 }"
-                  @click="showGuidelines = !showGuidelines"
-                >
-                  <!-- Alignment guides: two blocks + shared center guide -->
-                  <svg class="vf-ctrl-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path class="vf-ctrl-icon__soft vf-ctrl-icon__dash" d="M12 3v18" />
-                    <rect x="4" y="6" width="7" height="5" rx="1" />
-                    <rect x="13" y="13" width="7" height="5" rx="1" />
-                  </svg>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {{ showGuidelines ? t("marketplace.canvas.disableGuidelines") : t("marketplace.canvas.enableGuidelines") }}
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <button
-                  class="vue-flow__controls-button"
-                  type="button"
-                  :style="animateWires ? {} : { opacity: 0.4 }"
-                  @click="animateWires = !animateWires"
-                >
-                  <Activity class="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {{ animateWires ? t("marketplace.canvas.disableWireAnimation") : t("marketplace.canvas.enableWireAnimation") }}
-              </TooltipContent>
-            </Tooltip>
-            <template #control-fit-view>
+          <ButtonGroup v-if="previewProductId">
+            <Button size="sm" as-child>
+              <RouterLink
+                :to="`/products/${previewProductId}/edit`"
+                :title="t('marketplace.canvas.openPreviewProductTitle')"
+              >
+                <ExternalLink class="size-4" />
+                {{ t("marketplace.canvas.openPreviewProduct") }}
+              </RouterLink>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              @click="emit('clear-preview')"
+              :title="t('marketplace.canvas.resetPreviewTitle')"
+            >
+              <EyeOff class="size-4" />
+              {{ t("marketplace.canvas.resetPreview") }}
+            </Button>
+          </ButtonGroup>
+
+          <span
+            v-if="previewing"
+            class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+          >
+            <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
+          </span>
+          <input
+            ref="importFileInput"
+            type="file"
+            accept="application/json,.json"
+            class="hidden"
+            @change="importMappingFile"
+          />
+          <Badge v-if="errorCount" variant="destructive" class="gap-1">
+            <AlertTriangle class="size-3" /> {{ errorCount }}
+          </Badge>
+        </div>
+
+        <div v-if="debugMode" class="vf-debug-panel">
+          <div class="vf-debug-section">
+            <b>{{ t("marketplace.canvas.fieldsAnalysis") }}</b>
+            <div
+              v-for="(v, k) in debugInfo.analysis"
+              :key="k"
+              :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
+            >
+              <span class="badge">{{
+                v.importable ? "IMPORT" : "EXPORT"
+              }}</span>
+              {{ k }}: connected={{ v.connected }}, rev={{ v.reversible
+              }}<span v-if="v.fanOut" style="color: #f59e0b; margin-left: 4px"
+                >⚠ fan-out</span
+              >
+            </div>
+            <div
+              v-if="!Object.keys(debugInfo.analysis).length"
+              class="text-xs opacity-50"
+            >
+              {{ t("marketplace.canvas.noFields") }}
+            </div>
+          </div>
+          <div class="vf-debug-section">
+            <b
+              >{{ t("marketplace.canvas.edges") }} ({{
+                debugInfo.edges.length
+              }})</b
+            >
+            <div
+              v-for="e in debugInfo.edges"
+              :key="e.id"
+              :class="[
+                'vf-debug-row',
+                e.type === 'vf-import'
+                  ? 'ok'
+                  : e.type === 'vf-export'
+                    ? 'no'
+                    : '',
+              ]"
+            >
+              <span class="badge">{{ e.type }}</span>
+              <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
+            </div>
+          </div>
+          <div class="vf-debug-hint">
+            {{ t("marketplace.canvas.hideDebug") }}
+          </div>
+        </div>
+
+        <VueFlow
+          :min-zoom="0.2"
+          :max-zoom="1.75"
+          :delete-key-code="['Delete', 'Backspace']"
+          :selection-key-code="true"
+          :pan-on-drag="[1, 2]"
+          :only-render-visible-elements="false"
+          :elevate-edges-on-select="true"
+          :is-valid-connection="isValidConnection"
+          :snap-to-grid="snapToGrid"
+          :snap-grid="SNAP_GRID"
+          class="vf-canvas"
+        >
+          <Background
+            :variant="snapToGrid ? 'lines' : 'dots'"
+            :gap="snapToGrid ? SNAP_GRID[0] : 16"
+            :size="snapToGrid ? 1 : 1"
+            :line-width="1"
+            color="var(--vf-grid-color)"
+          />
+          <HelperLinesOverlay
+            v-if="showGuidelines"
+            :horizontal="helperLineHorizontal"
+            :vertical="helperLineVertical"
+          />
+          <MiniMap
+            pannable
+            zoomable
+            node-color="var(--muted-foreground)"
+            mask-color="var(--muted)"
+          />
+          <TooltipProvider :delay-duration="300">
+            <Controls position="bottom-left" :show-interactive="false">
+              <template #control-zoom-in>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button
+                      type="button"
+                      class="vue-flow__controls-button vue-flow__controls-zoomin"
+                      @click="zoomIn()"
+                    >
+                      <Plus class="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {{ t("marketplace.canvas.zoomIn") }}
+                  </TooltipContent>
+                </Tooltip>
+              </template>
+              <template #control-zoom-out>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button
+                      type="button"
+                      class="vue-flow__controls-button vue-flow__controls-zoomout"
+                      @click="zoomOut()"
+                    >
+                      <Minus class="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {{ t("marketplace.canvas.zoomOut") }}
+                  </TooltipContent>
+                </Tooltip>
+              </template>
               <Tooltip>
                 <TooltipTrigger as-child>
                   <button
                     class="vue-flow__controls-button"
                     type="button"
-                    @click="toggleMaximize"
+                    :aria-pressed="snapToGrid"
+                    :style="snapToGrid ? {} : { opacity: 0.4 }"
+                    @click="snapToGrid = !snapToGrid"
                   >
-                    <svg v-if="maximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
-                      <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
-                      <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
-                      <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
-                    </svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
-                      <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
-                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
-                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                    <!-- Snap-to-grid: cell grid + block on an intersection -->
+                    <svg
+                      class="vf-ctrl-icon"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        class="vf-ctrl-icon__soft"
+                        d="M4 9h16M4 15h16M9 4v16M15 4v16"
+                      />
+                      <rect
+                        class="vf-ctrl-icon__solid"
+                        x="9"
+                        y="9"
+                        width="6"
+                        height="6"
+                        rx="1"
+                      />
                     </svg>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  {{ maximized ? t("marketplace.canvas.collapse") : t("marketplace.canvas.fullscreen") }}
+                  {{
+                    snapToGrid
+                      ? t("marketplace.canvas.disableSnapToGrid")
+                      : t("marketplace.canvas.enableSnapToGrid")
+                  }}
                 </TooltipContent>
               </Tooltip>
-            </template>
-          </Controls>
-        </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    class="vue-flow__controls-button"
+                    type="button"
+                    :aria-pressed="showGuidelines"
+                    :style="showGuidelines ? {} : { opacity: 0.4 }"
+                    @click="showGuidelines = !showGuidelines"
+                  >
+                    <!-- Alignment guides: two blocks + shared center guide -->
+                    <svg
+                      class="vf-ctrl-icon"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        class="vf-ctrl-icon__soft vf-ctrl-icon__dash"
+                        d="M12 3v18"
+                      />
+                      <rect x="4" y="6" width="7" height="5" rx="1" />
+                      <rect x="13" y="13" width="7" height="5" rx="1" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {{
+                    showGuidelines
+                      ? t("marketplace.canvas.disableGuidelines")
+                      : t("marketplace.canvas.enableGuidelines")
+                  }}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    class="vue-flow__controls-button"
+                    type="button"
+                    :style="animateWires ? {} : { opacity: 0.4 }"
+                    @click="animateWires = !animateWires"
+                  >
+                    <Activity class="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {{
+                    animateWires
+                      ? t("marketplace.canvas.disableWireAnimation")
+                      : t("marketplace.canvas.enableWireAnimation")
+                  }}
+                </TooltipContent>
+              </Tooltip>
+              <template #control-fit-view>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button
+                      class="vue-flow__controls-button"
+                      type="button"
+                      @click="toggleMaximize"
+                    >
+                      <svg
+                        v-if="maximized"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                        <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+                        <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+                        <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                      </svg>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {{
+                      maximized
+                        ? t("marketplace.canvas.collapse")
+                        : t("marketplace.canvas.fullscreen")
+                    }}
+                  </TooltipContent>
+                </Tooltip>
+              </template>
+            </Controls>
+          </TooltipProvider>
 
-        <template #edge-vf-import="p"><ImportableEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
-        <template #edge-vf-export="p"><ExportOnlyEdge v-bind="p" :debug="debugMode" :animate="animateWires" /></template>
+          <template #edge-vf-import="p"
+            ><ImportableEdge
+              v-bind="p"
+              :debug="debugMode"
+              :animate="animateWires"
+          /></template>
+          <template #edge-vf-export="p"
+            ><ExportOnlyEdge
+              v-bind="p"
+              :debug="debugMode"
+              :animate="animateWires"
+          /></template>
 
-        <template #node-attribute="p"><SourceNode v-bind="p" /></template>
-        <template #node-storeAttribute="p"><SourceNode v-bind="p" /></template>
-        <template #node-productField="p"><SourceNode v-bind="p" /></template>
-        <template #node-static="p"><SourceNode v-bind="p" /></template>
-        <template #node-groupName="p"><SourceNode v-bind="p" /></template>
-        <template #node-storeFileUrl="p"><SourceNode v-bind="p" /></template>
-        <template #node-storeFileContent="p"
-          ><SourceNode v-bind="p"
-        /></template>
-        <template #node-productFileByName="p"
-          ><SourceNode v-bind="p"
-        /></template>
-        <template #node-productFileContentByName="p"
-          ><SourceNode v-bind="p"
-        /></template>
-        <template #node-productFilesByExtension="p"
-          ><SourceNode v-bind="p"
-        /></template>
-        <template #node-modifier="p"><ModifierNode v-bind="p" /></template>
-        <template #node-formatString="p"><OpNode v-bind="p" /></template>
-        <template #node-join="p"><OpNode v-bind="p" /></template>
-        <template #node-makeArray="p"><OpNode v-bind="p" /></template>
-        <template #node-arrayAppend="p"><OpNode v-bind="p" /></template>
-        <template #node-splitToArray="p"><OpNode v-bind="p" /></template>
-        <template #node-arrayIndex="p"><OpNode v-bind="p" /></template>
-        <template #node-arrayLength="p"><OpNode v-bind="p" /></template>
-        <template #node-ifElse="p"><OpNode v-bind="p" /></template>
-        <template #node-not="p"><OpNode v-bind="p" /></template>
-        <template #node-and="p"><OpNode v-bind="p" /></template>
-        <template #node-or="p"><OpNode v-bind="p" /></template>
-        <template #node-equals="p"><OpNode v-bind="p" /></template>
-        <template #node-notEquals="p"><OpNode v-bind="p" /></template>
-        <template #node-greaterThan="p"><OpNode v-bind="p" /></template>
-        <template #node-lessThan="p"><OpNode v-bind="p" /></template>
-        <template #node-contains="p"><OpNode v-bind="p" /></template>
-        <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
-        <template #node-isValid="p"><OpNode v-bind="p" /></template>
-        <template #node-adapterFields="p"
-          ><AdapterFieldsNode v-bind="p"
-        /></template>
-        <template #node-adapterPriceFields="p"
-          ><AdapterPriceFieldsNode v-bind="p"
-        /></template>
-        <template #node-reroute="p"><RerouteNode v-bind="p" /></template>
-      </VueFlow>
+          <template #node-attribute="p"><SourceNode v-bind="p" /></template>
+          <template #node-storeAttribute="p"
+            ><SourceNode v-bind="p"
+          /></template>
+          <template #node-productField="p"><SourceNode v-bind="p" /></template>
+          <template #node-static="p"><SourceNode v-bind="p" /></template>
+          <template #node-groupName="p"><SourceNode v-bind="p" /></template>
+          <template #node-storeFileUrl="p"><SourceNode v-bind="p" /></template>
+          <template #node-storeFileContent="p"
+            ><SourceNode v-bind="p"
+          /></template>
+          <template #node-productFileByName="p"
+            ><SourceNode v-bind="p"
+          /></template>
+          <template #node-productFileContentByName="p"
+            ><SourceNode v-bind="p"
+          /></template>
+          <template #node-productFilesByExtension="p"
+            ><SourceNode v-bind="p"
+          /></template>
+          <template #node-modifier="p"><ModifierNode v-bind="p" /></template>
+          <template #node-formatString="p"><OpNode v-bind="p" /></template>
+          <template #node-join="p"><OpNode v-bind="p" /></template>
+          <template #node-makeArray="p"><OpNode v-bind="p" /></template>
+          <template #node-arrayAppend="p"><OpNode v-bind="p" /></template>
+          <template #node-splitToArray="p"><OpNode v-bind="p" /></template>
+          <template #node-arrayIndex="p"><OpNode v-bind="p" /></template>
+          <template #node-arrayLength="p"><OpNode v-bind="p" /></template>
+          <template #node-ifElse="p"><OpNode v-bind="p" /></template>
+          <template #node-not="p"><OpNode v-bind="p" /></template>
+          <template #node-and="p"><OpNode v-bind="p" /></template>
+          <template #node-or="p"><OpNode v-bind="p" /></template>
+          <template #node-equals="p"><OpNode v-bind="p" /></template>
+          <template #node-notEquals="p"><OpNode v-bind="p" /></template>
+          <template #node-greaterThan="p"><OpNode v-bind="p" /></template>
+          <template #node-lessThan="p"><OpNode v-bind="p" /></template>
+          <template #node-contains="p"><OpNode v-bind="p" /></template>
+          <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
+          <template #node-isValid="p"><OpNode v-bind="p" /></template>
+          <template #node-adapterFields="p"
+            ><AdapterFieldsNode v-bind="p"
+          /></template>
+          <template #node-adapterPriceFields="p"
+            ><AdapterPriceFieldsNode v-bind="p"
+          /></template>
+          <template #node-reroute="p"><RerouteNode v-bind="p" /></template>
+        </VueFlow>
 
-      <!-- context menu + click-away catcher -->
-      <div
-        v-if="menu.open"
-        class="absolute inset-0 z-20"
-        @click="closeMenu"
-        @contextmenu.prevent="closeMenu"
-      />
-      <div
-        v-if="menu.open"
-        class="absolute z-30"
-        :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
-      >
-        <NodeContextMenu
-          :available-sources="availableSources"
-          :filter-type="menu.connectType"
-          :connect-dir="menu.connectDir"
-          @add="onMenuAdd"
-          @close="closeMenu"
+        <!-- context menu + click-away catcher -->
+        <div
+          v-if="menu.open"
+          class="absolute inset-0 z-20"
+          @click="closeMenu"
+          @contextmenu.prevent="closeMenu"
         />
-      </div>
-
-      <div
-        v-if="loading"
-        class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/60"
-        aria-busy="true"
-      >
-        <Spinner size="xl" class="text-muted-foreground" />
-        <p
-          class="text-sm text-muted-foreground text-center max-w-sm"
-          role="status"
-          aria-live="polite"
+        <div
+          v-if="menu.open"
+          class="absolute z-30"
+          :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
         >
-          {{ loadingStatusText }}
-        </p>
-      </div>
+          <NodeContextMenu
+            :available-sources="availableSources"
+            :filter-type="menu.connectType"
+            :connect-dir="menu.connectDir"
+            @add="onMenuAdd"
+            @close="closeMenu"
+          />
+        </div>
+
+        <div
+          v-if="loading"
+          class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/60"
+          aria-busy="true"
+        >
+          <Spinner size="xl" class="text-muted-foreground" />
+          <p
+            class="text-sm text-muted-foreground text-center max-w-sm"
+            role="status"
+            aria-live="polite"
+          >
+            {{ loadingStatusText }}
+          </p>
+        </div>
       </div>
     </SplitterPanel>
 
     <template v-if="selected">
-      <SplitterResizeHandle class="w-1 bg-border hover:bg-primary/30 transition-colors cursor-col-resize" />
+      <SplitterResizeHandle
+        class="w-1 bg-border hover:bg-primary/30 transition-colors cursor-col-resize"
+      />
       <SplitterPanel :default-size="25" :min-size="15" :max-size="50">
         <NodeInspector
           :node="selected"
@@ -2419,7 +2797,9 @@ async function importMappingFile(event) {
   >
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>{{ t("marketplace.fieldMappingPage.rearrangeBlocksTitle") }}</AlertDialogTitle>
+        <AlertDialogTitle>{{
+          t("marketplace.fieldMappingPage.rearrangeBlocksTitle")
+        }}</AlertDialogTitle>
         <AlertDialogDescription>
           {{ t("marketplace.fieldMappingPage.rearrangeBlocksDescription") }}
         </AlertDialogDescription>
@@ -2770,8 +3150,14 @@ async function importMappingFile(event) {
   background: #374151;
   color: #9ca3af;
 }
-.vf-debug-row.ok .badge { background: #14532d; color: #4ade80; }
-.vf-debug-row.no .badge { background: #7c2d12; color: #fb923c; }
+.vf-debug-row.ok .badge {
+  background: #14532d;
+  color: #4ade80;
+}
+.vf-debug-row.no .badge {
+  background: #7c2d12;
+  color: #fb923c;
+}
 .vf-debug-hint {
   font-size: 9px;
   color: #6b7280;
@@ -2834,11 +3220,11 @@ async function importMappingFile(event) {
   opacity: 1;
 }
 /* Bottom two buttons: larger icons */
-.vf-canvas .vue-flow__controls-button:nth-last-child(-n+2) {
+.vf-canvas .vue-flow__controls-button:nth-last-child(-n + 2) {
   width: 30px;
   height: 32px;
 }
-.vf-canvas .vue-flow__controls-button:nth-last-child(-n+2) svg {
+.vf-canvas .vue-flow__controls-button:nth-last-child(-n + 2) svg {
   width: 16px;
   max-width: 16px;
   height: 16px;

@@ -24,8 +24,10 @@ public static class PlatformRequestPolicy
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
           GET /products/{id}/files  PUT /products/{id}/files is multipart (Agent HTTP, not JSON)
           GET/POST /categories  GET/PATCH /categories/{id}
-          GET/POST /categories/{id}/attributes  PATCH /categories/{id}/attributes/{attributeId}
-          GET/POST/PATCH /store-attributes  GET/POST /productgroups
+          GET/POST /categories/{id}/attributes  GET /categories/{id}/attributes/summary
+          PATCH /categories/{id}/attributes/{attributeId}
+          GET/POST /store-attributes  GET /store-attributes/summary
+          GET/PATCH/DELETE /store-attributes/{attributeId}  GET/POST /productgroups
         PATCH /products/{id} attributeValues replaces the list (same as the product form). GET first.
 
         Orders: GET /marketplace/orders?tab=  GET /marketplace/connections/{id}/orders

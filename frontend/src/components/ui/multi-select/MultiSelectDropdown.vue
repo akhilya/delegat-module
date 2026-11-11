@@ -1,5 +1,12 @@
 <script setup>
-import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import { ChevronDown, X, Search, Plus } from "lucide-vue-next";
 import {
   Popover,
@@ -65,7 +72,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "open"]);
 
 const open = ref(false);
 const searchQuery = ref("");
@@ -73,6 +80,7 @@ const searchInputRef = ref(null);
 
 // Clear search when dropdown closes
 watch(open, (isOpen) => {
+  if (isOpen) emit("open");
   if (!isOpen) {
     searchQuery.value = "";
   } else if (isLargeList.value || props.allowCreate) {
@@ -83,7 +91,9 @@ watch(open, (isOpen) => {
 });
 
 // Check if this is a large list that needs special handling
-const isLargeList = computed(() => props.options.length > props.maxDisplayOptions);
+const isLargeList = computed(
+  () => props.options.length > props.maxDisplayOptions,
+);
 
 const showSearch = computed(
   () => props.allowCreate || props.options.length > props.searchThreshold,
@@ -94,9 +104,7 @@ const filteredOptions = computed(() => {
     return props.options;
   }
   const query = searchQuery.value.toLowerCase();
-  return props.options.filter(option =>
-    option.toLowerCase().includes(query)
-  );
+  return props.options.filter((option) => option.toLowerCase().includes(query));
 });
 
 // Limit displayed options for performance
@@ -106,8 +114,8 @@ const displayedOptions = computed(() => {
   // If large list and no search query, show selected options first, then others
   if (isLargeList.value && !searchQuery.value) {
     // Selected options should always be visible
-    const selected = filtered.filter(o => props.modelValue.includes(o));
-    const unselected = filtered.filter(o => !props.modelValue.includes(o));
+    const selected = filtered.filter((o) => props.modelValue.includes(o));
+    const unselected = filtered.filter((o) => !props.modelValue.includes(o));
 
     // Show all selected + remaining up to limit
     const remaining = props.maxDisplayOptions - selected.length;
@@ -149,7 +157,9 @@ const canAddCustom = computed(() => {
   if (props.modelValue.some((value) => String(value).toLowerCase() === lower)) {
     return false;
   }
-  return !props.options.some((option) => String(option).toLowerCase() === lower);
+  return !props.options.some(
+    (option) => String(option).toLowerCase() === lower,
+  );
 });
 
 const extraSelected = computed(() =>
@@ -194,11 +204,7 @@ function scheduleMeasure() {
   });
 }
 
-watch(
-  () => props.modelValue,
-  scheduleMeasure,
-  { deep: true },
-);
+watch(() => props.modelValue, scheduleMeasure, { deep: true });
 
 onMounted(() => {
   pillsObserver = new ResizeObserver(scheduleMeasure);
@@ -237,162 +243,220 @@ const clearAll = () => {
 
 <template>
   <div class="w-full min-w-0 max-w-full overflow-hidden">
-  <Popover v-model:open="open" class="block w-full min-w-0">
-    <PopoverTrigger as-child>
-      <button
-        type="button"
-        :disabled="disabled"
-        :aria-invalid="invalid || undefined"
-        :class="cn(
-          'border-input data-[placeholder]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-control border bg-transparent dark:bg-input/30 px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 h-9 text-left',
-          'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
-          selectedCount === 0 && 'text-muted-foreground',
-          props.class
-        )"
-        :title="selectedCount > 0 ? modelValue.join(', ') : undefined"
+    <Popover v-model:open="open" class="block w-full min-w-0">
+      <PopoverTrigger as-child>
+        <button
+          type="button"
+          :disabled="disabled"
+          :aria-invalid="invalid || undefined"
+          :class="
+            cn(
+              'border-input data-[placeholder]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-control border bg-transparent dark:bg-input/30 px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 h-9 text-left',
+              'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
+              selectedCount === 0 && 'text-muted-foreground',
+              props.class,
+            )
+          "
+          :title="selectedCount > 0 ? modelValue.join(', ') : undefined"
+        >
+          <span
+            ref="viewportRef"
+            class="relative min-h-5 min-w-0 flex-1 overflow-hidden"
+          >
+            <span
+              ref="measureRef"
+              class="invisible pointer-events-none absolute inset-y-0 left-0 flex w-max items-center gap-1 whitespace-nowrap"
+              aria-hidden="true"
+            >
+              <Badge
+                v-for="(value, index) in modelValue"
+                :key="'measure-' + index + '-' + value"
+                as="span"
+                variant="secondary"
+                :class="PILL_CLASS"
+                >{{ value }}</Badge
+              >
+            </span>
+            <span
+              v-if="selectedCount > 0 && pillsFit"
+              class="flex h-5 items-center gap-1"
+            >
+              <Badge
+                v-for="(value, index) in modelValue"
+                :key="'pill-' + index + '-' + value"
+                as="span"
+                variant="secondary"
+                :class="PILL_CLASS"
+                >{{ value }}</Badge
+              >
+            </span>
+            <span v-else class="block truncate">{{ displayText }}</span>
+          </span>
+          <div class="flex shrink-0 items-center gap-1">
+            <X
+              v-if="selectedCount > 0 && !disabled"
+              class="size-4 opacity-50 hover:opacity-100 cursor-pointer"
+              @click.stop="clearAll"
+            />
+            <ChevronDown class="size-4 shrink-0 opacity-50" />
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        :collision-padding="8"
+        class="w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col"
       >
-        <span ref="viewportRef" class="relative min-h-5 min-w-0 flex-1 overflow-hidden">
-          <span
-            ref="measureRef"
-            class="invisible pointer-events-none absolute inset-y-0 left-0 flex w-max items-center gap-1 whitespace-nowrap"
-            aria-hidden="true"
-          >
-            <Badge
-              v-for="(value, index) in modelValue"
-              :key="'measure-' + index + '-' + value"
-              as="span"
-              variant="secondary"
-              :class="PILL_CLASS"
-            >{{ value }}</Badge>
-          </span>
-          <span
-            v-if="selectedCount > 0 && pillsFit"
-            class="flex h-5 items-center gap-1"
-          >
-            <Badge
-              v-for="(value, index) in modelValue"
-              :key="'pill-' + index + '-' + value"
-              as="span"
-              variant="secondary"
-              :class="PILL_CLASS"
-            >{{ value }}</Badge>
-          </span>
-          <span
-            v-else
-            class="block truncate"
-          >{{ displayText }}</span>
-        </span>
-        <div class="flex shrink-0 items-center gap-1">
-          <X
-            v-if="selectedCount > 0 && !disabled"
-            class="size-4 opacity-50 hover:opacity-100 cursor-pointer"
-            @click.stop="clearAll"
-          />
-          <ChevronDown class="size-4 shrink-0 opacity-50" />
-        </div>
-      </button>
-    </PopoverTrigger>
-    <PopoverContent
-      align="start"
-      :collision-padding="8"
-      class="w-[min(var(--reka-popover-trigger-width),24rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0 max-h-72 overflow-hidden flex flex-col"
-    >
-      <!-- Search input (only shown if many options) -->
-      <div v-if="showSearch" class="p-2 border-b">
-        <div class="relative">
-          <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref="searchInputRef"
-            v-model="searchQuery"
-            type="search"
-            :placeholder="isLargeList ? t('components.multiSelectDropdown.searchPlaceholderLarge') : t('components.multiSelectDropdown.searchPlaceholder')"
-            class="h-8 pl-8"
-            @click.stop
-            @keydown.enter.prevent.stop="addCustom"
-          />
-        </div>
-        <!-- Info for large lists without search -->
-        <div v-if="isLargeList && !searchQuery" class="mt-1.5 text-xs text-muted-foreground">
-          {{ t('components.multiSelectDropdown.largeListHint', { count: options.length.toLocaleString() }) }}
-        </div>
-      </div>
-
-      <!-- Options list -->
-      <div class="overflow-auto flex-1">
-        <div v-if="options.length === 0 && extraSelected.length === 0 && !canAddCustom" class="p-3 text-sm text-muted-foreground text-center">
-          {{ allowCreate ? t('components.multiSelectDropdown.typeToAdd') : t('components.multiSelectDropdown.noOptions') }}
-        </div>
-        <div v-else-if="filteredOptions.length === 0 && extraSelected.length === 0 && !canAddCustom" class="p-3 text-sm text-muted-foreground text-center">
-          {{ t('components.multiSelectDropdown.nothingFound') }}
-        </div>
-        <div v-else class="p-1">
-          <button
-            v-if="canAddCustom"
-            type="button"
-            class="w-full text-left"
-            :class="MENU_ITEM"
-            @click="addCustom"
-          >
-            <Plus class="size-4 shrink-0" />
-            <span class="text-sm flex-1 truncate">{{
-              t("components.multiSelectDropdown.addCustom", { value: trimmedQuery })
-            }}</span>
-          </button>
-          <div
-            v-for="option in extraSelected"
-            :key="`custom-${option}`"
-            role="option"
-            :aria-selected="true"
-            :class="MENU_ITEM"
-            @click="toggleOption(option)"
-          >
-            <Checkbox
-              :model-value="true"
-              class="pointer-events-none"
-              tabindex="-1"
+        <!-- Search input (only shown if many options) -->
+        <div v-if="showSearch" class="p-2 border-b">
+          <div class="relative">
+            <Search
+              class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             />
-            <span class="text-sm flex-1 truncate" :title="option">{{ option }}</span>
-          </div>
-          <div
-            v-for="option in displayedOptions"
-            :key="option"
-            role="option"
-            :aria-selected="isSelected(option)"
-            :aria-disabled="atLimit && !isSelected(option) || undefined"
-            :class="[
-              MENU_ITEM,
-              atLimit && !isSelected(option)
-                ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
-                : '',
-            ]"
-            @click="toggleOption(option)"
-          >
-            <Checkbox
-              :model-value="isSelected(option)"
-              class="pointer-events-none"
-              tabindex="-1"
+            <Input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="search"
+              :placeholder="
+                isLargeList
+                  ? t('components.multiSelectDropdown.searchPlaceholderLarge')
+                  : t('components.multiSelectDropdown.searchPlaceholder')
+              "
+              class="h-8 pl-8"
+              @click.stop
+              @keydown.enter.prevent.stop="addCustom"
             />
-            <span class="text-sm flex-1 truncate" :title="option">{{ option }}</span>
           </div>
-
-          <!-- Hint when there are more options -->
-          <div v-if="hasMoreOptions" class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1">
-            <template v-if="searchQuery">
-              {{ t('components.multiSelectDropdown.moreResultsHint', { shown: displayedOptions.length, total: filteredOptions.length }) }}
-            </template>
-            <template v-else>
-              {{ t('components.multiSelectDropdown.remainingOptionsHint', { count: remainingCount.toLocaleString() }) }}
-            </template>
-          </div>
+          <!-- Info for large lists without search -->
           <div
-            v-if="maxCap"
-            class="px-2 py-1.5 text-xs text-muted-foreground text-center border-t"
+            v-if="isLargeList && !searchQuery"
+            class="mt-1.5 text-xs text-muted-foreground"
           >
-            {{ t("components.multiSelectDropdown.maxSelections", { count: selectedCount, max: maxCap }) }}
+            {{
+              t("components.multiSelectDropdown.largeListHint", {
+                count: options.length.toLocaleString(),
+              })
+            }}
           </div>
         </div>
-      </div>
-    </PopoverContent>
-  </Popover>
+
+        <!-- Options list -->
+        <div class="overflow-auto flex-1">
+          <div
+            v-if="
+              options.length === 0 &&
+              extraSelected.length === 0 &&
+              !canAddCustom
+            "
+            class="p-3 text-sm text-muted-foreground text-center"
+          >
+            {{
+              allowCreate
+                ? t("components.multiSelectDropdown.typeToAdd")
+                : t("components.multiSelectDropdown.noOptions")
+            }}
+          </div>
+          <div
+            v-else-if="
+              filteredOptions.length === 0 &&
+              extraSelected.length === 0 &&
+              !canAddCustom
+            "
+            class="p-3 text-sm text-muted-foreground text-center"
+          >
+            {{ t("components.multiSelectDropdown.nothingFound") }}
+          </div>
+          <div v-else class="p-1">
+            <button
+              v-if="canAddCustom"
+              type="button"
+              class="w-full text-left"
+              :class="MENU_ITEM"
+              @click="addCustom"
+            >
+              <Plus class="size-4 shrink-0" />
+              <span class="text-sm flex-1 truncate">{{
+                t("components.multiSelectDropdown.addCustom", {
+                  value: trimmedQuery,
+                })
+              }}</span>
+            </button>
+            <div
+              v-for="option in extraSelected"
+              :key="`custom-${option}`"
+              role="option"
+              :aria-selected="true"
+              :class="MENU_ITEM"
+              @click="toggleOption(option)"
+            >
+              <Checkbox
+                :model-value="true"
+                class="pointer-events-none"
+                tabindex="-1"
+              />
+              <span class="text-sm flex-1 truncate" :title="option">{{
+                option
+              }}</span>
+            </div>
+            <div
+              v-for="option in displayedOptions"
+              :key="option"
+              role="option"
+              :aria-selected="isSelected(option)"
+              :aria-disabled="(atLimit && !isSelected(option)) || undefined"
+              :class="[
+                MENU_ITEM,
+                atLimit && !isSelected(option)
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : '',
+              ]"
+              @click="toggleOption(option)"
+            >
+              <Checkbox
+                :model-value="isSelected(option)"
+                class="pointer-events-none"
+                tabindex="-1"
+              />
+              <span class="text-sm flex-1 truncate" :title="option">{{
+                option
+              }}</span>
+            </div>
+
+            <!-- Hint when there are more options -->
+            <div
+              v-if="hasMoreOptions"
+              class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1"
+            >
+              <template v-if="searchQuery">
+                {{
+                  t("components.multiSelectDropdown.moreResultsHint", {
+                    shown: displayedOptions.length,
+                    total: filteredOptions.length,
+                  })
+                }}
+              </template>
+              <template v-else>
+                {{
+                  t("components.multiSelectDropdown.remainingOptionsHint", {
+                    count: remainingCount.toLocaleString(),
+                  })
+                }}
+              </template>
+            </div>
+            <div
+              v-if="maxCap"
+              class="px-2 py-1.5 text-xs text-muted-foreground text-center border-t"
+            >
+              {{
+                t("components.multiSelectDropdown.maxSelections", {
+                  count: selectedCount,
+                  max: maxCap,
+                })
+              }}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   </div>
 </template>

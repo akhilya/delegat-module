@@ -156,6 +156,14 @@ public class GraphFieldPin
 public class AdapterField
 {
     public string? fieldKey { get; set; }
+    /// <summary>Original marketplace unit label, preserved with the graph schema.</summary>
+    public string? unit { get; set; }
+    /// <summary>Canonical unit code (or preserved custom code) for the marketplace field.</summary>
+    public string? unitCode { get; set; }
+    /// <summary>Marketplace-specific identifier for the field's selected unit.</summary>
+    public string? unitId { get; set; }
+    /// <summary>Field-level allowed unit labels/codes, when supplied by the marketplace schema.</summary>
+    public List<GraphNodeOption>? unitOptions { get; set; }
     public string? label { get; set; }
     public string? outputType { get; set; }
     /// <summary>Marketplace schema group, used to visually organize the price-field sink.</summary>

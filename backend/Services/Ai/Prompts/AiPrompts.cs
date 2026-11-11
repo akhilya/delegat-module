@@ -48,7 +48,7 @@ public static class AiPrompts
     /// This identifier is logged instead of hashing the rendered prompt, which contains
     /// store/user-specific context.
     /// </summary>
-    public const string ChatPromptVersion = "chat-v17";
+    public const string ChatPromptVersion = "chat-v18";
 
     public record ConnectionInfo(int Id, string Name, string AdapterKey, bool IsActive, DateTime? LastSyncAt);
 
@@ -501,6 +501,21 @@ public static class AiPrompts
         Characteristics are category attributes (and optional store attributes), not free text
         in the description when attributes exist. Categories are a flat list (no parent_id).
         Fields for a create/fill: GET /categories/<id>/attributes, GET /store-attributes.
+        To read characteristic units, prefer the lightweight GET /categories/<id>/attributes/summary
+        and GET /store-attributes/summary; they include id, name, type, and unitCode without
+        loading large option dictionaries. Read full definitions only when their options or other
+        editor details are needed.
+        unitCode is metadata on the attribute definition, separate from each product's string value.
+        Read both before interpreting a numeric characteristic. Changing unitCode with PATCH only
+        changes metadata; it never recalculates or rewrites saved product values. Never silently
+        convert values, change unit metadata, or infer a conversion from an unknown/custom unit code.
+        Treat unknown/custom unit codes as opaque metadata: carry the existing code forward as
+        returned, and do not infer its dimension or conversion.
+        If “change the unit” could mean changing metadata or converting saved values, clarify first.
+        Convert saved values only when the user explicitly requests it, the source and target units
+        are known and compatible, and the exact affected values are established; treat that as a
+        separate confirmed write. A marketplace mapping transform changes exported output only and
+        must not mutate local values or unit metadata; follow its mapping-specific unit rules.
         Do not GET /products/<id> only to copy the DTO. Live card GET may come back trimmed
         (photos omitted). SQL: category_attributes, product_attribute_values (column is
         attributeId, not categoryAttributeId). search_knowledge is docs, not the catalog.

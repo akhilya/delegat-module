@@ -12,6 +12,7 @@ namespace Delegat.Services;
 /// </summary>
 public class ImageDownloadBackgroundService : BackgroundService
 {
+    private const long MaxImportedVideoBytes = 500L * 1024 * 1024;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ImageDownloadBackgroundService> _logger;
     private readonly IOperationLogger _operationLogger;
@@ -202,9 +203,11 @@ public class ImageDownloadBackgroundService : BackgroundService
                 await _operationLogger.LogAsync(pending.batchId, pending.storeId, level, message);
         }
 
-        var shortUrl = pending.imageUrl.Length > 60
-            ? pending.imageUrl[..57] + "..."
-            : pending.imageUrl;
+        var shortUrl = SafeUrlForLog(pending.imageUrl);
+        var isVideo = pending.mediaKind == PendingMediaKind.Video;
+        string? uploadedFilePath = null;
+        Models.File? importedFile = null;
+        ImageReference? galleryReference = null;
 
         try
         {
@@ -219,20 +222,28 @@ public class ImageDownloadBackgroundService : BackgroundService
             }
 
             var fileId = Guid.NewGuid().ToString("N");
-            var extension = GetExtensionFromUrl(pending.imageUrl) ?? ".jpg";
-            var filePath = $"stores/{pending.storeId}/products/{pending.productId}/images/{fileId}{extension}";
+            var extension = isVideo
+                ? GetVideoExtension(pending.mediaFileName)
+                : GetExtensionFromUrl(pending.imageUrl) ?? ".jpg";
+            var mediaFolder = isVideo ? "media" : "images";
+            var filePath = $"stores/{pending.storeId}/products/{pending.productId}/{mediaFolder}/{fileId}{extension}";
+            uploadedFilePath = filePath;
 
-            var uploadResult = await storageService.UploadFromUriWithMetadataAsync(pending.imageUrl, filePath, ct);
+            var uploadResult = isVideo
+                ? await storageService.UploadVideoFromUriWithMetadataAsync(
+                    pending.imageUrl, filePath, MaxImportedVideoBytes, ct)
+                : await storageService.UploadFromUriWithMetadataAsync(pending.imageUrl, filePath, ct);
 
             if (uploadResult == null)
             {
+                await storageService.DeleteAsync(filePath, CancellationToken.None);
                 pending.status = ImageDownloadStatus.Failed;
-                pending.lastError = "Failed to download image";
+                pending.lastError = isVideo ? "Failed to download a supported video file" : "Failed to download image";
                 await context.SaveChangesAsync(ct);
 
                 _logger.LogWarning(
-                    "Failed to download image {ImageUrl} for product {ProductId} (attempt {Retry})",
-                    pending.imageUrl, pending.productId, pending.retryCount);
+                    "Failed to download media {MediaUrl} for product {ProductId} (attempt {Retry})",
+                    shortUrl, pending.productId, pending.retryCount);
 
                 await Log("warning", $"Failed to download: {shortUrl} (attempt {pending.retryCount})");
                 return;
@@ -258,10 +269,9 @@ public class ImageDownloadBackgroundService : BackgroundService
                 uploadResult.Length,
                 pending.imageUrl
             ));
-            file.fileType = FileType.Image;
-
-            context.files.Add(file);
-            await context.SaveChangesAsync(ct);
+            file.fileType = isVideo ? FileType.Other : FileType.Image;
+            if (isVideo)
+                file.displayName = pending.mediaFileName;
 
             var occupied = await context.images
                 .AnyAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
@@ -276,13 +286,15 @@ public class ImageDownloadBackgroundService : BackgroundService
                 index = maxIndex + 1;
             }
 
-            var imageRef = new ImageReference();
-            imageRef.AddFill(new ImageReference.AddForm(
-                file.Id,
-                pending.productId,
-                index
-            ));
-            context.images.Add(imageRef);
+            galleryReference = new ImageReference
+            {
+                file = file,
+                productId = pending.productId,
+                index = index
+            };
+            importedFile = file;
+            context.files.Add(file);
+            context.images.Add(galleryReference);
 
             pending.status = ImageDownloadStatus.Completed;
             pending.completedAt = DateTime.UtcNow;
@@ -291,18 +303,36 @@ public class ImageDownloadBackgroundService : BackgroundService
             await context.SaveChangesAsync(ct);
 
             _logger.LogDebug(
-                "Downloaded image {Index} for product {ProductId}: {ImageUrl}",
-                index, pending.productId, pending.imageUrl);
+                "Downloaded media {Index} for product {ProductId}: {MediaUrl}",
+                index, pending.productId, shortUrl);
         }
         catch (Exception ex)
         {
+            if (galleryReference != null)
+                context.images.Remove(galleryReference);
+            if (importedFile != null)
+                context.files.Remove(importedFile);
+            if (uploadedFilePath != null)
+            {
+                try
+                {
+                    await storageService.DeleteAsync(uploadedFilePath, CancellationToken.None);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logger.LogError(cleanupException,
+                        "Failed to clean imported media object {Path} after attachment failure",
+                        uploadedFilePath);
+                }
+            }
+
             pending.status = ImageDownloadStatus.Failed;
             pending.lastError = ex.Message;
             await context.SaveChangesAsync(CancellationToken.None);
 
             _logger.LogError(ex,
-                "Error downloading image {ImageUrl} for product {ProductId}",
-                pending.imageUrl, pending.productId);
+                "Error downloading media {MediaUrl} for product {ProductId}",
+                shortUrl, pending.productId);
 
             await Log("error", $"Error downloading image #{pending.imageIndex}: {ex.Message}");
         }
@@ -334,6 +364,18 @@ public class ImageDownloadBackgroundService : BackgroundService
         {
             return null;
         }
+    }
+
+    private static string GetVideoExtension(string? fileName)
+    {
+        var extension = Path.GetExtension(fileName ?? "").ToLowerInvariant();
+        return extension is ".mp4" or ".webm" or ".avi" ? extension : ".video";
+    }
+
+    private static string SafeUrlForLog(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "external media URL";
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
     }
 
     /// <summary>

@@ -116,13 +116,14 @@ const showDescriptionTooltip = computed(
           >
             {{ label }}<span v-if="required" class="text-destructive"> *</span>
           </FieldLabel>
+          <!-- Keep the 24px hit target without increasing the label row. -->
           <Tooltip v-if="showDescriptionTooltip">
             <TooltipTrigger as-child>
               <Button
                 variant="ghost"
                 size="icon-xs"
                 type="button"
-                class="mt-0.5 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                class="-my-1 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                 :aria-label="
                   t('components.settingsFormField.descriptionAriaLabel', {
                     label,

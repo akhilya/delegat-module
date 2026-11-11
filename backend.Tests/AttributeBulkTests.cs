@@ -35,12 +35,14 @@ public class AttributeBulkTests
             OtherCategoryId = data.AddCategory(store.Id).Id;
             CategoryAttribute = data.AddCategoryAttribute(category.Id, options: "[\"Red\"]");
             CategoryAttribute.description = "Keep category description";
+            CategoryAttribute.descriptionInTooltip = true;
             CategoryAttribute.group = "Color";
             CategoryAttribute.groupIcon = "Palette";
             CategoryAttribute.maxLength = 42;
             CategoryAttribute.defaultValue = "Red";
             GlobalAttribute = data.AddStoreAttribute(store.Id, options: "[\"Red\"]");
             GlobalAttribute.description = "Keep global description";
+            GlobalAttribute.descriptionInTooltip = true;
             GlobalAttribute.maxLength = 42;
             GlobalAttribute.defaultValue = "Red";
             OtherCategoryAttributeId = data.AddCategoryAttribute(OtherCategoryId).Id;
@@ -60,7 +62,7 @@ public class AttributeBulkTests
             Current.SelectedStoreId = store.Id;
             var unit = TestDbFactory.CreateUnitOfWork(Db);
             Categories = new CategoryController(Current, unit, null!, NullLogger<CategoryController>.Instance, Db);
-            Global = new StoreAttributeController(Current, unit, null!, NullLogger<StoreAttributeController>.Instance);
+            Global = new StoreAttributeController(Current, unit, null!, NullLogger<StoreAttributeController>.Instance, Db);
         }
 
         public int Id(bool global) => global ? GlobalAttribute.Id : CategoryAttribute.Id;
@@ -91,6 +93,7 @@ public class AttributeBulkTests
         Assert.True(attribute.isUnique);
         Assert.False(attribute.isRequired);
         Assert.True(attribute.showOnProductPage);
+        Assert.True(attribute.descriptionInTooltip);
         if (global)
         {
             var stored = Assert.IsType<StoreAttribute>(attribute);
@@ -126,6 +129,29 @@ public class AttributeBulkTests
         var attribute = await fixture.Read(global);
         Assert.False(attribute.isRequired);
         Assert.False(attribute.showOnProductPage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Update_DescriptionInTooltip_AppliesTrueAndFalse(bool global)
+    {
+        using var fixture = new Fixture();
+        int[] ids = [fixture.Id(global)];
+
+        await fixture.Update(global, new AttributeBulkUpdateForm
+        {
+            attributeIds = ids,
+            descriptionInTooltip = false,
+        });
+        Assert.False((await fixture.Read(global)).descriptionInTooltip);
+
+        await fixture.Update(global, new AttributeBulkUpdateForm
+        {
+            attributeIds = ids,
+            descriptionInTooltip = true,
+        });
+        Assert.True((await fixture.Read(global)).descriptionInTooltip);
     }
 
     [Theory]

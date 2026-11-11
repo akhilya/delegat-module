@@ -29,6 +29,7 @@ public class ProductController : ControllerBase
     private readonly QuotaService _quotaService;
     private readonly IOperationLogger _operationLogger;
     private readonly AttributeUniquenessService _attributeUniqueness;
+    private readonly ProductAttributeFileService _attributeFiles;
     private readonly ProductBulkUpdateService _bulkUpdateService;
     private readonly SqlReadonlyService? _catalogFilter;
 
@@ -45,6 +46,7 @@ public class ProductController : ControllerBase
         QuotaService quotaService,
         IOperationLogger operationLogger,
         AttributeUniquenessService attributeUniqueness,
+        ProductAttributeFileService attributeFiles,
         ProductBulkUpdateService bulkUpdateService,
         SqlReadonlyService? catalogFilter = null)
     {
@@ -57,6 +59,7 @@ public class ProductController : ControllerBase
         _quotaService = quotaService;
         _operationLogger = operationLogger;
         _attributeUniqueness = attributeUniqueness;
+        _attributeFiles = attributeFiles;
         _bulkUpdateService = bulkUpdateService;
         _catalogFilter = catalogFilter;
     }
@@ -246,11 +249,16 @@ public class ProductController : ControllerBase
                     .ThenInclude(f => f.tags)
                     .ThenInclude(t => t.tagDefinition)
                 .Include(p => p.images)
+                    .ThenInclude(i => i.file)
                 .Include(p => p.notes)
                 .Include(p => p.attributeValues)
                     .ThenInclude(av => av.attribute)
+                .Include(p => p.attributeValues)
+                    .ThenInclude(av => av.files)
                 .Include(p => p.storeAttributeValues)
-                    .ThenInclude(sav => sav.storeAttribute));
+                    .ThenInclude(sav => sav.storeAttribute)
+                .Include(p => p.storeAttributeValues)
+                    .ThenInclude(sav => sav.files));
 
         if (product == null)
             throw ApiException.NotFound(code: "product_not_found");
@@ -294,6 +302,8 @@ public class ProductController : ControllerBase
             input.categoryId,
             input.attributeValues,
             input.storeAttributeValues);
+        await _attributeFiles.EnsureRequiredCategoryFilesAsync(input.categoryId, input.attributeValues);
+        await _attributeFiles.EnsureRequiredStoreFilesAsync(selectedStoreId.Value, input.storeAttributeValues);
 
         var product = new Product();
         product.AddFill(new Product.AddForm(input, selectedStoreId.Value, input.categoryId));
@@ -313,6 +323,7 @@ public class ProductController : ControllerBase
                     attributeId = av.attributeId,
                     value = av.value
                 });
+                await _attributeFiles.ApplyCategoryAsync(attrValue, av, product.categoryId);
                 await attrValueRepo.AddWithoutSaveAsync(attrValue);
             }
         }
@@ -330,6 +341,7 @@ public class ProductController : ControllerBase
                     storeAttributeId = sav.storeAttributeId,
                     value = sav.value
                 });
+                await _attributeFiles.ApplyStoreAsync(storeAttrValue, sav, selectedStoreId.Value);
                 await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
             }
         }
@@ -391,6 +403,13 @@ public class ProductController : ControllerBase
             input.storeAttributeValues,
             excludeProductId: productId);
 
+        if (input.attributeValues != null)
+            await _attributeFiles.EnsureRequiredCategoryFilesAsync(
+                effectiveCategoryId, input.attributeValues);
+        if (input.storeAttributeValues != null)
+            await _attributeFiles.EnsureRequiredStoreFilesAsync(
+                selectedStoreId.Value, input.storeAttributeValues);
+
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             if (input.categoryId.HasValue)
@@ -413,6 +432,7 @@ public class ProductController : ControllerBase
                         attributeId = av.attributeId,
                         value = av.value
                     });
+                    await _attributeFiles.ApplyCategoryAsync(attrValue, av, product.categoryId);
                     await attrValueRepo.AddWithoutSaveAsync(attrValue);
                 }
             }
@@ -432,6 +452,7 @@ public class ProductController : ControllerBase
                         storeAttributeId = sav.storeAttributeId,
                         value = sav.value
                     });
+                    await _attributeFiles.ApplyStoreAsync(storeAttrValue, sav, selectedStoreId.Value);
                     await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
                 }
             }

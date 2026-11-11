@@ -75,6 +75,18 @@ public class AdapterHttpLogServiceTests
     }
 
     [Fact]
+    public void RedactBody_HidesDurableMediaGrantTokensInPayloads()
+    {
+        const string token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        var body = $$"""{"videos":["https://media.example.test/api/pub/media-export/{{token}}"]}""";
+
+        var redacted = AdapterHttpLogService.RedactBody(body);
+
+        Assert.DoesNotContain(token, redacted);
+        Assert.Contains("/api/pub/media-export/[redacted]", redacted);
+    }
+
+    [Fact]
     public void TruncateBody_ShortBody_StillRedacts()
     {
         const string body = """{"secret":"should-hide","x":1}""";

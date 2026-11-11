@@ -48,6 +48,45 @@ public class CategoryImportQueueServiceTests
     }
 
     [Fact]
+    public async Task Enqueue_PersistsFieldSelectionAndDuplicateDecisions()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var store = data.AddStore();
+        var connection = data.AddConnection(store.Id);
+        await db.SaveChangesAsync();
+
+        var queue = new CategoryImportQueueService(db);
+        var job = await queue.EnqueueIfNeededAsync(
+            connection,
+            "236",
+            "Toys",
+            "Toys",
+            3,
+            [],
+            "op1",
+            1,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "height",
+                    action = "reuse",
+                    existingAttributeId = 14,
+                },
+            ]);
+
+        Assert.NotNull(job);
+        Assert.Equal("[]", job.selectedFieldKeysJson);
+        var decisions = System.Text.Json.JsonSerializer.Deserialize<List<CategoryImportAttributeDecision>>(
+            job.attributeDecisionsJson!);
+        var decision = Assert.Single(decisions!);
+        Assert.Equal("height", decision.fieldKey);
+        Assert.Equal("reuse", decision.action);
+        Assert.Equal(14, decision.existingAttributeId);
+    }
+
+    [Fact]
     public async Task Enqueue_ReusesInFlightJobForSameExternalCategory()
     {
         var db = TestDbFactory.CreateDb();

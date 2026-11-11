@@ -105,6 +105,8 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 409 | `conflict` | Quota / uniqueness / state conflict |
 | 409 | `sku_already_used` / `store_attribute_key_used` / `category_has_products` / `product_limit_reached` | Named uniqueness or state conflict |
 | 422 | `validation_error` | Invalid body (when used) |
+| 400 | `attribute_unit_requires_number` | A non-empty `unitCode` was provided for a non-numeric attribute |
+| 400 | `required_attribute_file` / `attribute_multiple_files_disabled` / `file_not_found` | A File attribute is missing a required attachment, exceeds its single-file setting, or references a file not owned by that product |
 | 429 | `rate_limited` | Too many requests |
 | 503 | `PUBLIC_API_DISABLED` | Instance Public API toggle is off |
 | 503 | `API_USAGE_DISABLED` | Plan does not include Public API (`API_USAGE_ENABLED=false`) |
@@ -141,9 +143,9 @@ Poll `GET /api/v1/stores/{storeId}/operations/{operationId}` until `status` is t
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | List. Query: `search` (name, SKU, barcode, product id, marketplace external id/SKU, variant SKU/barcode), `categoryId` (`-1` = no category), `page`, `pageSize`. Items include `variantCount`. Trashed products are omitted. |
-| GET | `/{productId}` | Detail: prices, `attributeValues`, `storeAttributeValues`, and `variants` (size, SKU, barcode, price, quantity, sortOrder) |
-| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create. `categoryId` must belong to this store. Barcode must be EAN-8/13 when set. Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted and stored as text (arrays as JSON text). |
-| PATCH | `/{productId}` | Partial update. Sending `attributeValues` or `storeAttributeValues` **replaces** that collection (same as the dashboard). Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted. |
+| GET | `/{productId}` | Detail: prices, `attributeValues`, `storeAttributeValues`, and `variants` (size, SKU, barcode, price, quantity, sortOrder). File attribute values include ordered `fileIds`. |
+| POST | `/` | Create. Body: product fields (`sku`, `name`, …) same shape as SPA create. `categoryId` must belong to this store. Barcode must be EAN-8/13 when set. Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted and stored as text (arrays as JSON text). This JSON endpoint cannot upload files; use the cabinet's authenticated multipart product-create flow for new file attachments. |
+| PATCH | `/{productId}` | Partial update. Sending `attributeValues` or `storeAttributeValues` **replaces** that collection (same as the dashboard). Characteristic `value` is stored as a string; JSON numbers, booleans, and arrays are accepted. For File attributes send ordered `fileIds`; every ID must identify a file already owned by this product. The legacy File `value` may also contain a JSON integer array. |
 | DELETE | `/{productId}` | Soft-delete (trash) |
 | GET | `/{productId}/variants` | Size variants for the product |
 | POST | `/{productId}/variants` | Create. Body: `{ sku?, barcode?, size?, price?, quantity? }` |
@@ -158,8 +160,8 @@ Non-empty barcodes share one namespace across all products and variants in a sto
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List with attributes + product counts (`productCount` and `productsCount` are the same number). Attribute objects match GET detail: `options`, `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, `allowCustomValues`, `defaultValue`, `description`, `isMultiline`, `showOnProductPage`, `sortOrder`. Category objects include `hasSizes` (local Sizes tab; not a mapping-graph field). |
-| GET | `/{categoryId}` | Detail (same attribute fields as list, including `groupIcon`). Product count field is `productsCount`. |
+| GET | `/` | List with attributes + product counts (`productCount` and `productsCount` are the same number). Attribute objects match GET detail: `type`, `unitCode` (when set), `allowMultipleFiles`, `options`, `group`, `groupIcon` (`adapter:{adapterKey}` or a Lucide-compatible name), `maxLength`, `minValue`, `maxValue`, `maxValues` (select/multiselect cap; omitted when unlimited), `validationPattern` when set, `allowCustomValues`, `defaultValue`, `description`, `isMultiline`, `showOnProductPage`, `sortOrder`. Category objects include `hasSizes` (local Sizes tab; not a mapping-graph field). |
+| GET | `/{categoryId}` | Detail (same attribute fields as list, including `type`, `unitCode`, `allowMultipleFiles`, and `groupIcon`). Product count field is `productsCount`. |
 | POST | `/` | Create `{ name, description?, hasSizes? }` |
 | PATCH | `/{categoryId}` | Update (`name?`, `description?`, `hasSizes?`) |
 | DELETE | `/{categoryId}` | Delete (fails if products remain → `409 category_has_products`) |
@@ -180,10 +182,10 @@ Non-empty barcodes share one namespace across all products and variants in a sto
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | List global attributes (same DTO as the dashboard, including `options`, `allowCustomValues`, `maxLength`, `minValue`, `maxValue`, `maxValues`, `validationPattern`) |
-| GET | `/{attributeId}` | Detail |
-| POST | `/` | Create. Body matches the dashboard (`name`, `key`, `type`, `options?`, `allowCustomValues?`, `maxLength?`, `minValue?`, `maxValue?`, `maxValues?`, `validationPattern?`, `defaultValue?`, `description?`, …). Duplicate `key` → `409 store_attribute_key_used`. |
-| PATCH | `/{attributeId}` | Update |
+| GET | `/` | List global attributes (same DTO as the dashboard, including `type`, `unitCode`, `allowMultipleFiles`, `options`, `allowCustomValues`, `maxLength`, `minValue`, `maxValue`, `maxValues`, `validationPattern`) |
+| GET | `/{attributeId}` | Detail (same fields as list) |
+| POST | `/` | Create. Body matches the dashboard (`name`, `key`, `type`, `unitCode?`, `allowMultipleFiles?`, `options?`, `allowCustomValues?`, `maxLength?`, `minValue?`, `maxValue?`, `validationPattern?`, `defaultValue?`, `description?`, …). `type` is Text=0, Number=1, Boolean=2, Select=3, MultiSelect=4, Barcode=5, File=6. For File, `allowMultipleFiles` defaults to false; File attributes cannot be unique or have a default value. `unitCode` is limited to numeric attributes; empty/omitted means no unit. No conversion is performed. Duplicate `key` → `409 store_attribute_key_used`. |
+| PATCH | `/{attributeId}` | Update. Send `unitCode: ""` to clear the unit; setting a unit on a non-numeric type returns `400 attribute_unit_requires_number`. `allowMultipleFiles` is only valid for File (6). |
 | DELETE | `/{attributeId}` | Delete |
 
 ### Connections & links (`/stores/{storeId}/…`)

@@ -60,6 +60,9 @@ export function syncAdapterPriceFields(nodes, priceFieldMappings) {
       isRequired: !!mapping.isRequired,
       group: mapping.group ?? null,
       description: mapping.description ?? null,
+      unit: mapping.externalFieldUnit ?? null,
+      unitCode: mapping.externalFieldUnitCode ?? null,
+      unitId: mapping.externalFieldUnitId ?? null,
       sortOrder: Number.isFinite(mapping.sortOrder) ? mapping.sortOrder : index,
     };
 
@@ -105,6 +108,9 @@ export function samePriceFieldSchema(current, next) {
       isRequired: !!field.isRequired,
       group: field.group ?? null,
       description: field.description ?? null,
+      unit: field.unit ?? null,
+      unitCode: field.unitCode ?? null,
+      unitId: field.unitId ?? null,
       sortOrder: field.sortOrder ?? null,
     }));
   return JSON.stringify(schema(current)) === JSON.stringify(schema(next));

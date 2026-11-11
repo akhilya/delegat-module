@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using Delegat.Infrastructure.Security;
 using Delegat.Models;
 
 namespace Delegat.Services;
@@ -44,11 +45,13 @@ public class ErrorLogService : IErrorLogService
                 createdAt = DateTime.UtcNow,
                 statusCode = statusCode,
                 method = context.Request.Method,
-                path = context.Request.Path.Value ?? "",
-                queryString = context.Request.QueryString.HasValue ? context.Request.QueryString.Value : null,
+                path = MediaExportGrantSecrets.RedactPath(context.Request.Path),
+                queryString = context.Request.QueryString.HasValue
+                    ? MediaExportGrantSecrets.Redact(context.Request.QueryString.Value)
+                    : null,
                 exceptionType = exception.GetType().FullName ?? exception.GetType().Name,
-                message = exception.Message,
-                stackTrace = exception.ToString(),
+                message = MediaExportGrantSecrets.Redact(exception.Message),
+                stackTrace = MediaExportGrantSecrets.Redact(exception.ToString()),
                 traceIdentifier = context.TraceIdentifier,
                 userId = userId,
                 userName = context.User.FindFirst(JwtRegisteredClaimNames.Name)?.Value,

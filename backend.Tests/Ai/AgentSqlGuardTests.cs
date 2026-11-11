@@ -57,6 +57,19 @@ public class AgentSqlGuardTests
     }
 
     [Fact]
+    public void Accepts_UnitCodeForCategoryAndStoreAttributes()
+    {
+        var category = AgentSqlGuard.Parse(
+            "SELECT id, name, type, unitCode FROM category_attributes WHERE categoryId = 5");
+        Assert.Null(category.Error);
+        Assert.Contains("unitCode", category.Columns);
+
+        var store = AgentSqlGuard.Parse("SELECT id, name, unitCode FROM store_attributes");
+        Assert.Null(store.Error);
+        Assert.Contains("unitCode", store.Columns);
+    }
+
+    [Fact]
     public void Rejects_ParentId_WithFlatCategoryHint()
     {
         var parsed = AgentSqlGuard.Parse("SELECT id, parent_id FROM categories");

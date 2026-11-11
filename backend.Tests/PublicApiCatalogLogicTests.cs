@@ -25,7 +25,8 @@ public class PublicApiCatalogLogicTests
             db,
             TestDbFactory.CreateUnitOfWork(db),
             new QuotaService(TestDbFactory.CreateUnitOfWork(db), db),
-            new AttributeUniquenessService(db));
+            new AttributeUniquenessService(db),
+            new ProductAttributeFileService(db));
 
     private static PublicCategoriesController Categories(DataContext db, FakeCurrentUserService currentUser) =>
         new(new PublicApiStoreContext(currentUser, db), db, TestDbFactory.CreateUnitOfWork(db), new ServiceCollection().BuildServiceProvider());

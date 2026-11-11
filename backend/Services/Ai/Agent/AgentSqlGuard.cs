@@ -84,8 +84,8 @@ public static class AgentSqlGuard
 
     public const string SchemaDescription = """
         Allowlisted store tables (SHOW COLUMNS / DESCRIBE for fields). storeId is forced.
-        products, files, product_images, categories, category_attributes, product_attribute_values,
-        store_attributes, store_product_attribute_values, groups, group_members, notes, variants,
+        products, files, product_images, categories, category_attributes (incl. unitCode), product_attribute_values,
+        store_attributes (incl. unitCode), store_product_attribute_values, groups, group_members, notes, variants,
         product_links, connections, mappings, orders, store_files, store_folders, operations,
         pending_imports, adapter_http_logs.
         Never: credentials, tokens, payloadJson, graphJson, HTTP bodies/headers, users, API keys.
@@ -102,9 +102,9 @@ public static class AgentSqlGuard
         ["files"] = ["id", "productId", "displayName", "filePath", "contentType", "length", "folderId", "isPublic", "sourceUrl", "uploadDateTime"],
         ["product_images"] = ["id", "productId", "fileId", "index"],
         ["categories"] = ["id", "name", "description", "hasSizes", "createdAt"],
-        ["category_attributes"] = ["id", "categoryId", "name", "key", "type", "isRequired", "isUnique", "sortOrder", "group", "defaultValue", "description", "allowCustomValues"],
+        ["category_attributes"] = ["id", "categoryId", "name", "key", "type", "unitCode", "isRequired", "isUnique", "sortOrder", "group", "defaultValue", "description", "allowCustomValues"],
         ["product_attribute_values"] = ["id", "productId", "attributeId", "value"],
-        ["store_attributes"] = ["id", "name", "key", "type", "isRequired", "sortOrder", "description"],
+        ["store_attributes"] = ["id", "name", "key", "type", "unitCode", "isRequired", "sortOrder", "description"],
         ["store_product_attribute_values"] = ["id", "productId", "storeAttributeId", "value"],
         ["groups"] = ["id", "name", "description", "createdAt", "updatedAt"],
         ["group_members"] = ["id", "groupId", "productId", "sortOrder"],

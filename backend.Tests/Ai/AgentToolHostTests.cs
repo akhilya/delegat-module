@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Delegat;
+using Delegat.Enums;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
@@ -369,23 +370,41 @@ public class AgentToolHostTests
         var data = new TestDataBuilder(db);
         var store = data.AddStore();
         var category = data.AddCategory(store.Id, "T-shirts");
-        var attr = data.AddCategoryAttribute(category.Id, "Color", key: "color");
+        var attr = data.AddCategoryAttribute(category.Id, "Weight", AttributeType.Number, key: "weight");
+        attr.unitCode = "kg";
         var a = data.AddProduct(store.Id, "A", sku: "A1", categoryId: category.Id);
         var b = data.AddProduct(store.Id, "B", sku: "B1", categoryId: category.Id);
         db.productAttributeValues.Add(new ProductAttributeValue
         {
             productId = a.Id,
             attributeId = attr.Id,
-            value = "white",
+            value = "500",
         });
+        var storeAttribute = data.AddStoreAttribute(store.Id, "Package length", AttributeType.Number,
+            key: "package_length");
+        storeAttribute.unitCode = "vendor:box-width";
         await data.SaveAsync();
         var host = CreateHost(db);
 
         var attrs = await host.DispatchAsync("sql_readonly",
-            $$"""{"sql":"SELECT id, name, key FROM category_attributes WHERE categoryId = {{category.Id}}"}""",
+            $$"""{"sql":"SELECT id, name, key, type, unitCode FROM category_attributes WHERE categoryId = {{category.Id}}"}""",
             store.Id, 1, default);
         using var attrsJson = JsonDocument.Parse(JsonSerializer.Serialize(attrs.result));
         Assert.Equal(1, attrsJson.RootElement.GetProperty("rows").GetArrayLength());
+        Assert.Equal("kg", attrsJson.RootElement.GetProperty("rows")[0].GetProperty("unitCode").GetString());
+
+        var values = await host.DispatchAsync("sql_readonly",
+            $$"""{"sql":"SELECT attributeId, value FROM product_attribute_values WHERE productId = {{a.Id}}"}""",
+            store.Id, 1, default);
+        using var valuesJson = JsonDocument.Parse(JsonSerializer.Serialize(values.result));
+        Assert.Equal("500", valuesJson.RootElement.GetProperty("rows")[0].GetProperty("value").GetString());
+
+        var storeAttributes = await host.DispatchAsync("sql_readonly",
+            """{"sql":"SELECT id, name, unitCode FROM store_attributes"}""",
+            store.Id, 1, default);
+        using var storeAttributesJson = JsonDocument.Parse(JsonSerializer.Serialize(storeAttributes.result));
+        Assert.Equal("vendor:box-width",
+            storeAttributesJson.RootElement.GetProperty("rows")[0].GetProperty("unitCode").GetString());
 
         var products = await host.DispatchAsync("sql_readonly",
             $$"""{"sql":"SELECT id, sku FROM products WHERE id IN ({{a.Id}}, {{b.Id}})"}""",

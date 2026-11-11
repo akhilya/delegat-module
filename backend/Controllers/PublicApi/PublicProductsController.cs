@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Delegat.Infrastructure;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
@@ -27,19 +28,22 @@ public class PublicProductsController : ControllerBase
     private readonly IUnitOfWork _uow;
     private readonly QuotaService _quota;
     private readonly AttributeUniquenessService _attributeUniqueness;
+    private readonly ProductAttributeFileService _attributeFiles;
 
     public PublicProductsController(
         PublicApiStoreContext storeCtx,
         DataContext db,
         IUnitOfWork uow,
         QuotaService quota,
-        AttributeUniquenessService attributeUniqueness)
+        AttributeUniquenessService attributeUniqueness,
+        ProductAttributeFileService attributeFiles)
     {
         _storeCtx = storeCtx;
         _db = db;
         _uow = uow;
         _quota = quota;
         _attributeUniqueness = attributeUniqueness;
+        _attributeFiles = attributeFiles;
     }
 
     /// <summary>Lists products. Use <c>categoryId=-1</c> for products without a category.</summary>
@@ -98,7 +102,7 @@ public class PublicProductsController : ControllerBase
         return Ok(PublicApiResults.Page(items, page, pageSize, total));
     }
 
-    /// <summary>Gets a single product with attribute values and size variants.</summary>
+    /// <summary>Gets a single product with attribute values, attached File IDs, and size variants.</summary>
     [HttpGet("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -109,7 +113,13 @@ public class PublicProductsController : ControllerBase
         var product = await _db.products
             .AsNoTracking()
             .Include(p => p.attributeValues)
+                .ThenInclude(av => av.files)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.attribute)
             .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.files)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.storeAttribute)
             .Include(p => p.variants)
             .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == storeId, ct);
 
@@ -120,7 +130,10 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Creates a product. Enforces store product quota.</summary>
-    /// <remarks>Non-empty barcodes are unique across products and variants in the store, including trash. A collision returns 409 barcode_already_used.</remarks>
+    /// <remarks>
+    /// Non-empty barcodes are unique across products and variants in the store, including trash. A collision returns 409 barcode_already_used.
+    /// The JSON Public API cannot create or attach files. Use the cabinet's authenticated multipart product creation flow for File attributes.
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -130,6 +143,7 @@ public class PublicProductsController : ControllerBase
         await _quota.EnsureProductQuotaAsync(storeId);
         await EnsureCategoryInStoreAsync(storeId, input.categoryId, ct);
         EnsureBarcodeValid(input.barcode);
+        await EnsureNoFileAttachmentsOnCreateAsync(storeId, input, ct);
 
         var repo = _uow.Repository<Product>();
         var existing = await repo.FindAsync(p => p.storeId == storeId && p.sku == input.sku);
@@ -145,6 +159,8 @@ public class PublicProductsController : ControllerBase
             input.attributeValues,
             input.storeAttributeValues,
             ct: ct);
+        await _attributeFiles.EnsureRequiredCategoryFilesAsync(input.categoryId, input.attributeValues, ct);
+        await _attributeFiles.EnsureRequiredStoreFilesAsync(storeId, input.storeAttributeValues, ct);
 
         var product = new Product();
         product.AddFill(new Product.AddForm(input, storeId, input.categoryId));
@@ -162,6 +178,7 @@ public class PublicProductsController : ControllerBase
                     attributeId = av.attributeId,
                     value = av.value
                 });
+                await _attributeFiles.ApplyCategoryAsync(attrValue, av, product.categoryId, ct);
                 await attrRepo.AddWithoutSaveAsync(attrValue);
             }
             await _uow.SaveChangesAsync();
@@ -179,6 +196,7 @@ public class PublicProductsController : ControllerBase
                     storeAttributeId = sav.storeAttributeId,
                     value = sav.value
                 });
+                await _attributeFiles.ApplyStoreAsync(storeAttrValue, sav, storeId, ct);
                 await storeAttrRepo.AddWithoutSaveAsync(storeAttrValue);
             }
             await _uow.SaveChangesAsync();
@@ -188,7 +206,11 @@ public class PublicProductsController : ControllerBase
     }
 
     /// <summary>Updates a product.</summary>
-    /// <remarks>Partial update. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced. Barcode collisions with any product or variant in this store (including trash) return 409 barcode_already_used.</remarks>
+    /// <remarks>
+    /// Partial update. When <c>attributeValues</c> or <c>storeAttributeValues</c> is sent, that collection is replaced.
+    /// File attributes accept ordered product-owned IDs in <c>fileIds</c>; their legacy <c>value</c> is a JSON integer array.
+    /// Barcode collisions with any product or variant in this store (including trash) return 409 barcode_already_used.
+    /// </remarks>
     [HttpPatch("{productId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -216,6 +238,13 @@ public class PublicProductsController : ControllerBase
             excludeProductId: productId,
             ct: ct);
 
+        if (input.attributeValues != null)
+            await _attributeFiles.EnsureRequiredCategoryFilesAsync(
+                input.categoryId ?? product.categoryId, input.attributeValues, ct);
+        if (input.storeAttributeValues != null)
+            await _attributeFiles.EnsureRequiredStoreFilesAsync(
+                storeId, input.storeAttributeValues, ct);
+
         product.UpdateFill(input);
 
         if (input.attributeValues != null)
@@ -231,6 +260,7 @@ public class PublicProductsController : ControllerBase
                     attributeId = av.attributeId,
                     value = av.value
                 });
+                await _attributeFiles.ApplyCategoryAsync(attrValue, av, product.categoryId, ct);
                 await attrRepo.AddWithoutSaveAsync(attrValue);
             }
         }
@@ -248,6 +278,7 @@ public class PublicProductsController : ControllerBase
                     storeAttributeId = sav.storeAttributeId,
                     value = sav.value
                 });
+                await _attributeFiles.ApplyStoreAsync(storeAttrValue, sav, storeId, ct);
                 await storeAttrRepo.AddWithoutSaveAsync(storeAttrValue);
             }
         }
@@ -422,6 +453,63 @@ public class PublicProductsController : ControllerBase
             throw ApiException.NotFound(code: "category_not_found");
     }
 
+    private async Task EnsureNoFileAttachmentsOnCreateAsync(
+        int storeId,
+        Product.UserAddForm input,
+        CancellationToken ct)
+    {
+        if (input.categoryId.HasValue && await _db.categoryAttributes.AnyAsync(attribute =>
+                attribute.categoryId == input.categoryId
+                && attribute.type == Delegat.Enums.AttributeType.File
+                && attribute.isRequired, ct))
+            throw ApiException.BadRequest(code: "files_not_supported_on_product_create");
+
+        if (await _db.storeAttributes.AnyAsync(attribute =>
+                attribute.storeId == storeId
+                && attribute.type == Delegat.Enums.AttributeType.File
+                && attribute.isRequired, ct))
+            throw ApiException.BadRequest(code: "files_not_supported_on_product_create");
+
+        var categoryForms = input.attributeValues ?? [];
+        var categoryIds = categoryForms.Select(value => value.attributeId).Distinct().ToArray();
+        var fileCategoryIds = (await _db.categoryAttributes
+            .Where(attribute => input.categoryId != null
+                && attribute.categoryId == input.categoryId
+                && categoryIds.Contains(attribute.Id)
+                && attribute.type == Delegat.Enums.AttributeType.File)
+            .Select(attribute => attribute.Id)
+            .ToListAsync(ct)).ToHashSet();
+
+        foreach (var form in categoryForms)
+        {
+            if (form.fileIds is { Length: > 0 } && !fileCategoryIds.Contains(form.attributeId))
+                throw ApiException.BadRequest(code: "file_ids_require_file_attribute");
+            if (!fileCategoryIds.Contains(form.attributeId))
+                continue;
+            if (ProductAttributeFileService.ParseFileIds(form.fileIds, form.value).Length > 0)
+                throw ApiException.BadRequest(code: "files_not_supported_on_product_create");
+        }
+
+        var storeForms = input.storeAttributeValues ?? [];
+        var storeIds = storeForms.Select(value => value.storeAttributeId).Distinct().ToArray();
+        var fileStoreIds = (await _db.storeAttributes
+            .Where(attribute => attribute.storeId == storeId
+                && storeIds.Contains(attribute.Id)
+                && attribute.type == Delegat.Enums.AttributeType.File)
+            .Select(attribute => attribute.Id)
+            .ToListAsync(ct)).ToHashSet();
+
+        foreach (var form in storeForms)
+        {
+            if (form.fileIds is { Length: > 0 } && !fileStoreIds.Contains(form.storeAttributeId))
+                throw ApiException.BadRequest(code: "file_ids_require_file_attribute");
+            if (!fileStoreIds.Contains(form.storeAttributeId))
+                continue;
+            if (ProductAttributeFileService.ParseFileIds(form.fileIds, form.value).Length > 0)
+                throw ApiException.BadRequest(code: "files_not_supported_on_product_create");
+        }
+    }
+
     private static void EnsureBarcodeValid(string? barcode)
     {
         if (string.IsNullOrEmpty(barcode))
@@ -453,12 +541,18 @@ public class PublicProductsController : ControllerBase
         attributeValues = p.attributeValues.Select(av => new
         {
             attributeId = av.attributeId,
-            value = av.value
+            value = av.attribute?.type == Delegat.Enums.AttributeType.File
+                ? JsonSerializer.Serialize(av.files.OrderBy(f => f.index).Select(f => f.fileId))
+                : av.value,
+            fileIds = av.files.OrderBy(f => f.index).Select(f => f.fileId)
         }),
         storeAttributeValues = p.storeAttributeValues.Select(sav => new
         {
             storeAttributeId = sav.storeAttributeId,
-            value = sav.value
+            value = sav.storeAttribute?.type == Delegat.Enums.AttributeType.File
+                ? JsonSerializer.Serialize(sav.files.OrderBy(f => f.index).Select(f => f.fileId))
+                : sav.value,
+            fileIds = sav.files.OrderBy(f => f.index).Select(f => f.fileId)
         }),
         variants = p.variants
             .OrderBy(v => v.sortOrder)

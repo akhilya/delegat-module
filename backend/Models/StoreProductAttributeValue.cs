@@ -1,7 +1,9 @@
 using Delegat.Infrastructure.Interfaces;
+using Delegat.Enums;
 using Delegat.Models.Products;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 
 namespace Delegat.Models;
 
@@ -38,6 +40,8 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
     /// </summary>
     public StoreAttribute storeAttribute { get; set; } = null!;
 
+    public virtual ICollection<StoreProductAttributeFile> files { get; set; } = new List<StoreProductAttributeFile>();
+
     /// <summary>
     /// String representation of the attribute value.
     /// </summary>
@@ -67,7 +71,12 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
             storeAttributeId = storeAttributeId,
             attributeKey = storeAttribute?.key ?? "",
             attributeName = storeAttribute?.name ?? "",
-            value = value
+            value = storeAttribute?.type == AttributeType.File
+                ? JsonSerializer.Serialize(files.OrderBy(f => f.index).Select(f => f.fileId))
+                : value,
+            fileIds = storeAttribute?.type == AttributeType.File
+                ? files.OrderBy(f => f.index).Select(f => f.fileId).ToArray()
+                : null
         };
     }
 
@@ -96,6 +105,9 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
         /// </summary>
         [StringLength(VALUE_MAX_LENGTH)]
         public string value { get; set; }
+
+        /// <summary>Ordered file IDs for a File attribute. IDs must belong to the product.</summary>
+        public int[]? fileIds { get; set; }
     }
 
     /// <summary>
@@ -140,6 +152,9 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
         /// Attribute value string.
         /// </summary>
         public string value { get; set; }
+
+        /// <summary>Ordered file IDs for a File attribute. IDs must belong to the product.</summary>
+        public int[]? fileIds { get; set; }
     }
 
     /// <summary>
@@ -153,10 +168,13 @@ public class StoreProductAttributeValue : IEntity, IMapToDTO<StoreProductAttribu
         public int storeAttributeId { get; set; }
 
         /// <summary>
-        /// Attribute value string.
+        /// Attribute value string. For File attributes, the legacy value representation is a JSON integer array;
+        /// prefer <see cref="fileIds"/> for writes.
         /// </summary>
         [StringLength(VALUE_MAX_LENGTH)]
         [System.Text.Json.Serialization.JsonConverter(typeof(Delegat.Infrastructure.Json.FlexibleJsonStringConverter))]
         public string value { get; set; }
+        /// <summary>Ordered file IDs for a File attribute. IDs must belong to the product.</summary>
+        public int[]? fileIds { get; set; }
     }
 }

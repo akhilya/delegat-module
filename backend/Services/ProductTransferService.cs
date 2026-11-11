@@ -70,6 +70,7 @@ public class ProductTransferService
 
         var targetStore = await _context.stores
             .Include(s => s.members)
+            .Include(s => s.storeAttributes)
             .FirstOrDefaultAsync(s => s.Id == targetStoreId, ct);
 
         if (targetStore == null)
@@ -84,8 +85,12 @@ public class ProductTransferService
                 .ThenInclude(c => c!.attributes)
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.attribute)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.files)
             .Include(p => p.storeAttributeValues)
                 .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.files)
             .Include(p => p.files)
             .Include(p => p.images)
             .Include(p => p.folders)
@@ -251,6 +256,7 @@ public class ProductTransferService
 
         var targetStore = await _context.stores
             .Include(s => s.members)
+            .Include(s => s.storeAttributes)
             .FirstOrDefaultAsync(s => s.Id == request.targetStoreId, ct);
 
         if (targetStore == null)
@@ -265,8 +271,12 @@ public class ProductTransferService
                 .ThenInclude(c => c!.attributes)
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.attribute)
+            .Include(p => p.attributeValues)
+                .ThenInclude(av => av.files)
             .Include(p => p.storeAttributeValues)
                 .ThenInclude(sav => sav.storeAttribute)
+            .Include(p => p.storeAttributeValues)
+                .ThenInclude(sav => sav.files)
             .Include(p => p.files)
                 .ThenInclude(f => f.tags)
                     .ThenInclude(t => t.tagDefinition)
@@ -512,6 +522,7 @@ public class ProductTransferService
 
                 var copiedAttrValues = 0;
                 var skippedAttrValues = 0;
+                var copiedCategoryValues = new Dictionary<int, ProductAttributeValue>();
                 try
                 {
                     if (targetCategory != null)
@@ -523,12 +534,14 @@ public class ProductTransferService
                                 skippedAttrValues++;
                                 continue;
                             }
-                            _context.productAttributeValues.Add(new ProductAttributeValue
+                            var copiedValue = new ProductAttributeValue
                             {
                                 productId = newProduct.Id,
                                 attributeId = newAttrId,
                                 value = srcAv.value
-                            });
+                            };
+                            _context.productAttributeValues.Add(copiedValue);
+                            copiedCategoryValues[srcAv.Id] = copiedValue;
                             copiedAttrValues++;
                         }
                     }
@@ -554,6 +567,7 @@ public class ProductTransferService
 
                 var copiedStoreAttrs = 0;
                 var skippedStoreAttrs = 0;
+                var copiedStoreValues = new Dictionary<int, StoreProductAttributeValue>();
                 try
                 {
                     foreach (var srcSav in source.storeAttributeValues)
@@ -563,12 +577,14 @@ public class ProductTransferService
                             skippedStoreAttrs++;
                             continue;
                         }
-                        _context.storeProductAttributeValues.Add(new StoreProductAttributeValue
+                        var copiedValue = new StoreProductAttributeValue
                         {
                             productId = newProduct.Id,
                             storeAttributeId = newAttrId,
                             value = srcSav.value
-                        });
+                        };
+                        _context.storeProductAttributeValues.Add(copiedValue);
+                        copiedStoreValues[srcSav.Id] = copiedValue;
                         copiedStoreAttrs++;
                     }
 
@@ -774,6 +790,34 @@ public class ProductTransferService
 
                 try
                 {
+                    foreach (var srcAv in source.attributeValues)
+                    {
+                        if (!copiedCategoryValues.TryGetValue(srcAv.Id, out var copiedValue))
+                            continue;
+                        var targetDefinition = targetCategory?.attributes.FirstOrDefault(a =>
+                            attributeIdMap.TryGetValue(srcAv.attributeId, out var id) && a.Id == id);
+                        if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
+                            continue;
+                        foreach (var link in srcAv.files.OrderBy(f => f.index))
+                        {
+                            if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
+                                copiedValue.files.Add(new ProductAttributeFile { fileId = newFileId, index = link.index });
+                        }
+                    }
+                    foreach (var srcSav in source.storeAttributeValues)
+                    {
+                        if (!copiedStoreValues.TryGetValue(srcSav.Id, out var copiedValue))
+                            continue;
+                        var targetDefinition = targetStore.storeAttributes.FirstOrDefault(a =>
+                            storeAttrIdMap.TryGetValue(srcSav.storeAttributeId, out var id) && a.Id == id);
+                        if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
+                            continue;
+                        foreach (var link in srcSav.files.OrderBy(f => f.index))
+                        {
+                            if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
+                                copiedValue.files.Add(new StoreProductAttributeFile { fileId = newFileId, index = link.index });
+                        }
+                    }
                     foreach (var srcImg in source.images.OrderBy(i => i.index))
                     {
                         if (!fileIdMap.TryGetValue(srcImg.fileId, out var newFileId))
@@ -980,6 +1024,7 @@ public class ProductTransferService
                         name = srcAttr.name,
                         key = srcAttr.key,
                         type = srcAttr.type,
+                        unitCode = srcAttr.unitCode,
                         isRequired = srcAttr.isRequired,
                         isUnique = srcAttr.isUnique,
                         allowCustomValues = srcAttr.allowCustomValues,
@@ -1035,6 +1080,7 @@ public class ProductTransferService
                 name = srcAttr.name,
                 key = srcAttr.key,
                 type = srcAttr.type,
+                unitCode = srcAttr.unitCode,
                 isRequired = srcAttr.isRequired,
                 isUnique = srcAttr.isUnique,
                 allowCustomValues = srcAttr.allowCustomValues,

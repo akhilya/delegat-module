@@ -3,6 +3,8 @@ using Delegat.Marketplace.Avito;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.Wildberries;
 using Delegat.Marketplace.YandexMarket;
+using Delegat.Services.Plugins;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
 
@@ -40,6 +42,12 @@ public class PluginCapabilitySmokeTests
         Assert.True(plugin.Capabilities.HasFlag(MarketplaceCapabilities.SearchPublicCatalog));
         AssertCommerceFlags(plugin.Capabilities);
 
+        var media = plugin.GetMediaCapabilities();
+        Assert.True(media.CanImportVideos);
+        Assert.True(media.CanExportVideos);
+        Assert.True(media.UsesPermanentUrls);
+        Assert.Equal(6, media.MaxVideos);
+
         var rateLimit = plugin.GetRateLimitConfig();
         Assert.NotNull(rateLimit);
         Assert.True(rateLimit!.MaxRequestsPerSecond > 0);
@@ -56,6 +64,37 @@ public class PluginCapabilitySmokeTests
         Assert.False(new OzonPlugin().Capabilities.HasFlag(MarketplaceCapabilities.ManageShipments));
         Assert.True(new WildberriesPlugin().Capabilities.HasFlag(MarketplaceCapabilities.GetFulfillmentLocations));
         Assert.True(new WildberriesPlugin().Capabilities.HasFlag(MarketplaceCapabilities.ManageShipments));
+
+        var wildberriesMedia = Assert.IsAssignableFrom<IMarketplaceMediaCapabilities>(new WildberriesPlugin())
+            .GetMediaCapabilities();
+        Assert.True(wildberriesMedia.CanImportVideos);
+        Assert.False(wildberriesMedia.CanExportVideos);
+        Assert.Equal(1, wildberriesMedia.MaxVideos);
+    }
+
+    [Fact]
+    public void AdapterWrapperDefaultsLegacyPluginsToNoVideoSupport()
+    {
+        var adapter = new PluginAdapterWrapper(new AvitoPlugin(), NullLoggerFactory.Instance);
+
+        Assert.Equal(new MediaCapabilities(), adapter.GetMediaCapabilities());
+    }
+
+    [Fact]
+    public void UnverifiedAdaptersNeverAdvertiseVideoExport()
+    {
+        IMarketplacePlugin[] plugins =
+        [
+            new OzonPlugin(), new AvitoPlugin(),
+            new Delegat.Marketplace.OpenCart.OpenCartPlugin(),
+            new Delegat.Marketplace.WooCommerce.WooCommercePlugin(),
+            new Delegat.Marketplace.Medusa.MedusaPlugin()
+        ];
+        foreach (var plugin in plugins)
+        {
+            var adapter = new PluginAdapterWrapper(plugin, NullLoggerFactory.Instance);
+            Assert.False(adapter.GetMediaCapabilities().CanExportVideos, plugin.Key);
+        }
     }
 
     private static void AssertCommerceFlags(MarketplaceCapabilities capabilities)

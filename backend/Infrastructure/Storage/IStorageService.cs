@@ -59,6 +59,18 @@ public interface IStorageService
     Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default);
 
     /// <summary>
+    /// Download and stream a directly hosted video into storage, enforcing a byte limit
+    /// and validating its media signature. Implementations without safe streaming support
+    /// return null rather than falling back to an unbounded download.
+    /// </summary>
+    Task<FileUploadResult?> UploadVideoFromUriWithMetadataAsync(
+        string uri,
+        string path,
+        long maxBytes,
+        CancellationToken ct = default)
+        => Task.FromResult<FileUploadResult?>(null);
+
+    /// <summary>
     /// Server-side copy of an object to a new path in the same bucket.
     /// Returns true on success. Both objects exist after a successful copy.
     /// </summary>
