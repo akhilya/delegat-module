@@ -58,8 +58,7 @@ public static class AttributeDuplicateMatcher
         string? fieldUnitCode,
         IEnumerable<CategoryAttribute> attributes)
     {
-        var importedName = AttributeImportNameNormalizer.Normalize(
-            field.Name, fieldUnitCode, field.Description);
+        var importedName = AttributeImportSemantics.NormalizeName(field, fieldUnitCode);
         var fieldSemantics = SemanticMarkers(field.Name, field.Description, importedName);
         var fieldDescription = NormalizeText(field.Description);
         var fieldKey = NormalizeText(CategoryImportService.SanitizeKey(field.Key));

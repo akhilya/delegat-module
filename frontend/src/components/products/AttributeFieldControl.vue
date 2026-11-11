@@ -14,10 +14,22 @@ import {
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Upload } from "lucide-vue-next";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FieldLabel } from "@/components/ui/field";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ChevronDown, Paperclip, Search, Upload } from "@/lib/icons";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { isAttributeType } from "@/lib/productAttributeValidation";
-import { parseAttributeFileIds } from "@/lib/productAttributeFiles";
+import {
+  attributeFileName,
+  filterAttributeFiles,
+  limitAttributeFileResults,
+  parseAttributeFileIds,
+} from "@/lib/productAttributeFiles";
 import { getAttributeUnit } from "@/lib/attributeUnits";
 import {
   labelsToStoredValues,
@@ -47,6 +59,14 @@ export default {
     FormItem,
     Button,
     Spinner,
+    Checkbox,
+    FieldLabel,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    ChevronDown,
+    Paperclip,
+    Search,
     Upload,
   },
   emits: ["files-uploaded"],
@@ -71,6 +91,8 @@ export default {
       optionsHasMore: false,
       optionsRequestId: 0,
       optionsSearchTimer: null,
+      filePickerOpen: false,
+      fileSearchQuery: "",
     };
   },
   watch: {
@@ -82,6 +104,9 @@ export default {
     },
     productId() {
       this.resetOptionState();
+    },
+    filePickerOpen(isOpen) {
+      if (!isOpen) this.fileSearchQuery = "";
     },
   },
   beforeUnmount() {
@@ -296,6 +321,52 @@ export default {
     fileIds(rawValue) {
       return parseAttributeFileIds(rawValue) || [];
     },
+    fileId(file) {
+      return Number(file?.id ?? file?.Id);
+    },
+    fileName(file) {
+      return attributeFileName(file);
+    },
+    fileCheckboxId(file) {
+      return `${this.fieldId()}-file-${this.fileId(file)}`;
+    },
+    fileIsSelected(file, rawValue) {
+      return this.fileIds(rawValue).includes(this.fileId(file));
+    },
+    visibleFileRows(rawValue) {
+      return limitAttributeFileResults(
+        this.matchingFiles,
+        this.fileIds(rawValue),
+        Boolean(this.fileSearchQuery.trim()),
+      );
+    },
+    fileSelectionText(rawValue) {
+      const ids = this.fileIds(rawValue);
+      if (ids.length === 0) {
+        return this.$t(
+          this.attribute.allowMultipleFiles
+            ? "components.attributeFieldControl.chooseFiles"
+            : "components.attributeFieldControl.chooseFile",
+        );
+      }
+
+      if (!this.attribute.allowMultipleFiles && ids.length === 1) {
+        const selected = this.files.find(
+          (file) => this.fileId(file) === ids[0],
+        );
+        if (selected) return this.fileName(selected);
+      }
+
+      return this.$t("components.attributeFieldControl.selectedFileCount", {
+        count: ids.length,
+      });
+    },
+    hasMoreFileResults(rawValue) {
+      return this.visibleFileRows(rawValue).length < this.matchingFiles.length;
+    },
+    clearFileSelection(setValue) {
+      setValue("[]");
+    },
     toggleFile(fileId, rawValue, setValue) {
       const ids = this.fileIds(rawValue);
       const id = Number(fileId);
@@ -307,6 +378,7 @@ export default {
           this.attribute.allowMultipleFiles ? next : next.slice(-1),
         ),
       );
+      if (!this.attribute.allowMultipleFiles) this.filePickerOpen = false;
     },
     async uploadAttributeFiles(event, rawValue, setValue) {
       const input = event.target;
@@ -358,6 +430,12 @@ export default {
     },
   },
   computed: {
+    matchingFiles() {
+      return filterAttributeFiles(this.files, this.fileSearchQuery);
+    },
+    canUploadAttributeFile() {
+      return Boolean(this.productId || this.onFileUpload);
+    },
     unitDisplay() {
       const code = String(this.attribute?.unitCode ?? "").trim();
       if (!code) return "";
@@ -567,56 +645,148 @@ export default {
             @update:model-value="setValue"
           />
         </FormControl>
-        <div v-else-if="isType(attribute.type, 'file')" class="grid gap-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <input
-              ref="attributeFileInput"
-              type="file"
-              class="sr-only"
-              :multiple="attribute.allowMultipleFiles === true"
-              :aria-label="$t('components.attributeFieldControl.uploadFile')"
-              @change="uploadAttributeFiles($event, value, setValue)"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              :disabled="isUploadingFile"
-              @click="$refs.attributeFileInput?.click()"
+        <div v-else-if="isType(attribute.type, 'file')" class="min-w-0">
+          <input
+            :id="`${fieldId()}-upload`"
+            ref="attributeFileInput"
+            type="file"
+            class="sr-only"
+            tabindex="-1"
+            aria-hidden="true"
+            :multiple="attribute.allowMultipleFiles === true"
+            :aria-label="$t('components.attributeFieldControl.uploadFile')"
+            @change="uploadAttributeFiles($event, value, setValue)"
+          />
+          <Popover v-model:open="filePickerOpen">
+            <FormControl>
+              <PopoverTrigger as-child>
+                <Button
+                  :id="fieldId()"
+                  type="button"
+                  variant="outline"
+                  class="w-full min-w-0 justify-between gap-2 font-normal"
+                  :aria-label="`${attribute.name}: ${fileSelectionText(value)}`"
+                  :title="fileSelectionText(value)"
+                >
+                  <span class="flex min-w-0 items-center gap-2">
+                    <Paperclip class="size-4 shrink-0 text-muted-foreground" />
+                    <span class="truncate">{{ fileSelectionText(value) }}</span>
+                  </span>
+                  <ChevronDown
+                    class="size-4 shrink-0 text-muted-foreground transition-transform duration-[var(--duration-ui)]"
+                    :class="filePickerOpen ? 'rotate-180' : ''"
+                    aria-hidden="true"
+                  />
+                </Button>
+              </PopoverTrigger>
+            </FormControl>
+            <PopoverContent
+              align="start"
+              :collision-padding="8"
+              class="flex max-h-[min(24rem,calc(100vh-2rem))] w-[min(var(--reka-popover-trigger-width),28rem)] max-w-[min(28rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"
             >
-              <Spinner v-if="isUploadingFile" class="mr-2 size-4" />
-              <Upload v-else class="mr-2 size-4" />
-              {{ $t("components.attributeFieldControl.uploadFile") }}
-            </Button>
-            <span class="text-xs text-muted-foreground">
-              {{
-                attribute.allowMultipleFiles
-                  ? $t("components.attributeFieldControl.multipleFilesHint")
-                  : $t("components.attributeFieldControl.singleFileHint")
-              }}
-            </span>
-          </div>
-          <label
-            v-for="file in files"
-            :key="file.id"
-            class="flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-sm"
-          >
-            <input
-              type="checkbox"
-              :disabled="isUploadingFile"
-              :checked="fileIds(value).includes(file.id)"
-              @change="toggleFile(file.id, value, setValue)"
-            />
-            <span class="min-w-0 truncate">{{
-              file.fileName || file.displayName || file.name
-            }}</span>
-            <span class="ml-auto shrink-0 text-xs text-muted-foreground">{{
-              file.contentType
-            }}</span>
-          </label>
-          <p v-if="!files.length" class="text-sm text-muted-foreground">
-            {{ $t("products.productAttributeForm.noFiles") }}
-          </p>
+              <div v-if="files.length > 5" class="border-b px-2 py-2">
+                <div class="relative">
+                  <Search
+                    class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    v-model="fileSearchQuery"
+                    type="search"
+                    :placeholder="
+                      $t('components.attributeFieldControl.searchFiles')
+                    "
+                    :aria-label="
+                      $t('components.attributeFieldControl.searchFiles')
+                    "
+                    class="h-8 pl-8"
+                    @click.stop
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="files.length === 0"
+                class="px-3 py-5 text-center text-sm text-muted-foreground"
+              >
+                {{ $t("products.productAttributeForm.noFiles") }}
+              </div>
+              <div
+                v-else-if="matchingFiles.length === 0"
+                class="px-3 py-5 text-center text-sm text-muted-foreground"
+              >
+                {{ $t("components.attributeFieldControl.noMatchingFiles") }}
+              </div>
+              <div
+                v-else
+                role="group"
+                :aria-label="
+                  $t('components.attributeFieldControl.productFiles')
+                "
+                class="max-h-56 min-h-0 overflow-y-auto overscroll-contain p-1.5"
+              >
+                <FieldLabel
+                  v-for="file in visibleFileRows(value)"
+                  :key="file.id ?? file.Id"
+                  :for="fileCheckboxId(file)"
+                  class="flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm font-normal leading-5 text-foreground transition-colors duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] hover:bg-muted/70"
+                  :class="fileIsSelected(file, value) ? 'bg-muted/50' : ''"
+                >
+                  <Checkbox
+                    :id="fileCheckboxId(file)"
+                    :model-value="fileIsSelected(file, value)"
+                    :disabled="isUploadingFile"
+                    :aria-label="fileName(file)"
+                    @update:model-value="
+                      toggleFile(file.id ?? file.Id, value, setValue)
+                    "
+                  />
+                  <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate" :title="fileName(file)">
+                      {{ fileName(file) }}
+                    </span>
+                  </span>
+                </FieldLabel>
+              </div>
+
+              <p
+                v-if="hasMoreFileResults(value)"
+                class="border-t px-3 py-2 text-xs text-muted-foreground"
+              >
+                {{
+                  $t("components.attributeFieldControl.fileResultsHint", {
+                    shown: visibleFileRows(value).length.toLocaleString(),
+                    total: matchingFiles.length.toLocaleString(),
+                  })
+                }}
+              </p>
+
+              <div class="flex items-center justify-between gap-2 border-t p-2">
+                <Button
+                  v-if="fileIds(value).length"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  @click="clearFileSelection(setValue)"
+                >
+                  {{ $t("components.attributeFieldControl.clearSelection") }}
+                </Button>
+                <span v-else />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  :disabled="isUploadingFile || !canUploadAttributeFile"
+                  @click="$refs.attributeFileInput?.click()"
+                >
+                  <Spinner v-if="isUploadingFile" class="size-4" />
+                  <Upload v-else class="size-4" />
+                  {{ $t("components.attributeFieldControl.uploadFile") }}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         <FormControl v-else>
           <Input

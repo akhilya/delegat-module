@@ -14,6 +14,15 @@ internal static class AttributeFieldConstraints
     /// </summary>
     public static void ApplyTo(ref CategoryAttribute.AddForm form, ExternalField field)
     {
+        if (form.type == Delegat.Enums.AttributeType.File)
+        {
+            // URL/string limits describe the remote wire value, not local file IDs.
+            form.unitCode = null;
+            form.defaultValue = null;
+            form.options = null;
+            form.allowCustomValues = false;
+            return;
+        }
         form.unitCode = form.type == Delegat.Enums.AttributeType.Number
             ? ResolveUnitCode(field)
             : null;

@@ -359,8 +359,14 @@
     },
     "attributeFieldControl": {
       "uploadFile": "Загрузить файл",
-      "singleFileHint": "Один файл для значения",
-      "multipleFilesHint": "Можно добавить несколько файлов",
+      "chooseFile": "Выбрать файл",
+      "chooseFiles": "Выбрать файлы",
+      "selectedFileCount": "Выбрано: {count}",
+      "productFiles": "Файлы товара",
+      "searchFiles": "Поиск по файлам товара...",
+      "noMatchingFiles": "По запросу ничего не найдено",
+      "fileResultsHint": "Показано {shown} из {total}. Уточните поиск, чтобы увидеть остальные.",
+      "clearSelection": "Снять выбор",
       "constraints": {
         "pattern": "Формат"
       }

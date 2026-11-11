@@ -272,6 +272,7 @@ Floating lists (dropdown, context menu, select, searchable select, combobox, pop
 
 ### File drops and assistant attachments
 - The file manager and assistant share `FileDropOverlay`: an inset, neutral dashed target, bare upload icon, short instruction and optional hint, with a quiet opacity transition. The overlay does not intercept pointer events or move focus while dragging.
+- File attribute fields use the standard `h-9` shadcn-vue outline trigger. Keep the product file inventory in its anchored shadcn-vue popover, with search for larger inventories and a bounded scroll list; never render the full inventory inline in the product form. Multiple selections stay neutral rather than using the single-current-item primary fill.
 - The assistant uses the shared paperclip icon for attachment picking. Individual files can be dropped anywhere in the chat sheet when file permissions, an enabled model and an idle composer allow it. Drops add to the same draft attachment list as the picker; they never upload or send automatically. Folder drops are rejected with a localized hint; text and link drags keep native editing behavior.
 - Hide the assistant model selector when exactly one enabled model is available. Preserve automatic/default model resolution and the no-model state; show the selector for two or more choices.
 

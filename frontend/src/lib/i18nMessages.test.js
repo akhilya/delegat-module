@@ -112,6 +112,24 @@ describe("locale message catalogs", () => {
         );
       }
 
+      for (const key of [
+        "uploadFile",
+        "chooseFile",
+        "chooseFiles",
+        "selectedFileCount",
+        "productFiles",
+        "searchFiles",
+        "noMatchingFiles",
+        "fileResultsHint",
+        "clearSelection",
+      ]) {
+        assert.equal(
+          typeof messages.components.attributeFieldControl[key],
+          "string",
+          `${locale}.components.attributeFieldControl.${key}`,
+        );
+      }
+
       for (const key of ["unitLabel", "unitPlaceholder", "unitHint"]) {
         assert.equal(
           typeof messages.pages.categoryEditPage[key],

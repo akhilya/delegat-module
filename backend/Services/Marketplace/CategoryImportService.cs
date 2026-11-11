@@ -187,13 +187,13 @@ public class CategoryImportService
         var unitCodesByFieldKey = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var field in fieldsForAttributes)
         {
-            var unitCode = MapExternalFieldType(field.Type) == AttributeType.Number
+            var unitCode = AttributeImportSemantics.ResolveType(field) == AttributeType.Number
                 ? AttributeFieldConstraints.ResolveUnitCode(field)
                 : null;
             unitCodesByFieldKey[field.Key] = unitCode;
             var duplicateCandidates = AttributeDuplicateMatcher.FindCandidates(
                 field,
-                MapExternalFieldType(field.Type),
+                AttributeImportSemantics.ResolveType(field),
                 unitCode,
                 existingAttributes).ToArray();
             duplicateCandidatesByFieldKey[field.Key] = duplicateCandidates;
@@ -255,8 +255,8 @@ public class CategoryImportService
         {
             var sanitizedKey = SanitizeKey(field.Key);
             var unitCode = unitCodesByFieldKey[field.Key];
-            var importedName = AttributeImportNameNormalizer.Normalize(
-                field.Name, unitCode, field.Description);
+            var importedName = AttributeImportSemantics.NormalizeName(field, unitCode);
+            var importType = AttributeImportSemantics.ResolveType(field);
 
             var duplicateCandidates = duplicateCandidatesByFieldKey[field.Key];
             decisionsByFieldKey.TryGetValue(field.Key, out var decision);
@@ -292,7 +292,7 @@ public class CategoryImportService
 
             // Determine the default value for certain field types
             string? defaultValue = null;
-            if (field.Options != null && field.Options.Count > 0)
+            if (importType != AttributeType.File && field.Options != null && field.Options.Count > 0)
             {
                 defaultValue = DetermineDefaultValue(field);
             }
@@ -304,13 +304,14 @@ public class CategoryImportService
                     CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH,
                     sanitizedKey),
                 key = sanitizedKey,
-                type = MapExternalFieldType(field.Type),
-                unitCode = MapExternalFieldType(field.Type) == AttributeType.Number
+                type = importType,
+                allowMultipleFiles = AttributeImportSemantics.AllowsMultipleFiles(field),
+                unitCode = importType == AttributeType.Number
                     ? AttributeUnits.NormalizeCode(field.UnitCode ?? field.Unit)
                     : null,
                 isRequired = false,
                 sortOrder = sortOrder++,
-                options = field.Options != null ? SerializeOptions(field.Options) : null,
+                options = importType != AttributeType.File && field.Options != null ? SerializeOptions(field.Options) : null,
                 defaultValue = StringClip.ClipOptional(
                     defaultValue,
                     CategoryAttribute.ATTRIBUTE_DEFAULT_MAX_LENGTH),
@@ -974,13 +975,14 @@ public class CategoryImportService
     /// </summary>
     internal static AttributeType MapExternalFieldType(string externalType)
     {
-        return externalType.ToLowerInvariant() switch
+        return externalType.Trim().ToLowerInvariant() switch
         {
             "number" or "integer" or "decimal" or "float" => AttributeType.Number,
             "boolean" or "bool" => AttributeType.Boolean,
             "select" or "enum" => AttributeType.Select,
             "multiselect" or "multi" or "array" => AttributeType.MultiSelect,
             "barcode" => AttributeType.Barcode,
+            "file" or "files" or "attachment" or "attachments" => AttributeType.File,
             _ => AttributeType.Text
         };
     }

@@ -430,6 +430,7 @@ export default {
         Select: "select",
         MultiSelect: "multiSelect",
         Barcode: "barcode",
+        File: "file",
       };
       return this.$t(
         `marketplace.categoryImportPage.attributeTypes.${typeKeys[type] || "unknown"}`,

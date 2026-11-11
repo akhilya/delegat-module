@@ -11,6 +11,81 @@ namespace Delegat.Tests;
 public class CategoryImportServiceTests
 {
     [Fact]
+    public async Task Import_ReusesNormalizedFileDuplicateWithoutMutatingDefinition()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("21841", "Озон.Видео: ссылка", false, "string", MaxValues: 3),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(category.Id, "Видео", AttributeType.File, key: "video");
+        var text = data.AddCategoryAttribute(category.Id, "Видео", AttributeType.Text, key: "video_text");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(
+            connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision
+                {
+                    fieldKey = "21841", action = "reuse", existingAttributeId = existing.Id,
+                },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        Assert.Equal(2, await db.categoryAttributes.CountAsync());
+        Assert.False(existing.allowMultipleFiles);
+        Assert.Equal("video", existing.key);
+        Assert.Equal(AttributeType.Text, text.type);
+        var mapping = await db.categoryMappings.SingleAsync();
+        Assert.Contains($"\"attributeId\":{existing.Id}", mapping.graphJson);
+    }
+
+    [Fact]
+    public async Task Import_CreatesFileAttributesWithoutRemoteStringConstraints()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("21841", "Озон.Видео: ссылка", false, "string",
+                MaxLength: 100, ValidationPattern: "^https://", MaxValues: 3,
+                AllowCustomValues: true),
+            new ExternalField("cover", "Озон.Видеообложка: ссылка", false, "string", MaxValues: 1),
+            new ExternalField("manual", "Manual", false, "file"),
+            new ExternalField("21837", "Озон.Видео: название", false, "string"),
+        ]);
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", "Toys");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var video = await db.categoryAttributes.SingleAsync(a => a.key == "21841");
+        Assert.Equal("Видео", video.name);
+        Assert.Equal(AttributeType.File, video.type);
+        Assert.True(video.allowMultipleFiles);
+        Assert.Null(video.maxLength);
+        Assert.Null(video.validationPattern);
+        Assert.Null(video.maxValues);
+        Assert.Null(video.defaultValue);
+        Assert.Null(video.options);
+        Assert.False(video.allowCustomValues);
+        var cover = await db.categoryAttributes.SingleAsync(a => a.key == "cover");
+        Assert.Equal("Видеообложка", cover.name);
+        Assert.Equal(AttributeType.File, cover.type);
+        Assert.False(cover.allowMultipleFiles);
+        Assert.Equal(AttributeType.File, (await db.categoryAttributes.SingleAsync(a => a.key == "manual")).type);
+        Assert.Equal(AttributeType.Text, (await db.categoryAttributes.SingleAsync(a => a.key == "21837")).type);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var graph = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = graph.RootElement.GetProperty("nodes").EnumerateArray()
+            .Single(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray();
+        var remoteVideo = fields.Single(f => f.GetProperty("fieldKey").GetString() == "21841");
+        Assert.Equal("Озон.Видео: ссылка", remoteVideo.GetProperty("label").GetString());
+    }
+
+    [Fact]
     public async Task Import_ClipsOverlongCategoryAndAttributeNames()
     {
         var (svc, db, connection) = Create("leaf",

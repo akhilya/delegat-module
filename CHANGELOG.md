@@ -88,6 +88,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- File attribute controls stay compact in product forms; file selection and upload use a searchable, size-bounded popover instead of rendering the product's full file list inline.
 - Assistant attachment picking uses a paperclip icon. The model selector is hidden when only one enabled model is available.
 - AI Model IDs use the shared badge component. Desktop toast notifications stay to the left of the companion buttons and follow their position when sheets open; mobile placement is unchanged.
 - Checkboxes have larger click/touch targets, and table selection columns and outer cells have more breathing room, including headers. Form corners now match the existing buttons; file tables no longer duplicate their parent's outline.
@@ -243,6 +244,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Marketplace category imports recognize attachment and media-link fields as File attributes in both preview and creation, normalize labels such as Ozon video/video-cover links, and omit remote URL-string constraints without changing existing definitions.
 - Product attribute forms preserve scalar values when attachment IDs are present in API DTOs, instead of overwriting values with `[]`. Mixed-gallery previews expose the media classifier correctly.
 - Product details send only selected dictionary labels; complete selector options load on opening, including keyboard activation. Large category dictionaries no longer inflate every product response.
 - Interrupted feature migrations fail immediately with a reconciliation error instead of repeatedly attempting duplicate DDL or automatically stamping incomplete schemas.

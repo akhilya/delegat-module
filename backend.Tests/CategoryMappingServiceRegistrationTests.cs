@@ -43,6 +43,10 @@ public class CategoryMappingServiceRegistrationTests
                     Description: "Choose a brand",
                     MaxValues: 4,
                     AllowCustomValues: true),
+                new ExternalField(
+                    "21841", "Озон.Видео: ссылка", false, "string",
+                    MaxLength: 100, ValidationPattern: "^https://", MaxValues: 3,
+                    AllowCustomValues: true),
             ],
         };
         await using var provider = CreateProvider(aiEnabled: false, adapter: adapter);
@@ -73,6 +77,17 @@ public class CategoryMappingServiceRegistrationTests
         var packagedHeight = body.EnumerateArray()
             .Single(item => item.GetProperty("key").GetString() == "height_with_packaging");
         Assert.Equal("Высота с упаковкой", packagedHeight.GetProperty("importName").GetString());
+
+        var video = body.EnumerateArray()
+            .Single(item => item.GetProperty("key").GetString() == "21841");
+        Assert.Equal("Видео", video.GetProperty("importName").GetString());
+        Assert.Equal("File", video.GetProperty("importType").GetString());
+        Assert.Equal("string", video.GetProperty("type").GetString());
+        Assert.True(video.GetProperty("allowMultipleFiles").GetBoolean());
+        Assert.False(video.GetProperty("allowCustomValues").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, video.GetProperty("maxLength").ValueKind);
+        Assert.Equal(JsonValueKind.Null, video.GetProperty("validationPattern").ValueKind);
+        Assert.Equal(JsonValueKind.Null, video.GetProperty("maxValues").ValueKind);
 
         var detailsResult = await controller.GetExternalCategoryFields(
             connection.Id, "remote-category", "brand");

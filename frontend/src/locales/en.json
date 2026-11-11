@@ -359,8 +359,14 @@
     },
     "attributeFieldControl": {
       "uploadFile": "Upload file",
-      "singleFileHint": "One file per value",
-      "multipleFilesHint": "Multiple files allowed",
+      "chooseFile": "Choose a file",
+      "chooseFiles": "Choose files",
+      "selectedFileCount": "{count} selected",
+      "productFiles": "Files in this product",
+      "searchFiles": "Search product files...",
+      "noMatchingFiles": "No files match your search",
+      "fileResultsHint": "Showing {shown} of {total}. Refine the search to see more.",
+      "clearSelection": "Clear selection",
       "constraints": {
         "pattern": "Format"
       }

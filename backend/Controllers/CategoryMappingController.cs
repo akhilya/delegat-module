@@ -1055,7 +1055,8 @@ public class CategoryMappingController : ControllerBase
 
             var result = selectedFields.Select(f =>
             {
-                var importType = CategoryImportService.MapExternalFieldType(f.Type);
+                var importType = AttributeImportSemantics.ResolveType(f);
+                var isFile = importType == AttributeType.File;
                 var unitCode = importType == AttributeType.Number
                     ? AttributeFieldConstraints.ResolveUnitCode(f)
                     : null;
@@ -1067,11 +1068,11 @@ public class CategoryMappingController : ControllerBase
                         unitCode,
                         localAttributes).ToArray();
                 var attributeKey = CategoryImportService.SanitizeKey(f.Key);
-                var maxLength = AttributeFieldConstraints.NormalizeMaxLength(f.MaxLength);
+                var maxLength = isFile ? null : AttributeFieldConstraints.NormalizeMaxLength(f.MaxLength);
                 var (minValue, maxValue) = AttributeFieldConstraints.NormalizeRange(
-                    f.MinValue, f.MaxValue);
+                    isFile ? null : f.MinValue, isFile ? null : f.MaxValue);
                 var defaultValue = StringClip.ClipOptional(
-                    CategoryImportService.DetermineDefaultValue(f),
+                    isFile ? null : CategoryImportService.DetermineDefaultValue(f),
                     CategoryAttribute.ATTRIBUTE_DEFAULT_MAX_LENGTH);
                 if (defaultValue != null && maxLength.HasValue)
                     defaultValue = StringClip.ClipOptional(defaultValue, maxLength.Value);
@@ -1082,7 +1083,7 @@ public class CategoryMappingController : ControllerBase
                     attributeKey,
                     name = f.Name,
                     importName = StringClip.ClipRequired(
-                        AttributeImportNameNormalizer.Normalize(f.Name, unitCode, f.Description),
+                        AttributeImportSemantics.NormalizeName(f, unitCode),
                         CategoryAttribute.ATTRIBUTE_NAME_MAX_LENGTH,
                         attributeKey),
                     importType = importType.ToString(),
@@ -1092,10 +1093,11 @@ public class CategoryMappingController : ControllerBase
                     isUnique = false,
                     isMultiline = false,
                     showOnProductPage = true,
-                    allowCustomValues = f.AllowCustomValues,
+                    allowCustomValues = !isFile && f.AllowCustomValues,
+                    allowMultipleFiles = AttributeImportSemantics.AllowsMultipleFiles(f),
                     type = f.Type,
-                    optionsCount = f.Options?.Count ?? 0,
-                    options = string.IsNullOrWhiteSpace(fieldKey)
+                    optionsCount = isFile ? 0 : f.Options?.Count ?? 0,
+                    options = isFile || string.IsNullOrWhiteSpace(fieldKey)
                         ? null
                         : f.Options?.Select(o => new { value = o.Value, label = o.Label }).ToList(),
                     defaultValue,
@@ -1114,9 +1116,9 @@ public class CategoryMappingController : ControllerBase
                     maxLength,
                     minValue,
                     maxValue,
-                    maxValues = AttributeFieldConstraints.NormalizeMaxValues(f.MaxValues),
+                    maxValues = isFile ? null : AttributeFieldConstraints.NormalizeMaxValues(f.MaxValues),
                     validationPattern = AttributeFieldConstraints.UsableValidationPattern(
-                        f.ValidationPattern),
+                        isFile ? null : f.ValidationPattern),
                     potentialDuplicates = duplicateCandidates.Select(candidate => new
                     {
                         id = candidate.Attribute.Id,
