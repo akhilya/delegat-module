@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Data;
 using Delegat.Infrastructure.Interfaces;
@@ -16,6 +17,21 @@ namespace Delegat.Controllers;
 [JwtAuthorize]
 public class CategoryController : ControllerBase
 {
+    private const int AttributeOptionMaxPageSize = 100;
+    private const int AttributeOptionMaxSearchLength = 200;
+    private const int AttributeOptionMaxSelectedJsonLength = 8192;
+    private const int AttributeOptionMaxSelectedValues = 100;
+
+    public sealed record AttributeOption(string Value, string Label);
+
+    public sealed record AttributeOptionPage(
+        IReadOnlyList<AttributeOption> Items,
+        int Page,
+        int PageSize,
+        int Total,
+        bool HasMore,
+        IReadOnlyList<AttributeOption> SelectedOptions);
+
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceProvider _serviceProvider;
@@ -346,6 +362,149 @@ public class CategoryController : ControllerBase
         if (attribute == null)
             throw ApiException.NotFound(code: "attribute_not_found");
         return Ok(((IMapToDTO<CategoryAttribute.AttributeDTO>)attribute).MapToDTO(_serviceProvider));
+    }
+
+    /// <summary>Returns a bounded search page from a select attribute's JSON dictionary.</summary>
+    [HttpGet("/categories/{categoryId}/attributes/{attributeId:int}/options")]
+    public async Task<IActionResult> GetCategoryAttributeOptions(
+        int categoryId,
+        int attributeId,
+        [FromQuery] string? query = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? selectedValues = null)
+    {
+        await RequireAttributeCategoryAsync(categoryId);
+
+        var attribute = await _context.categoryAttributes.AsNoTracking()
+            .Where(a => a.Id == attributeId && a.categoryId == categoryId)
+            .Select(a => new { a.type, a.options })
+            .FirstOrDefaultAsync();
+        if (attribute == null)
+            throw ApiException.NotFound(code: "attribute_not_found");
+        if (attribute.type is not (Delegat.Enums.AttributeType.Select or Delegat.Enums.AttributeType.MultiSelect))
+            throw ApiException.BadRequest(code: "attribute_options_not_available");
+
+        var selected = ParseSelectedOptionValues(selectedValues);
+        var dictionaryOptions = ParseAttributeOptions(attribute.options);
+        var allOptions = dictionaryOptions;
+        var normalizedQuery = query?.Trim();
+        if (!string.IsNullOrEmpty(normalizedQuery))
+        {
+            normalizedQuery = normalizedQuery[..Math.Min(normalizedQuery.Length, AttributeOptionMaxSearchLength)];
+            allOptions = allOptions.Where(option =>
+                    option.Label.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
+                    || option.Value.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, AttributeOptionMaxPageSize);
+        var total = allOptions.Count;
+        var offset = (long)(page - 1) * pageSize;
+        var items = offset >= total
+            ? []
+            : allOptions.Skip((int)offset).Take(pageSize).ToList();
+
+        var selectedOptions = selected.Select(value =>
+        {
+            var match = dictionaryOptions.FirstOrDefault(option =>
+                string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(option.Label, value, StringComparison.OrdinalIgnoreCase));
+            return new AttributeOption(value, match?.Label ?? value);
+        }).ToList();
+
+        return Ok(new AttributeOptionPage(
+            items,
+            page,
+            pageSize,
+            total,
+            offset + items.Count < total,
+            selectedOptions));
+    }
+
+    private static List<string> ParseSelectedOptionValues(string? selectedValues)
+    {
+        if (string.IsNullOrWhiteSpace(selectedValues))
+            return [];
+        if (selectedValues.Length > AttributeOptionMaxSelectedJsonLength)
+            throw ApiException.BadRequest(code: "attribute_options_selection_invalid");
+
+        try
+        {
+            using var document = JsonDocument.Parse(selectedValues);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                throw ApiException.BadRequest(code: "attribute_options_selection_invalid");
+            var values = document.RootElement.EnumerateArray()
+                .Where(value => value.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+                .Select(value => value.ToString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+            if (values.Count > AttributeOptionMaxSelectedValues
+                || values.Any(value => value.Length > 1024))
+                throw ApiException.BadRequest(code: "attribute_options_selection_invalid");
+            return values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (JsonException)
+        {
+            throw ApiException.BadRequest(code: "attribute_options_selection_invalid");
+        }
+    }
+
+    private static List<AttributeOption> ParseAttributeOptions(string? optionsJson)
+    {
+        if (string.IsNullOrWhiteSpace(optionsJson))
+            return [];
+
+        try
+        {
+            using var document = JsonDocument.Parse(optionsJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var options = new List<AttributeOption>();
+            foreach (var entry in document.RootElement.EnumerateArray())
+            {
+                string? value;
+                string? label;
+                if (entry.ValueKind == JsonValueKind.Object)
+                {
+                    value = ReadOptionProperty(entry, "value") ?? ReadOptionProperty(entry, "Value");
+                    label = ReadOptionProperty(entry, "label") ?? ReadOptionProperty(entry, "Label");
+                }
+                else if (entry.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+                {
+                    value = entry.ToString();
+                    label = value;
+                }
+                else
+                {
+                    continue;
+                }
+
+                value = string.IsNullOrEmpty(value) ? label : value;
+                label = string.IsNullOrEmpty(label) ? value : label;
+                if (!string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(label))
+                    options.Add(new AttributeOption(value, label));
+            }
+            return options;
+        }
+        catch (JsonException)
+        {
+            return optionsJson.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => new AttributeOption(value, value))
+                .ToList();
+        }
+    }
+
+    private static string? ReadOptionProperty(JsonElement entry, string name)
+    {
+        foreach (var property in entry.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                return property.Value.ValueKind == JsonValueKind.Null ? null : property.Value.ToString();
+        }
+        return null;
     }
 
     private IQueryable<AttributeDefinitionSummary> CategoryAttributeSummaries(int categoryId) =>

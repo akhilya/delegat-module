@@ -326,6 +326,11 @@ public class ImageDownloadBackgroundService : BackgroundService
                 }
             }
 
+            // Host shutdown cancellation is not a media failure. Keep the queue row
+            // recoverable as InProgress; startup recovery will return it to Pending.
+            if (ex is OperationCanceledException && ct.IsCancellationRequested)
+                throw;
+
             pending.status = ImageDownloadStatus.Failed;
             pending.lastError = ex.Message;
             await context.SaveChangesAsync(CancellationToken.None);

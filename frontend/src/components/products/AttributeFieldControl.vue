@@ -63,18 +63,29 @@ export default {
     return {
       isUploadingFile: false,
       isLoadingOptions: false,
+      isLoadingMoreOptions: false,
       loadedOptions: null,
+      selectedOptions: [],
+      optionsSearchQuery: "",
+      optionsPage: 1,
+      optionsHasMore: false,
+      optionsRequestId: 0,
+      optionsSearchTimer: null,
     };
   },
   watch: {
     "attribute.id"() {
-      this.loadedOptions = null;
-      this.isLoadingOptions = false;
+      this.resetOptionState();
     },
     categoryId() {
-      this.loadedOptions = null;
-      this.isLoadingOptions = false;
+      this.resetOptionState();
     },
+    productId() {
+      this.resetOptionState();
+    },
+  },
+  beforeUnmount() {
+    this.resetOptionState();
   },
   methods: {
     isType(attrType, typeName) {
@@ -87,41 +98,169 @@ export default {
       return `${this.idPrefix}${this.attribute.id}`;
     },
     getSelectOptions() {
-      return parseAttributeOptions(
-        this.loadedOptions ?? this.attribute.options,
-      );
+      const available =
+        this.loadedOptions ?? parseAttributeOptions(this.attribute.options);
+      const merged = [...this.selectedOptions, ...available];
+      const seen = new Set();
+      return merged.filter((option) => {
+        const key = String(option.value);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     },
     optionSource() {
-      return this.loadedOptions ?? this.attribute.options;
+      return JSON.stringify(this.getSelectOptions());
     },
-    async loadOptions() {
+    resetOptionState() {
+      this.optionsRequestId += 1;
+      clearTimeout(this.optionsSearchTimer);
+      this.optionsSearchTimer = null;
+      this.isLoadingOptions = false;
+      this.isLoadingMoreOptions = false;
+      this.loadedOptions = null;
+      this.selectedOptions = [];
+      this.optionsSearchQuery = "";
+      this.optionsPage = 1;
+      this.optionsHasMore = false;
+    },
+    selectedOptionValues(rawValue) {
+      if (rawValue == null || rawValue === "") return [];
+      const text = String(rawValue);
+      if (this.isType(this.attribute.type, "multiselect")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed))
+            return parsed.map(String).filter(Boolean).slice(0, 100);
+          if (parsed != null) return [String(parsed)];
+        } catch {
+          return text
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .slice(0, 100);
+        }
+        return [];
+      }
+      return [text];
+    },
+    async loadOptions(rawValue) {
       if (
         this.isLoadingOptions ||
         this.loadedOptions !== null ||
-        (this.attribute.options && !this.attribute.optionsPartial) ||
+        !this.attribute.optionsPartial ||
         !this.categoryId ||
         (!this.isType(this.attribute.type, "select") &&
           !this.isType(this.attribute.type, "multiselect"))
       )
         return;
+
+      this.optionsSearchQuery = "";
+      const requestId = ++this.optionsRequestId;
+      this.isLoadingOptions = true;
+      await this.fetchOptionsPage("", 1, false, rawValue, requestId);
+    },
+    handleOptionSearch(query, rawValue) {
+      if (!this.attribute.optionsPartial) return;
+      const nextQuery = String(query ?? "");
+      if (nextQuery === this.optionsSearchQuery) return;
+
+      this.optionsSearchQuery = nextQuery;
+      clearTimeout(this.optionsSearchTimer);
+      const requestId = ++this.optionsRequestId;
+      this.isLoadingOptions = true;
+      this.isLoadingMoreOptions = false;
+      this.optionsPage = 1;
+      this.optionsHasMore = false;
+      this.optionsSearchTimer = setTimeout(() => {
+        this.optionsSearchTimer = null;
+        this.fetchOptionsPage(nextQuery, 1, false, rawValue, requestId);
+      }, 250);
+    },
+    async fetchOptionsPage(query, page, append, rawValue, requestId) {
       const categoryId = this.categoryId;
       const attributeId = this.attribute.id;
-      this.isLoadingOptions = true;
+      const params = {
+        query,
+        page,
+        pageSize: 50,
+        selectedValues: JSON.stringify(this.selectedOptionValues(rawValue)),
+      };
       try {
         const response = await http.get(
-          `/categories/${categoryId}/attributes/${attributeId}`,
+          `/categories/${categoryId}/attributes/${attributeId}/options`,
+          { params },
         );
-        if (this.categoryId !== categoryId || this.attribute.id !== attributeId)
+        if (
+          requestId !== this.optionsRequestId ||
+          this.categoryId !== categoryId ||
+          this.attribute.id !== attributeId
+        )
           return;
-        const definition = response.data?.value ?? response.data;
-        this.loadedOptions = definition?.options ?? "[]";
+        const result = response.data?.value ?? response.data;
+        const pageOptions = Array.isArray(result?.items)
+          ? result.items.map((option) => ({
+              value: String(option.value ?? ""),
+              label: String(option.label ?? option.value ?? ""),
+            }))
+          : [];
+        this.loadedOptions = append
+          ? this.mergeOptionPages(this.loadedOptions ?? [], pageOptions)
+          : pageOptions;
+        this.selectedOptions = Array.isArray(result?.selectedOptions)
+          ? result.selectedOptions.map((option) => ({
+              value: String(option.value ?? ""),
+              label: String(option.label ?? option.value ?? ""),
+            }))
+          : [];
+        this.optionsPage = page;
+        this.optionsHasMore = result?.hasMore === true;
       } catch (error) {
-        if (this.categoryId === categoryId && this.attribute.id === attributeId)
+        if (
+          requestId === this.optionsRequestId &&
+          this.categoryId === categoryId &&
+          this.attribute.id === attributeId
+        )
           displaySonnerError(error);
       } finally {
-        if (this.categoryId === categoryId && this.attribute.id === attributeId)
+        if (
+          requestId === this.optionsRequestId &&
+          this.categoryId === categoryId &&
+          this.attribute.id === attributeId
+        ) {
           this.isLoadingOptions = false;
+          this.isLoadingMoreOptions = false;
+        }
       }
+    },
+    async loadMoreOptions(rawValue) {
+      if (
+        !this.optionsHasMore ||
+        this.isLoadingOptions ||
+        this.isLoadingMoreOptions
+      )
+        return;
+      const requestId = ++this.optionsRequestId;
+      this.isLoadingMoreOptions = true;
+      await this.fetchOptionsPage(
+        this.optionsSearchQuery,
+        this.optionsPage + 1,
+        true,
+        rawValue,
+        requestId,
+      );
+    },
+    mergeOptionPages(current, next) {
+      const seen = new Set(current.map((option) => String(option.value)));
+      const merged = [...current];
+      for (const option of next) {
+        const key = String(option.value);
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(option);
+        }
+      }
+      return merged;
     },
     getMultiSelectLabels(rawValue) {
       if (!rawValue) return [];
@@ -388,13 +527,19 @@ export default {
           <SearchableSelect
             :model-value="value || ''"
             :options="getSelectOptions()"
+            :remote="attribute.optionsPartial === true"
+            :loading="isLoadingOptions"
+            :has-more="optionsHasMore"
+            :loading-more="isLoadingMoreOptions"
             :placeholder="
               attribute.defaultValue ||
               $t('products.productAttributeForm.selectPlaceholder')
             "
             :invalid="!!errorMessage"
             :allow-create="!!attribute.allowCustomValues"
-            @open="loadOptions"
+            @search="handleOptionSearch($event, value)"
+            @load-more="loadMoreOptions(value)"
+            @open="loadOptions(value)"
             @update:model-value="setValue"
           />
         </FormControl>
@@ -402,11 +547,17 @@ export default {
           <MultiSelectDropdown
             :options="getSelectOptions().map((option) => option.label)"
             :model-value="getMultiSelectLabels(value)"
+            :remote="attribute.optionsPartial === true"
+            :loading="isLoadingOptions"
+            :has-more="optionsHasMore"
+            :loading-more="isLoadingMoreOptions"
             :invalid="!!errorMessage"
             :placeholder="$t('products.productAttributeForm.selectPlaceholder')"
             :allow-create="!!attribute.allowCustomValues"
             :max-selections="valueMaxSelections()"
-            @open="loadOptions"
+            @search="handleOptionSearch($event, value)"
+            @load-more="loadMoreOptions(value)"
+            @open="loadOptions(value)"
             @update:model-value="setMultiSelectByLabels($event, setValue)"
           />
         </FormControl>

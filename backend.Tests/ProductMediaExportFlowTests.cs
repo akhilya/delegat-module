@@ -72,6 +72,77 @@ public sealed class ProductMediaExportFlowTests
         Assert.Equal(file.Id, (await db.productMediaExportGrants.SingleAsync()).fileId);
     }
 
+    [Fact]
+    public async Task WildberriesSingleExport_UsesHostPreparedPermanentVideoGrant()
+    {
+        var (db, product, connection, file, storage) = await CreateScenarioAsync("wildberries");
+        var adapter = CreateAdapter("wildberries", new MediaCapabilities(
+            CanImportVideos: true,
+            CanExportVideos: true,
+            UsesPermanentUrls: true,
+            MaxVideos: 1,
+            AcceptedVideoContentTypes: ["video/mp4", "video/quicktime"]),
+            () => db.productMediaExportGrants.Count());
+        var service = CreateProductSyncService(db, adapter, storage);
+
+        var result = await service.ExportProductAsync(product.Id, connection.Id);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var proxy = Assert.IsAssignableFrom<FakeVideoExportAdapterProxy>((object)adapter);
+        Assert.Equal(1, proxy.SingleExportGrantCount);
+        var url = Assert.Single(Assert.IsType<List<string>>(proxy.SingleExportData!["videos"]));
+        Assert.StartsWith("https://media.example.test/api/pub/media-export/", url);
+        var grant = await db.productMediaExportGrants.SingleAsync();
+        Assert.Equal(file.Id, grant.fileId);
+        Assert.Equal(connection.Id, grant.connectionId);
+    }
+
+    [Fact]
+    public async Task OzonSingleExport_UsesHostPreparedPermanentVideoGrantAndGalleryName()
+    {
+        var (db, product, connection, file, storage) = await CreateScenarioAsync("ozon");
+        var adapter = CreateAdapter("ozon", new MediaCapabilities(
+            CanImportVideos: true,
+            CanExportVideos: true,
+            UsesPermanentUrls: true), () => db.productMediaExportGrants.Count());
+        var service = CreateProductSyncService(db, adapter, storage);
+
+        var result = await service.ExportProductAsync(product.Id, connection.Id);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var proxy = Assert.IsAssignableFrom<FakeVideoExportAdapterProxy>((object)adapter);
+        Assert.Equal(1, proxy.SingleExportGrantCount);
+        Assert.StartsWith(
+            "https://media.example.test/api/pub/media-export/",
+            Assert.Single(Assert.IsType<List<string>>(proxy.SingleExportData!["videos"])));
+        Assert.Equal(["clip.mp4"], Assert.IsType<List<string>>(proxy.SingleExportData["videoNames"]));
+        Assert.Equal(file.Id, (await db.productMediaExportGrants.SingleAsync()).fileId);
+    }
+
+    [Fact]
+    public async Task SingleExport_LogsSuccessfulAdapterMediaWarningAsOperationWarning()
+    {
+        var (db, product, connection, _, storage) = await CreateScenarioAsync("wildberries");
+        const string warning = "Card updated but media upload failed: fake failure";
+        var operationLogger = new RecordingOperationLogger();
+        var adapter = CreateAdapter(
+            "wildberries",
+            new MediaCapabilities(CanExportVideos: true, UsesPermanentUrls: true, MaxVideos: 1),
+            () => db.productMediaExportGrants.Count(),
+            singleErrorMessage: warning);
+        var service = CreateProductSyncService(db, adapter, storage, operationLogger: operationLogger);
+
+        var result = await service.ExportProductAsync(
+            product.Id,
+            connection.Id,
+            operationId: "operation-1",
+            operationStoreId: connection.storeId);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Contains(operationLogger.Entries,
+            entry => entry.Level == "warning" && entry.Message == warning);
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -137,13 +208,15 @@ public sealed class ProductMediaExportFlowTests
     private static IMarketplaceAdapter CreateAdapter(
         string key,
         MediaCapabilities mediaCapabilities,
-        Func<int> grantCount)
+        Func<int> grantCount,
+        string? singleErrorMessage = null)
     {
         var adapter = DispatchProxy.Create<IMarketplaceAdapter, FakeVideoExportAdapterProxy>();
         var proxy = (FakeVideoExportAdapterProxy)(object)adapter;
         proxy.AdapterKey = key;
         proxy.MediaCapabilities = mediaCapabilities;
         proxy.GetGrantCount = grantCount;
+        proxy.SingleErrorMessage = singleErrorMessage;
         return adapter;
     }
 
@@ -151,7 +224,8 @@ public sealed class ProductMediaExportFlowTests
         DataContext db,
         IMarketplaceAdapter adapter,
         IStorageService storage,
-        ProductMediaExportGrantService? mediaGrants = null)
+        ProductMediaExportGrantService? mediaGrants = null,
+        IOperationLogger? operationLogger = null)
     {
         var mappingServices = new ServiceCollection()
             .AddSingleton(storage)
@@ -172,7 +246,7 @@ public sealed class ProductMediaExportFlowTests
             mappingService,
             storage,
             NullLogger<ProductSyncService>.Instance,
-            new NoopOperationLogger(),
+            operationLogger ?? new NoopOperationLogger(),
             quota,
             mediaGrants);
     }
@@ -182,6 +256,7 @@ public sealed class ProductMediaExportFlowTests
         public string AdapterKey { get; set; } = "yandex";
         public MediaCapabilities MediaCapabilities { get; set; } = new();
         public Func<int>? GetGrantCount { get; set; }
+        public string? SingleErrorMessage { get; set; }
         public int SingleExportGrantCount { get; private set; }
         public int BulkExportGrantCount { get; private set; }
         public Dictionary<string, object>? SingleExportData { get; private set; }
@@ -207,7 +282,7 @@ public sealed class ProductMediaExportFlowTests
         {
             SingleExportGrantCount = GetGrantCount?.Invoke() ?? 0;
             SingleExportData = Assert.IsType<Dictionary<string, object>>(args![1]);
-            return Task.FromResult(new ExportResult(true, "fake-external-id"));
+            return Task.FromResult(new ExportResult(true, "fake-external-id", SingleErrorMessage));
         }
 
         private Task<BulkExportResult> ExportBulk(object?[]? args)
@@ -235,6 +310,31 @@ public sealed class ProductMediaExportFlowTests
         public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed) => Task.CompletedTask;
         public Task FinishAsync(string operationId, int storeId, string status, string? summary = null) => Task.CompletedTask;
         public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingOperationLogger : IOperationLogger
+    {
+        public List<(string Level, string Message)> Entries { get; } = [];
+
+        public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
+            int? connectionId = null, string? connectionName = null,
+            string? batchId = null, string? batchType = null, int? totalItems = null, int? authorApiKeyId = null)
+            => Task.CompletedTask;
+
+        public Task LogAsync(string operationId, int storeId, string level, string message)
+        {
+            Entries.Add((level, message));
+            return Task.CompletedTask;
+        }
+
+        public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed)
+            => Task.CompletedTask;
+
+        public Task FinishAsync(string operationId, int storeId, string status, string? summary = null)
+            => Task.CompletedTask;
+
+        public Task UpdateStatusAsync(string operationId, int storeId, string status)
+            => Task.CompletedTask;
     }
 
     private sealed class PublicOriginValidator : IPublicMediaExportBaseUrlValidator

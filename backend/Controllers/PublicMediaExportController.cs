@@ -22,7 +22,8 @@ public sealed class PublicMediaExportController : ControllerBase
     [HttpGet]
     [HttpHead]
     [Route("/pub/media-export/{token}")]
-    public async Task Get(string token, CancellationToken ct)
+    [Route("/pub/media-export/{token}/{fileName}")]
+    public async Task Get(string token, CancellationToken ct, string? fileName = null)
     {
         if (!IsToken(token))
             throw ApiException.NotFound(code: "file_not_found");

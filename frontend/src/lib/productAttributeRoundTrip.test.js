@@ -69,7 +69,7 @@ test("partial options load on selector open, including keyboard multi-select", (
     "utf8",
   );
   assert.match(field, /attribute\.optionsPartial/);
-  assert.equal((field.match(/@open="loadOptions"/g) || []).length, 2);
+  assert.equal((field.match(/@open="loadOptions\(value\)"/g) || []).length, 2);
   const multi = readFileSync(
     new URL(
       "../components/ui/multi-select/MultiSelectDropdown.vue",
@@ -77,5 +77,14 @@ test("partial options load on selector open, including keyboard multi-select", (
     ),
     "utf8",
   );
-  assert.match(multi, /if \(isOpen\) emit\("open"\)/);
+  assert.match(multi, /emit\("open"\)/);
+  assert.match(multi, /emit\("search", query\)/);
+  assert.match(multi, /@keydown\.up\.prevent="moveOptionFocus/);
+  assert.match(multi, /@keydown\.down\.prevent="moveOptionFocus/);
+  assert.match(
+    field,
+    /categories\/\$\{categoryId\}\/attributes\/\$\{attributeId\}\/options/,
+  );
+  assert.match(field, /requestId !== this\.optionsRequestId/);
+  assert.match(field, /@load-more="loadMoreOptions\(value\)"/);
 });

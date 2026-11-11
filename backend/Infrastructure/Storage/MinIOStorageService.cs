@@ -75,6 +75,10 @@ public class MinIOStorageService : IStorageService
             await _client.PutObjectAsync(request, ct);
             return true;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to upload file to MinIO: {Path}", path);
@@ -100,6 +104,10 @@ public class MinIOStorageService : IStorageService
 
             await _client.PutObjectAsync(request, ct);
             return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -148,6 +156,10 @@ public class MinIOStorageService : IStorageService
                 .WithContentType(contentType);
             await _client.PutObjectAsync(request, ct);
             return new FileUploadResult(contentType, counting.Total);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -227,6 +239,10 @@ public class MinIOStorageService : IStorageService
                 // Timeout - retry with backoff
                 var delayMs = baseDelayMs * (int)Math.Pow(2, attempt);
                 await Task.Delay(delayMs, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception)
             {

@@ -68,8 +68,17 @@ public class PluginCapabilitySmokeTests
         var wildberriesMedia = Assert.IsAssignableFrom<IMarketplaceMediaCapabilities>(new WildberriesPlugin())
             .GetMediaCapabilities();
         Assert.True(wildberriesMedia.CanImportVideos);
-        Assert.False(wildberriesMedia.CanExportVideos);
+        Assert.True(wildberriesMedia.CanExportVideos);
+        Assert.True(wildberriesMedia.UsesPermanentUrls);
         Assert.Equal(1, wildberriesMedia.MaxVideos);
+        Assert.Equal(["video/mp4", "video/quicktime"], wildberriesMedia.AcceptedVideoContentTypes);
+
+        var ozonMedia = Assert.IsAssignableFrom<IMarketplaceMediaCapabilities>(new OzonPlugin())
+            .GetMediaCapabilities();
+        Assert.True(ozonMedia.CanImportVideos);
+        Assert.True(ozonMedia.CanExportVideos);
+        Assert.True(ozonMedia.UsesPermanentUrls);
+        Assert.Null(ozonMedia.MaxVideos);
     }
 
     [Fact]
@@ -85,7 +94,7 @@ public class PluginCapabilitySmokeTests
     {
         IMarketplacePlugin[] plugins =
         [
-            new OzonPlugin(), new AvitoPlugin(),
+            new AvitoPlugin(),
             new Delegat.Marketplace.OpenCart.OpenCartPlugin(),
             new Delegat.Marketplace.WooCommerce.WooCommercePlugin(),
             new Delegat.Marketplace.Medusa.MedusaPlugin()

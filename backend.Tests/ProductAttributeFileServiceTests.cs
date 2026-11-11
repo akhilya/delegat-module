@@ -52,6 +52,47 @@ public sealed class ProductAttributeFileServiceTests
     }
 
     [Fact]
+    public async Task EmptyFileSelectionClearsOnlyTheAttributeReference()
+    {
+        var (db, product, category, attribute) = await CreateCategoryProductAsync(allowMultiple: true);
+        var file = AddFile(db, product.Id, "video/mp4");
+        await db.SaveChangesAsync();
+        var value = new ProductAttributeValue
+        {
+            productId = product.Id,
+            attributeId = attribute.Id,
+            value = ""
+        };
+        await new ProductAttributeFileService(db).ApplyCategoryAsync(value, new()
+        {
+            attributeId = attribute.Id,
+            value = $"[{file.Id}]",
+            fileIds = [file.Id]
+        }, category.Id);
+        db.productAttributeValues.Add(value);
+        await db.SaveChangesAsync();
+
+        db.productAttributeValues.Remove(value);
+        var clearedValue = new ProductAttributeValue
+        {
+            productId = product.Id,
+            attributeId = attribute.Id,
+            value = ""
+        };
+        await new ProductAttributeFileService(db).ApplyCategoryAsync(clearedValue, new()
+        {
+            attributeId = attribute.Id,
+            value = "[]",
+            fileIds = []
+        }, category.Id);
+        db.productAttributeValues.Add(clearedValue);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.productAttributeFiles.ToListAsync());
+        Assert.Equal(file.Id, Assert.Single(await db.files.ToListAsync()).Id);
+    }
+
+    [Fact]
     public async Task SingleFileAttribute_RejectsMultipleFiles()
     {
         var (db, product, category, attribute) = await CreateCategoryProductAsync();
@@ -70,6 +111,64 @@ public sealed class ProductAttributeFileServiceTests
             new ProductAttributeFileService(db).ApplyCategoryAsync(value, form, category.Id));
 
         Assert.Equal("attribute_multiple_files_disabled", error.Code);
+    }
+
+    [Fact]
+    public async Task FileAttribute_RejectsDuplicateFileIds()
+    {
+        var (db, product, category, attribute) = await CreateCategoryProductAsync(allowMultiple: true);
+        var file = AddFile(db, product.Id, "application/pdf");
+        await db.SaveChangesAsync();
+        var value = new ProductAttributeValue { productId = product.Id, attributeId = attribute.Id, value = "" };
+
+        var error = await Assert.ThrowsAsync<ApiException>(() =>
+            new ProductAttributeFileService(db).ApplyCategoryAsync(value, new()
+            {
+                attributeId = attribute.Id,
+                value = $"[{file.Id},{file.Id}]",
+                fileIds = [file.Id, file.Id]
+            }, category.Id));
+
+        Assert.Equal("duplicate_attribute_files", error.Code);
+        Assert.Empty(value.files);
+    }
+
+    [Fact]
+    public async Task StoreFileAttribute_PersistsOrderedProductOwnedLinks()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var product = data.AddProduct(store.Id);
+        var attribute = data.AddStoreAttribute(store.Id, "Documents", AttributeType.File);
+        attribute.allowMultipleFiles = true;
+        var first = AddFile(db, product.Id, "application/pdf");
+        var second = AddFile(db, product.Id, "video/mp4");
+        await db.SaveChangesAsync();
+        var value = new StoreProductAttributeValue
+        {
+            productId = product.Id,
+            storeAttributeId = attribute.Id,
+            value = ""
+        };
+
+        await new ProductAttributeFileService(db).ApplyStoreAsync(value, new()
+        {
+            storeAttributeId = attribute.Id,
+            value = $"[{second.Id},{first.Id}]",
+            fileIds = [second.Id, first.Id]
+        }, store.Id);
+        db.storeProductAttributeValues.Add(value);
+        await db.SaveChangesAsync();
+
+        var links = await db.storeProductAttributeFiles
+            .Where(link => link.attributeValueId == value.Id)
+            .OrderBy(link => link.index)
+            .Select(link => link.fileId)
+            .ToArrayAsync();
+        Assert.Equal([second.Id, first.Id], links);
+        Assert.Equal("", value.value);
     }
 
     [Fact]

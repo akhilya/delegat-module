@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Delegat.Tests;
 
@@ -85,14 +87,43 @@ public sealed class ProductCreateWithFilesTests
         Assert.Empty(storage.StoredObjects);
     }
 
+    [Fact]
+    public async Task Create_WhenDatabaseSaveFailsAfterUpload_DeletesUploadedObject()
+    {
+        var interceptor = new FailNextFileSaveInterceptor();
+        var (db, controller, category, attribute, storage) = await CreateControllerAsync(interceptor);
+        var input = ProductInput(category.Id, attribute.Id, fileId: -1);
+        var payload = JsonSerializer.Serialize(
+            new ProductCreateWithFilesController.CreateProductPayload(input, [-1]),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await SetMultipartRequestAsync(
+            controller,
+            payload,
+            ("file_-1", "video/mp4", "clip.mp4", "uploaded-before-db-error"u8.ToArray()));
+        interceptor.FailNextFileSave = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.Create(CancellationToken.None));
+
+        Assert.Empty(storage.StoredObjects);
+        Assert.Single(storage.DeletedPaths);
+        Assert.Empty(db.files);
+        Assert.Empty(db.productAttributeFiles);
+        Assert.Empty(db.images);
+    }
+
     private static async Task<(
         DataContext Db,
         ProductCreateWithFilesController Controller,
         Category Category,
         CategoryAttribute Attribute,
-        MemoryStorage Storage)> CreateControllerAsync()
+        MemoryStorage Storage)> CreateControllerAsync(SaveChangesInterceptor? interceptor = null)
     {
-        var db = TestDbFactory.CreateDb();
+        var optionsBuilder = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
+        if (interceptor != null)
+            optionsBuilder.AddInterceptors(interceptor);
+        var db = new DataContext(optionsBuilder.Options);
         var data = new TestDataBuilder(db);
         var user = data.AddUser();
         var store = data.AddStore(members: [user]);
@@ -217,6 +248,27 @@ public sealed class ProductCreateWithFilesTests
             string prefix,
             object? model)
         {
+        }
+    }
+
+    private sealed class FailNextFileSaveInterceptor : SaveChangesInterceptor
+    {
+        public bool FailNextFileSave { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (FailNextFileSave
+                && eventData.Context?.ChangeTracker.Entries<Models.File>()
+                    .Any(entry => entry.State == EntityState.Added) == true)
+            {
+                FailNextFileSave = false;
+                throw new InvalidOperationException("Injected file row persistence failure");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
     }
 }

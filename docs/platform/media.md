@@ -4,9 +4,25 @@ File attributes store ordered references to product-owned files. A File attribut
 
 Product forms interpret `fileIds` only for File definitions. Scalar attribute DTOs expose no attachment selection. Cabinet product details include only the selected dictionary entries and mark them `optionsPartial`; selectors fetch the complete category attribute definition on opening, without changing stored option IDs. This compact cabinet representation does not change the Public API v1 product contract.
 
-Video imports accept directly downloadable MP4, WebM, or AVI containers with a matching binary signature, validate each redirect URL, and enforce the import size limit. HTML players and HLS playlists are not downloadable video files. Failed attachments clean up their uploaded storage objects.
+Video imports accept directly downloadable MP4, WebM, or AVI containers with a matching binary signature, validate each redirect URL, and enforce the import size limit. HTML players and HLS playlists are not downloadable video files. Failed attachments clean up their uploaded storage objects. Container signatures do not validate codecs or prove marketplace playback compatibility.
 
 MySQL DDL may commit before an interrupted migration is recorded. Back up the database and reconcile the full generated migration before restarting; feature migration history is never automatically stamped from object names alone.
+
+## URL-grant exports
+
+Ozon and Wildberries video exports use the same connection-scoped, revocable HTTPS grants described below for Yandex Market. Only video files selected in the ordered product gallery are exported. Arbitrary graph-provided video URLs are removed. Grants are created immediately before actual single or bulk adapter export; readiness checks and previews do not create them.
+
+Ozon maps gallery URLs and names to the Seller API product-import `complex_attributes` fields: complex attribute `100001`, URL attribute `21841`, and name attribute `21837`. Its existing product-import task flow handles the regular asynchronous `/v3/product/import` response. The adapter does not impose video count, byte-size, or MIME limits that are not established by the contract. Existing video complex attributes are retained when the local gallery has no selected video, so an empty local selection is not a remote deletion request.
+
+Wildberries sends the selected video URL alongside the photo URLs to `POST /content/v3/media/save`, after the card `nmId` is known. The URL is a permanent grant URL ending in `/video.mp4` or `/video.mov`, as required for a direct media-file URL. The documented limits used by the adapter are one video, at most 50 MB, MP4 or MOV, and at most 30 photos. On updates the adapter fetches the existing card and constructs the full media list, retaining current photos and video unless a selected local video replaces the current video. It does not call media-save for an empty local gallery.
+
+Contract references checked on 2026-11-11:
+
+- [Wildberries API — Upload media files via links](https://dev.wildberries.ru/en/docs/openapi/item-management#tag/mediaFiles/operation/postV3MediaSave) — direct-file URL requirements, including a filename and extension.
+- [Wildberries API — Working with items](https://dev.wildberries.ru/en/knowledge-base/articles/019d49a4-1320-71bb-9dac-8ba07e7177ce/working-with-items) — include existing media links when submitting media updates.
+- [Ozon Seller API documentation](https://docs.ozon.ru/api/seller/) — `/v3/product/import` and `/v4/product/info/attributes`; the video-gallery complex-attribute mapping (`100001`, `21841`, `21837`) is documented through the Ozon Developer Forum rather than a complete video-specific API schema. Video-specific maximums and processing/replacement semantics are not fully stated in the public API schema.
+
+The endpoint payloads, media selection, URL suffix, size/type checks, failure handling, and gallery preservation have fake/unit-test coverage. No live Ozon or Wildberries seller API call has been made. In particular, Ozon video processing and replacement behavior and Wildberries media-save replacement behavior still require an authorized real-account verification before being described as live-verified.
 
 ## Yandex Market video export
 
@@ -31,4 +47,4 @@ This requires `marketplace.manage` and store membership. Revocation can break fu
 
 ## Other adapters
 
-Wildberries imports typed video when its API supplies a downloadable asset, but video export remains disabled until the media-save contract and replacement semantics are verified. Ozon does not currently advertise video media capability. Source review also confirms that OpenCart maps only `ImageUrls`, WooCommerce's archive path accepts only allowlisted image extensions, and Medusa exposes an image-URL field only. Their upstream/bridge video contracts have not been confirmed, so no video support is inferred from image fields or arbitrary metadata. Avito listing publication remains outside the adapter's supported contract.
+Wildberries also imports typed video when its API supplies a downloadable asset. Source review confirms that OpenCart maps only `ImageUrls`, WooCommerce's archive path accepts only allowlisted image extensions, and Medusa exposes an image-URL field only. Their upstream/bridge video contracts have not been confirmed, so no video support is inferred from image fields or arbitrary metadata. Avito listing publication remains outside the adapter's supported contract.

@@ -70,9 +70,26 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  /** Search and paginate options through the parent rather than filtering locally. */
+  remote: {
+    type: Boolean,
+    default: false,
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
+  hasMore: {
+    type: Boolean,
+    default: false,
+  },
+  loadingMore: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["update:modelValue", "open"]);
+const emit = defineEmits(["update:modelValue", "open", "search", "load-more"]);
 
 const open = ref(false);
 const searchQuery = ref("");
@@ -80,14 +97,21 @@ const searchInputRef = ref(null);
 
 // Clear search when dropdown closes
 watch(open, (isOpen) => {
-  if (isOpen) emit("open");
+  if (isOpen) {
+    emit("open");
+    if (props.remote) emit("search", "");
+  }
   if (!isOpen) {
     searchQuery.value = "";
-  } else if (isLargeList.value || props.allowCreate) {
+  } else if (isLargeList.value || props.remote || props.allowCreate) {
     nextTick(() => {
       focusSearchInput();
     });
   }
+});
+
+watch(searchQuery, (query) => {
+  if (props.remote && open.value) emit("search", query);
 });
 
 // Check if this is a large list that needs special handling
@@ -96,11 +120,14 @@ const isLargeList = computed(
 );
 
 const showSearch = computed(
-  () => props.allowCreate || props.options.length > props.searchThreshold,
+  () =>
+    props.allowCreate ||
+    props.remote ||
+    props.options.length > props.searchThreshold,
 );
 
 const filteredOptions = computed(() => {
-  if (!searchQuery.value) {
+  if (props.remote || !searchQuery.value) {
     return props.options;
   }
   const query = searchQuery.value.toLowerCase();
@@ -128,6 +155,7 @@ const displayedOptions = computed(() => {
 
 // Show hint when there are more options than displayed
 const hasMoreOptions = computed(() => {
+  if (props.remote) return props.hasMore;
   return filteredOptions.value.length > displayedOptions.value.length;
 });
 
@@ -219,6 +247,19 @@ onBeforeUnmount(() => {
 
 const isSelected = (option) => {
   return props.modelValue.includes(option);
+};
+
+const moveOptionFocus = (event, direction) => {
+  const current = event.target.closest('[role="option"]');
+  if (!current) return;
+  const options = Array.from(
+    event.currentTarget.querySelectorAll(
+      '[role="option"][tabindex="0"]:not([aria-disabled="true"])',
+    ),
+  );
+  const index = options.indexOf(current);
+  const next = options[index + direction];
+  next?.focus();
 };
 
 const toggleOption = (option) => {
@@ -341,9 +382,22 @@ const clearAll = () => {
         </div>
 
         <!-- Options list -->
-        <div class="overflow-auto flex-1">
+        <div
+          role="listbox"
+          aria-multiselectable="true"
+          :aria-label="placeholder"
+          class="overflow-auto flex-1"
+          @keydown.up.prevent="moveOptionFocus($event, -1)"
+          @keydown.down.prevent="moveOptionFocus($event, 1)"
+        >
           <div
-            v-if="
+            v-if="loading && options.length === 0"
+            class="p-3 text-sm text-muted-foreground text-center"
+          >
+            {{ t("components.multiSelectDropdown.searching") }}
+          </div>
+          <div
+            v-else-if="
               options.length === 0 &&
               extraSelected.length === 0 &&
               !canAddCustom
@@ -386,6 +440,7 @@ const clearAll = () => {
               :key="`custom-${option}`"
               role="option"
               :aria-selected="true"
+              tabindex="0"
               :class="MENU_ITEM"
               @click="toggleOption(option)"
             >
@@ -404,6 +459,7 @@ const clearAll = () => {
               role="option"
               :aria-selected="isSelected(option)"
               :aria-disabled="(atLimit && !isSelected(option)) || undefined"
+              tabindex="0"
               :class="[
                 MENU_ITEM,
                 atLimit && !isSelected(option)
@@ -424,7 +480,7 @@ const clearAll = () => {
 
             <!-- Hint when there are more options -->
             <div
-              v-if="hasMoreOptions"
+              v-if="hasMoreOptions && !remote"
               class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1"
             >
               <template v-if="searchQuery">
@@ -443,6 +499,19 @@ const clearAll = () => {
                 }}
               </template>
             </div>
+            <button
+              v-if="remote && hasMore"
+              type="button"
+              class="mt-1 w-full border-t px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="loadingMore || loading"
+              @click.stop.prevent="$emit('load-more')"
+            >
+              {{
+                loadingMore
+                  ? t("components.multiSelectDropdown.searching")
+                  : t("components.multiSelectDropdown.loadMore")
+              }}
+            </button>
             <div
               v-if="maxCap"
               class="px-2 py-1.5 text-xs text-muted-foreground text-center border-t"

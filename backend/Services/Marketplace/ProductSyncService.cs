@@ -567,6 +567,10 @@ public class ProductSyncService
                 return ProductExportResult.Failure(safeErrorMessage, result.Retryable);
             }
 
+            var successWarning = MediaExportGrantSecrets.Redact(result.ErrorMessage);
+            if (!string.IsNullOrWhiteSpace(successWarning))
+                await Log("warning", successWarning);
+
             await Log("success", $"Marketplace responded: ExternalID = {result.ExternalProductId}");
             var successDetailsMessage = FormatExportDetails(result.Details);
             if (successDetailsMessage != null)
@@ -1255,9 +1259,14 @@ public class ProductSyncService
         // Video URLs are not an established export field for legacy adapters. Strip graph
         // values for every adapter unless its optional capability explicitly permits safe,
         // permanent-URL export; only then replace them with host-issued gallery grants.
-        var hasUntrustedVideoMapping = exportData.ContainsKey("videos") || exportData.ContainsKey("_videoUrls");
+        var hasUntrustedVideoMapping = exportData.ContainsKey("videos")
+            || exportData.ContainsKey("_videoUrls")
+            || exportData.ContainsKey("videoNames")
+            || exportData.ContainsKey("_videoNames");
         exportData.Remove("videos");
         exportData.Remove("_videoUrls");
+        exportData.Remove("videoNames");
+        exportData.Remove("_videoNames");
 
         if (!mediaCapabilities.CanExportVideos || !mediaCapabilities.UsesPermanentUrls)
             return videoFileIds.Length == 0
@@ -1286,10 +1295,16 @@ public class ProductSyncService
             product.Id,
             videoFileIds,
             ct)).ToList();
+        if (string.Equals(adapter.Key, "ozon", StringComparison.OrdinalIgnoreCase))
+            exportData["videoNames"] = GetGalleryVideoFiles(product)
+                .Select((file, index) => string.IsNullOrWhiteSpace(file.displayName)
+                    ? $"video_{index + 1}"
+                    : file.displayName.Trim())
+                .ToList();
         return null;
     }
 
-    private static int[] GetGalleryVideoFileIds(Product product)
+    private static Delegat.Models.File[] GetGalleryVideoFiles(Product product)
     {
         if (product.images == null || product.images.Count == 0)
             return [];
@@ -1300,10 +1315,13 @@ public class ProductSyncService
             .Where(file => file != null
                 && !string.IsNullOrWhiteSpace(file.contentType)
                 && file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
-            .Select(file => file!.Id)
-            .Distinct()
+            .Select(file => file!)
+            .DistinctBy(file => file.Id)
             .ToArray();
     }
+
+    private static int[] GetGalleryVideoFileIds(Product product)
+        => GetGalleryVideoFiles(product).Select(file => file.Id).ToArray();
 
     /// <summary>
     /// The mapping field that controls card grouping for this adapter:

@@ -33,6 +33,26 @@ public class ImageDownloadAttachTests
     }
 
     [Fact]
+    public async Task Worker_CancellationCleansVideoObjectAndLeavesQueueRowRecoverable()
+    {
+        var (worker, db, storage, pending, _) = await SeedPendingAsync();
+        pending.mediaKind = PendingMediaKind.Video;
+        pending.mediaFileName = "demo.mp4";
+        storage.CancelVideoUpload = true;
+        using var cancellation = new CancellationTokenSource();
+        storage.CancellationSource = cancellation;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            worker.ProcessSingleImageAsync(db, storage, Quota(db), pending, cancellation.Token));
+
+        Assert.Equal(ImageDownloadStatus.InProgress, pending.status);
+        Assert.Empty(await db.files.Where(file => file.contentType == "video/mp4").ToListAsync());
+        Assert.Empty(await db.images.Where(image => image.fileId != 1).ToListAsync());
+        Assert.True(storage.DeleteCalled);
+    }
+
+    [Fact]
     public async Task Worker_DoesNotReplaceOccupiedGallerySlot()
     {
         var (worker, db, storage, pending, existing) = await SeedPendingAsync();
@@ -226,6 +246,8 @@ public class ImageDownloadAttachTests
         public int UploadCalls { get; private set; }
         public int VideoUploadCalls { get; private set; }
         public bool DeleteCalled { get; private set; }
+        public bool CancelVideoUpload { get; set; }
+        public CancellationTokenSource? CancellationSource { get; set; }
         public string Bucket => "test";
 
         public Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default)
@@ -239,6 +261,11 @@ public class ImageDownloadAttachTests
         {
             VideoUploadCalls++;
             Assert.True(maxBytes > 0);
+            if (CancelVideoUpload)
+            {
+                CancellationSource?.Cancel();
+                throw new OperationCanceledException(ct);
+            }
             return Task.FromResult<FileUploadResult?>(new FileUploadResult("video/mp4", 2048));
         }
 

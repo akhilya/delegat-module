@@ -107,16 +107,86 @@ public sealed class ProductMediaExportGrantTests
     public async Task ExportGrant_RejectsVideoCountAboveYandexLimitWithoutTruncating()
     {
         var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var product = data.AddProduct(store.Id);
+        var connection = data.AddConnection(store.Id, adapterKey: "yandex");
+        await data.SaveAsync();
         var storage = new MemoryStorage([]);
         var service = CreateService(db, storage);
 
         var error = await Assert.ThrowsAsync<ApiException>(() => service.GetOrCreateUrlsAsync(
-            connectionId: 1,
-            productId: 1,
+            connectionId: connection.Id,
+            productId: product.Id,
             requestedFileIds: Enumerable.Range(1, ProductMediaExportGrantService.YandexMaxVideos + 1).ToArray()));
 
         Assert.Equal("media_export_video_limit_exceeded", error.Code);
         Assert.Empty(await db.productMediaExportGrants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ExportGrant_WildberriesAcceptsOnlySupportedVideoAndEnforcesSizeAndCount()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var product = data.AddProduct(store.Id);
+        var connection = data.AddConnection(store.Id, adapterKey: "wildberries");
+        var accepted = new Models.File
+        {
+            Id = 51,
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "accepted.mp4",
+            contentType = "video/mp4",
+            length = 50L * 1024 * 1024,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow
+        };
+        var unsupported = new Models.File
+        {
+            Id = 52,
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "unsupported.webm",
+            contentType = "video/webm",
+            length = 10,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow
+        };
+        var oversized = new Models.File
+        {
+            Id = 53,
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "oversized.mp4",
+            contentType = "video/mp4",
+            length = ProductMediaExportGrantService.WildberriesMaxVideoBytes + 1,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow
+        };
+        db.files.AddRange(accepted, unsupported, oversized);
+        await data.SaveAsync();
+        var service = CreateService(db, new MemoryStorage([]));
+
+        var url = Assert.Single(await service.GetOrCreateUrlsAsync(connection.Id, product.Id, [accepted.Id]));
+        Assert.StartsWith("https://media.example.test/api/pub/media-export/", url);
+        Assert.EndsWith("/video.mp4", url);
+
+        var typeError = await Assert.ThrowsAsync<ApiException>(
+            () => service.GetOrCreateUrlsAsync(connection.Id, product.Id, [unsupported.Id]));
+        Assert.Equal("media_export_video_type_not_supported", typeError.Code);
+
+        var sizeError = await Assert.ThrowsAsync<ApiException>(
+            () => service.GetOrCreateUrlsAsync(connection.Id, product.Id, [oversized.Id]));
+        Assert.Equal("media_export_video_size_exceeded", sizeError.Code);
+
+        var countError = await Assert.ThrowsAsync<ApiException>(
+            () => service.GetOrCreateUrlsAsync(connection.Id, product.Id, [accepted.Id, unsupported.Id]));
+        Assert.Equal("media_export_video_limit_exceeded", countError.Code);
+        Assert.Single(await db.productMediaExportGrants.ToListAsync());
     }
 
     [Theory]

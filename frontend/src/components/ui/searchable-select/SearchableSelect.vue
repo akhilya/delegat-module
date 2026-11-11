@@ -58,6 +58,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  hasMore: {
+    type: Boolean,
+    default: false,
+  },
+  loadingMore: {
+    type: Boolean,
+    default: false,
+  },
   /** Allow typing a value that is not in `options`. */
   allowCreate: {
     type: Boolean,
@@ -69,7 +77,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue", "open", "search"]);
+const emit = defineEmits(["update:modelValue", "open", "search", "load-more"]);
 
 const open = ref(false);
 const searchQuery = ref("");
@@ -131,7 +139,7 @@ const displayedOptions = computed(() => {
 
 // Show hint when there are more options than displayed
 const hasMoreOptions = computed(() => {
-  if (props.remote) return false;
+  if (props.remote) return props.hasMore;
   return filteredOptions.value.length > displayedOptions.value.length;
 });
 
@@ -282,7 +290,9 @@ const closePopover = () => {
             {{ t("components.searchableSelect.searching") }}
           </div>
           <div
-            v-else-if="options.length === 0 && !canAddCustom && !extraSelectedOption"
+            v-else-if="
+              options.length === 0 && !canAddCustom && !extraSelectedOption
+            "
             class="p-3 text-sm text-muted-foreground text-center"
           >
             {{
@@ -294,7 +304,11 @@ const closePopover = () => {
             }}
           </div>
           <div
-            v-else-if="filteredOptions.length === 0 && !canAddCustom && !extraSelectedOption"
+            v-else-if="
+              filteredOptions.length === 0 &&
+              !canAddCustom &&
+              !extraSelectedOption
+            "
             class="p-3 text-sm text-muted-foreground text-center"
           >
             {{ t("components.searchableSelect.nothingFound") }}
@@ -319,9 +333,11 @@ const closePopover = () => {
               :class="cn(MENU_ITEM, 'pr-8')"
               @click="selectOption(extraSelectedOption)"
             >
-              <span class="text-sm flex-1 truncate" :title="extraSelectedOption.label">{{
-                extraSelectedOption.label
-              }}</span>
+              <span
+                class="text-sm flex-1 truncate"
+                :title="extraSelectedOption.label"
+                >{{ extraSelectedOption.label }}</span
+              >
               <Check :class="cn(MENU_ITEM_CHECK, 'text-foreground')" />
             </div>
             <div
@@ -341,7 +357,7 @@ const closePopover = () => {
 
             <!-- Hint when there are more options -->
             <div
-              v-if="hasMoreOptions"
+              v-if="hasMoreOptions && !remote"
               class="px-2 py-2 text-xs text-muted-foreground text-center border-t mt-1"
             >
               <template v-if="searchQuery">
@@ -360,6 +376,19 @@ const closePopover = () => {
                 }}
               </template>
             </div>
+            <button
+              v-if="remote && hasMore"
+              type="button"
+              class="mt-1 w-full border-t px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="loadingMore || loading"
+              @click.stop.prevent="$emit('load-more')"
+            >
+              {{
+                loadingMore
+                  ? t("components.searchableSelect.searching")
+                  : t("components.searchableSelect.loadMore")
+              }}
+            </button>
           </div>
         </div>
         <div v-if="$slots.footer" class="shrink-0 border-t p-1">

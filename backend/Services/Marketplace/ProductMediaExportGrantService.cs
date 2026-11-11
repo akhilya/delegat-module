@@ -11,7 +11,28 @@ namespace Delegat.Services.Marketplace;
 public sealed class ProductMediaExportGrantService
 {
     public const int YandexMaxVideos = 6;
+    public const int WildberriesMaxVideos = 1;
+    public const long WildberriesMaxVideoBytes = 50L * 1024 * 1024;
     private const string PublicBaseUrlSetting = "PUBLIC_BASE_URL";
+
+    private sealed record GrantPolicy(
+        int? MaxVideos,
+        long? MaxBytes,
+        IReadOnlySet<string>? AcceptedContentTypes);
+
+    private static readonly IReadOnlyDictionary<string, GrantPolicy> GrantPolicies =
+        new Dictionary<string, GrantPolicy>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["yandex"] = new(YandexMaxVideos, null, null),
+            // Ozon accepts stable external video URLs in its complex video attributes.
+            // No count, byte-size, or MIME limit is imposed here until its public contract
+            // documents a seller API limit.
+            ["ozon"] = new(null, null, null),
+            ["wildberries"] = new(
+                WildberriesMaxVideos,
+                WildberriesMaxVideoBytes,
+                new HashSet<string>(["video/mp4", "video/quicktime"], StringComparer.OrdinalIgnoreCase))
+        };
 
     private readonly DataContext _db;
     private readonly IConfiguration _configuration;
@@ -43,12 +64,6 @@ public sealed class ProductMediaExportGrantService
         var fileIds = requestedFileIds.Distinct().ToArray();
         if (fileIds.Length == 0)
             return [];
-        if (fileIds.Length > YandexMaxVideos)
-            throw new ApiException(
-                "Yandex Market accepts at most six video URLs per product.",
-                StatusCodes.Status400BadRequest,
-                code: "media_export_video_limit_exceeded");
-
         var rawBaseUrl = _configuration[PublicBaseUrlSetting]?.Trim();
         if (!Uri.TryCreate(rawBaseUrl, UriKind.Absolute, out var baseUri)
             || !string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
@@ -89,12 +104,18 @@ public sealed class ProductMediaExportGrantService
             .Select(p => (int?)p.storeId)
             .FirstOrDefaultAsync(ct);
         if (connection == null || productStoreId != connection.storeId
-            || !string.Equals(connection.adapterKey, "yandex", StringComparison.OrdinalIgnoreCase))
+            || !GrantPolicies.TryGetValue(connection.adapterKey, out var policy))
         {
             throw ApiException.BadRequest(
-                "The video grant does not match a Yandex Market connection and product in the same store.",
+                "The video grant does not match a supported marketplace connection and product in the same store.",
                 code: "media_export_connection_mismatch");
         }
+
+        if (policy.MaxVideos is int maxVideos && fileIds.Length > maxVideos)
+            throw new ApiException(
+                $"{connection.adapterKey} accepts at most {maxVideos} video(s) per product.",
+                StatusCodes.Status400BadRequest,
+                code: "media_export_video_limit_exceeded");
 
         var files = await _db.files
             .Where(f => f.productId == productId && fileIds.Contains(f.Id))
@@ -109,6 +130,15 @@ public sealed class ProductMediaExportGrantService
                 || !file.contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
             {
                 throw ApiException.BadRequest(code: "media_export_file_not_video");
+            }
+            if (policy.AcceptedContentTypes is { Count: > 0 }
+                && !policy.AcceptedContentTypes.Contains(file.contentType.Trim()))
+            {
+                throw ApiException.BadRequest(code: "media_export_video_type_not_supported");
+            }
+            if (policy.MaxBytes is long maxBytes && file.length > maxBytes)
+            {
+                throw ApiException.BadRequest(code: "media_export_video_size_exceeded");
             }
             if (!await _storage.ExistsAsync(file.filePath, ct))
                 throw ApiException.NotFound(code: "media_export_file_not_found");
@@ -168,7 +198,11 @@ public sealed class ProductMediaExportGrantService
             }
         }
 
-        return fileIds.Select(fileId => BuildUrl(baseUri, existing[fileId].token)).ToArray();
+        return fileIds.Select(fileId => BuildUrl(
+            baseUri,
+            existing[fileId].token,
+            connection.adapterKey,
+            files[fileId].contentType)).ToArray();
     }
 
     public async Task<int> RevokeForConnectionAsync(int connectionId, CancellationToken ct = default)
@@ -187,8 +221,18 @@ public sealed class ProductMediaExportGrantService
         return grants.Count;
     }
 
-    private static string BuildUrl(Uri baseUri, string token)
-        => new Uri(baseUri, $"/api/pub/media-export/{token}").AbsoluteUri;
+    private static string BuildUrl(Uri baseUri, string token, string adapterKey, string contentType)
+    {
+        // WB requires direct file URLs to end in a filename and extension. The endpoint
+        // authenticates by the preceding opaque token; this suffix is only a file hint.
+        var fileName = string.Equals(adapterKey, "wildberries", StringComparison.OrdinalIgnoreCase)
+            ? contentType.Equals("video/quicktime", StringComparison.OrdinalIgnoreCase)
+                ? "video.mov"
+                : "video.mp4"
+            : null;
+        var suffix = fileName == null ? "" : $"/{fileName}";
+        return new Uri(baseUri, $"/api/pub/media-export/{token}{suffix}").AbsoluteUri;
+    }
 
     private static string NewToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
     private static string NewRevision() => Guid.NewGuid().ToString("N");

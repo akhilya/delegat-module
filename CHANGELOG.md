@@ -11,7 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Product categories and store attributes support File values with ordered, product-owned attachments; the product gallery can mix images and downloaded videos. Wildberries and Yandex Market video imports are typed separately from image URLs. Yandex Market exports up to six gallery videos through stable, revocable HTTPS grants; other video export paths remain disabled until their contracts are verified.
+- Product categories and store attributes support File values with ordered, product-owned attachments; the product gallery can mix images and downloaded videos. Ozon, Wildberries, and Yandex Market video imports are typed separately from image URLs. Their implemented export paths use stable, revocable HTTPS grants for selected gallery videos; Yandex supports up to six, Wildberries one MP4/MOV up to 50 MB, and Ozon applies no unverified limits. Ozon and Wildberries media payloads have fake-test coverage but have not been verified against live seller accounts.
 
 - Adding a category now offers a reusable choice dialog for manual creation or marketplace import, with connection selection when multiple marketplaces are configured.
 
