@@ -247,6 +247,7 @@ describe("locale message catalogs", () => {
       "external_price_fields_unavailable",
       "mapping_type_invalid",
       "mapping_graph_invalid",
+      "mapping_graph_conflict",
       "group_marketplace_sync_failed",
       "shipment_failed",
       "promotion_update_failed",

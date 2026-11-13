@@ -586,9 +586,10 @@ export default {
      * Fetches the saved visual node graph for a category mapping.
      * @returns {Promise<{hasGraph: boolean, graph: object|null}>}
      */
-    async getMappingGraph(ctx, { connectionId, mappingId }) {
+    async getMappingGraph(ctx, { connectionId, mappingId, includeSchema }) {
       const response = await http.get(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
+        { params: includeSchema ? { includeSchema: true } : undefined },
       );
       return response.data;
     },
@@ -617,10 +618,13 @@ export default {
     /**
      * Saves (or clears, when graph is null) the visual node graph for a category mapping.
      */
-    async saveMappingGraph(ctx, { connectionId, mappingId, graph, fields }) {
+    async saveMappingGraph(
+      ctx,
+      { connectionId, mappingId, graph, expectedGraphVersion },
+    ) {
       const response = await http.put(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
-        { graph, fields },
+        { graph, expectedGraphVersion: expectedGraphVersion || null },
       );
       return response.data;
     },
@@ -673,160 +677,7 @@ export default {
         .catch((error) => onError(error));
     },
 
-    // === Field Mappings ===
-
-    /**
-     * Fetches external fields available for a category mapping.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async getExternalFields(ctx, { mappingId, onSuccess, onError }) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/external-fields`,
-        { method: "GET", cache: false },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    async getPriceFields(ctx, { mappingId, onSuccess, onError }) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/price-fields`,
-        { method: "GET", cache: false },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    /**
-     * Fetches all field mappings for a category mapping.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async getFieldMappings(ctx, { mappingId, onSuccess, onError }) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/field-mappings`,
-        { method: "GET", cache: false },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    /**
-     * Saves (creates or replaces) field mappings for a category mapping.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {Array<Object>} params.fieldMappings - Array of field mapping configurations.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async saveFieldMappings(
-      ctx,
-      { mappingId, fieldMappings, onSuccess, onError },
-    ) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/field-mappings`,
-        {
-          method: "POST",
-          cache: false,
-          data: { fieldMappings },
-        },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    /**
-     * Toggles the enabled/disabled state of a field mapping.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {string|number} params.fieldMappingId - The field mapping ID to toggle.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async toggleFieldMapping(
-      ctx,
-      { mappingId, fieldMappingId, onSuccess, onError },
-    ) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/field-mappings/${fieldMappingId}/toggle`,
-        {
-          method: "PATCH",
-          cache: false,
-        },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    /**
-     * Updates a specific field mapping configuration.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {string|number} params.fieldMappingId - The field mapping ID to update.
-     * @param {Object} params.data - Partial field mapping data to patch.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async updateFieldMapping(
-      ctx,
-      { mappingId, fieldMappingId, data, onSuccess, onError },
-    ) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/field-mappings/${fieldMappingId}`,
-        {
-          method: "PATCH",
-          cache: false,
-          data,
-        },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
+    // === Mapping editor ===
 
     /**
      * Fetches available local source fields that can be mapped to external fields.
@@ -859,39 +710,6 @@ export default {
         {
           immediate: true,
           abortPrevious: false,
-        },
-      )
-        .then((response) => onSuccess(response))
-        .catch((error) => onError(error));
-    },
-
-    // === Field Mapping Preview ===
-
-    /**
-     * Previews field mapping modifier results for a specific product.
-     * @param {Object} ctx - Vuex action context.
-     * @param {Object} params - Action parameters.
-     * @param {string|number} params.mappingId - The category mapping ID.
-     * @param {number} params.productId - The product ID to preview.
-     * @param {Function} params.onSuccess - Callback on successful response.
-     * @param {Function} params.onError - Callback on error.
-     * @returns {Promise<void>}
-     */
-    async previewFieldMappings(
-      ctx,
-      { mappingId, productId, fieldMappings, onSuccess, onError },
-    ) {
-      return await useAxios(
-        `/marketplace/mappings/${mappingId}/preview`,
-        {
-          method: "POST",
-          cache: false,
-          data: { productId, fieldMappings },
-        },
-        http,
-        {
-          immediate: true,
-          abortPrevious: true,
         },
       )
         .then((response) => onSuccess(response))

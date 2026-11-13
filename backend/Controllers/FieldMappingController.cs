@@ -54,11 +54,7 @@ public class FieldMappingController : ControllerBase
     {
         var mapping = await GetMappingAsync(mappingId);
 
-        var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
-        var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
-
-        if (connection == null)
-            throw ApiException.NotFound(code: "connection_not_found");
+        var connection = mapping.connection;
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -69,13 +65,8 @@ public class FieldMappingController : ControllerBase
 
         try
         {
-            var cacheKey = MarketplaceMetadataCache.CategoryFieldsKey(
-                connection.adapterKey, connection.Id, mapping.externalCategoryId);
-            if (!_metadataCache.TryGetValue(cacheKey, out List<ExternalField>? fields) || fields == null)
-            {
-                fields = await adapter.GetCategoryFieldsAsync(connection, mapping.externalCategoryId, ct);
-                _metadataCache.Set(cacheKey, fields, MarketplaceMetadataCache.CategoryFieldsTtl);
-            }
+            var fields = await MappingFieldSchema.GetCategoryFieldsAsync(
+                _metadataCache, adapter, connection, mapping.externalCategoryId, ct);
 
             if (LocalCategoryAdapterFields.ShouldExposeLocalAttributes(connection.adapterKey))
             {
@@ -84,23 +75,7 @@ public class FieldMappingController : ControllerBase
                 fields = LocalCategoryAdapterFields.Merge(fields, attrs);
             }
 
-            return Ok(fields.Select(f => new
-            {
-                key = f.Key,
-                name = f.Name,
-                isRequired = f.IsRequired,
-                type = f.Type,
-                options = f.Options,
-                description = f.Description,
-                unit = f.Unit,
-                minValue = f.MinValue,
-                maxValue = f.MaxValue,
-                maxLength = f.MaxLength,
-                maxValues = f.MaxValues,
-                allowCustomValues = f.AllowCustomValues,
-                sortOrder = f.SortOrder,
-                isAspect = f.IsAspect
-            }));
+            return Ok(fields.Select(MappingFieldSchema.ToDto));
         }
         catch (Exception ex)
         {
@@ -118,11 +93,7 @@ public class FieldMappingController : ControllerBase
     {
         var mapping = await GetMappingAsync(mappingId);
 
-        var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
-        var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
-
-        if (connection == null)
-            throw ApiException.NotFound(code: "connection_not_found");
+        var connection = mapping.connection;
 
         var adapter = _adapterRegistry.GetByKey(connection.adapterKey);
         if (adapter == null)
@@ -133,56 +104,19 @@ public class FieldMappingController : ControllerBase
 
         try
         {
-            var fields = await adapter.GetPriceFieldsAsync(connection, mapping.externalCategoryId, ct);
+            var fields = await MappingFieldSchema.GetPriceFieldsAsync(
+                _metadataCache, adapter, connection, mapping.externalCategoryId, ct);
             var extendedPrice = await _unitOfWork.Repository<Store>().Query()
                 .Where(s => s.Id == connection.storeId)
                 .Select(s => s.extendedPriceParameters)
                 .FirstOrDefaultAsync(ct);
-            if (!extendedPrice)
-                fields = fields.Where(f => !CategoryImportService.IsStoreExtendedPriceKey(f.Key)).ToList();
-            return Ok(fields.Select(f => new
-            {
-                key = f.Key,
-                name = f.Name,
-                isRequired = f.IsRequired,
-                type = f.Type,
-                options = f.Options,
-                description = f.Description,
-                sortOrder = f.SortOrder,
-                group = f.Group,
-                minValue = f.MinValue,
-                maxValue = f.MaxValue,
-                maxLength = f.MaxLength,
-                maxValues = f.MaxValues,
-                allowCustomValues = f.AllowCustomValues,
-            }));
+            return Ok(MappingFieldSchema.VisiblePriceFields(fields, extendedPrice).Select(MappingFieldSchema.ToDto));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting price fields for mapping {MappingId}", mappingId);
             throw ApiException.BadRequest(code: "external_price_fields_unavailable");
         }
-    }
-
-    /// <summary>
-    /// Mapping metadata for the editor page. The per-field schema now lives in the graph
-    /// (<see cref="CategoryMapping.graphJson"/>), so this returns only the mapping info the page needs.
-    /// </summary>
-    [HttpGet]
-    [Route("/marketplace/mappings/{mappingId}/field-mappings")]
-    public async Task<IActionResult> GetFieldMappings(int mappingId, CancellationToken ct)
-    {
-        var mapping = await GetMappingAsync(mappingId);
-        return Ok(new
-        {
-            fieldMappings = Array.Empty<object>(),
-            name = mapping.name,
-            connectionName = mapping.connection?.name,
-            localCategoryId = mapping.localCategoryId,
-            localCategoryName = mapping.localCategory?.name,
-            externalCategoryId = mapping.externalCategoryId,
-            externalCategoryName = mapping.externalCategoryName,
-        });
     }
 
     /// <summary>
@@ -200,9 +134,7 @@ public class FieldMappingController : ControllerBase
             c => c.Id == mapping.localCategoryId,
             query => query.Include(c => c.attributes));
 
-        // Load store attributes
-        var connectionRepo = _unitOfWork.Repository<MarketplaceConnection>();
-        var connection = await connectionRepo.FindAsync(c => c.Id == mapping.connectionId);
+        var connection = mapping.connection;
 
         var storeAttributeRepo = _unitOfWork.Repository<StoreAttribute>();
         var storeAttributes = connection != null
@@ -268,19 +200,26 @@ public class FieldMappingController : ControllerBase
         [FromQuery] string type,
         [FromQuery] int id)
     {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+        var storeId = selectedStoreId.Value;
+
         string? options = null;
 
         if (type == "category")
         {
-            var repo = _unitOfWork.Repository<CategoryAttribute>();
-            var attr = await repo.FindAsync(a => a.Id == id);
-            options = attr?.options;
+            options = await _unitOfWork.Repository<CategoryAttribute>().Query()
+                .Where(a => a.Id == id && a.category.storeId == storeId)
+                .Select(a => a.options)
+                .FirstOrDefaultAsync();
         }
         else if (type == "store")
         {
-            var repo = _unitOfWork.Repository<StoreAttribute>();
-            var attr = await repo.FindAsync(a => a.Id == id);
-            options = attr?.options;
+            options = await _unitOfWork.Repository<StoreAttribute>().Query()
+                .Where(a => a.Id == id && a.storeId == storeId)
+                .Select(a => a.options)
+                .FirstOrDefaultAsync();
         }
         else
         {
