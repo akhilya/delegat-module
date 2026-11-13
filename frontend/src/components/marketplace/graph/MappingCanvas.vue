@@ -29,16 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { confirm } from "@/composables/useConfirm";
 import HelperLinesOverlay from "./HelperLinesOverlay.vue";
 import { applyHelperLineChanges } from "./helperLines.js";
 import {
@@ -84,7 +75,6 @@ import {
   createModifierNode,
   createOpNode,
   createRerouteNode,
-  syncAdapterFields,
   syncAdapterPriceFields,
   ensurePriceNode,
   ensureModifierParamDefaults,
@@ -121,7 +111,8 @@ import "@vue-flow/minimap/dist/style.css";
 const props = defineProps({
   connectionId: { type: [Number, String], required: true },
   mappingId: { type: [Number, String], required: true },
-  fieldMappings: { type: Array, default: () => [] },
+  // Returns the GET …/graph response; the page owns it so one request also feeds field defs.
+  graphLoader: { type: Function, default: null },
   // Live field definitions from /external-fields: { [fieldKey]: { name, type, options: [{value,label}] } }
   externalFieldDefs: { type: Object, default: () => ({}) },
   priceFieldMappings: { type: Array, default: () => [] },
@@ -183,7 +174,6 @@ const SNAP_GRID = [16, 16];
 const showGuidelines = ref(true);
 const helperLineHorizontal = ref(undefined);
 const helperLineVertical = ref(undefined);
-const showAutoArrangeConfirm = ref(false);
 
 const loading = ref(true);
 const loadingPhase = ref("graph");
@@ -205,6 +195,8 @@ const loadingStatusText = computed(() =>
 const saving = ref(false);
 const syncingFields = ref(false);
 const dirty = ref(false);
+// Content version of the stored graph this canvas was loaded from (conflict-safe save).
+let graphVersion = null;
 const previewing = ref(false);
 const selected = ref(null);
 const focusAdapterField = ref(null);
@@ -1541,12 +1533,15 @@ async function load(options = {}) {
     const data = await loadStep(
       "load:api:getMappingGraph",
       () =>
-        store.dispatch("getMappingGraph", {
-          connectionId: props.connectionId,
-          mappingId: props.mappingId,
-        }),
+        props.graphLoader
+          ? props.graphLoader()
+          : store.dispatch("getMappingGraph", {
+              connectionId: props.connectionId,
+              mappingId: props.mappingId,
+            }),
       stepCtx,
     );
+    graphVersion = data?.graphVersion ?? null;
 
     let graph;
     let migrated = false;
@@ -1558,7 +1553,7 @@ async function load(options = {}) {
     ) {
       graph = data.graph;
     } else {
-      graph = autoMigrate(props.fieldMappings, props.availableSources);
+      graph = autoMigrate([], props.availableSources);
       migrated = true;
     }
 
@@ -1570,15 +1565,11 @@ async function load(options = {}) {
           graph.edges,
           props.priceFieldMappings,
         );
-        graph.nodes = syncAdapterFields(
-          syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
-          props.fieldMappings,
-        );
-        graph.edges = ensured.edges;
         graph.nodes = syncAdapterPriceFields(
-          graph.nodes,
+          ensured.nodes,
           props.priceFieldMappings,
         );
+        graph.edges = ensured.edges;
         ensureModifierParamDefaults(graph.nodes);
       },
       { ...stepCtx, migrated },
@@ -1714,9 +1705,14 @@ async function syncAdapterFieldSchema() {
   }
 }
 
-function confirmAutoArrange() {
-  showAutoArrangeConfirm.value = false;
-  autoArrange();
+async function confirmAutoArrange() {
+  const ok = await confirm({
+    title: t("marketplace.fieldMappingPage.rearrangeBlocksTitle"),
+    description: t("marketplace.fieldMappingPage.rearrangeBlocksDescription"),
+    confirmLabel: t("marketplace.fieldMappingPage.rearrange"),
+    destructive: false,
+  });
+  if (ok) autoArrange();
 }
 
 // ---- Context menu (right-click / Tab) ----
@@ -2105,23 +2101,62 @@ function duplicateSelection() {
   if (copySelection()) spawnCopies(clipboard.value, { x: 40, y: 40 });
 }
 
-async function save() {
+let saveInFlight = null;
+
+/** Saves the canvas. Resolves true when the graph is persisted. */
+function save(options = {}) {
+  if (saveInFlight) return saveInFlight;
+  saveInFlight = persistGraph(options).finally(() => {
+    saveInFlight = null;
+  });
+  return saveInFlight;
+}
+
+async function persistGraph({ force = false } = {}) {
+  if (errorCount.value > 0) {
+    displaySonnerError({
+      message: t("marketplace.canvas.fixErrorsBeforeSave"),
+    });
+    return false;
+  }
   saving.value = true;
   try {
-    const { projections } = analyzeFields(nodes.value, edges.value);
-    await store.dispatch("saveMappingGraph", {
+    const result = await store.dispatch("saveMappingGraph", {
       connectionId: props.connectionId,
       mappingId: props.mappingId,
       graph: buildGraph(),
-      fields: projections,
+      expectedGraphVersion: force ? null : graphVersion,
     });
+    graphVersion = result?.graphVersion ?? null;
     dirty.value = false;
     displaySonnerSuccess(t("marketplace.canvas.graphSaved"));
+    return true;
   } catch (e) {
+    if (e?.response?.status === 409) {
+      saving.value = false;
+      return resolveSaveConflict();
+    }
     displaySonnerError(e);
+    return false;
   } finally {
     saving.value = false;
   }
+}
+
+async function resolveSaveConflict() {
+  const choice = await confirm({
+    title: t("marketplace.canvas.saveConflict.title"),
+    description: t("marketplace.canvas.saveConflict.description"),
+    saveLabel: t("marketplace.canvas.saveConflict.reload"),
+    confirmLabel: t("marketplace.canvas.saveConflict.overwrite"),
+    cancelLabel: t("common.cancel"),
+  });
+  if (choice === true) return persistGraph({ force: true });
+  if (choice === "save") {
+    dirty.value = false;
+    await load({ preserveLayout: true });
+  }
+  return false;
 }
 
 let previewTimer = null;
@@ -2237,7 +2272,8 @@ function triggerImportFile() {
 
 defineExpose({
   reload: requestLoad,
-  reloadAfterFieldSync: () => requestLoad({ preserveLayout: true }),
+  isDirty: () => dirty.value,
+  save,
   autoArrange,
   syncAdapterFieldSchema,
   exportMappingFile,
@@ -2248,6 +2284,12 @@ async function importMappingFile(event) {
   const file = event.target?.files?.[0];
   if (event.target) event.target.value = "";
   if (!file) return;
+  const ok = await confirm({
+    title: t("marketplace.canvas.importConfirm.title"),
+    description: t("marketplace.canvas.importConfirm.description"),
+    confirmLabel: t("marketplace.canvas.importConfirm.confirm"),
+  });
+  if (!ok) return;
   try {
     const data = JSON.parse(await file.text());
     const graph = data.graph ?? data;
@@ -2259,12 +2301,8 @@ async function importMappingFile(event) {
       graph.edges || [],
       props.priceFieldMappings,
     );
-    let importedNodes = syncAdapterFields(
-      syncAdapterPriceFields(ensured.nodes, props.priceFieldMappings),
-      props.fieldMappings,
-    );
-    importedNodes = syncAdapterPriceFields(
-      importedNodes,
+    const importedNodes = syncAdapterPriceFields(
+      ensured.nodes,
       props.priceFieldMappings,
     );
     const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
@@ -2315,11 +2353,19 @@ async function importMappingFile(event) {
             <Button
               size="sm"
               :disabled="saving || errorCount > 0"
-              @click="save"
+              :title="
+                dirty ? t('marketplace.canvas.unsavedChanges') : undefined
+              "
+              @click="save()"
             >
               <Spinner v-if="saving" />
               <Save v-else class="size-4" />
               {{ t("marketplace.canvas.save") }}
+              <span
+                v-if="dirty && !saving"
+                class="size-1.5 rounded-full bg-current opacity-80"
+                aria-hidden="true"
+              />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
@@ -2332,7 +2378,7 @@ async function importMappingFile(event) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" class="w-56">
-                <DropdownMenuItem @select="showAutoArrangeConfirm = true">
+                <DropdownMenuItem @select="confirmAutoArrange">
                   <LayoutGrid class="size-4" />
                   {{ t("marketplace.fieldMappingPage.autoArrange") }}
                 </DropdownMenuItem>
@@ -2790,31 +2836,6 @@ async function importMappingFile(event) {
       </SplitterPanel>
     </template>
   </SplitterGroup>
-
-  <AlertDialog
-    :open="showAutoArrangeConfirm"
-    @update:open="showAutoArrangeConfirm = $event"
-  >
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{{
-          t("marketplace.fieldMappingPage.rearrangeBlocksTitle")
-        }}</AlertDialogTitle>
-        <AlertDialogDescription>
-          {{ t("marketplace.fieldMappingPage.rearrangeBlocksDescription") }}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>{{ t("common.cancel") }}</AlertDialogCancel>
-        <AlertDialogAction
-          class="bg-primary text-primary-foreground hover:bg-primary/90"
-          @click="confirmAutoArrange"
-        >
-          {{ t("marketplace.fieldMappingPage.rearrange") }}
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
 </template>
 
 <!-- Global (non-scoped) styles: node cards render into the Vue Flow tree via slots, so scoped

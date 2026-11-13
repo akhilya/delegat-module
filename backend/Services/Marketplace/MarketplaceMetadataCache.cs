@@ -23,6 +23,9 @@ public sealed class MarketplaceMetadataCache : IMarketplaceMetadataCache
     public static string CategoryFieldsKey(string adapterKey, int connectionId, string externalCategoryId)
         => $"category-fields:{adapterKey}:{connectionId}:{externalCategoryId}";
 
+    public static string PriceFieldsKey(string adapterKey, int connectionId, string externalCategoryId)
+        => $"price-fields:{adapterKey}:{connectionId}:{externalCategoryId}";
+
     public bool TryGetValue<T>(string key, out T? value)
     {
         if (_cache.TryGetValue(key, out T? cached) && cached is not null)

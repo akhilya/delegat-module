@@ -660,6 +660,7 @@
     "external_price_fields_unavailable": "Не удалось загрузить поля цен с маркетплейса. Попробуйте позже.",
     "mapping_type_invalid": "Выберите сопоставление категории или магазина.",
     "mapping_graph_invalid": "Изменение сопоставления некорректно. Проверьте схему и попробуйте ещё раз.",
+    "mapping_graph_conflict": "Маппинг изменён в другом месте. Обновите страницу, чтобы загрузить актуальную версию.",
     "group_marketplace_sync_failed": "Не удалось обновить товарную группу на маркетплейсе.",
     "shipment_failed": "Маркетплейс не смог выполнить действие с поставкой.",
     "promotion_update_failed": "Не удалось обновить акцию на маркетплейсе.",
@@ -1614,33 +1615,10 @@
       "optionsAbbrCount": "{count} опц."
     },
     "fieldMappingPage": {
-      "adapters": "Адаптеры",
-      "connection": "Подключение",
       "mappings": "Маппинги",
       "category": "Категория",
-      "sourceType": {
-        "productField": "Поле товара",
-        "categoryAttribute": "Атрибут категории",
-        "storeAttribute": "Атрибут магазина",
-        "staticValue": "Статическое значение",
-        "groupName": "Название группы"
-      },
-      "notSelected": "Не выбрано",
-      "notSet": "Не задано",
-      "productGroupName": "Название группы товаров",
-      "notConfigured": "Не настроено",
-      "mappingsSaved": "Маппинги сохранены",
       "untitled": "Без названия",
       "mappingHash": "Маппинг #{id}",
-      "settingsSaved": "Настройки сохранены",
-      "saveError": "Ошибка сохранения",
-      "enterFieldKey": "Введите ключ поля",
-      "fieldKeyExists": "Поле с таким ключом уже существует",
-      "cannotDeleteAdapterField": "Нельзя удалить поле адаптера. Можно только отключить.",
-      "invalidFileFormat": "Неверный формат файла",
-      "importedFieldsCount": "Импортировано: {count} полей",
-      "fileReadError": "Ошибка чтения файла",
-      "moreActions": "Действия",
       "autoArrange": "Авторасстановка",
       "checkFieldsUpToDate": "Обновить поля",
       "export": "Экспорт",
@@ -1648,26 +1626,6 @@
       "rearrangeBlocksTitle": "Переставить блоки?",
       "rearrangeBlocksDescription": "Все блоки будут автоматически перестроены - текущее расположение будет потеряно.",
       "rearrange": "Переставить",
-      "previewTitle": "Предпросмотр",
-      "previewSheetDescription": "Сводка всех полей. Изменённые значения выделены цветом.",
-      "visualTab": "Просмотр",
-      "rawDataTab": "Данные",
-      "imagesCountHint": "{count} изображений. Если не отображаются - URL может быть недоступен из браузера.",
-      "sourceAbbr": "Исх:",
-      "resultAbbr": "Рез:",
-      "noActiveFieldsTitle": "Нет активных полей",
-      "noActiveFieldsDescription": "Подключите поля адаптера к источникам, чтобы увидеть предпросмотр значений.",
-      "mappingSettingsTitle": "Настройки маппинга",
-      "mappingSettingsDescription": "Настройте параметры маппинга",
-      "mappingNamePlaceholder": "Название маппинга",
-      "addFieldTitle": "Добавить поле",
-      "addFieldDescription": "Добавьте поле с произвольным ключом для адаптера",
-      "fieldKeyLabel": "Ключ поля *",
-      "fieldKeyPlaceholder": "например: custom_field",
-      "nameOptionalLabel": "Название (опционально)",
-      "displayNamePlaceholder": "Отображаемое название",
-      "sourceTypeLabel": "Тип источника",
-      "fieldValuePlaceholder": "Значение поля",
       "loadStatus": {
         "mapping": "Загрузка маппинга…",
         "dictionaries": "Загрузка словарей адаптера…",
@@ -1675,6 +1633,19 @@
         "products": "Загрузка товаров…",
         "graph": "Открытие графа маппинга…",
         "layout": "Расстановка блоков…"
+      },
+      "leaveConfirm": {
+        "title": "Несохранённые изменения",
+        "description": "В маппинге есть несохранённые изменения. Сохраните их перед уходом — или уйдите без сохранения.",
+        "saveLabel": "Сохранить и уйти",
+        "confirmLabel": "Уйти без сохранения",
+        "cancelLabel": "Остаться"
+      },
+      "externalChange": {
+        "title": "Маппинг изменён ассистентом",
+        "description": "Загрузить новую версию? Ваши несохранённые изменения на холсте будут потеряны.",
+        "reload": "Загрузить новую версию",
+        "keep": "Оставить мои изменения"
       }
     },
     "marketplacePage": {
@@ -2008,7 +1979,10 @@
         },
         "arrayAppend": {
           "label": "Добавить в массив",
-          "inputLabels": ["массив", "элемент"],
+          "inputLabels": [
+            "массив",
+            "элемент"
+          ],
           "params": {}
         },
         "splitToArray": {
@@ -2029,7 +2003,11 @@
         },
         "ifElse": {
           "label": "Если",
-          "inputLabels": ["условие", "если да", "если нет"],
+          "inputLabels": [
+            "условие",
+            "если да",
+            "если нет"
+          ],
           "params": {}
         },
         "not": {
@@ -2046,27 +2024,42 @@
         },
         "equals": {
           "label": "Равно",
-          "inputLabels": ["A", "B"],
+          "inputLabels": [
+            "A",
+            "B"
+          ],
           "params": {}
         },
         "notEquals": {
           "label": "Не равно",
-          "inputLabels": ["A", "B"],
+          "inputLabels": [
+            "A",
+            "B"
+          ],
           "params": {}
         },
         "greaterThan": {
           "label": "Больше",
-          "inputLabels": ["A", "B"],
+          "inputLabels": [
+            "A",
+            "B"
+          ],
           "params": {}
         },
         "lessThan": {
           "label": "Меньше",
-          "inputLabels": ["A", "B"],
+          "inputLabels": [
+            "A",
+            "B"
+          ],
           "params": {}
         },
         "contains": {
           "label": "Содержит",
-          "inputLabels": ["где", "что"],
+          "inputLabels": [
+            "где",
+            "что"
+          ],
           "params": {}
         },
         "isEmpty": {
@@ -2239,7 +2232,20 @@
       "mappingExported": "Маппинг экспортирован",
       "mappingImported": "Маппинг импортирован - нажмите «Сохранить»",
       "sourceValueLabel": "Исходное значение",
-      "aiModelFallback": "Модель #{id}"
+      "aiModelFallback": "Модель #{id}",
+      "unsavedChanges": "Есть несохранённые изменения",
+      "fixErrorsBeforeSave": "Исправьте ошибки в графе перед сохранением",
+      "saveConflict": {
+        "title": "Маппинг изменился",
+        "description": "Пока вы редактировали, маппинг сохранили в другом месте (другая вкладка или ассистент). Загрузите актуальную версию или перезапишите её своей.",
+        "reload": "Загрузить актуальную",
+        "overwrite": "Перезаписать моей версией"
+      },
+      "importConfirm": {
+        "title": "Заменить граф из файла?",
+        "description": "Текущие блоки и связи на холсте будут заменены содержимым файла. Изменения не сохранятся, пока вы не нажмёте «Сохранить».",
+        "confirm": "Заменить"
+      }
     },
     "optionMapEditor": {
       "title": "Соответствия: вариант → вариант адаптера",
@@ -3781,8 +3787,8 @@
         "boolean": "Да/Нет",
         "select": "Выбор",
         "multiSelect": "Множественный выбор",
-        "barcode": "Штрихкод",
         "file": "Файл",
+        "barcode": "Штрихкод",
         "unknown": "Неизвестный тип"
       },
       "noGroupOption": "Без группы (Прочее)",
@@ -3823,7 +3829,7 @@
       "optionsHeader": "Опции",
       "requiredFieldTitle": "Обязательное поле",
       "deleteAttributeTitle": "Удалить атрибут?",
-      "deleteAttributeDescription": "Вы уверены что хотите удалить атрибут «{name}»? Все значения этого атрибута у товаров будут удалены.",
+      "deleteAttributeDescription": "Вы уверены что хотите удалить атрибут \"{name}\"? Все значения этого атрибута у товаров будут удалены.",
       "editAttributeTitle": "Редактировать атрибут",
       "newAttributeTitle": "Новый атрибут",
       "attributeDialogSubtitle": "Параметры поля на странице товара в этой категории",
@@ -3854,7 +3860,11 @@
       "groupNamePlaceholder": "Название группы",
       "noGroupPlaceholder": "Без группы",
       "chooseFromListLabel": "Выбрать из списка",
-      "customGroupLabel": "Другая группа",
+      "customGroupLabel": "Своя группа",
+      "groupIconLabel": "Иконка группы",
+      "groupIconNone": "Без иконки",
+      "groupIconMarketplace": "Маркетплейсы",
+      "groupIconSymbols": "Значки",
       "multilineLabel": "Многострочный текст",
       "multilineHint": "Поле с переносами строк на странице товара",
       "allowCustomValuesLabel": "Свои значения",
@@ -4889,119 +4899,6 @@
       "requestLabel": "Запрос",
       "traceIdLabel": "Trace ID",
       "stackTraceLabel": "Стек"
-    },
-    "categoryEditPage": {
-      "breadcrumbEditing": "Редактирование",
-      "attributeTypes": {
-        "text": "Текст",
-        "number": "Число",
-        "boolean": "Да/Нет",
-        "select": "Выбор",
-        "multiSelect": "Множественный выбор",
-        "file": "Файл",
-        "barcode": "Штрихкод",
-        "unknown": "Неизвестный тип"
-      },
-      "noGroupOption": "Без группы (Прочее)",
-      "attributesCount": {
-        "one": "атрибут",
-        "few": "атрибута",
-        "many": "атрибутов"
-      },
-      "nameRequired": "Введите название категории",
-      "saved": "Категория сохранена",
-      "attrNameRequired": "Введите название атрибута",
-      "attrKeyRequired": "Введите ключ атрибута",
-      "attrUpdated": "Атрибут обновлён",
-      "attrAdded": "Атрибут добавлен",
-      "attrDeleted": "Атрибут удалён",
-      "orderSaved": "Порядок атрибутов сохранён",
-      "fileNoOptions": "Файл не содержит вариантов",
-      "importedCount": "Импортировано вариантов: {count}",
-      "noOptionsToExport": "Нет вариантов для экспорта",
-      "exportedCount": "Экспортировано вариантов: {count}",
-      "fileReadFailed": "Не удалось прочитать файл",
-      "fileReadError": "Ошибка чтения файла",
-      "editingCategoryFallback": "Редактирование категории",
-      "subtitle": "Название, описание и настройки размерной сетки для товаров категории.",
-      "namePlaceholder": "Введите название",
-      "optionalPlaceholder": "Необязательно",
-      "sizeGridLabel": "Размерная сетка",
-      "hasSizesLabel": "Товары имеют размеры",
-      "hasSizesDescription": "Включает вкладку «Размеры». Эти строки уходят на маркетплейс как варианты, а не как поля на графе маппинга.",
-      "attributesCardTitle": "Атрибуты категории",
-      "attributesOrderHint": "Порядок строк — порядок на карточке товара. Перетащите строки, чтобы изменить его.",
-      "noAttributesTitle": "Нет атрибутов",
-      "noAttributesDescription": "Атрибуты определяют свойства товаров - размер, цвет, материал и другие характеристики",
-      "addAttribute": "Добавить атрибут",
-      "keyLabel": "Ключ",
-      "groupLabel": "Группа",
-      "typeHeader": "Тип",
-      "optionsHeader": "Опции",
-      "requiredFieldTitle": "Обязательное поле",
-      "deleteAttributeTitle": "Удалить атрибут?",
-      "deleteAttributeDescription": "Вы уверены что хотите удалить атрибут \"{name}\"? Все значения этого атрибута у товаров будут удалены.",
-      "editAttributeTitle": "Редактировать атрибут",
-      "newAttributeTitle": "Новый атрибут",
-      "attributeDialogSubtitle": "Параметры поля на странице товара в этой категории",
-      "basicSection": "Основное",
-      "namePlaceholderExamples": "Цвет, Размер, Бренд",
-      "keyDescription": "Используется в API и экспорте",
-      "typeLabel": "Тип значения",
-      "unitLabel": "Единица измерения",
-      "unitPlaceholder": "Выберите или введите код единицы",
-      "unitHint": "Используется для отображения и предупреждений маппинга. Значения автоматически не пересчитываются.",
-      "optionsSection": "Варианты",
-      "export": "Экспорт",
-      "import": "Импорт",
-      "optionsWord": "вариантов",
-      "largeOptionsHint": "Список хранится в JSON - редактируйте через импорт и экспорт",
-      "clearOptions": "Очистить",
-      "optionsPlaceholderExample": "Красный, Синий, Зелёный - или value:подпись",
-      "optionsFormatHint": "JSON, CSV или текст - по одному варианту на строку или через запятую",
-      "additionalSection": "Дополнительно",
-      "defaultValueLabel": "Значение по умолчанию",
-      "notSelectedPlaceholder": "Не выбрано",
-      "lazyLoadHint": "Список загрузится при открытии выбора",
-      "multiValuePlaceholder": "значение1, значение2",
-      "multiValueHint": "Несколько значений через запятую",
-      "descriptionPlaceholder": "Подсказка для пользователя на странице товара",
-      "descriptionInTooltipLabel": "Описание в подсказке",
-      "descriptionInTooltipHint": "Скрывать длинное описание за иконкой на странице товара",
-      "groupNamePlaceholder": "Название группы",
-      "noGroupPlaceholder": "Без группы",
-      "chooseFromListLabel": "Выбрать из списка",
-      "customGroupLabel": "Своя группа",
-      "groupIconLabel": "Иконка группы",
-      "groupIconNone": "Без иконки",
-      "groupIconMarketplace": "Маркетплейсы",
-      "groupIconSymbols": "Значки",
-      "multilineLabel": "Многострочный текст",
-      "multilineHint": "Поле с переносами строк на странице товара",
-      "allowCustomValuesLabel": "Свои значения",
-      "allowCustomValuesHint": "Можно ввести значение, которого нет в списке",
-      "allowMultipleFilesLabel": "Несколько файлов",
-      "allowMultipleFilesHint": "Разрешить прикреплять к атрибуту несколько файлов",
-      "maxValuesLabel": "Макс. значений",
-      "maxValuesPlaceholder": "Без ограничения",
-      "maxValuesHint": "Подставляется с маркетплейса при импорте категории (выбор и множественный выбор)",
-      "valueMaxLengthLabel": "Макс. символов",
-      "valueMaxLengthPlaceholder": "Без ограничения",
-      "valueMaxLengthHint": "Подставляется с маркетплейса при импорте категории",
-      "minValueLabel": "Минимум",
-      "minValuePlaceholder": "Без минимума",
-      "maxValueLabel": "Максимум",
-      "maxValuePlaceholder": "Без максимума",
-      "validationPatternLabel": "Формат (regex)",
-      "validationPatternPlaceholder": "Необязательно",
-      "validationPatternHint": "Подставляется с маркетплейса при импорте категории",
-      "showOnProductPageLabel": "На странице товара",
-      "showOnProductPageHint": "Показывать при редактировании товара",
-      "showOnProductPageRequiredHint": "Обязательные поля всегда показываются на странице товара",
-      "requiredFieldHint": "Требовать заполнение при создании товара",
-      "uniqueFieldTitle": "Уникальное",
-      "uniqueFieldHint": "Значение не должно повторяться у других товаров в этой категории",
-      "uniqueBadge": "уник"
     }
   },
   "columnSelector": {

@@ -88,6 +88,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- The mapping editor opens with one graph request that also returns mapping details and the marketplace field schema. Card and price field schemas are cached for an hour, so opening a mapping no longer calls the marketplace API twice. **Update fields** still reads the live schema. Previewing on a product loads it with split, untracked queries.
+
 - The standalone barcode and notes pages are hidden from navigation without removing their routes. Administration is a single, tab-free page with Plan, Summary (instance and per-store usage), Stores, Users, AI, Public API, Logging, and Database backup in sequence; section access remains independent, and previous settings/admin links redirect there. The AI model table opens in a wide dialog. Product barcode previews use a compact, readable scale on a white background in both themes. Help, Operations, and the enabled AI assistant share the navbar; the account menu remains in the sidebar footer. Missing-photo placeholders use the muted surface in both themes.
 - Administration's Stores, Users, and AI sections use the shared inset-group styling, with create, invite, add-model, and personal-settings actions at the bottom of their lists. The Administration sidebar entry keeps its original settings icon.
 - Desktop page gutters are now symmetric; the right side no longer reserves extra space for corner buttons that have moved into the navbar.
@@ -249,6 +251,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
 ### Fixed
+
+- The mapping editor asks before you leave with unsaved changes and offers to save first. If a graph was changed elsewhere (another tab or the assistant) since it was opened, saving it returns a conflict: you can load the latest version or overwrite it. Assistant edits no longer reload the canvas over unsaved work without asking. Importing a graph file and auto-arranging blocks now ask for confirmation in the app's own dialogs.
+- Attribute option lookup for the mapping editor (`GET /marketplace/attribute-options`) is now limited to the selected store.
 
 - Ozon product imports now bring every gallery video into product media, including videos returned as separate complex attributes or in the regular attribute list, instead of only the first or none. Video and cover links are no longer written as text into mapped File attributes.
 - Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.

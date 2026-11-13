@@ -20,17 +20,15 @@ function method(start, end) {
 test("mapping initialization does not fetch a catalog page or wait for product choices", async () => {
   const { fetchData } = method(
     "    async fetchData() {",
-    "    async fetchFieldMappings()",
+    "    async requestGraph()",
   );
   let previewCalls = 0;
   let selectedCalls = 0;
+  const graph = { hasGraph: true, graphVersion: "v1" };
   const context = {
-    waitForPaint: async () => {},
-    fetchExternalFieldDescriptions: async () => {},
-    fetchPriceFieldDescriptions: async () => {},
+    requestGraph: async () => graph,
     fetchAvailableSources: async () => {},
     fetchStoreFiles: async () => {},
-    fetchFieldMappings: async () => {},
     fetchPreviewProducts: async () => {
       previewCalls++;
     },
@@ -41,6 +39,7 @@ test("mapping initialization does not fetch a catalog page or wait for product c
   };
   await fetchData.call(context);
   assert.equal(context.isLoading, false);
+  assert.equal(context.prefetchedGraph, graph);
   assert.equal(previewCalls, 0);
   assert.equal(selectedCalls, 1);
 });
