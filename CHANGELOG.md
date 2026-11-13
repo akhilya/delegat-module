@@ -250,6 +250,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Ozon product imports now bring every gallery video into product media, including videos returned as separate complex attributes or in the regular attribute list, instead of only the first or none. Video and cover links are no longer written as text into mapped File attributes.
 - Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.
 - Store deletion works with MySQL automatic retries and handles trashed folder trees, restricting catalog references, scoped job/chat/history data, and both current and legacy storage prefixes; archive/chat objects are cleaned only after database commit.
 - Product transfers stage file bytes before opening the database transaction and atomically include category/group creation. Failed/cancelled attempts restore tracking and clean staged objects; database retries do not recopy files, and post-commit notification failures cannot delete committed media.

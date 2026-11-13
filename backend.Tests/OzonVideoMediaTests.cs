@@ -76,6 +76,69 @@ public sealed class OzonVideoMediaTests
     }
 
     [Fact]
+    public void ProductImportMapsEveryVideoFromSeparateComplexAttributeGroups()
+    {
+        var attributes = new ProductAttributesItem
+        {
+            Id = 42,
+            ComplexAttributes =
+            [
+                new ComplexAttributeInfo
+                {
+                    Attributes =
+                    [
+                        Attribute(100001, 21841, "https://cdn.example.test/first.mp4"),
+                        Attribute(100001, 21837, "first clip")
+                    ]
+                },
+                new ComplexAttributeInfo
+                {
+                    Attributes =
+                    [
+                        Attribute(100001, 21837, "second clip"),
+                        Attribute(100001, 21841, "https://cdn.example.test/second.mp4")
+                    ]
+                }
+            ]
+        };
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        Assert.Equal(
+            ["https://cdn.example.test/first.mp4", "https://cdn.example.test/second.mp4"],
+            product.Media!.Select(media => media.Url));
+        Assert.Equal(["first clip", "second clip"], product.Media!.Select(media => media.FileName));
+        Assert.Equal([0, 1], product.Media!.Select(media => media.Index));
+    }
+
+    [Fact]
+    public void ProductImportReadsGalleryVideoFromTopLevelAttributesWithoutTextUrlValues()
+    {
+        var attributes = new ProductAttributesItem
+        {
+            Id = 42,
+            Attributes =
+            [
+                Attribute(100001, 21841, "https://cdn.example.test/clip.mp4"),
+                Attribute(100001, 21837, "clip"),
+                Attribute(100002, 21845, "https://cdn.example.test/cover.mp4")
+            ]
+        };
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn.example.test/clip.mp4", media.Url);
+        Assert.Equal("clip", media.FileName);
+        Assert.False(product.Attributes?.ContainsKey("21841") ?? false);
+        Assert.False(product.Attributes?.ContainsKey("21845") ?? false);
+    }
+
+    [Fact]
     public void EmptyLocalMediaPreservesRemoteGalleryAndCoverWhileSelectedVideoReplacesOnlyGalleryVideo()
     {
         var existing = ExistingAttributes();
