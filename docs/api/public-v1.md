@@ -228,6 +228,14 @@ Base: `/stores/{storeId}/connections/{connectionId}/…`
 | POST | `/export-stocks` | `{ linkIds?: number[] }` | |
 | POST | `/import-stocks` | _(empty)_ | Adapter must support import stocks |
 
+Queued product imports fetch marketplace data before committing a local product.
+The new card, mapped attribute values, variants, marketplace/group links, group
+membership, and media queue are saved atomically: a failed local write leaves
+none of that new structure behind. Media bytes are downloaded later by workers.
+Retrying the same connection/external ID reuses its existing local link, including
+a trashed product, without restoring it or queueing its media again. A barcode
+owned by an imported variant is not also assigned to its parent card.
+
 ### Marketplace commerce
 
 Paths are unchanged. Swagger lists them as separate sections: Prices, Orders, Fulfillment, Shipments, Promotions.

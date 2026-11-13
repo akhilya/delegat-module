@@ -77,8 +77,11 @@ public class CategoryController : ControllerBase
             .OrderBy(c => c.name)
             .Select(c => new Category.CategoryDTO
             {
-                id = c.Id, name = c.name, description = c.description,
-                hasSizes = c.hasSizes, createdAt = c.createdAt,
+                id = c.Id,
+                name = c.name,
+                description = c.description,
+                hasSizes = c.hasSizes,
+                createdAt = c.createdAt,
                 attributesCount = c.attributes.Count,
             }).ToListAsync();
 
@@ -141,7 +144,10 @@ public class CategoryController : ControllerBase
             .Where(c => c.Id == categoryId && c.storeId == storeId.Value)
             .Select(c => new Category.EditorSummaryDTO
             {
-                id = c.Id, name = c.name, description = c.description, hasSizes = c.hasSizes,
+                id = c.Id,
+                name = c.name,
+                description = c.description,
+                hasSizes = c.hasSizes,
             }).SingleOrDefaultAsync();
         if (category == null)
             throw ApiException.NotFound(code: "category_not_found");
@@ -234,38 +240,8 @@ public class CategoryController : ControllerBase
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> DeleteCategory(int categoryId)
     {
-        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
-        if (selectedStoreId == null)
-            throw ApiException.BadRequest(code: "store_not_selected");
-
-        var categoryRepo = _unitOfWork.Repository<Category>();
-
-        var category = await categoryRepo.FindAsync(
-            c => c.Id == categoryId && c.storeId == selectedStoreId.Value,
-            query => query.Include(c => c.attributes));
-
-        if (category == null)
-            throw ApiException.NotFound(code: "category_not_found");
-
-        var activeCount = await _context.products.CountAsync(p => p.categoryId == categoryId);
-        if (activeCount > 0)
-            throw new ApiException(
-                statusCode: StatusCodes.Status400BadRequest,
-                data: new { productCount = activeCount },
-                code: "category_has_products");
-
-        // Trashed products are hidden by the global query filter, but their FK rows still
-        // block the DELETE - detach them from the category (they stay in the trash)
-        await _context.products.IgnoreQueryFilters()
-            .Where(p => p.categoryId == categoryId && p.deletedAt != null)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.categoryId, (int?)null));
-
-        // Delete attributes and category in a single save
-        var attrRepo = _unitOfWork.Repository<CategoryAttribute>();
-        attrRepo.DeleteRange(category.attributes.ToList());
-        categoryRepo.DeleteWithoutSave(category);
-        await _unitOfWork.SaveChangesAsync();
-
+        // The shared path persists trash detachment and dependent deletion in one save.
+        await BulkDeleteCategories(new Category.BulkDeleteForm { categoryIds = [categoryId] });
         return Ok(new { next = "/categories" });
     }
 

@@ -133,9 +133,21 @@ public class ProductBulkUpdateService
         ProductBulkUpdateFields updates,
         CancellationToken ct = default,
         IOperationLogger? operationLogger = null,
-        string? operationId = null)
+        string? operationId = null,
+        PendingProductBulkUpdate? job = null)
     {
-        var result = new ProductBulkUpdateResult();
+        productIds = productIds.Distinct().ToList();
+        var result = new ProductBulkUpdateResult
+        {
+            updatedCount = job?.completedCount ?? 0,
+            failedCount = job?.failedCount ?? 0
+        };
+        if (job != null && (_db.Entry(job).State == EntityState.Detached || job.storeId != storeId || job.processedCount < 0
+            || job.processedCount > productIds.Count || job.completedCount < 0 || job.failedCount < 0
+            || job.completedCount + job.failedCount != job.processedCount))
+            throw new InvalidOperationException("Bulk update checkpoint does not match the product selection");
+        if (job?.lastError is { Length: > 0 } resumedError)
+            result.errors.Add(resumedError);
         var total = productIds.Count;
 
         // Queued jobs may outlive the catalog state checked at enqueue time.
@@ -146,7 +158,7 @@ public class ProductBulkUpdateService
         {
             await operationLogger.LogAsync(operationId, storeId, "info",
                 $"Starting bulk update for {total} product(s)");
-            await operationLogger.ProgressAsync(operationId, storeId, total, 0, 0);
+            await ReportProgressAsync(operationLogger, operationId, storeId, total, result);
             await LogUpdateSummaryAsync(operationLogger, operationId, storeId, updates);
         }
 
@@ -154,14 +166,16 @@ public class ProductBulkUpdateService
         if (productIds.Count > 1)
             await EnsureBulkUniqueAttributesAllowedAsync(storeId, updates, ct);
 
-        var products = await _db.products
-            .Include(p => p.attributeValues)
-            .Include(p => p.storeAttributeValues)
-            .Include(p => p.variants)
-            .Where(p => productIds.Contains(p.Id) && p.storeId == storeId)
-            .ToListAsync(ct);
+        if (total == 1 && (updates.attributeValues != null || updates.storeAttributeValues != null))
+        {
+            var target = await _db.products.AsNoTracking()
+                .Where(p => p.Id == productIds[0] && p.storeId == storeId)
+                .Select(p => new { p.categoryId }).SingleOrDefaultAsync(ct);
+            if (target != null)
+                await _attributeUniqueness.EnsureUniqueAsync(storeId, target.categoryId,
+                    updates.attributeValues, updates.storeAttributeValues, excludeProductIds: productIds, ct: ct);
+        }
 
-        var byId = products.ToDictionary(p => p.Id);
         HashSet<string>? occupiedBarcodes = null;
         if (updates.generateBarcodes == true)
         {
@@ -173,145 +187,109 @@ public class ProductBulkUpdateService
                     .Select(v => v.barcode!).ToListAsync(ct))
                 .ToHashSet(StringComparer.Ordinal);
         }
-        var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-        var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
-
-        // Unique-attribute collision check once (multi-select already forbids unique attrs).
-        if (productIds.Count == 1
-            && (updates.attributeValues != null || updates.storeAttributeValues != null)
-            && byId.TryGetValue(productIds[0], out var soleProduct))
-        {
-            await _attributeUniqueness.EnsureUniqueAsync(
-                storeId,
-                soleProduct.categoryId,
-                updates.attributeValues,
-                updates.storeAttributeValues,
-                excludeProductIds: productIds,
-                ct: ct);
-        }
-
-        var pendingSinceSave = 0;
-
-        foreach (var productId in productIds)
+        for (var offset = job?.processedCount ?? 0; offset < total; offset += SaveChunkSize)
         {
             ct.ThrowIfCancellationRequested();
-
-            if (!byId.TryGetValue(productId, out var product))
-            {
-                result.failedCount++;
-                var msg = $"Product #{productId} not found in store";
-                result.errors.Add(msg);
-                if (operationLogger != null && operationId != null)
-                    await operationLogger.LogAsync(operationId, storeId, "error", msg);
-                await ReportProgressAsync(operationLogger, operationId, storeId, total, result);
-                continue;
-            }
-
+            var ids = productIds.Skip(offset).Take(SaveChunkSize).ToList();
+            var products = await _db.products.AsSplitQuery()
+                .Include(p => p.attributeValues)
+                .Include(p => p.storeAttributeValues)
+                .Include(p => p.variants)
+                .Where(p => ids.Contains(p.Id) && p.storeId == storeId).ToListAsync(ct);
+            var byId = products.ToDictionary(p => p.Id);
+            var errors = new List<string>();
+            var applied = 0;
+            var previousError = job?.lastError;
             try
             {
-                ApplyProductFields(product, updates);
-
-                if (occupiedBarcodes != null && string.IsNullOrEmpty(product.barcode))
+                foreach (var id in ids)
                 {
-                    string candidate;
-                    do
+                    ct.ThrowIfCancellationRequested();
+                    if (!byId.TryGetValue(id, out var product))
                     {
-                        ct.ThrowIfCancellationRequested();
-                        candidate = _barcodeGenerator();
-                    } while (!occupiedBarcodes.Add(candidate));
-                    product.barcode = candidate;
-                }
-
-                if (updates.attributeValues != null)
-                {
-                    foreach (var av in updates.attributeValues)
+                        errors.Add($"Product #{id} not found in store");
+                        continue;
+                    }
+                    try
                     {
-                        var existing = product.attributeValues
-                            .FirstOrDefault(a => a.attributeId == av.attributeId);
-                        if (existing != null)
+                        ApplyProductFields(product, updates);
+                        if (occupiedBarcodes != null && string.IsNullOrEmpty(product.barcode))
                         {
-                            existing.value = av.value;
-                        }
-                        else
-                        {
-                            var attrValue = new ProductAttributeValue();
-                            attrValue.AddFill(new ProductAttributeValue.AddForm
+                            string candidate;
+                            do
                             {
-                                productId = product.Id,
-                                attributeId = av.attributeId,
-                                value = av.value
-                            });
-                            await attrValueRepo.AddWithoutSaveAsync(attrValue);
+                                ct.ThrowIfCancellationRequested();
+                                candidate = _barcodeGenerator();
+                            } while (!occupiedBarcodes.Add(candidate));
+                            product.barcode = candidate;
                         }
-                    }
-                }
-
-                if (updates.storeAttributeValues != null)
-                {
-                    foreach (var sav in updates.storeAttributeValues)
-                    {
-                        var existing = product.storeAttributeValues
-                            .FirstOrDefault(a => a.storeAttributeId == sav.storeAttributeId);
-                        if (existing != null)
+                        foreach (var av in updates.attributeValues ?? [])
                         {
-                            existing.value = sav.value;
+                            var value = product.attributeValues.FirstOrDefault(v => v.attributeId == av.attributeId);
+                            if (value == null)
+                                product.attributeValues.Add(new ProductAttributeValue { productId = id, attributeId = av.attributeId, value = av.value });
+                            else value.value = av.value;
                         }
-                        else
+                        foreach (var av in updates.storeAttributeValues ?? [])
                         {
-                            var storeAttrValue = new StoreProductAttributeValue();
-                            storeAttrValue.AddFill(new StoreProductAttributeValue.AddForm
-                            {
-                                productId = product.Id,
-                                storeAttributeId = sav.storeAttributeId,
-                                value = sav.value
-                            });
-                            await storeAttrValueRepo.AddWithoutSaveAsync(storeAttrValue);
+                            var value = product.storeAttributeValues.FirstOrDefault(v => v.storeAttributeId == av.storeAttributeId);
+                            if (value == null)
+                                product.storeAttributeValues.Add(new StoreProductAttributeValue { productId = id, storeAttributeId = av.storeAttributeId, value = av.value });
+                            else value.value = av.value;
                         }
+                        applied++;
                     }
-                }
-
-                result.updatedCount++;
-                pendingSinceSave++;
-
-                if (pendingSinceSave >= SaveChunkSize)
-                {
-                    await _unitOfWork.SaveChangesAsync();
-                    pendingSinceSave = 0;
-                    if (operationLogger != null && operationId != null)
+                    catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        await operationLogger.LogAsync(operationId, storeId, "info",
-                            $"Persisted {result.updatedCount}/{total} product(s)");
+                        DiscardChunkChanges([product]);
+                        errors.Add($"Product #{id}: {ex.Message}");
                     }
                 }
+
+                SetCheckpoint(job, offset + ids.Count, result.updatedCount + applied,
+                    result.failedCount + errors.Count, errors.FirstOrDefault() ?? previousError);
+                // EF commits the products, variants, attributes and durable job checkpoint together.
+                await _unitOfWork.SaveChangesAsync(ct);
             }
             catch (OperationCanceledException)
             {
+                SetCheckpoint(job, offset, result.updatedCount, result.failedCount, previousError);
+                DiscardChunkChanges(products);
                 throw;
             }
-            catch (ApiException ex)
+            catch (DbUpdateConcurrencyException)
             {
-                await DiscardProductChangesAsync(product);
-                result.failedCount++;
-                var msg = $"Product #{product.Id} ({product.sku}): {ex.Message}";
-                result.errors.Add(msg);
-                if (operationLogger != null && operationId != null)
-                    await operationLogger.LogAsync(operationId, storeId, "error", msg);
+                SetCheckpoint(job, offset, result.updatedCount, result.failedCount, previousError);
+                throw; // Another worker owns the committed prefix; do not mark its work as failed.
             }
             catch (Exception ex)
             {
-                await DiscardProductChangesAsync(product);
-                result.failedCount++;
-                var msg = $"Product #{product.Id} ({product.sku}): {ex.Message}";
-                result.errors.Add(msg);
-                if (operationLogger != null && operationId != null)
-                    await operationLogger.LogAsync(operationId, storeId, "error", msg);
+                DiscardChunkChanges(products);
+                applied = 0;
+                errors = ids.Select(id => $"Product #{id}: batch was not saved ({ex.Message})").ToList();
+                SetCheckpoint(job, offset + ids.Count, result.updatedCount, result.failedCount + ids.Count, errors[0]);
+                // Do not let failed tracked changes leak into the next batch or the worker's status save.
+                // If even the checkpoint cannot be saved, abort and resume at the previous committed prefix.
+                if (job != null)
+                {
+                    try { await _unitOfWork.SaveChangesAsync(ct); }
+                    catch
+                    {
+                        SetCheckpoint(job, offset, result.updatedCount, result.failedCount, previousError);
+                        throw;
+                    }
+                }
             }
+            finally { DiscardChunkChanges(products); }
 
+            result.updatedCount += applied;
+            result.failedCount += errors.Count;
+            result.errors.AddRange(errors);
+            if (operationLogger != null && operationId != null)
+                foreach (var error in errors)
+                    await operationLogger.LogAsync(operationId, storeId, "error", error);
             await ReportProgressAsync(operationLogger, operationId, storeId, total, result);
         }
-
-        if (pendingSinceSave > 0)
-            await _unitOfWork.SaveChangesAsync();
 
         if (operationLogger != null && operationId != null)
         {
@@ -322,35 +300,31 @@ public class ProductBulkUpdateService
         return result;
     }
 
-    /// <summary>
-    /// Drop in-memory mutations for a product that failed mid-apply so a later chunk save
-    /// does not persist partial changes.
-    /// </summary>
-    private async Task DiscardProductChangesAsync(Product product)
+    private static void SetCheckpoint(PendingProductBulkUpdate? job, int processed, int completed, int failed, string? error)
     {
-        foreach (var entry in _db.ChangeTracker.Entries<ProductAttributeValue>()
-                     .Where(e => e.Entity.productId == product.Id)
-                     .ToList())
-        {
-            if (entry.State == EntityState.Added)
-                entry.State = EntityState.Detached;
-            else if (entry.State != EntityState.Detached)
-                await entry.ReloadAsync();
-        }
+        if (job == null) return;
+        job.processedCount = processed;
+        job.completedCount = completed;
+        job.failedCount = failed;
+        job.lastError = error;
+    }
 
-        foreach (var entry in _db.ChangeTracker.Entries<StoreProductAttributeValue>()
-                     .Where(e => e.Entity.productId == product.Id)
-                     .ToList())
+    private void DiscardChunkChanges(IEnumerable<Product> products)
+    {
+        var ids = products.Select(p => p.Id).ToHashSet();
+        foreach (var entry in _db.ChangeTracker.Entries().Where(e => e.Entity switch
         {
-            if (entry.State == EntityState.Added)
-                entry.State = EntityState.Detached;
-            else if (entry.State != EntityState.Detached)
-                await entry.ReloadAsync();
+            Product p => ids.Contains(p.Id),
+            ProductVariant v => ids.Contains(v.productId),
+            ProductAttributeValue v => ids.Contains(v.productId),
+            StoreProductAttributeValue v => ids.Contains(v.productId),
+            _ => false
+        }).ToList())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.CurrentValues.SetValues(entry.OriginalValues);
+            entry.State = EntityState.Detached;
         }
-
-        var productEntry = _db.Entry(product);
-        if (productEntry.State is EntityState.Modified or EntityState.Unchanged)
-            await productEntry.ReloadAsync();
     }
 
     private static async Task ReportProgressAsync(

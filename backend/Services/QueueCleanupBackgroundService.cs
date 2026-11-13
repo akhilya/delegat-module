@@ -202,72 +202,111 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
         if (idleImages > 0)
             _logger.LogInformation("Queue cleanup closed {Count} idle image-download operation(s)", idleImages);
 
-        var deletedExports = await db.pendingProductExports
+        var deletedExports = await DeleteInBatchesAsync(db.pendingProductExports
             .Where(p => (p.status == ProductExportStatus.Completed
                          || p.status == ProductExportStatus.Failed
                          || p.status == ProductExportStatus.Cancelled)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedImports = await db.pendingProductImports
+        var deletedImports = await DeleteInBatchesAsync(db.pendingProductImports
             .Where(p => (p.status == ProductImportStatus.Completed
                          || p.status == ProductImportStatus.Failed
                          || p.status == ProductImportStatus.Cancelled)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedImages = await db.pendingImageDownloads
+        var deletedImages = await DeleteInBatchesAsync(db.pendingImageDownloads
             .Where(p => (p.status == ImageDownloadStatus.Completed
                          || p.status == ImageDownloadStatus.Failed
                          || p.status == ImageDownloadStatus.Cancelled)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedTransfers = await db.pendingProductTransfers
+        var deletedTransfers = await DeleteInBatchesAsync(db.pendingProductTransfers
             .Where(p => (p.status == ProductTransferStatus.Completed
                          || p.status == ProductTransferStatus.Failed
                          || p.status == ProductTransferStatus.Cancelled
                          || p.status == ProductTransferStatus.Partial)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedBulkUpdates = await db.pendingProductBulkUpdates
+        var deletedBulkUpdates = await DeleteInBatchesAsync(db.pendingProductBulkUpdates
             .Where(p => (p.status == ProductBulkUpdateStatus.Completed
                          || p.status == ProductBulkUpdateStatus.Failed
                          || p.status == ProductBulkUpdateStatus.Cancelled
                          || p.status == ProductBulkUpdateStatus.Partial)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedFolderJobs = await db.pendingFolderJobs
+        var deletedFolderJobs = await DeleteInBatchesAsync(db.pendingFolderJobs
             .Where(p => (p.status == FolderJobStatus.Completed
                          || p.status == FolderJobStatus.Failed
                          || p.status == FolderJobStatus.Cancelled)
                         && p.createdAt < cutoff
-                        && p.resultObjectKey == null)
-            .ExecuteDeleteAsync(ct);
+                         && p.resultObjectKey == null), ct);
 
-        var deletedCategoryImports = await db.pendingCategoryImports
+        var deletedCategoryImports = await DeleteInBatchesAsync(db.pendingCategoryImports
             .Where(p => (p.status == CategoryImportStatus.Completed
                          || p.status == CategoryImportStatus.Failed
                          || p.status == CategoryImportStatus.Cancelled)
-                        && p.createdAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                         && p.createdAt < cutoff), ct);
 
-        var deletedOps = await db.operations
-            .Where(o => (o.status == "completed"
-                         || o.status == "failed"
-                         || o.status == "cancelled"
-                         || o.status == "partial")
-                        && (o.finishedAt ?? o.createdAt) < cutoff)
-            .ExecuteDeleteAsync(ct);
+        var deletedCatalogJobs = await DeleteInBatchesAsync(db.pendingCatalogConnectJobs.Where(p =>
+            (p.status == CatalogConnectJobStatus.Completed || p.status == CatalogConnectJobStatus.Failed
+             || p.status == CatalogConnectJobStatus.Cancelled) && p.createdAt < cutoff), ct);
+        var deletedOps = await DeleteTerminalOperationsAsync(db, cutoff, ct);
+        // Older versions removed operation parents without their string-keyed log rows.
+        var deletedOrphanLogs = await DeleteInBatchesAsync(db.operationLogEntries.Where(e => e.timestamp < cutoff
+            && !db.operations.Any(o => o.operationId == e.operationId)), ct);
 
-        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedBulkUpdates + deletedFolderJobs + deletedCategoryImports + deletedOps;
+        var total = deletedExports + deletedImports + deletedImages + deletedTransfers + deletedBulkUpdates + deletedFolderJobs + deletedCategoryImports + deletedCatalogJobs + deletedOps + deletedOrphanLogs;
         if (total > 0)
         {
             _logger.LogInformation(
-                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, bulkUpdates={BulkUpdates}, folderJobs={FolderJobs}, categoryImports={CategoryImports}, operations={Ops} older than {Days}d",
-                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedBulkUpdates, deletedFolderJobs, deletedCategoryImports, deletedOps, retentionDays);
+                "Queue cleanup removed exports={Exports}, imports={Imports}, images={Images}, transfers={Transfers}, bulkUpdates={BulkUpdates}, folderJobs={FolderJobs}, categoryImports={CategoryImports}, catalogJobs={CatalogJobs}, operations={Ops}, orphanLogs={OrphanLogs} older than {Days}d",
+                deletedExports, deletedImports, deletedImages, deletedTransfers, deletedBulkUpdates, deletedFolderJobs, deletedCategoryImports, deletedCatalogJobs, deletedOps, deletedOrphanLogs, retentionDays);
+        }
+    }
+
+    private const int CleanupBatchSize = 500;
+
+    internal static async Task<int> DeleteInBatchesAsync<TEntity>(IQueryable<TEntity> query, CancellationToken ct)
+        where TEntity : class
+    {
+        var deleted = 0;
+        while (true)
+        {
+            var ids = await query.AsNoTracking().OrderBy(e => EF.Property<int>(e, "Id"))
+                .Select(e => EF.Property<int>(e, "Id")).Take(CleanupBatchSize).ToListAsync(ct);
+            if (ids.Count == 0) return deleted;
+            var count = await query.Where(e => ids.Contains(EF.Property<int>(e, "Id"))).ExecuteDeleteAsync(ct);
+            deleted += count;
+            if (count == 0) return deleted;
+            // Release the connection and give interactive requests room between committed batches.
+            await Task.Delay(25, ct);
+        }
+    }
+
+    internal static async Task<int> DeleteTerminalOperationsAsync(DataContext db, DateTime cutoff, CancellationToken ct)
+    {
+        var deleted = 0;
+        while (true)
+        {
+            var count = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(ct);
+                var rows = await db.operations.AsNoTracking().Where(o =>
+                        (o.status == "completed" || o.status == "failed" || o.status == "cancelled" || o.status == "partial")
+                        && (o.finishedAt ?? o.createdAt) < cutoff)
+                    .OrderBy(o => o.Id).Take(CleanupBatchSize)
+                    .Select(o => new { o.Id, o.operationId }).ToListAsync(ct);
+                if (rows.Count == 0) return 0;
+                var keys = rows.Select(o => o.operationId).ToList();
+                var ids = rows.Select(o => o.Id).ToList();
+                await db.operationLogEntries.Where(e => keys.Contains(e.operationId)).ExecuteDeleteAsync(ct);
+                var removed = await db.operations.Where(o => ids.Contains(o.Id)).ExecuteDeleteAsync(ct);
+                await transaction.CommitAsync(ct);
+                return removed;
+            });
+            deleted += count;
+            if (count == 0) return deleted;
+            await Task.Delay(25, ct);
         }
     }
 

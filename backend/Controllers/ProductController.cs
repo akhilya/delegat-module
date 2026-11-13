@@ -10,6 +10,7 @@ using Delegat.Models.Products;
 using Delegat.Services;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Marketplace;
+using System.Diagnostics;
 
 namespace Delegat.Controllers;
 
@@ -88,6 +89,7 @@ public class ProductController : ControllerBase
         string? sortBy = null,
         bool sortDesc = true)
     {
+        var timer = Stopwatch.StartNew();
         if (startIndex < 0) startIndex = 0;
         if (pageSize < 1) pageSize = 12;
         if (pageSize > 250) pageSize = 250;
@@ -134,22 +136,27 @@ public class ProductController : ControllerBase
             : ProductSortHelper.ParseSortSpecs(sort, sortBy, sortDesc);
         var orderBy = ProductSortHelper.BuildOrderBy(sortSpecs, hasSearch, searchQuery);
 
-        var total = await query.CountAsync();
-        var items = await orderBy(query)
-            .AsSplitQuery()
-            .Include(p => p.files)
-            .Include(p => p.images)
-                .ThenInclude(i => i.file)
-            .Include(p => p.category)
-            .Include(p => p.storeAttributeValues)
-                .ThenInclude(sav => sav.storeAttribute)
-            .Include(p => p.marketplaceLinks)
-                .ThenInclude(l => l.connection)
-            .Include(p => p.marketplaceLinks)
-                .ThenInclude(l => l.categoryMapping)
+        var ct = HttpContext.RequestAborted;
+        var countStarted = timer.ElapsedMilliseconds;
+        var total = await query.TagWith("Catalog.Products.Count").CountAsync(ct);
+        var countMs = timer.ElapsedMilliseconds - countStarted;
+        // Apply expensive search/sort only once, not in every collection query.
+        var pageStarted = timer.ElapsedMilliseconds;
+        var pageIds = await orderBy(query.TagWith("Catalog.Products.PageIds"))
             .Skip(startIndex)
             .Take(pageSize)
-            .ToListAsync();
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        var pageMs = timer.ElapsedMilliseconds - pageStarted;
+        var rowsStarted = timer.ElapsedMilliseconds;
+        var rows = pageIds.Count == 0 ? new List<Product>() : await _context.products
+            .TagWith("Catalog.Products.ReviewRows")
+            .Where(p => p.storeId == selectedStoreId.Value && pageIds.Contains(p.Id))
+            .SelectReviewData()
+            .ToListAsync(ct);
+        var rowsMs = timer.ElapsedMilliseconds - rowsStarted;
+        var byId = rows.ToDictionary(p => p.Id);
+        var items = pageIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
 
         var paged = new List<Product.ProductReviewDTO>();
         foreach (var p in items)
@@ -160,6 +167,12 @@ public class ProductController : ControllerBase
 
         await EnrichAdapterLinkMappingFlagsAsync(paged, items);
 
+        if (timer.ElapsedMilliseconds >= 500)
+            _logger.LogWarning(
+                "Slow product list: store={StoreId}, rows={Rows}, offset={Offset}, search={HasSearch}, category={HasCategory}, countMs={CountMs}, pageMs={PageMs}, rowsMs={RowsMs}, totalMs={TotalMs}",
+                selectedStoreId.Value, paged.Count, startIndex, hasSearch, hasCategoryFilter,
+                countMs, pageMs, rowsMs, timer.ElapsedMilliseconds);
+
         var lastPage = startIndex + pageSize >= total;
         return Ok(new
         {
@@ -167,6 +180,27 @@ public class ProductController : ControllerBase
             totalCount = total,
             lastPage,
         });
+    }
+
+    /// <summary>Small, store-scoped product choices without catalog collections or a total count.</summary>
+    [HttpGet("/products/lookup")]
+    public async Task<IActionResult> LookupProducts(string? searchQuery = null, int? categoryId = null,
+        int? productId = null, int pageSize = 25, CancellationToken ct = default)
+    {
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (storeId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+
+        var query = _context.products.AsNoTracking().Where(p => p.storeId == storeId.Value);
+        if (productId.HasValue)
+            query = query.Where(p => p.Id == productId.Value);
+        if (categoryId.HasValue)
+            query = query.Where(p => p.categoryId == categoryId.Value);
+        var items = await query.WhereMatchesSearch(searchQuery)
+            .OrderByDescending(p => p.Id).Take(Math.Clamp(pageSize, 1, 50))
+            .Select(p => new { id = p.Id, p.name, p.sku })
+            .ToListAsync(ct);
+        return Ok(new { items });
     }
 
     /// <summary>
@@ -376,6 +410,7 @@ public class ProductController : ControllerBase
         var product = await productRepo.GetByIdWithIncludesTrackingAsync(
             productId,
             query => query
+                .AsSplitQuery()
                 .Include(p => p.attributeValues)
                 .Include(p => p.storeAttributeValues));
 
@@ -1026,106 +1061,17 @@ public class ProductController : ControllerBase
     [HttpDelete]
     [Route("/products/{productId}/permanent")]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
-    public async Task<IActionResult> PermanentDeleteProduct(int productId)
+    public async Task<IActionResult> PermanentDeleteProduct(int productId, CancellationToken ct = default)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
             throw ApiException.BadRequest(code: "store_not_selected");
 
-        var product = await _context.products
-            .IgnoreQueryFilters()
-            .Include(p => p.files)
-            .Include(p => p.images)
-            .Include(p => p.notes)
-            .Include(p => p.attributeValues)
-            .Include(p => p.storeAttributeValues)
-            .FirstOrDefaultAsync(p => p.Id == productId && p.storeId == selectedStoreId.Value && p.deletedAt != null);
-
-        if (product == null)
-            throw ApiException.NotFound(code: "product_not_found");
-
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            await _context.Set<PendingProductExport>()
-                .Where(pe => pe.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.pendingProductImports
-                .Where(pi => pi.importedProductId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.pendingImageDownloads
-                .Where(pid => pid.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.pendingProductTransfers
-                .Where(pt => pt.newProductId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productVariantLinks
-                .Where(vl => vl.variant.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productVariants
-                .Where(v => v.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productMarketplaceLinks
-                .Where(ml => ml.productId == productId)
-                .ExecuteDeleteAsync();
-
-            await _context.productGroupMembers
-                .Where(gm => gm.productId == productId)
-                .ExecuteDeleteAsync();
-
-            // Delete file share tokens
-            var fileIds = product.files.Select(f => f.Id).ToList();
-            if (fileIds.Any())
-            {
-                await _context.fileShareTokens
-                    .Where(fst => fileIds.Contains(fst.fileId))
-                    .ExecuteDeleteAsync();
-                await _context.tags
-                    .Where(t => fileIds.Contains(t.fileId))
-                    .ExecuteDeleteAsync();
-            }
-
-            // Delete folder share tokens
-            var folderIds = await _context.productFolders
-                .Where(pf => pf.productId == productId)
-                .Select(pf => pf.Id)
-                .ToListAsync();
-            if (folderIds.Any())
-            {
-                await _context.folderShareTokens
-                    .Where(fst => fst.folderId.HasValue && folderIds.Contains(fst.folderId.Value))
-                    .ExecuteDeleteAsync();
-            }
-
-            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
-            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-            var noteRepo = _unitOfWork.Repository<Note>();
-            var imageRepo = _unitOfWork.Repository<ImageReference>();
-            var fileRepo = _unitOfWork.Repository<Models.File>();
-            var productRepo = _unitOfWork.Repository<Product>();
-
-            storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
-            attrValueRepo.DeleteRange(product.attributeValues.ToList());
-            noteRepo.DeleteRange(product.notes.ToList());
-            imageRepo.DeleteRange(product.images.ToList());
-            fileRepo.DeleteRange(product.files.ToList());
-
-            // Delete folders (children first due to Restrict)
-            await _context.productFolders
-                .Where(pf => pf.productId == productId && pf.parentFolderId != null)
-                .ExecuteDeleteAsync();
-            await _context.productFolders
-                .Where(pf => pf.productId == productId)
-                .ExecuteDeleteAsync();
-
-            productRepo.DeleteWithoutSave(product);
-            await _unitOfWork.SaveChangesAsync();
-        });
+            if (await ProductPermanentDeletion.DeleteBatchAsync(_context, selectedStoreId.Value, [productId], ct) == 0)
+                throw ApiException.NotFound(code: "product_not_found");
+        }, ct);
 
         return Ok(new { success = true });
     }
@@ -1136,7 +1082,7 @@ public class ProductController : ControllerBase
     [HttpPost]
     [Route("/products/bulk-permanent-delete")]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
-    public async Task<IActionResult> BulkPermanentDelete([FromBody] BulkDeleteRequest request)
+    public async Task<IActionResult> BulkPermanentDelete([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
     {
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
         if (selectedStoreId == null)
@@ -1145,107 +1091,31 @@ public class ProductController : ControllerBase
         if (request.productIds == null || request.productIds.Count == 0)
             throw ApiException.BadRequest(code: "products_required");
 
-        var products = await _context.products
+        // Select only IDs up front. Never build a Cartesian product of files,
+        // images, notes and both attribute collections for the whole selection.
+        var foundIds = await _context.products
             .IgnoreQueryFilters()
-            .Include(p => p.files)
-            .Include(p => p.images)
-            .Include(p => p.notes)
-            .Include(p => p.attributeValues)
-            .Include(p => p.storeAttributeValues)
+            .AsNoTracking()
             .Where(p => request.productIds.Contains(p.Id) && p.storeId == selectedStoreId.Value && p.deletedAt != null)
-            .ToListAsync();
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
 
-        if (!products.Any())
+        if (foundIds.Count == 0)
             throw ApiException.NotFound(code: "product_not_found");
 
-        var foundIds = products.Select(p => p.Id).ToList();
-
+        var deletedCount = 0;
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            await _context.Set<PendingProductExport>()
-                .Where(pe => foundIds.Contains(pe.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.pendingProductImports
-                .Where(pi => foundIds.Contains(pi.importedProductId ?? 0))
-                .ExecuteDeleteAsync();
-
-            await _context.pendingImageDownloads
-                .Where(pid => foundIds.Contains(pid.productId))
-                .ExecuteDeleteAsync();
-
-            // Clear transfer records referencing these products
-            await _context.pendingProductTransfers
-                .Where(pt => foundIds.Contains(pt.newProductId ?? 0))
-                .ExecuteDeleteAsync();
-
-            await _context.productVariantLinks
-                .Where(vl => foundIds.Contains(vl.variant.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.productVariants
-                .Where(v => foundIds.Contains(v.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.productMarketplaceLinks
-                .Where(ml => foundIds.Contains(ml.productId))
-                .ExecuteDeleteAsync();
-
-            await _context.productGroupMembers
-                .Where(gm => foundIds.Contains(gm.productId))
-                .ExecuteDeleteAsync();
-
-            var allFileIds = products.SelectMany(p => p.files.Select(f => f.Id)).ToList();
-            if (allFileIds.Any())
+            deletedCount = 0;
+            foreach (var chunk in foundIds.Chunk(100))
             {
-                await _context.fileShareTokens
-                    .Where(fst => allFileIds.Contains(fst.fileId))
-                    .ExecuteDeleteAsync();
-                await _context.tags
-                    .Where(t => allFileIds.Contains(t.fileId))
-                    .ExecuteDeleteAsync();
+                deletedCount += await ProductPermanentDeletion.DeleteBatchAsync(
+                    _context, selectedStoreId.Value, chunk.ToList(), ct);
             }
+        }, ct);
 
-            var allFolderIds = await _context.productFolders
-                .Where(pf => foundIds.Contains(pf.productId))
-                .Select(pf => pf.Id)
-                .ToListAsync();
-            if (allFolderIds.Any())
-            {
-                await _context.folderShareTokens
-                    .Where(fst => fst.folderId.HasValue && allFolderIds.Contains(fst.folderId.Value))
-                    .ExecuteDeleteAsync();
-            }
-
-            var storeAttrValueRepo = _unitOfWork.Repository<StoreProductAttributeValue>();
-            var attrValueRepo = _unitOfWork.Repository<ProductAttributeValue>();
-            var noteRepo = _unitOfWork.Repository<Note>();
-            var imageRepo = _unitOfWork.Repository<ImageReference>();
-            var fileRepo = _unitOfWork.Repository<Models.File>();
-            var productRepo = _unitOfWork.Repository<Product>();
-
-            foreach (var product in products)
-            {
-                storeAttrValueRepo.DeleteRange(product.storeAttributeValues.ToList());
-                attrValueRepo.DeleteRange(product.attributeValues.ToList());
-                noteRepo.DeleteRange(product.notes.ToList());
-                imageRepo.DeleteRange(product.images.ToList());
-                fileRepo.DeleteRange(product.files.ToList());
-                productRepo.DeleteWithoutSave(product);
-            }
-
-            // Delete folders (children first due to Restrict)
-            await _context.productFolders
-                .Where(pf => foundIds.Contains(pf.productId) && pf.parentFolderId != null)
-                .ExecuteDeleteAsync();
-            await _context.productFolders
-                .Where(pf => foundIds.Contains(pf.productId))
-                .ExecuteDeleteAsync();
-
-            await _unitOfWork.SaveChangesAsync();
-        });
-
-        return Ok(new { success = true, deletedCount = products.Count });
+        return Ok(new { success = true, deletedCount });
     }
 
     /// <summary>
@@ -1464,7 +1334,7 @@ public class ProductController : ControllerBase
                 .AsNoTracking()
                 .Where(m => categoryIds.Contains(m.localCategoryId) && connectionIds.Contains(m.connectionId))
                 .Select(m => new { m.localCategoryId, m.connectionId })
-                .ToListAsync();
+                .ToListAsync(HttpContext.RequestAborted);
             mappingCounts = pairs
                 .GroupBy(p => (p.localCategoryId, p.connectionId))
                 .ToDictionary(g => g.Key, g => g.Count());

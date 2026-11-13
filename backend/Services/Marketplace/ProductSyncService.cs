@@ -18,7 +18,7 @@ namespace Delegat.Services.Marketplace;
 /// <summary>
 /// Service for synchronizing products with marketplaces (export, import, SKU update).
 /// </summary>
-public class ProductSyncService
+public partial class ProductSyncService
 {
     private readonly DataContext _context;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
@@ -1590,6 +1590,8 @@ public class ProductSyncService
             return ProductImportResult.Failure("Adapter does not support product import");
 
         var existingLink = await _context.productMarketplaceLinks
+            .IgnoreQueryFilters()
+            .AsNoTracking()
             .Include(l => l.product)
             .FirstOrDefaultAsync(l =>
                 l.connectionId == connectionId &&
@@ -1647,120 +1649,18 @@ public class ProductSyncService
                 importBarcode ?? "null",
                 externalProduct.Attributes?.Count ?? 0);
 
-            await _quotaService.EnsureProductQuotaAsync(connection.storeId);
-
-            // Create a local product
-            await Log("info", $"Creating product in the database: {productLabel}...");
-            var product = new Product();
-            product.AddFill(new Product.AddForm(
-                new Product.UserAddForm
-                {
-                    sku = StringClip.ClipRequired(
-                        externalProduct.Sku,
-                        Product.PRODUCT_SKU_MAX_LENGTH,
-                        $"MP-{externalProductId}"),
-                    barcode = StringClip.ClipOptional(
-                        importBarcode,
-                        Product.PRODUCT_BARCODE_MAX_LENGTH),
-                    name = StringClip.ClipRequired(
-                        externalProduct.Name,
-                        Product.PRODUCT_NAME_MAX_LENGTH,
-                        $"Product {externalProductId}"),
-                    description = StringClip.Clip(
-                        Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description),
-                        Product.PRODUCT_DESCRIPTION_MAX_LENGTH),
-                    price = externalProduct.Price,
-                    storageQuantity = externalProduct.Quantity,
-                    categoryId = targetCategoryId
-                },
-                connection.storeId,
-                targetCategoryId
-            ));
-
-            _context.products.Add(product);
-            await _context.SaveChangesAsync(ct);
-            await Log("info", $"Product created (ID: {product.Id})");
-
-            // Import attributes based on the category mapping
-            if (targetCategoryId.HasValue)
-            {
-                var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
-                if (importedAttributes.Count > 0)
-                {
-                    await Log("info", $"Importing {importedAttributes.Count} attributes...");
-                    await ImportProductAttributesAsync(
-                        product.Id,
-                        connectionId,
-                        targetCategoryId.Value,
-                        importedAttributes,
-                        ct);
-                    await Log("info", $"Attributes imported");
-                }
-            }
-
-            // Import images
-            if (importByUserId.HasValue)
-                await QueueImportedMediaAsync(
-                    product.Id, connection.storeId, importByUserId.Value,
-                    externalProduct, ct, imageBatchId, Log);
-
-            // Create the link (bind category mapping when importing into a mapped category)
-            int? importCategoryMappingId = null;
-            if (targetCategoryId.HasValue)
-            {
-                importCategoryMappingId = await _context.categoryMappings
-                    .AsNoTracking()
-                    .Where(cm =>
-                        cm.connectionId == connectionId &&
-                        cm.localCategoryId == targetCategoryId.Value)
-                    .Select(cm => (int?)cm.Id)
-                    .FirstOrDefaultAsync(ct);
-            }
-
-            var link = new ProductMarketplaceLink();
-            link.AddFill(new ProductMarketplaceLink.AddForm
-            {
-                productId = product.Id,
-                connectionId = connectionId,
-                externalProductId = externalProductId,
-                externalSku = externalProduct.Sku,
-                status = ProductMarketplaceStatus.Synced,
-                categoryMappingId = importCategoryMappingId
-            });
-            link.externalPrice = externalProduct.Price;
-            link.externalStock = externalProduct.Quantity;
-            link.lastSyncAt = DateTime.UtcNow;
-
-            _context.productMarketplaceLinks.Add(link);
-            await _context.SaveChangesAsync(ct);
-
-            // Sync variants (sizes) if present
-            if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
-            {
-                await Log("info", $"Syncing {externalProduct.Variants.Count} variants (sizes)...");
-                await SyncVariantsAsync(product.Id, connectionId, externalProduct.Variants, ct);
-                await Log("info", $"Variants synced");
-            }
-
-            // Add the product to a group if GroupId is provided
-            if (!string.IsNullOrEmpty(externalProduct.GroupId))
-            {
-                await Log("info", $"Adding to group: {externalProduct.GroupName ?? externalProduct.GroupId}...");
-                await AddProductToGroupAsync(product.Id, connectionId, connection.storeId, externalProduct.GroupId, externalProduct.GroupName, ct);
-                await Log("info", $"Product added to the group");
-            }
-
-            return ProductImportResult.Success(
-                product.Id,
-                link.Id,
-                product.name,
-                "Product imported successfully"
-            );
+            await Log("info", $"Preparing atomic local import: {productLabel}...");
+            return await CommitNewImportAsync(connection, externalProduct, externalProductId,
+                targetCategoryId, importByUserId, imageBatchId, linked: true, receiptKey: null, ct);
         }
         catch (ApiException ex) when (ex.Code == "product_limit_reached")
         {
             await Log("error", ex.Message);
             return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -1792,6 +1692,11 @@ public class ProductSyncService
         if (publicId.Length == 0)
             return ProductImportResult.Failure("Public product id is required");
 
+        var receiptKey = PublicImportReceiptKey(connection, publicId, operationId);
+        var previous = await FindCommittedImportAsync(connection, publicId, linked: false, receiptKey, ct);
+        if (previous != null)
+            return previous;
+
         try
         {
             await _quotaService.EnsureProductQuotaAsync(connection.storeId);
@@ -1804,77 +1709,19 @@ public class ProductSyncService
 
         try
         {
-            var importBarcode = MarketplaceImportBarcode.Resolve(externalProduct);
-            var sku = await ResolveUniqueSkuAsync(
-                connection.storeId, externalProduct.Sku, publicId, connection.adapterKey, ct);
             var productLabel = externalProduct.Name ?? publicId;
-            await Log("info", $"Creating unlinked product: {productLabel} | SKU: {sku} | public id: {publicId}");
-
-            var product = new Product();
-            product.AddFill(new Product.AddForm(
-                new Product.UserAddForm
-                {
-                    sku = sku,
-                    barcode = StringClip.ClipOptional(
-                        importBarcode,
-                        Product.PRODUCT_BARCODE_MAX_LENGTH),
-                    name = StringClip.ClipRequired(
-                        externalProduct.Name,
-                        Product.PRODUCT_NAME_MAX_LENGTH,
-                        $"Product {publicId}"),
-                    description = StringClip.Clip(
-                        Delegat.Marketplace.SDK.DescriptionFormatting.FromMarketplaceHtml(externalProduct.Description),
-                        Product.PRODUCT_DESCRIPTION_MAX_LENGTH),
-                    price = externalProduct.Price,
-                    storageQuantity = externalProduct.Quantity,
-                    categoryId = targetCategoryId
-                },
-                connection.storeId,
-                targetCategoryId
-            ));
-
-            _context.products.Add(product);
-            await _context.SaveChangesAsync(ct);
-            await Log("info", $"Product created (ID: {product.Id}) without a marketplace link");
-
-            if (targetCategoryId.HasValue)
-            {
-                var importedAttributes = ImportedAttributeValue.Collect(externalProduct);
-                if (importedAttributes.Count > 0)
-                {
-                    await Log("info", $"Importing {importedAttributes.Count} attributes...");
-                    await ImportProductAttributesAsync(
-                        product.Id,
-                        connection.Id,
-                        targetCategoryId.Value,
-                        importedAttributes,
-                        ct);
-                    await Log("info", "Attributes imported");
-                }
-            }
-
-            if (userId > 0)
-                await QueueImportedMediaAsync(
-                    product.Id, connection.storeId, userId,
-                    externalProduct, ct, operationId, Log);
-
-            if (externalProduct.Variants != null && externalProduct.Variants.Count > 0)
-            {
-                await Log("info", $"Creating {externalProduct.Variants.Count} local variants (no marketplace size links)...");
-                await SyncVariantsAsync(
-                    product.Id, connection.Id, externalProduct.Variants, ct, createMarketplaceLinks: false);
-                await Log("info", "Variants created");
-            }
-
-            return ProductImportResult.SuccessUnlinked(
-                product.Id,
-                product.name,
-                "Product copied from the public catalog");
+            await Log("info", $"Preparing atomic public-card copy: {productLabel} | public id: {publicId}");
+            return await CommitNewImportAsync(connection, externalProduct, publicId,
+                targetCategoryId, userId > 0 ? userId : null, operationId, linked: false, receiptKey, ct);
         }
         catch (ApiException ex) when (ex.Code == "product_limit_reached")
         {
             await Log("error", ex.Message);
             return ProductImportResult.Failure(ex.Message, ex.Code, ex.Data);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

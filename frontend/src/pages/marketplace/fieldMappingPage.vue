@@ -233,8 +233,7 @@ export default {
       "getExternalFields",
       "getPriceFields",
       "previewFieldMappings",
-      "getAllProducts",
-      "getProduct",
+      "lookupProducts",
       "updateCategoryMapping",
       "getAttributeOptions",
     ]),
@@ -261,13 +260,11 @@ export default {
         this.loadStatus = "sources";
         await this.waitForPaint();
         await Promise.all([sources, files]);
-        this.loadStatus = "products";
-        await this.waitForPaint();
-        await this.fetchPreviewProducts();
-        await this.ensureSelectedPreviewInOptions();
       } finally {
         this.isLoading = false;
       }
+      // The selector searches on open. A saved preview choice must not block the editor.
+      void this.ensureSelectedPreviewInOptions();
     },
 
     async fetchFieldMappings() {
@@ -784,10 +781,8 @@ export default {
       const requestId = (this._previewSearchRequestId =
         (this._previewSearchRequestId || 0) + 1);
       this.previewProductsLoading = true;
-      await this.getAllProducts({
+      await this.lookupProducts({
         searchQuery: searchQuery || "",
-        startIndex: 0,
-        pageSize: 50,
         categoryId: this.mappingInfo?.localCategoryId || null,
         onSuccess: (response) => {
           if (requestId !== this._previewSearchRequestId) return;
@@ -827,10 +822,10 @@ export default {
         this.previewSelectedOption = existing;
         return;
       }
-      await this.getProduct({
+      await this.lookupProducts({
         productId: this.previewProductId,
         onSuccess: (response) => {
-          const p = extractResponseData(response, null);
+          const p = extractResponseData(response, {})?.items?.[0];
           if (!p?.id) return;
           const opt = this.mapPreviewProductOption(p);
           this.previewSelectedOption = opt;

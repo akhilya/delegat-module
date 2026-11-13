@@ -151,15 +151,18 @@ public class ImageDownloadBackgroundService : BackgroundService
             // Report progress for batched images
             if (pending.batchId != null)
             {
-                var batchItems = await context.pendingImageDownloads.AsNoTracking()
-                    .Where(p => p.batchId == pending.batchId).ToListAsync(ct);
-                var total = batchItems.Count;
-                var completed = batchItems.Count(p => p.status == ImageDownloadStatus.Completed);
-                var failed = batchItems.Count(p => p.status == ImageDownloadStatus.Failed);
-                var cancelled = batchItems.Count(p => p.status == ImageDownloadStatus.Cancelled);
+                var counts = await context.pendingImageDownloads.AsNoTracking()
+                    .Where(p => p.batchId == pending.batchId)
+                    .GroupBy(p => new { p.status, p.retryCount })
+                    .Select(g => new { g.Key.status, g.Key.retryCount, Count = g.Count() })
+                    .ToListAsync(ct);
+                var total = counts.Sum(g => g.Count);
+                var completed = counts.Where(g => g.status == ImageDownloadStatus.Completed).Sum(g => g.Count);
+                var failed = counts.Where(g => g.status == ImageDownloadStatus.Failed).Sum(g => g.Count);
+                var cancelled = counts.Where(g => g.status == ImageDownloadStatus.Cancelled).Sum(g => g.Count);
                 await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
-                var hasActive = batchItems.Any(p =>
+                var hasActive = counts.Any(p =>
                     p.status == ImageDownloadStatus.Pending
                     || p.status == ImageDownloadStatus.InProgress
                     || (p.status == ImageDownloadStatus.Failed
@@ -442,7 +445,8 @@ public class ImageDownloadBackgroundService : BackgroundService
 
             var rows = await db.pendingImageDownloads.AsNoTracking()
                 .Where(p => p.batchId == batchKey)
-                .Select(p => new { p.status, p.retryCount })
+                .GroupBy(p => new { p.status, p.retryCount })
+                .Select(g => new { g.Key.status, g.Key.retryCount, Count = g.Count() })
                 .ToListAsync(ct);
 
             var hasActive = rows.Any(p =>
@@ -453,9 +457,9 @@ public class ImageDownloadBackgroundService : BackgroundService
             if (hasActive)
                 continue;
 
-            var completed = rows.Count(p => p.status == ImageDownloadStatus.Completed);
-            var failed = rows.Count(p => p.status == ImageDownloadStatus.Failed);
-            var cancelled = rows.Count(p => p.status == ImageDownloadStatus.Cancelled);
+            var completed = rows.Where(p => p.status == ImageDownloadStatus.Completed).Sum(p => p.Count);
+            var failed = rows.Where(p => p.status == ImageDownloadStatus.Failed).Sum(p => p.Count);
+            var cancelled = rows.Where(p => p.status == ImageDownloadStatus.Cancelled).Sum(p => p.Count);
 
             string status;
             string summary;

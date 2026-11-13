@@ -71,11 +71,11 @@ public class ProductImportBackgroundService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
-        var productSyncService = scope.ServiceProvider.GetRequiredService<ProductSyncService>();
 
         var staleInProgressBefore = DateTime.UtcNow - InProgressTimeout;
 
         var candidates = await context.pendingProductImports
+            .AsNoTracking()
             .Where(p => p.status == ProductImportStatus.Pending ||
                        (p.status == ProductImportStatus.Failed && p.retryCount < PendingProductImport.MAX_RETRIES) ||
                        (p.status == ProductImportStatus.InProgress &&
@@ -159,8 +159,17 @@ public class ProductImportBackgroundService : BackgroundService
 
             try
             {
+                // A separate scope bounds EF tracking to one product, including large
+                // category dictionaries, and discards failed tracked writes before retry.
+                using var itemScope = _scopeFactory.CreateScope();
+                var itemContext = itemScope.ServiceProvider.GetRequiredService<DataContext>();
+                var productSyncService = itemScope.ServiceProvider.GetRequiredService<ProductSyncService>();
+                var trackedPending = await itemContext.pendingProductImports
+                    .SingleOrDefaultAsync(p => p.Id == pending.Id, ct);
+                if (trackedPending == null || trackedPending.status == ProductImportStatus.Cancelled)
+                    continue;
                 var quotaExhausted = await ProcessSingleImportAsync(
-                    context, productSyncService, pending, mappingByKey, failedCategoryByKey, ct);
+                    itemContext, productSyncService, trackedPending, mappingByKey, failedCategoryByKey, ct);
                 if (quotaExhausted)
                     break;
             }
@@ -381,13 +390,15 @@ public class ProductImportBackgroundService : BackgroundService
         if (pending.batchId == null)
             return;
 
-        var batchItems = await context.pendingProductImports
+        var counts = await context.pendingProductImports
             .AsNoTracking()
             .Where(p => p.batchId == pending.batchId)
+            .GroupBy(p => p.status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToListAsync(ct);
-        var total = batchItems.Count;
-        var completed = batchItems.Count(p => p.status == ProductImportStatus.Completed);
-        var failed = batchItems.Count(p => p.status == ProductImportStatus.Failed);
+        var total = counts.Sum(g => g.Count);
+        var completed = counts.Where(g => g.Status == ProductImportStatus.Completed).Sum(g => g.Count);
+        var failed = counts.Where(g => g.Status == ProductImportStatus.Failed).Sum(g => g.Count);
         await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
         if (total != completed + failed)

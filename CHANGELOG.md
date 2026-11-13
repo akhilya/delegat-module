@@ -250,6 +250,18 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.
+- Store deletion works with MySQL automatic retries and handles trashed folder trees, restricting catalog references, scoped job/chat/history data, and both current and legacy storage prefixes; archive/chat objects are cleaned only after database commit.
+- Product transfers stage file bytes before opening the database transaction and atomically include category/group creation. Failed/cancelled attempts restore tracking and clean staged objects; database retries do not recopy files, and post-commit notification failures cannot delete committed media.
+- Queue retention deletes in bounded batches, removes terminal operations together with their logs, recovers old orphan logs, and includes terminal Catalog Connect jobs. A log-timestamp index supports cleanup.
+
+- Marketplace and public-card imports commit each new product's local structure and media queue atomically, without external requests inside the write transaction. Retries reuse linked products, including trash, and public-card copies keep operation-scoped retry receipts. Variant barcodes are no longer also claimed by the parent card.
+- Bulk product edits load and commit at most 50 products at a time, count only persisted results, roll back and discard failed chunks, and save concurrency-checked job checkpoints with the changes. Restarted jobs do not apply price deltas twice. Legacy unfinished jobs without checkpoints require operator review instead of automatic replay.
+
+- Catalog pages fetch only row data and one image instead of complete mapping graphs, credentials, and file collections; mapping preview product choices load on demand without blocking the editor. Slow catalog requests report phase timings without search text or product content.
+- Permanent product deletion removes dependent rows in sets and bounded product batches inside one all-or-nothing transaction, including File attribute references, root shares, and deeply nested folders.
+- Product import workers isolate EF tracking per item, image/product progress uses database aggregates, and new catalog, barcode validation, and image queue indexes reduce unnecessary reads and locking scans. Bulk edits and partner product details avoid Cartesian collection joins.
+
 - Deleting a shared file tag now retains its selection through confirmation and sends the permanent-delete request.
 - Automatically created marketplace categories use the final breadcrumb title rather than the full path, before name-length limits; both product import category choices and standalone category import targets use shared inset rows while retaining the common attribute/unit normalization pipeline.
 - Photos and videos can be dragged between the Media tab's selected gallery and storage sections, including empty drop targets, without deleting storage files.

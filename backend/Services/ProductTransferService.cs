@@ -319,70 +319,75 @@ public class ProductTransferService
         Category? targetCategory = null;
         Dictionary<int, int> attributeIdMap = new(); // sourceAttrId -> targetAttrId
 
-        if (source.categoryId.HasValue)
+        async Task ResolveCategoryAsync()
         {
-            switch (request.categoryAction)
+            targetCategory = null;
+            attributeIdMap.Clear();
+            if (source.categoryId.HasValue)
             {
-                case "match":
-                    // Re-use CloneCategoryAsync: if category exists it returns it
-                    // (and syncs missing attributes when the flag is set);
-                    // if it doesn't exist, it creates one. Same logic as "create".
-                    if (source.category != null)
-                    {
+                switch (request.categoryAction)
+                {
+                    case "match":
+                        // Re-use CloneCategoryAsync: if category exists it returns it
+                        // (and syncs missing attributes when the flag is set);
+                        // if it doesn't exist, it creates one. Same logic as "create".
+                        if (source.category != null)
+                        {
+                            targetCategory = await CloneCategoryAsync(
+                                source.category, request.targetStoreId,
+                                request.syncMissingCategoryAttributes, ct);
+                        }
+                        break;
+
+                    case "use":
+                        if (!request.categoryId.HasValue)
+                            throw new InvalidOperationException("categoryAction=use requires categoryId");
+                        targetCategory = await _context.categories
+                            .Include(c => c.attributes)
+                            .FirstOrDefaultAsync(c =>
+                                c.Id == request.categoryId.Value &&
+                                c.storeId == request.targetStoreId, ct);
+                        if (targetCategory == null)
+                            throw new InvalidOperationException("The specified category was not found in the target store");
+                        break;
+
+                    case "create":
+                        if (source.category == null)
+                            throw new InvalidOperationException("categoryAction=create requires a source category");
                         targetCategory = await CloneCategoryAsync(
                             source.category, request.targetStoreId,
                             request.syncMissingCategoryAttributes, ct);
-                    }
-                    break;
+                        break;
 
-                case "use":
-                    if (!request.categoryId.HasValue)
-                        throw new InvalidOperationException("categoryAction=use requires categoryId");
-                    targetCategory = await _context.categories
-                        .Include(c => c.attributes)
-                        .FirstOrDefaultAsync(c =>
-                            c.Id == request.categoryId.Value &&
-                            c.storeId == request.targetStoreId, ct);
-                    if (targetCategory == null)
-                        throw new InvalidOperationException("The specified category was not found in the target store");
-                    break;
-
-                case "create":
-                    if (source.category == null)
-                        throw new InvalidOperationException("categoryAction=create requires a source category");
-                    targetCategory = await CloneCategoryAsync(
-                        source.category, request.targetStoreId,
-                        request.syncMissingCategoryAttributes, ct);
-                    break;
-
-                case "none":
-                default:
-                    targetCategory = null;
-                    break;
+                    case "none":
+                    default:
+                        targetCategory = null;
+                        break;
+                }
             }
-        }
 
-        // Build attribute id map (source CategoryAttribute.Id -> target CategoryAttribute.Id)
-        if (targetCategory != null && source.category != null)
-        {
-            var targetByKey = targetCategory.attributes.ToDictionary(a => a.key, a => a.Id);
-            foreach (var srcAttr in source.category.attributes)
+            // Build attribute id map (source CategoryAttribute.Id -> target CategoryAttribute.Id)
+            if (targetCategory != null && source.category != null)
             {
-                if (targetByKey.TryGetValue(srcAttr.key, out var targetId))
-                    attributeIdMap[srcAttr.Id] = targetId;
+                var targetByKey = targetCategory.attributes.ToDictionary(a => a.key, a => a.Id);
+                foreach (var srcAttr in source.category.attributes)
+                {
+                    if (targetByKey.TryGetValue(srcAttr.key, out var targetId))
+                        attributeIdMap[srcAttr.Id] = targetId;
+                }
             }
-        }
 
-        if (targetCategory != null)
-        {
-            var mapped = attributeIdMap.Count;
-            var total = source.category?.attributes?.Count ?? 0;
-            await Log("info",
-                $"Category: \"{targetCategory.name}\" (ID {targetCategory.Id}), attributes mapped: {mapped}/{total}");
-        }
-        else if (source.categoryId.HasValue)
-        {
-            await Log("warning", "Category: not assigned in the target store");
+            if (targetCategory != null)
+            {
+                var mapped = attributeIdMap.Count;
+                var total = source.category?.attributes?.Count ?? 0;
+                await Log("info",
+                    $"Category: \"{targetCategory.name}\" (ID {targetCategory.Id}), attributes mapped: {mapped}/{total}");
+            }
+            else if (source.categoryId.HasValue)
+            {
+                await Log("warning", "Category: not assigned in the target store");
+            }
         }
 
         // ---- Resolve store attribute id map ------------------------------------------
@@ -427,9 +432,7 @@ public class ProductTransferService
                     description = $"Created when transferring a product from store #{sourceStoreId}",
                     storeId = request.targetStoreId
                 });
-                _context.Set<ProductGroup>().Add(targetGroup);
-                // Save here so we have an Id for the membership row created later in TX.
-                // This still rolls back if the outer transaction fails.
+                // Attach a fresh group inside each DB attempt, never during byte staging.
                 break;
 
             case "none":
@@ -438,20 +441,26 @@ public class ProductTransferService
         }
 
         // ---- Plan MinIO copies -------------------------------------------------------
-        // We pre-plan source->dest paths so we can roll them back if the DB transaction
-        // fails. Path includes the new productId, which we don't have yet - placeholder
-        // it, fix after the new product is saved.
+        // Opaque transfer paths let us stage bytes before any database transaction.
+        // Access remains product-owned through the eventual File row, not path parsing.
 
         var newProductGuid = Guid.NewGuid().ToString("N").Substring(0, 8);
 
         var transferred = new List<(int newFileId, string destPath)>();
         var copiedMinIOObjects = new List<string>(); // for cleanup on failure
+        var stagedFiles = new Dictionary<int, string>();
+        var deferredLogs = new List<(string Level, string Message)>();
 
         TransferResult result = null!;
 
         // Helper: log a step to the operation panel (no-op when running without logger)
         async Task Log(string level, string message)
         {
+            if (_context.Database.CurrentTransaction != null)
+            {
+                deferredLogs.Add((level, message));
+                return;
+            }
             if (operationLogger != null && operationId != null)
                 await operationLogger.LogAsync(operationId, sourceStoreId, level, message);
         }
@@ -472,6 +481,7 @@ public class ProductTransferService
 
             async Task Progress()
             {
+                if (_context.Database.CurrentTransaction != null) return;
                 if (operationLogger != null && operationId != null)
                     await operationLogger.ProgressAsync(operationId, sourceStoreId,
                         totalItems, completedItems, failedItems);
@@ -479,497 +489,536 @@ public class ProductTransferService
 
             await Progress();
 
-            await _unitOfWork.ExecuteInTransactionAsync(async () =>
+            if (shouldCopyFiles)
             {
-                // ---- Create new Product --------------------------------------------------
-
-                await Log("info", $"Creating product ({newSku})");
-
-                Product newProduct;
-                try
-                {
-                    newProduct = new Product
-                    {
-                        sku = newSku,
-                        barcode = source.barcode,
-                        name = source.name,
-                        description = source.description,
-                        storageQuantity = source.storageQuantity,
-                        price = source.price,
-                        storeId = request.targetStoreId,
-                        categoryId = targetCategory?.Id,
-                        createdAt = DateTime.UtcNow,
-                        updatedAt = DateTime.UtcNow
-                    };
-                    _context.products.Add(newProduct);
-                    await _context.SaveChangesAsync(ct);
-
-                    if (targetGroup != null && targetGroup.Id == 0)
-                        await _context.SaveChangesAsync(ct);
-
-                    completedItems++;
-                    await Progress();
-                    await Log("success", $"Product created (ID: {newProduct.Id})");
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error creating product: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Copy ProductAttributeValues (mapped) --------------------------------
-
-                var copiedAttrValues = 0;
-                var skippedAttrValues = 0;
-                var copiedCategoryValues = new Dictionary<int, ProductAttributeValue>();
-                try
-                {
-                    if (targetCategory != null)
-                    {
-                        foreach (var srcAv in source.attributeValues)
-                        {
-                            if (!attributeIdMap.TryGetValue(srcAv.attributeId, out var newAttrId))
-                            {
-                                skippedAttrValues++;
-                                continue;
-                            }
-                            var copiedValue = new ProductAttributeValue
-                            {
-                                productId = newProduct.Id,
-                                attributeId = newAttrId,
-                                value = srcAv.value
-                            };
-                            _context.productAttributeValues.Add(copiedValue);
-                            copiedCategoryValues[srcAv.Id] = copiedValue;
-                            copiedAttrValues++;
-                        }
-                    }
-
-                    if (copiedAttrValues > 0 || skippedAttrValues > 0)
-                    {
-                        completedItems += copiedAttrValues;
-                        failedItems += skippedAttrValues;
-                        await Progress();
-                        await Log("info",
-                            $"Category attributes: {copiedAttrValues} copied" +
-                            (skippedAttrValues > 0 ? $", {skippedAttrValues} skipped (not in target category)" : ""));
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error copying category attributes: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Copy StoreProductAttributeValues (mapped) ---------------------------
-
-                var copiedStoreAttrs = 0;
-                var skippedStoreAttrs = 0;
-                var copiedStoreValues = new Dictionary<int, StoreProductAttributeValue>();
-                try
-                {
-                    foreach (var srcSav in source.storeAttributeValues)
-                    {
-                        if (!storeAttrIdMap.TryGetValue(srcSav.storeAttributeId, out var newAttrId))
-                        {
-                            skippedStoreAttrs++;
-                            continue;
-                        }
-                        var copiedValue = new StoreProductAttributeValue
-                        {
-                            productId = newProduct.Id,
-                            storeAttributeId = newAttrId,
-                            value = srcSav.value
-                        };
-                        _context.storeProductAttributeValues.Add(copiedValue);
-                        copiedStoreValues[srcSav.Id] = copiedValue;
-                        copiedStoreAttrs++;
-                    }
-
-                    if (copiedStoreAttrs > 0 || skippedStoreAttrs > 0)
-                    {
-                        completedItems += copiedStoreAttrs;
-                        failedItems += skippedStoreAttrs;
-                        await Progress();
-                        await Log("info",
-                            $"Store attributes: {copiedStoreAttrs} copied" +
-                            (skippedStoreAttrs > 0 ? $", {skippedStoreAttrs} skipped" : ""));
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error copying store attributes: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Copy ProductFolder tree / Files / gallery images --------------------
-
-                var folderIdMap = new Dictionary<int, int>();
-                var fileIdMap = new Dictionary<int, int>();
-                var copiedFileCount = 0;
-                var failedFileCount = 0;
-                var imagesCopied = 0;
-
-                if (!shouldCopyFiles)
-                {
-                    await Log("info", "Skipping files, folders, and gallery images (copyFiles=false)");
-                }
-                else
-                {
-                var pendingFolders = source.folders.ToList();
-                try
-                {
-                    if (pendingFolders.Count > 0)
-                        await Log("info", $"Copying folders: {pendingFolders.Count}");
-
-                    while (pendingFolders.Count > 0)
-                    {
-                        var progressed = false;
-                        foreach (var f in pendingFolders.ToList())
-                        {
-                            if (f.parentFolderId.HasValue && !folderIdMap.ContainsKey(f.parentFolderId.Value))
-                                continue;
-
-                            var newFolder = new ProductFolder
-                            {
-                                name = f.name,
-                                productId = newProduct.Id,
-                                parentFolderId = f.parentFolderId.HasValue
-                                    ? folderIdMap[f.parentFolderId.Value]
-                                    : null,
-                                createdAt = f.createdAt
-                            };
-                            _context.productFolders.Add(newFolder);
-                            await _context.SaveChangesAsync(ct);
-                            folderIdMap[f.Id] = newFolder.Id;
-                            pendingFolders.Remove(f);
-                            progressed = true;
-                            completedItems++;
-                        }
-                        if (!progressed)
-                        {
-                            await Log("warning", $"Failed to copy {pendingFolders.Count} folders (hierarchy broken)");
-                            break;
-                        }
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error copying folders: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Copy Files (MinIO + DB) ---------------------------------------------
-
-                var totalFiles = source.files.Count;
-
-                if (totalFiles > 0)
-                    await Log("info", $"Copying files: {totalFiles}");
-
-                foreach (var srcFile in source.files)
+                foreach (var file in source.files)
                 {
                     ct.ThrowIfCancellationRequested();
+                    await Log("info", $"Staging file: {file.displayName ?? Path.GetFileName(file.filePath)}");
+                    var path = $"{request.targetStoreId}/transfers/{newProductGuid}/{Guid.NewGuid():N}/{Path.GetFileName(file.filePath)}";
+                    copiedMinIOObjects.Add(path); // Include interrupted/partially written objects in rollback cleanup.
+                    var copied = false;
+                    try { copied = await _storageService.CopyAsync(file.filePath, path, ct); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { _logger.LogWarning(ex, "Transfer staging failed for {Path}", file.filePath); }
+                    if (copied) stagedFiles[file.Id] = path;
+                    else
+                    {
+                        try { await _storageService.DeleteAsync(path, CancellationToken.None); }
+                        catch (Exception ex) { _logger.LogWarning(ex, "Failed to remove incomplete transfer object {Path}", path); }
+                    }
+                }
+            }
 
-                    var fileName = System.IO.Path.GetFileName(srcFile.filePath);
-                    var displayName = srcFile.displayName ?? fileName;
-                    var uniqueKey = Guid.NewGuid().ToString("N");
-                    var newPath = $"{request.targetStoreId}/{newProduct.Id}/{uniqueKey}/{fileName}";
+            var restoreTracking = CaptureTransferTracking();
 
-                    bool copied;
+            await _unitOfWork.ExecuteInTransactionAsync(async () =>
+            {
+                completedItems = 0;
+                failedItems = 0;
+                transferred.Clear();
+                deferredLogs.Clear();
+                try
+                {
+                    if (request.groupAction == "create")
+                    {
+                        targetGroup = new ProductGroup();
+                        targetGroup.AddFill(new ProductGroup.AddForm
+                        {
+                            name = request.groupName!.Trim(),
+                            description = $"Created when transferring a product from store #{sourceStoreId}",
+                            storeId = request.targetStoreId
+                        });
+                        _context.productGroups.Add(targetGroup);
+                    }
+                    // Category creation/synchronization is now part of the same atomic DB unit.
+                    await ResolveCategoryAsync();
+                    // ---- Create new Product --------------------------------------------------
+
+                    await Log("info", $"Creating product ({newSku})");
+
+                    Product newProduct;
                     try
                     {
-                        copied = await _storageService.CopyAsync(srcFile.filePath, newPath, ct);
-                    }
-                    catch (OperationCanceledException) { throw; }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Transfer: copy failed for {Path}", srcFile.filePath);
-                        copied = false;
-                    }
-
-                    if (!copied)
-                    {
-                        failedFileCount++;
-                        failedItems++;
-                        await Progress();
-                        await Log("warning", $"File not copied, skipped: {displayName}");
-                        continue;
-                    }
-
-                    copiedMinIOObjects.Add(newPath);
-
-                    try
-                    {
-                        var newFile = new Models.File
+                        newProduct = new Product
                         {
-                            productId = newProduct.Id,
-                            authorUserId = userId,
-                            filePath = newPath,
-                            displayName = srcFile.displayName,
-                            uploadDateTime = DateTime.UtcNow,
-                            fileType = srcFile.fileType,
-                            contentType = srcFile.contentType,
-                            length = srcFile.length,
-                            folderId = srcFile.folderId.HasValue && folderIdMap.ContainsKey(srcFile.folderId.Value)
-                                ? folderIdMap[srcFile.folderId.Value]
-                                : null
-                        };
-                        _context.Set<Models.File>().Add(newFile);
-                        await _context.SaveChangesAsync(ct);
-
-                        fileIdMap[srcFile.Id] = newFile.Id;
-                        transferred.Add((newFile.Id, newPath));
-
-                        // Copy file tags - map TagDefinitions to target store
-                        foreach (var srcTag in srcFile.tags)
-                        {
-                            var srcDef = srcTag.tagDefinition;
-                            if (srcDef == null) continue;
-
-                            int targetTagId;
-                            if (srcDef.storeId == request.targetStoreId)
-                            {
-                                // Same store clone - reuse directly
-                                targetTagId = srcTag.tagDefinitionId;
-                            }
-                            else
-                            {
-                                // Cross-store - find or create matching TagDefinition in target
-                                var existing = await _context.tagDefinitions
-                                    .FirstOrDefaultAsync(td =>
-                                        td.storeId == request.targetStoreId && td.name == srcDef.name, ct);
-                                if (existing != null)
-                                {
-                                    targetTagId = existing.Id;
-                                }
-                                else
-                                {
-                                    var newDef = new TagDefinition
-                                    {
-                                        name = srcDef.name,
-                                        color = srcDef.color,
-                                        storeId = request.targetStoreId,
-                                        createdAt = DateTime.UtcNow
-                                    };
-                                    _context.tagDefinitions.Add(newDef);
-                                    await _context.SaveChangesAsync(ct);
-                                    targetTagId = newDef.Id;
-                                }
-                            }
-
-                            _context.tags.Add(new FileTag
-                            {
-                                fileId = newFile.Id,
-                                tagDefinitionId = targetTagId
-                            });
-                        }
-                    }
-                    catch (OperationCanceledException) { throw; }
-                    catch (Exception ex)
-                    {
-                        failedFileCount++;
-                        failedItems++;
-                        await Progress();
-                        await Log("warning", $"Error saving file {displayName}: {ex.Message}");
-                        continue;
-                    }
-
-                    copiedFileCount++;
-                    completedItems++;
-                    await Progress();
-                }
-
-                if (totalFiles > 0)
-                    await Log("info", $"Files: {copiedFileCount} copied" + (failedFileCount > 0 ? $", {failedFileCount} failed" : ""));
-
-                // ---- Copy ImageReferences (rebuilt with new fileIds) ---------------------
-
-                try
-                {
-                    foreach (var srcAv in source.attributeValues)
-                    {
-                        if (!copiedCategoryValues.TryGetValue(srcAv.Id, out var copiedValue))
-                            continue;
-                        var targetDefinition = targetCategory?.attributes.FirstOrDefault(a =>
-                            attributeIdMap.TryGetValue(srcAv.attributeId, out var id) && a.Id == id);
-                        if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
-                            continue;
-                        foreach (var link in srcAv.files.OrderBy(f => f.index))
-                        {
-                            if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
-                                copiedValue.files.Add(new ProductAttributeFile { fileId = newFileId, index = link.index });
-                        }
-                    }
-                    foreach (var srcSav in source.storeAttributeValues)
-                    {
-                        if (!copiedStoreValues.TryGetValue(srcSav.Id, out var copiedValue))
-                            continue;
-                        var targetDefinition = targetStore.storeAttributes.FirstOrDefault(a =>
-                            storeAttrIdMap.TryGetValue(srcSav.storeAttributeId, out var id) && a.Id == id);
-                        if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
-                            continue;
-                        foreach (var link in srcSav.files.OrderBy(f => f.index))
-                        {
-                            if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
-                                copiedValue.files.Add(new StoreProductAttributeFile { fileId = newFileId, index = link.index });
-                        }
-                    }
-                    foreach (var srcImg in source.images.OrderBy(i => i.index))
-                    {
-                        if (!fileIdMap.TryGetValue(srcImg.fileId, out var newFileId))
-                            continue;
-                        _context.Set<ImageReference>().Add(new ImageReference
-                        {
-                            productId = newProduct.Id,
-                            fileId = newFileId,
-                            index = srcImg.index
-                        });
-                        imagesCopied++;
-                        completedItems++;
-                    }
-                    if (imagesCopied > 0)
-                    {
-                        await Progress();
-                        await Log("info", $"Images: {imagesCopied} linked");
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error linking images: {ex.Message}");
-                    throw;
-                }
-                } // end shouldCopyFiles
-
-                // ---- Copy Notes ----------------------------------------------------------
-
-                try
-                {
-                    foreach (var srcNote in source.notes)
-                    {
-                        _context.notes.Add(new Note
-                        {
-                            productId = newProduct.Id,
-                            text = srcNote.text,
-                            importance = srcNote.importance,
-                            authorUserId = srcNote.authorUserId,
-                            createdAt = srcNote.createdAt,
-                            updatedAt = DateTime.UtcNow
-                        });
-                        completedItems++;
-                    }
-                    if (source.notes.Count > 0)
-                    {
-                        await Progress();
-                        await Log("info", $"Notes: {source.notes.Count} copied");
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error copying notes: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Copy Variants (without marketplace links) ---------------------------
-
-                try
-                {
-                    foreach (var srcVar in source.variants)
-                    {
-                        _context.productVariants.Add(new ProductVariant
-                        {
-                            productId = newProduct.Id,
-                            sku = srcVar.sku,
-                            barcode = srcVar.barcode,
-                            size = srcVar.size,
-                            price = srcVar.price,
-                            quantity = srcVar.quantity,
-                            sortOrder = srcVar.sortOrder,
+                            sku = newSku,
+                            barcode = source.barcode,
+                            name = source.name,
+                            description = source.description,
+                            storageQuantity = source.storageQuantity,
+                            price = source.price,
+                            storeId = request.targetStoreId,
+                            categoryId = targetCategory?.Id,
                             createdAt = DateTime.UtcNow,
                             updatedAt = DateTime.UtcNow
-                        });
+                        };
+                        _context.products.Add(newProduct);
+                        await _context.SaveChangesAsync(ct);
+
+                        if (targetGroup != null && targetGroup.Id == 0)
+                            await _context.SaveChangesAsync(ct);
+
                         completedItems++;
-                    }
-                    if (source.variants.Count > 0)
-                    {
                         await Progress();
-                        await Log("info", $"Variants: {source.variants.Count} copied");
-                    }
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
-                {
-                    await Log("error", $"Error copying variants: {ex.Message}");
-                    throw;
-                }
-
-                // ---- Group membership (target store group) -------------------------------
-
-                if (targetGroup != null)
-                {
-                    try
-                    {
-                        var maxOrder = await _context.productGroupMembers
-                            .Where(m => m.groupId == targetGroup.Id)
-                            .Select(m => (int?)m.sortOrder)
-                            .MaxAsync(ct) ?? 0;
-
-                        _context.productGroupMembers.Add(new ProductGroupMember
-                        {
-                            groupId = targetGroup.Id,
-                            productId = newProduct.Id,
-                            sortOrder = maxOrder + 1,
-                            addedAt = DateTime.UtcNow
-                        });
-                        await Log("info", $"Added to group: {targetGroup.name}");
+                        await Log("success", $"Product created (ID: {newProduct.Id})");
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
                     {
-                        await Log("error", $"Error adding to group: {ex.Message}");
+                        await Log("error", $"Error creating product: {ex.Message}");
                         throw;
                     }
+
+                    // ---- Copy ProductAttributeValues (mapped) --------------------------------
+
+                    var copiedAttrValues = 0;
+                    var skippedAttrValues = 0;
+                    var copiedCategoryValues = new Dictionary<int, ProductAttributeValue>();
+                    try
+                    {
+                        if (targetCategory != null)
+                        {
+                            foreach (var srcAv in source.attributeValues)
+                            {
+                                if (!attributeIdMap.TryGetValue(srcAv.attributeId, out var newAttrId))
+                                {
+                                    skippedAttrValues++;
+                                    continue;
+                                }
+                                var copiedValue = new ProductAttributeValue
+                                {
+                                    productId = newProduct.Id,
+                                    attributeId = newAttrId,
+                                    value = srcAv.value
+                                };
+                                _context.productAttributeValues.Add(copiedValue);
+                                copiedCategoryValues[srcAv.Id] = copiedValue;
+                                copiedAttrValues++;
+                            }
+                        }
+
+                        if (copiedAttrValues > 0 || skippedAttrValues > 0)
+                        {
+                            completedItems += copiedAttrValues;
+                            failedItems += skippedAttrValues;
+                            await Progress();
+                            await Log("info",
+                                $"Category attributes: {copiedAttrValues} copied" +
+                                (skippedAttrValues > 0 ? $", {skippedAttrValues} skipped (not in target category)" : ""));
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        await Log("error", $"Error copying category attributes: {ex.Message}");
+                        throw;
+                    }
+
+                    // ---- Copy StoreProductAttributeValues (mapped) ---------------------------
+
+                    var copiedStoreAttrs = 0;
+                    var skippedStoreAttrs = 0;
+                    var copiedStoreValues = new Dictionary<int, StoreProductAttributeValue>();
+                    try
+                    {
+                        foreach (var srcSav in source.storeAttributeValues)
+                        {
+                            if (!storeAttrIdMap.TryGetValue(srcSav.storeAttributeId, out var newAttrId))
+                            {
+                                skippedStoreAttrs++;
+                                continue;
+                            }
+                            var copiedValue = new StoreProductAttributeValue
+                            {
+                                productId = newProduct.Id,
+                                storeAttributeId = newAttrId,
+                                value = srcSav.value
+                            };
+                            _context.storeProductAttributeValues.Add(copiedValue);
+                            copiedStoreValues[srcSav.Id] = copiedValue;
+                            copiedStoreAttrs++;
+                        }
+
+                        if (copiedStoreAttrs > 0 || skippedStoreAttrs > 0)
+                        {
+                            completedItems += copiedStoreAttrs;
+                            failedItems += skippedStoreAttrs;
+                            await Progress();
+                            await Log("info",
+                                $"Store attributes: {copiedStoreAttrs} copied" +
+                                (skippedStoreAttrs > 0 ? $", {skippedStoreAttrs} skipped" : ""));
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        await Log("error", $"Error copying store attributes: {ex.Message}");
+                        throw;
+                    }
+
+                    // ---- Copy ProductFolder tree / Files / gallery images --------------------
+
+                    var folderIdMap = new Dictionary<int, int>();
+                    var fileIdMap = new Dictionary<int, int>();
+                    var copiedFileCount = 0;
+                    var failedFileCount = 0;
+                    var imagesCopied = 0;
+
+                    if (!shouldCopyFiles)
+                    {
+                        await Log("info", "Skipping files, folders, and gallery images (copyFiles=false)");
+                    }
+                    else
+                    {
+                        var pendingFolders = source.folders.ToList();
+                        try
+                        {
+                            if (pendingFolders.Count > 0)
+                                await Log("info", $"Copying folders: {pendingFolders.Count}");
+
+                            while (pendingFolders.Count > 0)
+                            {
+                                var progressed = false;
+                                foreach (var f in pendingFolders.ToList())
+                                {
+                                    if (f.parentFolderId.HasValue && !folderIdMap.ContainsKey(f.parentFolderId.Value))
+                                        continue;
+
+                                    var newFolder = new ProductFolder
+                                    {
+                                        name = f.name,
+                                        productId = newProduct.Id,
+                                        parentFolderId = f.parentFolderId.HasValue
+                                            ? folderIdMap[f.parentFolderId.Value]
+                                            : null,
+                                        createdAt = f.createdAt
+                                    };
+                                    _context.productFolders.Add(newFolder);
+                                    await _context.SaveChangesAsync(ct);
+                                    folderIdMap[f.Id] = newFolder.Id;
+                                    pendingFolders.Remove(f);
+                                    progressed = true;
+                                    completedItems++;
+                                }
+                                if (!progressed)
+                                {
+                                    await Log("warning", $"Failed to copy {pendingFolders.Count} folders (hierarchy broken)");
+                                    break;
+                                }
+                            }
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            await Log("error", $"Error copying folders: {ex.Message}");
+                            throw;
+                        }
+
+                        // ---- Copy Files (MinIO + DB) ---------------------------------------------
+
+                        var totalFiles = source.files.Count;
+
+                        if (totalFiles > 0)
+                            await Log("info", $"Copying files: {totalFiles}");
+
+                        foreach (var srcFile in source.files)
+                        {
+                            ct.ThrowIfCancellationRequested();
+
+                            var fileName = System.IO.Path.GetFileName(srcFile.filePath);
+                            var displayName = srcFile.displayName ?? fileName;
+                            var copied = stagedFiles.TryGetValue(srcFile.Id, out var newPath);
+
+                            if (!copied)
+                            {
+                                failedFileCount++;
+                                failedItems++;
+                                await Progress();
+                                await Log("warning", $"File not copied, skipped: {displayName}");
+                                continue;
+                            }
+
+                            try
+                            {
+                                var newFile = new Models.File
+                                {
+                                    productId = newProduct.Id,
+                                    authorUserId = userId,
+                                    filePath = newPath!,
+                                    displayName = srcFile.displayName,
+                                    uploadDateTime = DateTime.UtcNow,
+                                    fileType = srcFile.fileType,
+                                    contentType = srcFile.contentType,
+                                    length = srcFile.length,
+                                    folderId = srcFile.folderId.HasValue && folderIdMap.ContainsKey(srcFile.folderId.Value)
+                                        ? folderIdMap[srcFile.folderId.Value]
+                                        : null
+                                };
+                                _context.Set<Models.File>().Add(newFile);
+                                await _context.SaveChangesAsync(ct);
+
+                                fileIdMap[srcFile.Id] = newFile.Id;
+                                transferred.Add((newFile.Id, newPath!));
+
+                                // Copy file tags - map TagDefinitions to target store
+                                foreach (var srcTag in srcFile.tags)
+                                {
+                                    var srcDef = srcTag.tagDefinition;
+                                    if (srcDef == null) continue;
+
+                                    int targetTagId;
+                                    if (srcDef.storeId == request.targetStoreId)
+                                    {
+                                        // Same store clone - reuse directly
+                                        targetTagId = srcTag.tagDefinitionId;
+                                    }
+                                    else
+                                    {
+                                        // Cross-store - find or create matching TagDefinition in target
+                                        var existing = await _context.tagDefinitions
+                                            .FirstOrDefaultAsync(td =>
+                                                td.storeId == request.targetStoreId && td.name == srcDef.name, ct);
+                                        if (existing != null)
+                                        {
+                                            targetTagId = existing.Id;
+                                        }
+                                        else
+                                        {
+                                            var newDef = new TagDefinition
+                                            {
+                                                name = srcDef.name,
+                                                color = srcDef.color,
+                                                storeId = request.targetStoreId,
+                                                createdAt = DateTime.UtcNow
+                                            };
+                                            _context.tagDefinitions.Add(newDef);
+                                            await _context.SaveChangesAsync(ct);
+                                            targetTagId = newDef.Id;
+                                        }
+                                    }
+
+                                    _context.tags.Add(new FileTag
+                                    {
+                                        fileId = newFile.Id,
+                                        tagDefinitionId = targetTagId
+                                    });
+                                }
+                            }
+                            catch (OperationCanceledException) { throw; }
+                            catch (Exception ex)
+                            {
+                                await Log("error", $"Error saving file {displayName}: {ex.Message}");
+                                throw; // Database errors cannot be downgraded to a partially saved file.
+                            }
+
+                            copiedFileCount++;
+                            completedItems++;
+                            await Progress();
+                        }
+
+                        if (totalFiles > 0)
+                            await Log("info", $"Files: {copiedFileCount} copied" + (failedFileCount > 0 ? $", {failedFileCount} failed" : ""));
+
+                        // ---- Copy ImageReferences (rebuilt with new fileIds) ---------------------
+
+                        try
+                        {
+                            foreach (var srcAv in source.attributeValues)
+                            {
+                                if (!copiedCategoryValues.TryGetValue(srcAv.Id, out var copiedValue))
+                                    continue;
+                                var targetDefinition = targetCategory?.attributes.FirstOrDefault(a =>
+                                    attributeIdMap.TryGetValue(srcAv.attributeId, out var id) && a.Id == id);
+                                if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
+                                    continue;
+                                foreach (var link in srcAv.files.OrderBy(f => f.index))
+                                {
+                                    if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
+                                        copiedValue.files.Add(new ProductAttributeFile { fileId = newFileId, index = link.index });
+                                }
+                            }
+                            foreach (var srcSav in source.storeAttributeValues)
+                            {
+                                if (!copiedStoreValues.TryGetValue(srcSav.Id, out var copiedValue))
+                                    continue;
+                                var targetDefinition = targetStore.storeAttributes.FirstOrDefault(a =>
+                                    storeAttrIdMap.TryGetValue(srcSav.storeAttributeId, out var id) && a.Id == id);
+                                if (targetDefinition?.type != Delegat.Enums.AttributeType.File)
+                                    continue;
+                                foreach (var link in srcSav.files.OrderBy(f => f.index))
+                                {
+                                    if (fileIdMap.TryGetValue(link.fileId, out var newFileId))
+                                        copiedValue.files.Add(new StoreProductAttributeFile { fileId = newFileId, index = link.index });
+                                }
+                            }
+                            foreach (var srcImg in source.images.OrderBy(i => i.index))
+                            {
+                                if (!fileIdMap.TryGetValue(srcImg.fileId, out var newFileId))
+                                    continue;
+                                _context.Set<ImageReference>().Add(new ImageReference
+                                {
+                                    productId = newProduct.Id,
+                                    fileId = newFileId,
+                                    index = srcImg.index
+                                });
+                                imagesCopied++;
+                                completedItems++;
+                            }
+                            if (imagesCopied > 0)
+                            {
+                                await Progress();
+                                await Log("info", $"Images: {imagesCopied} linked");
+                            }
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            await Log("error", $"Error linking images: {ex.Message}");
+                            throw;
+                        }
+                    } // end shouldCopyFiles
+
+                    // ---- Copy Notes ----------------------------------------------------------
+
+                    try
+                    {
+                        foreach (var srcNote in source.notes)
+                        {
+                            _context.notes.Add(new Note
+                            {
+                                productId = newProduct.Id,
+                                text = srcNote.text,
+                                importance = srcNote.importance,
+                                authorUserId = srcNote.authorUserId,
+                                createdAt = srcNote.createdAt,
+                                updatedAt = DateTime.UtcNow
+                            });
+                            completedItems++;
+                        }
+                        if (source.notes.Count > 0)
+                        {
+                            await Progress();
+                            await Log("info", $"Notes: {source.notes.Count} copied");
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        await Log("error", $"Error copying notes: {ex.Message}");
+                        throw;
+                    }
+
+                    // ---- Copy Variants (without marketplace links) ---------------------------
+
+                    try
+                    {
+                        foreach (var srcVar in source.variants)
+                        {
+                            _context.productVariants.Add(new ProductVariant
+                            {
+                                productId = newProduct.Id,
+                                sku = srcVar.sku,
+                                barcode = srcVar.barcode,
+                                size = srcVar.size,
+                                price = srcVar.price,
+                                quantity = srcVar.quantity,
+                                sortOrder = srcVar.sortOrder,
+                                createdAt = DateTime.UtcNow,
+                                updatedAt = DateTime.UtcNow
+                            });
+                            completedItems++;
+                        }
+                        if (source.variants.Count > 0)
+                        {
+                            await Progress();
+                            await Log("info", $"Variants: {source.variants.Count} copied");
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        await Log("error", $"Error copying variants: {ex.Message}");
+                        throw;
+                    }
+
+                    // ---- Group membership (target store group) -------------------------------
+
+                    if (targetGroup != null)
+                    {
+                        try
+                        {
+                            var maxOrder = await _context.productGroupMembers
+                                .Where(m => m.groupId == targetGroup.Id)
+                                .Select(m => (int?)m.sortOrder)
+                                .MaxAsync(ct) ?? 0;
+
+                            _context.productGroupMembers.Add(new ProductGroupMember
+                            {
+                                groupId = targetGroup.Id,
+                                productId = newProduct.Id,
+                                sortOrder = maxOrder + 1,
+                                addedAt = DateTime.UtcNow
+                            });
+                            await Log("info", $"Added to group: {targetGroup.name}");
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            await Log("error", $"Error adding to group: {ex.Message}");
+                            throw;
+                        }
+                    }
+
+                    // ---- Move-only: soft-delete original -------------------------------------
+
+                    if (request.mode == "move")
+                    {
+                        source.deletedAt = DateTime.UtcNow;
+                        _context.products.Update(source);
+                        await Log("info", "Original moved to trash");
+                    }
+
+                    await Log("info", "Saving");
+                    await _context.SaveChangesAsync(ct);
+
+                    result = new TransferResult
+                    {
+                        success = true,
+                        mode = request.mode,
+                        newProductId = newProduct.Id,
+                        targetStoreId = request.targetStoreId,
+                        filesCopied = copiedFileCount,
+                        filesFailed = failedFileCount,
+                        imagesCopied = source.images.Count(i => fileIdMap.ContainsKey(i.fileId)),
+                        notesCopied = source.notes.Count,
+                        variantsCopied = source.variants.Count,
+                        attributeValuesCopied = attributeIdMap.Count > 0
+                            ? source.attributeValues.Count(av => attributeIdMap.ContainsKey(av.attributeId))
+                            : 0,
+                        storeAttributeValuesCopied = source.storeAttributeValues
+                            .Count(sav => storeAttrIdMap.ContainsKey(sav.storeAttributeId)),
+                        marketplaceLinksBroken = source.marketplaceLinks.Count,
+                        originalSoftDeleted = request.mode == "move"
+                    };
                 }
-
-                // ---- Move-only: soft-delete original -------------------------------------
-
-                if (request.mode == "move")
+                catch
                 {
-                    source.deletedAt = DateTime.UtcNow;
-                    _context.products.Update(source);
-                    await Log("info", "Original moved to trash");
+                    restoreTracking();
+                    throw;
                 }
+            }, ct);
 
-                await Log("info", "Saving");
-                await _context.SaveChangesAsync(ct);
-
-                result = new TransferResult
-                {
-                    success = true,
-                    mode = request.mode,
-                    newProductId = newProduct.Id,
-                    targetStoreId = request.targetStoreId,
-                    filesCopied = copiedFileCount,
-                    filesFailed = failedFileCount,
-                    imagesCopied = source.images.Count(i => fileIdMap.ContainsKey(i.fileId)),
-                    notesCopied = source.notes.Count,
-                    variantsCopied = source.variants.Count,
-                    attributeValuesCopied = attributeIdMap.Count > 0
-                        ? source.attributeValues.Count(av => attributeIdMap.ContainsKey(av.attributeId))
-                        : 0,
-                    storeAttributeValuesCopied = source.storeAttributeValues
-                        .Count(sav => storeAttrIdMap.ContainsKey(sav.storeAttributeId)),
-                    marketplaceLinksBroken = source.marketplaceLinks.Count,
-                    originalSoftDeleted = request.mode == "move"
-                };
-            });
-
-            // (this assignment lives in closure above; result is captured by ref via outer var)
+            // Persisted progress/logging cannot hold store-row locks or describe rolled-back writes.
+            try
+            {
+                foreach (var entry in deferredLogs) await Log(entry.Level, entry.Message);
+                await Progress();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Transfer committed but progress notification failed");
+            }
             return result!;
         }
         catch (Exception)
@@ -986,6 +1035,50 @@ public class ProductTransferService
             }
             throw;
         }
+    }
+
+    private Action CaptureTransferTracking()
+    {
+        var snapshots = _context.ChangeTracker.Entries().Select(entry => new
+        {
+            Entry = entry,
+            entry.State,
+            Modified = entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name).ToHashSet(),
+            Current = entry.CurrentValues.Clone(),
+            Original = entry.OriginalValues.Clone(),
+            References = entry.References.ToDictionary(n => n.Metadata.Name, n => n.CurrentValue),
+            Collections = entry.Collections.ToDictionary(n => n.Metadata.Name,
+                n => n.CurrentValue?.Cast<object>().ToArray() ?? [])
+        }).ToList();
+        return () =>
+        {
+            foreach (var entry in _context.ChangeTracker.Entries().ToList()) entry.State = EntityState.Detached;
+            foreach (var snapshot in snapshots)
+            {
+                // Keep the original entry: shared-type membership dictionaries cannot
+                // be rediscovered through DbContext.Entry(object) after detachment.
+                var entry = snapshot.Entry;
+                entry.CurrentValues.SetValues(snapshot.Current);
+                entry.OriginalValues.SetValues(snapshot.Original);
+                foreach (var reference in snapshot.References) entry.Reference(reference.Key).CurrentValue = reference.Value;
+                foreach (var collection in snapshot.Collections)
+                {
+                    var current = entry.Collection(collection.Key).CurrentValue;
+                    if (current == null) continue;
+                    var contract = current.GetType().GetInterfaces().First(t => t.IsGenericType
+                        && t.GetGenericTypeDefinition() == typeof(ICollection<>));
+                    contract.GetMethod("Clear")!.Invoke(current, null);
+                    foreach (var value in collection.Value) contract.GetMethod("Add")!.Invoke(current, [value]);
+                }
+            }
+            foreach (var snapshot in snapshots.OrderByDescending(s => s.Entry.Metadata.HasSharedClrType))
+            {
+                snapshot.Entry.State = snapshot.State;
+                if (snapshot.State == EntityState.Modified)
+                    foreach (var property in snapshot.Entry.Properties)
+                        property.IsModified = snapshot.Modified.Contains(property.Metadata.Name);
+            }
+        };
     }
 
     #endregion

@@ -43,6 +43,97 @@ public sealed class StoreDeletionService : IStoreDeletionService
 
     public async Task DeleteStoreAsync(int storeId, string confirmationName, CancellationToken ct = default)
     {
+        if (!_db.Database.IsRelational())
+        {
+            await DeleteTrackedStoreAsync(storeId, confirmationName, ct);
+            return;
+        }
+
+        var validated = false;
+        var extraObjectKeys = new List<string>();
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            // Serialize destructive store changes, including the last-store check.
+            var stores = _db.Database.IsMySql()
+                ? await _db.stores.FromSqlRaw("SELECT * FROM `stores` ORDER BY `Id` FOR UPDATE").AsNoTracking().ToListAsync(ct)
+                : await _db.stores.AsNoTracking().ToListAsync(ct);
+            var store = stores.FirstOrDefault(s => s.Id == storeId);
+            if (store == null)
+            {
+                if (validated) return; // A retry may follow a committed delete whose acknowledgement was lost.
+                throw ApiException.NotFound(code: "store_not_found");
+            }
+            if (!string.Equals((confirmationName ?? "").Trim(), store.name ?? "", StringComparison.Ordinal))
+                throw ApiException.BadRequest(code: "store_delete_name_mismatch");
+            if (stores.Count <= 1) throw ApiException.BadRequest(code: "store_delete_last");
+            validated = true;
+            extraObjectKeys = await _db.aiChatAttachments.Where(a => a.storeId == storeId).Select(a => a.storageKey)
+                .Where(key => key != "").ToListAsync(ct);
+            extraObjectKeys.AddRange(await _db.pendingFolderJobs.Where(j => j.storeId == storeId && j.resultObjectKey != null)
+                .Select(j => j.resultObjectKey!).ToListAsync(ct));
+            extraObjectKeys = extraObjectKeys.Where(key => !string.IsNullOrWhiteSpace(key)).Distinct(StringComparer.Ordinal).ToList();
+
+            await _db.Users.Where(u => u.selectedStoreId == storeId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.selectedStoreId, (int?)null), ct);
+            await PurgeRelationalStoreDataAsync(storeId, ct);
+
+            // Required product navigations normally hide trash; deletion must include it.
+            await _db.productAttributeFiles.IgnoreQueryFilters()
+                .Where(f => f.attributeValue.product.storeId == storeId).ExecuteDeleteAsync(ct);
+            await _db.storeProductAttributeFiles.IgnoreQueryFilters()
+                .Where(f => f.attributeValue.product.storeId == storeId).ExecuteDeleteAsync(ct);
+            await _db.productFolders.IgnoreQueryFilters().Where(f => f.product.storeId == storeId)
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.parentFolderId, (int?)null), ct);
+            await _db.storeFolders.Where(f => f.storeId == storeId)
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.parentFolderId, (int?)null), ct);
+            // Store cascades may visit categories before products; the optional FK is RESTRICT.
+            await _db.products.IgnoreQueryFilters().Where(p => p.storeId == storeId)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.categoryId, (int?)null), ct);
+
+            await _db.stores.Where(s => s.Id == storeId).ExecuteDeleteAsync(ct);
+            await tx.CommitAsync(ct);
+        });
+
+        // External storage is never touched before a successful DB commit.
+        foreach (var key in extraObjectKeys)
+        {
+            try { await _storage.DeleteAsync(key, ct); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to clean up store {StoreId} artifact {Key}", storeId, key); }
+        }
+        await TryDeleteStoragePrefixAsync(storeId, ct);
+        await _brandingSettings.DeleteForStoreAsync(storeId, ct);
+    }
+
+    private async Task PurgeRelationalStoreDataAsync(int storeId, CancellationToken ct)
+    {
+        await _db.operationLogEntries.Where(e => _db.operations.Any(o => o.storeId == storeId && o.operationId == e.operationId)).ExecuteDeleteAsync(ct);
+        await _db.operations.Where(o => o.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiConversationMessages.Where(m => _db.aiConversations.Any(c => c.storeId == storeId && c.Id == m.conversationId)).ExecuteDeleteAsync(ct);
+        await _db.aiChatAttachments.Where(a => a.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiConversations.Where(c => c.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiOperations.Where(o => o.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiStoreSettings.Where(s => s.StoreId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiMemories.Where(m => m.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiSandboxRuns.Where(r => r.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiAgentAudits.Where(a => a.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.aiKnowledgeChunks.Where(c => c.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.mappingGenerativeCaches.Where(c => _db.categoryMappings.Any(m => m.Id == c.mappingId && m.connection.storeId == storeId)).ExecuteDeleteAsync(ct);
+        await _db.pendingImageDownloads.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingProductImports.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingProductExports.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingProductBulkUpdates.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingFolderJobs.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingCategoryImports.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingCatalogConnectJobs.Where(p => p.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.pendingProductTransfers.Where(p => p.sourceStoreId == storeId || p.targetStoreId == storeId).ExecuteDeleteAsync(ct);
+        await _db.scheduledTaskRuns.Where(r => r.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.scheduledTasks.Where(t => t.storeId == storeId).ExecuteDeleteAsync(ct);
+        await _db.adapterHttpLogs.Where(l => l.storeId == storeId).ExecuteDeleteAsync(ct);
+    }
+
+    private async Task DeleteTrackedStoreAsync(int storeId, string confirmationName, CancellationToken ct)
+    {
         var store = await _db.stores.FirstOrDefaultAsync(s => s.Id == storeId, ct);
         if (store == null)
             throw ApiException.NotFound("Store not found", code: "store_not_found");
@@ -163,25 +254,27 @@ public sealed class StoreDeletionService : IStoreDeletionService
 
     private async Task TryDeleteStoragePrefixAsync(int storeId, CancellationToken ct)
     {
-        var prefix = $"{storeId}/";
-        try
+        foreach (var prefix in new[] { $"{storeId}/", $"stores/{storeId}/" })
         {
-            var keys = await _storage.ListObjectsByPrefixAsync(prefix, ct);
-            foreach (var key in keys)
+            try
             {
-                try
+                var keys = await _storage.ListObjectsByPrefixAsync(prefix, ct);
+                foreach (var key in keys)
                 {
-                    await _storage.DeleteAsync(key, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete storage object {Key} for store {StoreId}", key, storeId);
+                    try
+                    {
+                        await _storage.DeleteAsync(key, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete storage object {Key} for store {StoreId}", key, storeId);
+                    }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to list/delete storage prefix {Prefix} for store {StoreId}", prefix, storeId);
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to list/delete storage prefix {Prefix} for store {StoreId}", prefix, storeId);
+            }
         }
     }
 }

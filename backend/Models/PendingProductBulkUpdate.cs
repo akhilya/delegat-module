@@ -42,6 +42,9 @@ public class PendingProductBulkUpdate
 
     public int failedCount { get; set; }
 
+    /// <summary>Committed prefix of the distinct selection. Migrated legacy jobs use -1 and cannot auto-resume.</summary>
+    public int processedCount { get; set; }
+
     public DateTime createdAt { get; set; } = DateTime.UtcNow;
     public DateTime? startedAt { get; set; }
     public DateTime? finishedAt { get; set; }

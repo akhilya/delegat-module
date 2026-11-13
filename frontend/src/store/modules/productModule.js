@@ -3,6 +3,22 @@ import { http } from "@/main";
 
 export default {
   actions: {
+    async lookupProducts(
+      ctx,
+      { searchQuery, categoryId, productId, onSuccess, onError },
+    ) {
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("searchQuery", searchQuery);
+      if (categoryId != null) params.set("categoryId", categoryId);
+      if (productId != null) params.set("productId", productId);
+      return useAxios(
+        `/products/lookup?${params}`,
+        { method: "GET", cache: false },
+        http,
+      )
+        .then((response) => onSuccess(response))
+        .catch((error) => onError(error));
+    },
     /**
      * Fetches a paginated list of products with optional search filtering.
      * @param {Object} ctx - Vuex action context.

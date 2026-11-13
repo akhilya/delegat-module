@@ -88,7 +88,8 @@ public sealed class ProductTransferMediaTests
         Assert.Empty(await scenario.Db.productAttributeFiles
             .Where(link => link.attributeValue.productId == result.newProductId).ToListAsync());
         Assert.Empty(await scenario.Db.images.Where(image => image.productId == result.newProductId).ToListAsync());
-        Assert.Empty(scenario.Storage.DeletedPaths);
+        Assert.Equal(Assert.Single(scenario.Storage.Copies).Destination, Assert.Single(scenario.Storage.DeletedPaths));
+        Assert.DoesNotContain(scenario.SourceFile.filePath, scenario.Storage.DeletedPaths);
     }
 
     [Fact]

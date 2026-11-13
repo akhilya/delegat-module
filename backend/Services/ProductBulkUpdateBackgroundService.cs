@@ -117,7 +117,8 @@ public class ProductBulkUpdateBackgroundService : BackgroundService
                 updates,
                 cts.Token,
                 _operationLogger,
-                item.batchId);
+                item.batchId,
+                job: item);
 
             cts.Cancel();
             try { await stopWatcher; } catch { /* ignored */ }
@@ -151,6 +152,13 @@ public class ProductBulkUpdateBackgroundService : BackgroundService
             await context.SaveChangesAsync(stoppingToken);
             await _operationLogger.FinishAsync(item.batchId, item.storeId, finalStatus, summary);
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            cts.Cancel();
+            try { await stopWatcher; } catch { /* ignored */ }
+            await context.Entry(item).ReloadAsync(stoppingToken);
+            _logger.LogInformation("Bulk update {BatchId} checkpoint advanced in another worker", item.batchId);
+        }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
         {
             item.status = ProductBulkUpdateStatus.Cancelled;
@@ -171,12 +179,13 @@ public class ProductBulkUpdateBackgroundService : BackgroundService
             try { await stopWatcher; } catch { /* ignored */ }
 
             _logger.LogError(ex, "Bulk update {BatchId} failed", item.batchId);
-            item.status = ProductBulkUpdateStatus.Failed;
+            item.status = item.completedCount > 0 ? ProductBulkUpdateStatus.Partial : ProductBulkUpdateStatus.Failed;
             item.lastError = ex.Message;
             item.finishedAt = DateTime.UtcNow;
             await context.SaveChangesAsync(CancellationToken.None);
             await _operationLogger.LogAsync(item.batchId, item.storeId, "error", ex.Message);
-            await _operationLogger.FinishAsync(item.batchId, item.storeId, "failed", ex.Message);
+            await _operationLogger.FinishAsync(item.batchId, item.storeId,
+                item.completedCount > 0 ? "partial" : "failed", ex.Message);
         }
     }
 }

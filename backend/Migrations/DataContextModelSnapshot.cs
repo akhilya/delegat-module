@@ -1670,6 +1670,8 @@ namespace Delegat.Migrations
 
                     b.HasIndex("operationId");
 
+                    b.HasIndex("timestamp");
+
                     b.ToTable("operationLogEntries");
                 });
 
@@ -1953,7 +1955,12 @@ namespace Delegat.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("batchId")
+                        .HasAnnotation("MySql:IndexPrefixLength", new[] { 191 });
+
                     b.HasIndex("productId");
+
+                    b.HasIndex("status", "createdAt");
 
                     b.HasIndex("status", "storeId");
 
@@ -1989,6 +1996,12 @@ namespace Delegat.Migrations
 
                     b.Property<string>("lastError")
                         .HasColumnType("longtext");
+
+                    b.Property<int>("processedCount")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(-1);
 
                     b.Property<string>("productIdsJson")
                         .IsRequired()
@@ -2388,6 +2401,22 @@ namespace Delegat.Migrations
                     b.ToTable("productGroupMembers");
                 });
 
+            modelBuilder.Entity("Delegat.Models.ProductImportReceipt", b =>
+                {
+                    b.Property<string>("key")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("productId")
+                        .HasColumnType("int");
+
+                    b.HasKey("key");
+
+                    b.HasIndex("productId");
+
+                    b.ToTable("ProductImportReceipt");
+                });
+
             modelBuilder.Entity("Delegat.Models.ProductMediaExportGrant", b =>
                 {
                     b.Property<int>("Id")
@@ -2510,7 +2539,11 @@ namespace Delegat.Migrations
 
                     b.HasIndex("storeId");
 
+                    b.HasIndex("storeId", "barcode");
+
                     b.HasIndex("storeId", "deletedAt");
+
+                    b.HasIndex("storeId", "deletedAt", "categoryId", "Id");
 
                     b.ToTable("products");
                 });
@@ -2556,6 +2589,8 @@ namespace Delegat.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("productId");
+
+                    b.HasIndex("barcode", "productId");
 
                     b.ToTable("productVariants");
                 });
@@ -4016,6 +4051,17 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("group");
+
+                    b.Navigation("product");
+                });
+
+            modelBuilder.Entity("Delegat.Models.ProductImportReceipt", b =>
+                {
+                    b.HasOne("Delegat.Models.Products.Product", "product")
+                        .WithMany()
+                        .HasForeignKey("productId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("product");
                 });

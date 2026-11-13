@@ -112,6 +112,7 @@ public class PublicProductsController : ControllerBase
 
         var product = await _db.products
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(p => p.attributeValues)
                 .ThenInclude(av => av.files)
             .Include(p => p.attributeValues)

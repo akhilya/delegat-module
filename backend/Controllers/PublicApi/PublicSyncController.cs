@@ -139,6 +139,10 @@ public class PublicSyncController : ControllerBase
     /// <summary>
     /// Queues product import by external ids. Returns 202; poll operations/{operationId}.
     /// Selling price is taken from the card, or from the prices API when the card omits it.
+    /// Each new local product, mapped values, variants, links, group membership and media queue
+    /// is committed atomically after external requests complete. Retries reuse an existing
+    /// connection/external-id link, including products in the trash; imports do not restore them.
+    /// Variant-owned barcodes are not duplicated onto the parent card.
     /// </summary>
     [HttpPost("import-products")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]

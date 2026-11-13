@@ -304,6 +304,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<PendingProductBulkUpdate>()
             .HasIndex(p => new { p.status, p.createdAt });
 
+        builder.Entity<PendingProductBulkUpdate>()
+            .Property(p => p.processedCount).HasDefaultValue(-1).HasSentinel(-1).IsConcurrencyToken();
+
         // Foreign key indexes for query performance
         builder.Entity<Product>()
             .HasIndex(p => p.storeId);
@@ -311,8 +314,21 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<Product>()
             .HasQueryFilter(p => p.deletedAt == null);
 
+        builder.Entity<ProductImportReceipt>()
+            .HasOne(r => r.product).WithMany().HasForeignKey(r => r.productId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Entity<Product>()
             .HasIndex(p => new { p.storeId, p.deletedAt });
+
+        builder.Entity<Product>()
+            .HasIndex(p => new { p.storeId, p.deletedAt, p.categoryId, p.Id });
+
+        // Barcode validation performs locking equality reads on these columns.
+        builder.Entity<Product>()
+            .HasIndex(p => new { p.storeId, p.barcode });
+        builder.Entity<ProductVariant>()
+            .HasIndex(v => new { v.barcode, v.productId });
 
         builder.Entity<Category>()
             .HasIndex(c => c.storeId);
@@ -491,6 +507,13 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<PendingImageDownload>()
             .HasIndex(pid => new { pid.status, pid.storeId });
 
+        builder.Entity<PendingImageDownload>()
+            .Property(pid => pid.batchId).HasColumnType("longtext");
+        builder.Entity<PendingImageDownload>()
+            .HasIndex(pid => pid.batchId).HasPrefixLength(191);
+        builder.Entity<PendingImageDownload>()
+            .HasIndex(pid => new { pid.status, pid.createdAt });
+
         // RefreshToken indexes
         builder.Entity<RefreshToken>()
             .HasIndex(rt => rt.token).IsUnique();
@@ -539,6 +562,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         // OperationLogEntry indexes
         builder.Entity<OperationLogEntry>()
             .HasIndex(e => e.operationId);
+
+        builder.Entity<OperationLogEntry>()
+            .HasIndex(e => e.timestamp);
 
         // ErrorLog indexes
         builder.Entity<ErrorLog>()
