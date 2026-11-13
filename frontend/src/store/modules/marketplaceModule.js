@@ -589,7 +589,10 @@ export default {
     async getMappingGraph(ctx, { connectionId, mappingId, includeSchema }) {
       const response = await http.get(
         `/marketplace/connections/${connectionId}/mappings/${mappingId}/graph`,
-        { params: includeSchema ? { includeSchema: true } : undefined },
+        {
+          cache: false,
+          params: includeSchema ? { includeSchema: true } : undefined,
+        },
       );
       return response.data;
     },
