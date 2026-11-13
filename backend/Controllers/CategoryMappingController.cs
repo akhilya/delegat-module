@@ -577,35 +577,33 @@ public class CategoryMappingController : ControllerBase
     public async Task<IActionResult> SaveMappingGraph(
         int connectionId,
         int mappingId,
-        [FromBody] SaveGraphInput input)
+        [FromBody] SaveGraphInput input,
+        CancellationToken ct = default)
     {
         await GetConnectionAsync(connectionId);
 
-        var repo = _unitOfWork.Repository<CategoryMapping>();
-        var mapping = await repo.FindAsync(m => m.Id == mappingId && m.connectionId == connectionId);
-
-        if (mapping == null)
-            throw ApiException.NotFound(code: "mapping_not_found");
-
-        if (!MappingGraphVersion.Matches(mapping.graphJson, input.expectedGraphVersion))
-            throw ApiException.Conflict(
-                "The mapping graph was changed elsewhere",
-                new { graphVersion = MappingGraphVersion.Compute(mapping.graphJson) },
-                code: "mapping_graph_conflict");
-
-        mapping.graphJson = input.graph.HasValue
+        var graphJson = input.graph.HasValue
             && input.graph.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
                 ? input.graph.Value.GetRawText()
                 : null;
 
-        await repo.UpdateAsync(mapping);
+        var result = await MappingGraphStore.SaveAsync(
+            _context, connectionId, mappingId, graphJson, input.expectedGraphVersion, ct);
 
-        return Ok(new
+        return result.Status switch
         {
-            success = true,
-            hasGraph = mapping.graphJson != null,
-            graphVersion = MappingGraphVersion.Compute(mapping.graphJson),
-        });
+            MappingGraphSaveStatus.NotFound => throw ApiException.NotFound(code: "mapping_not_found"),
+            MappingGraphSaveStatus.Conflict => throw ApiException.Conflict(
+                "The mapping graph was changed elsewhere",
+                new { graphVersion = result.GraphVersion },
+                code: "mapping_graph_conflict"),
+            _ => Ok(new
+            {
+                success = true,
+                hasGraph = graphJson != null,
+                graphVersion = result.GraphVersion,
+            }),
+        };
     }
 
     /// <summary>
