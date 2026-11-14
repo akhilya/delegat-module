@@ -365,15 +365,20 @@ public sealed class OzonVideoMediaTests
             ["name"] = "Desk lamp",
             ["sku"] = "LAMP-1",
             ["21841"] = "https://cdn.example.test/video.mp4",
+            ["21837"] = "mapped graph name",
             ["21845"] = "https://cdn.example.test/cover.mp4",
-            ["videos"] = new List<string> { "https://cdn.example.test/gallery.mp4" }
+            ["videos"] = new List<string> { "https://cdn.example.test/gallery.mp4" },
+            ["videoNames"] = new List<string> { "gallery video name" }
         }, existingExternalId: "42");
 
-        Assert.DoesNotContain(item.Attributes, attribute => attribute.Id is 21841 or 21845);
-        Assert.Contains(
-            Assert.Single(item.ComplexAttributes!).Attributes,
+        Assert.DoesNotContain(item.Attributes, attribute => attribute.Id is 21841 or 21837 or 21845);
+        var galleryAttributes = Assert.Single(item.ComplexAttributes!).Attributes;
+        Assert.Contains(galleryAttributes,
             attribute => attribute.Id == 21841
                 && Assert.Single(attribute.Values).Value == "https://cdn.example.test/gallery.mp4");
+        Assert.Contains(galleryAttributes,
+            attribute => attribute.Id == 21837
+                && Assert.Single(attribute.Values).Value == "gallery video name");
     }
 
     [Fact]
