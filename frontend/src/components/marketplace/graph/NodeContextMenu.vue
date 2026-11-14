@@ -45,6 +45,11 @@ const props = defineProps({
   // "source" = dragged from an OUTPUT pin (offer consumers that accept the type);
   // "target" = dragged from an INPUT pin (offer producers whose output fits the type).
   connectDir: { type: String, default: null },
+  // Adapter fields that carry predefined options (for standard-value search).
+  adapterFieldsWithOptions: { type: Array, default: () => [] },
+  // The adapter field whose input pin the menu was opened for (wire drag);
+  // enables offering its option values directly.
+  adapterValueField: { type: Object, default: null },
 });
 const emit = defineEmits(["add", "close"]);
 
@@ -57,9 +62,42 @@ onMounted(async () => {
 });
 
 const q = computed(() => search.value.trim().toLowerCase());
-const match = (label, ...aliases) =>
-  !q.value ||
-  [label, ...aliases].some((a) => (a || "").toLowerCase().includes(q.value));
+
+// Word-level fuzzy match: a query word hits when it is a substring of a
+// candidate word, or close enough to tolerate a typo (1-2 edits for longer
+// words). Works the same for Cyrillic and Latin input.
+const lev = (a, b) => {
+  const n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+};
+const wordOk = (qw, cw) =>
+  cw.includes(qw) ||
+  (cw.length >= 3 && qw.startsWith(cw)) ||
+  (qw.length >= 4 && lev(qw, cw) <= (qw.length >= 8 ? 2 : 1));
+const match = (label, ...aliases) => {
+  if (!q.value) return true;
+  const qWords = q.value.split(/\s+/).filter(Boolean);
+  const hay = [label, ...aliases]
+    .flatMap((a) =>
+      String(a || "")
+        .toLowerCase()
+        .split(/[\s,;/|]+/),
+    )
+    .filter(Boolean);
+  return qWords.every((w) => hay.some((h) => wordOk(w, h)));
+};
 
 const connecting = computed(
   () => !!props.filterType && props.filterType !== "any",
@@ -175,6 +213,10 @@ const literalItems = computed(() => {
     "number",
     "int",
     "float",
+    "digit",
+    "число",
+    "цифра",
+    "количество",
   );
   push(
     Type,
@@ -184,6 +226,9 @@ const literalItems = computed(() => {
     "text",
     "string",
     "str",
+    "текст",
+    "строка",
+    "слово",
   );
   push(
     ToggleLeft,
@@ -195,6 +240,10 @@ const literalItems = computed(() => {
     "true",
     "false",
     "flag",
+    "булево",
+    "да",
+    "нет",
+    "флаг",
   );
   push(
     List,
@@ -204,13 +253,33 @@ const literalItems = computed(() => {
     "array",
     "list",
     "arr",
+    "массив",
+    "список",
   );
   // Adapter value: static node backed by the adapter field's parsedOptions.
   // Options are populated on connect or manually in the inspector, and the
   // bound field decides the real valueType - so offer it for any dragged pin.
   const adapterValueLabel = t("marketplace.graph.contextMenu.adapterValueItem");
+  // Option labels of every adapter field act as aliases, so searching a known
+  // dictionary value (e.g. "красный") still surfaces the standard-value block.
+  const optionAliases = props.adapterFieldsWithOptions.flatMap((f) => [
+    f.label,
+    f.fieldKey,
+    ...(f.options || []).slice(0, 50).flatMap((o) => [o.label, o.value]),
+  ]);
   if (
-    match(adapterValueLabel, "default", "enum", "preset", "select") &&
+    match(
+      adapterValueLabel,
+      "default",
+      "enum",
+      "preset",
+      "select",
+      "стандарт",
+      "значение",
+      "словарь",
+      "вариант",
+      ...optionAliases,
+    ) &&
     srcVisible({
       group: "source",
       kind: "static",
@@ -233,6 +302,32 @@ const literalItems = computed(() => {
     });
   }
   return out;
+});
+
+// Values of the adapter field the menu was opened for (wire dropped on empty
+// space): each option creates a standard-value node already bound to that field.
+const adapterValueItems = computed(() => {
+  const field = props.adapterValueField;
+  if (!field?.options?.length) return [];
+  return field.options
+    .filter((o) => match(o.label, o.value))
+    .slice(0, 50)
+    .map((o) => ({
+      label: o.label,
+      desc: {
+        group: "source",
+        kind: "static",
+        payload: {
+          isAdapterValue: true,
+          valueType: field.valueType,
+          staticValue: o.value,
+          label: o.label,
+          options: field.options,
+          optionSourceKey: field.fieldKey,
+          optionSourceLabel: field.label,
+        },
+      },
+    }));
 });
 
 // Product files referenced by name / extension (resolved per product at eval).
@@ -352,6 +447,13 @@ const modifierGroups = computed(() => {
 const groups = computed(() =>
   [
     {
+      key: "adapterValues",
+      label: props.adapterValueField
+        ? `${t("marketplace.graph.contextMenu.adapterValueItem")} · ${props.adapterValueField.label}`
+        : t("marketplace.graph.contextMenu.adapterValueItem"),
+      items: adapterValueItems.value,
+    },
+    {
       key: "sources",
       label: t("marketplace.graph.contextMenu.groups.sources"),
       items: sourceItems.value,
@@ -428,7 +530,6 @@ const pick = (desc) => {
             class="size-3"
           />
           {{ g.label }}
-          <span class="vf-ctx__count">{{ g.items.length }}</span>
         </Button>
         <Button
           v-for="(it, i) in isOpen(g) ? g.items : []"
@@ -437,9 +538,7 @@ const pick = (desc) => {
           class="vf-ctx__item h-auto w-full justify-start"
           @click="pick(it.desc)"
         >
-          <component :is="it.icon" class="size-3.5 text-muted-foreground" />{{
-            it.label
-          }}
+          {{ it.label }}
         </Button>
       </template>
 
@@ -480,11 +579,6 @@ const pick = (desc) => {
 .vf-ctx__group:hover {
   color: var(--foreground);
   background: transparent;
-}
-.vf-ctx__count {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.7;
 }
 .vf-ctx__item {
   gap: 8px;

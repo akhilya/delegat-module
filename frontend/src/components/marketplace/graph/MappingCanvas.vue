@@ -1097,6 +1097,14 @@ const adapterFieldsWithOptions = computed(() =>
       valueType: d.type === "multiselect" ? "array" : "string",
     })),
 );
+// Field whose input pin a wire drag started from - lets the node menu offer
+// that field's option values as ready-made standard-value blocks.
+const menuAdapterValueField = computed(() => {
+  const pc = pendingConnect.value;
+  if (!pc || pc.dir !== "target" || !pc.handleId?.startsWith("f:")) return null;
+  const key = pc.handleId.slice(2);
+  return adapterFieldsWithOptions.value.find((f) => f.fieldKey === key) || null;
+});
 
 function normalizeAiModelOption(m) {
   const id = m?.id ?? m?.Id;
@@ -2929,6 +2937,8 @@ async function importMappingFile(event) {
             :available-sources="availableSources"
             :filter-type="menu.connectType"
             :connect-dir="menu.connectDir"
+            :adapter-fields-with-options="adapterFieldsWithOptions"
+            :adapter-value-field="menuAdapterValueField"
             @add="onMenuAdd"
             @close="closeMenu"
           />
