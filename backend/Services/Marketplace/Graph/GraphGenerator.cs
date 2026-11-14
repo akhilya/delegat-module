@@ -60,6 +60,11 @@ public static class GraphGenerator
         public Dictionary<string, object>? @params { get; set; }
     }
 
+    // Spacing for nodes appended to an already-positioned graph (mirrors the frontend layout's
+    // 180px card width + 40px node gap per rank, ~64px card height + gap per row).
+    private const double AppendedColumnGap = 220;
+    private const double AppendedRowGap = 96;
+
     /// <summary>
     /// Every mapping must expose a grouping field ("mapping as a translation layer"):
     /// field-based adapters (Ozon) already have a real one in their schema; endpoint-based
@@ -237,6 +242,13 @@ public static class GraphGenerator
             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
             .Select(f => f.fieldKey!));
 
+        // Newly appended nodes get positions only when the graph already stores a layout:
+        // the frontend auto-lays-out a fully position-less graph, but a mixed graph would
+        // leave the appended chain piled at the origin.
+        var hasSavedLayout = graph.nodes.Any(n => n.position != null);
+        var nextRowY = hasSavedLayout ? graph.nodes.Max(n => n.position!.y) + AppendedRowGap : 0;
+        var leftColumnX = hasSavedLayout ? graph.nodes.Min(n => n.position!.x) : 0;
+
         var incoming = AliasDuplicateProductFieldSources(
             specs.Where(f => f.isEnabled).ToList());
         foreach (var fm in incoming.OrderBy(f => f.sortOrder))
@@ -256,10 +268,22 @@ public static class GraphGenerator
                 continue;
             }
             graph.edges ??= new List<GraphEdge>();
+            var nodeCountBefore = graph.nodes.Count;
             var added = AppendSpecsToSink([fm], adapter.id ?? "adapter-fields", graph.nodes, graph.edges,
                 prefix => $"{prefix}-{Guid.NewGuid():N}");
             adapter.data.fields.AddRange(added);
             have.Add(fm.externalFieldKey);
+
+            if (hasSavedLayout && graph.nodes.Count > nodeCountBefore)
+            {
+                var x = leftColumnX;
+                foreach (var appended in graph.nodes.Skip(nodeCountBefore))
+                {
+                    appended.position = new GraphPosition { x = x, y = nextRowY };
+                    x += AppendedColumnGap;
+                }
+                nextRowY += AppendedRowGap;
+            }
         }
 
         return JsonSerializer.Serialize(graph, SerializeOpts);

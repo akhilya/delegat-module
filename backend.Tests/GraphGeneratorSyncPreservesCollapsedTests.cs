@@ -447,4 +447,48 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         var edges = doc.RootElement.GetProperty("edges").EnumerateArray().ToList();
         Assert.DoesNotContain(edges, e => e.GetProperty("targetHandle").GetString() == "f:discountedPrice");
     }
+
+    [Fact]
+    public void SyncAdapterFields_PositionsAppendedChainBelowSavedLayout()
+    {
+        var result = GraphGenerator.SyncAdapterFields(
+            GraphWithCollapsedSource,
+            [
+                new FieldSpec
+                {
+                    externalFieldKey = "weight",
+                    externalFieldName = "Weight",
+                    externalFieldType = "number",
+                    isEnabled = true,
+                    sortOrder = 5,
+                    sourceType = FieldMappingSourceType.CategoryAttribute,
+                    sourceAttributeId = 9,
+                    modifiersJson = """[{"type":"unitConversion","enabled":true,"params":{"fromUnit":"kg","toUnit":"g"}}]""",
+                },
+            ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var nodes = doc.RootElement.GetProperty("nodes").EnumerateArray().ToList();
+        var existing = nodes.Where(n =>
+        {
+            var id = n.GetProperty("id").GetString()!;
+            return id is "src-1" or "adapter-fields" or "adapter-price-fields";
+        }).ToList();
+        var appended = nodes.Except(existing).ToList();
+
+        // The saved layout is preserved and every appended node (attribute source + modifier)
+        // gets a position below the lowest existing node instead of piling at the origin.
+        Assert.Equal(2, appended.Count);
+        Assert.All(appended, n => Assert.True(n.TryGetProperty("position", out _)));
+        var maxExistingY = existing.Max(n => n.GetProperty("position").GetProperty("y").GetDouble());
+        Assert.All(appended, n =>
+            Assert.True(n.GetProperty("position").GetProperty("y").GetDouble() > maxExistingY));
+
+        var minExistingX = existing.Min(n => n.GetProperty("position").GetProperty("x").GetDouble());
+        var source = appended.Single(n => n.GetProperty("type").GetString() == "attribute");
+        var modifier = appended.Single(n => n.GetProperty("type").GetString() == "modifier");
+        Assert.Equal(minExistingX, source.GetProperty("position").GetProperty("x").GetDouble());
+        Assert.True(modifier.GetProperty("position").GetProperty("x").GetDouble()
+            > source.GetProperty("position").GetProperty("x").GetDouble());
+    }
 }
