@@ -2284,7 +2284,10 @@ public class ProductSyncController : ControllerBase
                 product.categoryId.Value,
                 importedAttributes,
                 ct,
-                excludeAttrFieldNames);
+                excludeAttrFieldNames,
+                authorUserId: userId,
+                mediaBatchId: $"{operationId}-img",
+                externalMedia: externalProduct.Media);
             foreach (var change in attrChanges)
             {
                 var key = $"attr:{change.FieldName}";
@@ -3137,7 +3140,10 @@ public class ProductSyncController : ControllerBase
                             link.connectionId,
                             product.categoryId.Value,
                             importedAttributes,
-                            ct);
+                            ct,
+                            authorUserId: userId,
+                            mediaBatchId: $"{operationId}-img",
+                            externalMedia: externalProduct.Media);
                         foreach (var change in attrChanges)
                             updatedFields.Add($"attr:{change.FieldName}");
                     }

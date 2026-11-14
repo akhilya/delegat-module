@@ -1947,10 +1947,21 @@ namespace Delegat.Migrations
                     b.Property<int>("retryCount")
                         .HasColumnType("int");
 
+                    b.Property<bool>("skipGallery")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("status")
                         .HasColumnType("int");
 
                     b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("targetAttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("targetStoreAttributeId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");

@@ -64,6 +64,12 @@ public class PendingImageDownload
     [StringLength(255)]
     public string? mediaFileName { get; set; }
 
+    public int? targetAttributeId { get; set; }
+
+    public int? targetStoreAttributeId { get; set; }
+
+    public bool skipGallery { get; set; } = false;
+
     /// <summary>
     /// Order index of the image (for sorting).
     /// </summary>

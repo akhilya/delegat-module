@@ -194,6 +194,21 @@ public class ImageDownloadBackgroundService : BackgroundService
         PendingImageDownload pending,
         CancellationToken ct)
     {
+        if (pending.skipGallery)
+        {
+            var target = await ResolveFileAttributeTargetAsync(context, pending, ct);
+            if (target == null
+                || (!target.AllowMultipleFiles
+                    && await HasTargetFilesAsync(context, pending.productId, target, ct)))
+            {
+                pending.status = ImageDownloadStatus.Completed;
+                pending.completedAt = DateTime.UtcNow;
+                pending.lastError = null;
+                await context.SaveChangesAsync(ct);
+                return;
+            }
+        }
+
         pending.status = ImageDownloadStatus.InProgress;
         pending.lastAttemptAt = DateTime.UtcNow;
         pending.retryCount++;
@@ -211,6 +226,14 @@ public class ImageDownloadBackgroundService : BackgroundService
         string? uploadedFilePath = null;
         Models.File? importedFile = null;
         ImageReference? galleryReference = null;
+        ProductAttributeValue? productAttributeValue = null;
+        StoreProductAttributeValue? storeProductAttributeValue = null;
+        ProductAttributeValue? newProductAttributeValue = null;
+        StoreProductAttributeValue? newStoreProductAttributeValue = null;
+        ProductAttributeFile? productAttributeFile = null;
+        StoreProductAttributeFile? storeProductAttributeFile = null;
+        string? previousProductAttributeValue = null;
+        string? previousStoreAttributeValue = null;
 
         try
         {
@@ -263,6 +286,47 @@ public class ImageDownloadBackgroundService : BackgroundService
                 return;
             }
 
+            var target = pending.targetAttributeId.HasValue || pending.targetStoreAttributeId.HasValue
+                ? await ResolveFileAttributeTargetAsync(context, pending, ct)
+                : null;
+            var canAttachToAttribute = target != null;
+            if (target != null)
+            {
+                if (target.IsStoreAttribute)
+                {
+                    storeProductAttributeValue = await context.storeProductAttributeValues
+                        .Include(value => value.files)
+                        .FirstOrDefaultAsync(value =>
+                            value.productId == pending.productId
+                            && value.storeAttributeId == target.AttributeId, ct);
+                    canAttachToAttribute = target.AllowMultipleFiles
+                        || storeProductAttributeValue == null
+                        || storeProductAttributeValue.files.Count == 0;
+                }
+                else
+                {
+                    productAttributeValue = await context.productAttributeValues
+                        .Include(value => value.files)
+                        .FirstOrDefaultAsync(value =>
+                            value.productId == pending.productId
+                            && value.attributeId == target.AttributeId, ct);
+                    canAttachToAttribute = target.AllowMultipleFiles
+                        || productAttributeValue == null
+                        || productAttributeValue.files.Count == 0;
+                }
+            }
+
+            if (pending.skipGallery && !canAttachToAttribute)
+            {
+                await storageService.DeleteAsync(filePath, CancellationToken.None);
+                uploadedFilePath = null;
+                pending.status = ImageDownloadStatus.Completed;
+                pending.completedAt = DateTime.UtcNow;
+                pending.lastError = null;
+                await context.SaveChangesAsync(ct);
+                return;
+            }
+
             var file = new Models.File();
             file.AddFill(new Models.File.AddForm(
                 filePath,
@@ -276,28 +340,95 @@ public class ImageDownloadBackgroundService : BackgroundService
             if (isVideo)
                 file.displayName = pending.mediaFileName;
 
-            var occupied = await context.images
-                .AnyAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
-
-            var index = pending.imageIndex;
-            if (occupied)
-            {
-                var maxIndex = await context.images
-                    .Where(i => i.productId == pending.productId)
-                    .Select(i => (int?)i.index)
-                    .MaxAsync(ct) ?? -1;
-                index = maxIndex + 1;
-            }
-
-            galleryReference = new ImageReference
-            {
-                file = file,
-                productId = pending.productId,
-                index = index
-            };
             importedFile = file;
             context.files.Add(file);
-            context.images.Add(galleryReference);
+
+            if (!pending.skipGallery)
+            {
+                var occupied = await context.images
+                    .AnyAsync(i => i.productId == pending.productId && i.index == pending.imageIndex, ct);
+                var index = pending.imageIndex;
+                if (occupied)
+                {
+                    var maxIndex = await context.images
+                        .Where(i => i.productId == pending.productId)
+                        .Select(i => (int?)i.index)
+                        .MaxAsync(ct) ?? -1;
+                    index = maxIndex + 1;
+                }
+
+                galleryReference = new ImageReference
+                {
+                    file = file,
+                    productId = pending.productId,
+                    index = index
+                };
+                context.images.Add(galleryReference);
+            }
+
+            if (canAttachToAttribute && target != null)
+            {
+                if (target.IsStoreAttribute)
+                {
+                    if (storeProductAttributeValue == null)
+                    {
+                        storeProductAttributeValue = new StoreProductAttributeValue
+                        {
+                            productId = pending.productId,
+                            storeAttributeId = target.AttributeId,
+                            value = string.Empty
+                        };
+                        newStoreProductAttributeValue = storeProductAttributeValue;
+                        context.storeProductAttributeValues.Add(storeProductAttributeValue);
+                    }
+                    else
+                    {
+                        previousStoreAttributeValue = storeProductAttributeValue.value;
+                        storeProductAttributeValue.value = string.Empty;
+                    }
+
+                    storeProductAttributeFile = new StoreProductAttributeFile
+                    {
+                        attributeValue = storeProductAttributeValue,
+                        file = file,
+                        index = storeProductAttributeValue.files.Count == 0
+                            ? 0
+                            : storeProductAttributeValue.files.Max(link => link.index) + 1
+                    };
+                    storeProductAttributeValue.files.Add(storeProductAttributeFile);
+                    context.storeProductAttributeFiles.Add(storeProductAttributeFile);
+                }
+                else
+                {
+                    if (productAttributeValue == null)
+                    {
+                        productAttributeValue = new ProductAttributeValue
+                        {
+                            productId = pending.productId,
+                            attributeId = target.AttributeId,
+                            value = string.Empty
+                        };
+                        newProductAttributeValue = productAttributeValue;
+                        context.productAttributeValues.Add(productAttributeValue);
+                    }
+                    else
+                    {
+                        previousProductAttributeValue = productAttributeValue.value;
+                        productAttributeValue.value = string.Empty;
+                    }
+
+                    productAttributeFile = new ProductAttributeFile
+                    {
+                        attributeValue = productAttributeValue,
+                        file = file,
+                        index = productAttributeValue.files.Count == 0
+                            ? 0
+                            : productAttributeValue.files.Max(link => link.index) + 1
+                    };
+                    productAttributeValue.files.Add(productAttributeFile);
+                    context.productAttributeFiles.Add(productAttributeFile);
+                }
+            }
 
             pending.status = ImageDownloadStatus.Completed;
             pending.completedAt = DateTime.UtcNow;
@@ -307,12 +438,30 @@ public class ImageDownloadBackgroundService : BackgroundService
 
             _logger.LogDebug(
                 "Downloaded media {Index} for product {ProductId}: {MediaUrl}",
-                index, pending.productId, shortUrl);
+                pending.imageIndex, pending.productId, shortUrl);
         }
         catch (Exception ex)
         {
             if (galleryReference != null)
                 context.images.Remove(galleryReference);
+            if (productAttributeFile != null)
+            {
+                productAttributeValue?.files.Remove(productAttributeFile);
+                context.productAttributeFiles.Remove(productAttributeFile);
+            }
+            if (storeProductAttributeFile != null)
+            {
+                storeProductAttributeValue?.files.Remove(storeProductAttributeFile);
+                context.storeProductAttributeFiles.Remove(storeProductAttributeFile);
+            }
+            if (newProductAttributeValue != null)
+                context.productAttributeValues.Remove(newProductAttributeValue);
+            else if (productAttributeValue != null && previousProductAttributeValue != null)
+                productAttributeValue.value = previousProductAttributeValue;
+            if (newStoreProductAttributeValue != null)
+                context.storeProductAttributeValues.Remove(newStoreProductAttributeValue);
+            else if (storeProductAttributeValue != null && previousStoreAttributeValue != null)
+                storeProductAttributeValue.value = previousStoreAttributeValue;
             if (importedFile != null)
                 context.files.Remove(importedFile);
             if (uploadedFilePath != null)
@@ -358,6 +507,81 @@ public class ImageDownloadBackgroundService : BackgroundService
         await context.SaveChangesAsync();
         await log("error", error);
     }
+
+    private sealed record FileAttributeTarget(
+        int AttributeId,
+        bool IsStoreAttribute,
+        bool AllowMultipleFiles);
+
+    private static async Task<FileAttributeTarget?> ResolveFileAttributeTargetAsync(
+        DataContext context,
+        PendingImageDownload pending,
+        CancellationToken ct)
+    {
+        if (pending.targetAttributeId.HasValue == pending.targetStoreAttributeId.HasValue)
+            return null;
+
+        var product = await context.products.AsNoTracking()
+            .Where(item => item.Id == pending.productId)
+            .Select(item => new { item.categoryId, item.storeId })
+            .FirstOrDefaultAsync(ct);
+        if (product == null || product.storeId != pending.storeId)
+            return null;
+
+        if (pending.targetAttributeId is int categoryAttributeId)
+        {
+            if (!product.categoryId.HasValue)
+                return null;
+
+            var attribute = await context.categoryAttributes.AsNoTracking()
+                .Where(item => item.Id == categoryAttributeId)
+                .Select(item => new { item.categoryId, item.type, item.allowMultipleFiles })
+                .FirstOrDefaultAsync(ct);
+            if (attribute == null
+                || attribute.type != AttributeType.File
+                || attribute.categoryId != product.categoryId.Value)
+                return null;
+
+            return new FileAttributeTarget(
+                categoryAttributeId,
+                IsStoreAttribute: false,
+                attribute.allowMultipleFiles);
+        }
+
+        if (pending.targetStoreAttributeId is int storeAttributeId)
+        {
+            var attribute = await context.storeAttributes.AsNoTracking()
+                .Where(item => item.Id == storeAttributeId)
+                .Select(item => new { item.storeId, item.type, item.allowMultipleFiles })
+                .FirstOrDefaultAsync(ct);
+            if (attribute == null
+                || attribute.type != AttributeType.File
+                || attribute.storeId != product.storeId)
+                return null;
+
+            return new FileAttributeTarget(
+                storeAttributeId,
+                IsStoreAttribute: true,
+                attribute.allowMultipleFiles);
+        }
+
+        return null;
+    }
+
+    private static Task<bool> HasTargetFilesAsync(
+        DataContext context,
+        int productId,
+        FileAttributeTarget target,
+        CancellationToken ct)
+        => target.IsStoreAttribute
+            ? context.storeProductAttributeValues.AnyAsync(value =>
+                value.productId == productId
+                && value.storeAttributeId == target.AttributeId
+                && value.files.Any(), ct)
+            : context.productAttributeValues.AnyAsync(value =>
+                value.productId == productId
+                && value.attributeId == target.AttributeId
+                && value.files.Any(), ct);
 
     private static string? GetExtensionFromUrl(string url)
     {

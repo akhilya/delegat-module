@@ -33,6 +33,106 @@ public class ImageDownloadAttachTests
     }
 
     [Fact]
+    public async Task Worker_AttachesCategoryFileToGalleryDownload()
+    {
+        var seeded = await SeedAttributePendingAsync(skipGallery: false);
+
+        await seeded.Worker.ProcessSingleImageAsync(
+            seeded.Db, seeded.Storage, Quota(seeded.Db), seeded.Pending, CancellationToken.None);
+
+        Assert.Equal(ImageDownloadStatus.Completed, seeded.Pending.status);
+        var value = await seeded.Db.productAttributeValues
+            .Include(item => item.files)
+            .SingleAsync(item => item.productId == seeded.ProductId);
+        Assert.Equal(string.Empty, value.value);
+        var attachment = Assert.Single(value.files);
+        var file = await seeded.Db.files.SingleAsync(item => item.Id == attachment.fileId);
+        Assert.Equal(seeded.ProductId, file.productId);
+        Assert.Equal(seeded.Pending.imageUrl, file.sourceUrl);
+        var reference = Assert.Single(await seeded.Db.images.ToListAsync());
+        Assert.Equal(file.Id, reference.fileId);
+    }
+
+    [Fact]
+    public async Task Worker_AttachesSkipGalleryDownloadWithoutCreatingImageReference()
+    {
+        var seeded = await SeedAttributePendingAsync(skipGallery: true);
+
+        await seeded.Worker.ProcessSingleImageAsync(
+            seeded.Db, seeded.Storage, Quota(seeded.Db), seeded.Pending, CancellationToken.None);
+
+        Assert.Equal(ImageDownloadStatus.Completed, seeded.Pending.status);
+        var value = await seeded.Db.productAttributeValues
+            .Include(item => item.files)
+            .SingleAsync(item => item.productId == seeded.ProductId);
+        Assert.Equal(string.Empty, value.value);
+        Assert.Single(value.files);
+        Assert.Empty(await seeded.Db.images.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Worker_AttachesSkipGalleryDownloadToStoreFileAttribute()
+    {
+        var seeded = await SeedAttributePendingAsync(skipGallery: true, storeAttribute: true);
+
+        await seeded.Worker.ProcessSingleImageAsync(
+            seeded.Db, seeded.Storage, Quota(seeded.Db), seeded.Pending, CancellationToken.None);
+
+        Assert.Equal(ImageDownloadStatus.Completed, seeded.Pending.status);
+        var value = await seeded.Db.storeProductAttributeValues
+            .Include(item => item.files)
+            .SingleAsync(item => item.productId == seeded.ProductId);
+        Assert.Equal(string.Empty, value.value);
+        Assert.Single(value.files);
+        Assert.Empty(await seeded.Db.images.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Worker_CleansSkipGalleryUploadWhenSingleFileTargetFillsDuringDownload()
+    {
+        var seeded = await SeedAttributePendingAsync(skipGallery: true);
+        seeded.Storage.AfterUpload = () =>
+        {
+            var existingFile = new Models.File
+            {
+                productId = seeded.ProductId,
+                authorUserId = seeded.UserId,
+                filePath = "stores/1/products/1/media/managed.mp4",
+                contentType = "video/mp4",
+                length = 20,
+                fileType = FileType.Other,
+                uploadDateTime = DateTime.UtcNow,
+                sourceUrl = "https://8.8.8.8/managed.mp4"
+            };
+            var value = new ProductAttributeValue
+            {
+                productId = seeded.ProductId,
+                attributeId = seeded.AttributeId,
+                value = string.Empty
+            };
+            value.files.Add(new ProductAttributeFile { file = existingFile, index = 0 });
+            seeded.Db.files.Add(existingFile);
+            seeded.Db.productAttributeValues.Add(value);
+            seeded.Db.SaveChanges();
+        };
+
+        await seeded.Worker.ProcessSingleImageAsync(
+            seeded.Db, seeded.Storage, Quota(seeded.Db), seeded.Pending, CancellationToken.None);
+
+        Assert.Equal(1, seeded.Storage.UploadCalls);
+        Assert.True(seeded.Storage.DeleteCalled);
+        Assert.Equal(ImageDownloadStatus.Completed, seeded.Pending.status);
+        Assert.DoesNotContain(
+            await seeded.Db.files.ToListAsync(),
+            file => file.sourceUrl == seeded.Pending.imageUrl);
+        Assert.Empty(await seeded.Db.images.ToListAsync());
+        var value = await seeded.Db.productAttributeValues
+            .Include(item => item.files)
+            .SingleAsync(item => item.productId == seeded.ProductId);
+        Assert.Single(value.files);
+    }
+
+    [Fact]
     public async Task Worker_CancellationCleansVideoObjectAndLeavesQueueRowRecoverable()
     {
         var (worker, db, storage, pending, _) = await SeedPendingAsync();
@@ -226,6 +326,55 @@ public class ImageDownloadAttachTests
         return (worker, db, new FakeStorage(), pending, existing);
     }
 
+    private static async Task<(
+        ImageDownloadBackgroundService Worker,
+        DataContext Db,
+        FakeStorage Storage,
+        PendingImageDownload Pending,
+        int AttributeId,
+        int ProductId,
+        int UserId)> SeedAttributePendingAsync(
+        bool skipGallery,
+        bool storeAttribute = false)
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Target category");
+        var product = data.AddProduct(store.Id, "Target product", "ART-1", category.Id);
+        var attribute = storeAttribute
+            ? (object)data.AddStoreAttribute(store.Id, "Target file", AttributeType.File)
+            : data.AddCategoryAttribute(category.Id, "Target file", AttributeType.File);
+        var attributeId = attribute switch
+        {
+            CategoryAttribute categoryAttribute => categoryAttribute.Id,
+            StoreAttribute storeAttributeDefinition => storeAttributeDefinition.Id,
+            _ => throw new InvalidOperationException("Unsupported test attribute")
+        };
+        var pending = new PendingImageDownload
+        {
+            productId = product.Id,
+            storeId = store.Id,
+            authorUserId = user.Id,
+            imageUrl = "https://8.8.8.8/target.jpg",
+            mediaKind = PendingMediaKind.Image,
+            imageIndex = 0,
+            status = ImageDownloadStatus.Pending,
+            targetAttributeId = storeAttribute ? null : attributeId,
+            targetStoreAttributeId = storeAttribute ? attributeId : null,
+            skipGallery = skipGallery
+        };
+        db.pendingImageDownloads.Add(pending);
+        await db.SaveChangesAsync();
+
+        var worker = new ImageDownloadBackgroundService(
+            scopeFactory: null!,
+            NullLogger<ImageDownloadBackgroundService>.Instance,
+            new NoopOperationLogger());
+        return (worker, db, new FakeStorage(), pending, attributeId, product.Id, user.Id);
+    }
+
     private static QuotaService Quota(DataContext db) =>
         new(TestDbFactory.CreateUnitOfWork(db), db);
 
@@ -248,11 +397,13 @@ public class ImageDownloadAttachTests
         public bool DeleteCalled { get; private set; }
         public bool CancelVideoUpload { get; set; }
         public CancellationTokenSource? CancellationSource { get; set; }
+        public Action? AfterUpload { get; set; }
         public string Bucket => "test";
 
         public Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default)
         {
             UploadCalls++;
+            AfterUpload?.Invoke();
             return Task.FromResult<FileUploadResult?>(new FileUploadResult("image/jpeg", 1024));
         }
 
@@ -260,6 +411,7 @@ public class ImageDownloadAttachTests
             string uri, string path, long maxBytes, CancellationToken ct = default)
         {
             VideoUploadCalls++;
+            AfterUpload?.Invoke();
             Assert.True(maxBytes > 0);
             if (CancelVideoUpload)
             {
