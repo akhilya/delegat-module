@@ -35,23 +35,39 @@ public static class GraphUnitMetadata
             return IsTransparent(node) && inputs.Count == 1 ? SourceUnit(inputs[0].source, seen) : null;
         }
 
-        string? TargetUnit(string id, HashSet<string> seen)
+        HashSet<string> TargetUnits(string id, HashSet<string> seen)
         {
-            if (!seen.Add(id)) return null;
-            var units = outgoing[id].Select(edge =>
+            var units = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!seen.Add(id)) return units;
+            foreach (var edge in outgoing[id])
             {
-                if (!nodes.TryGetValue(edge.target, out var target)) return null;
+                if (!nodes.TryGetValue(edge.target, out var target)) continue;
                 if (edge.targetHandle?.StartsWith("f:") == true)
                 {
                     var field = target.data?.fields?.FirstOrDefault(f => $"f:{f.fieldKey}" == edge.targetHandle);
-                    return field == null ? null : AttributeFieldConstraints.ResolveUnitCode(new ExternalField(
+                    var unit = field == null ? null : AttributeFieldConstraints.ResolveUnitCode(new ExternalField(
                         field.fieldKey ?? "", field.label ?? "", field.isRequired, field.outputType ?? "",
                         Description: field.description, Unit: field.unit, UnitCode: field.unitCode));
+                    if (unit != null) units.Add(unit);
+                    continue;
                 }
-                return IsMain(edge) && IsTransparent(target)
-                    ? TargetUnit(target.id, new HashSet<string>(seen)) : null;
-            }).ToList();
-            return units.Count > 0 && units.All(unit => unit != null && unit == units[0]) ? units[0] : null;
+                // Operand and auxiliary pins consume numbers, not a value in the destination's unit.
+                if (!IsMain(edge)) continue;
+                if (target.type == "modifier" && target.data?.modifierType == "unitConversion")
+                {
+                    var parameters = target.data.@params ?? new();
+                    // Automatic conversions derive their input from upstream. Only a manual
+                    // conversion establishes an independent constraint on the intermediate unit.
+                    if (!ModifierHelpers.GetBool(parameters, "autoDetect", true))
+                    {
+                        var unit = AttributeUnits.NormalizeCode(ModifierHelpers.GetString(parameters, "fromUnit", null));
+                        if (unit != null) units.Add(unit);
+                    }
+                }
+                else if (IsTransparent(target))
+                    units.UnionWith(TargetUnits(target.id, new HashSet<string>(seen)));
+            }
+            return units;
         }
 
         void Resolve(GraphNode node)
@@ -62,7 +78,8 @@ public static class GraphUnitMetadata
             {
                 var inputs = incoming[node.id].Where(IsMain).ToList();
                 parameters["fromUnit"] = inputs.Count == 1 ? SourceUnit(inputs[0].source, new()) ?? "" : "";
-                parameters["toUnit"] = TargetUnit(node.id, new()) ?? "";
+                var units = TargetUnits(node.id, new());
+                parameters["toUnit"] = units.Count == 1 ? units.Single() : "";
             }
             visiting.Remove(node.id);
             resolved.Add(node.id);

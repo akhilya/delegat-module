@@ -322,6 +322,123 @@ describe("automatic conversion parameters", () => {
       null,
     );
   });
+  for (const reverseOrder of [false, true]) {
+    it(`keeps the intermediate unit in an automatic chain (reverse=${reverseOrder})`, () => {
+      const second = {
+        id: "second",
+        type: "modifier",
+        data: {
+          modifierType: "unitConversion",
+          params: { fromUnit: "g", toUnit: "kg" },
+        },
+      };
+      const other = {
+        ...sink,
+        id: "other",
+        data: { fields: [{ fieldKey: "weight", unitCode: "kg" }] },
+      };
+      const nodes = [source, convert, sink, second, other];
+      if (reverseOrder) nodes.reverse();
+      const resolved = resolveConversionUnits(
+        nodes,
+        [
+          ...edges,
+          { source: "convert", target: "second", targetHandle: "in" },
+          { source: "second", target: "other", targetHandle: "f:weight" },
+        ],
+        sources,
+      );
+      assert.equal(resolved.get("convert").toUnit, "g");
+      assert.equal(resolved.get("second").fromUnit, "g");
+      assert.equal(resolved.get("second").toUnit, "kg");
+    });
+  }
+  for (const handle of ["p:factor", "field:extra"]) {
+    it(`ignores an auxiliary consumer at ${handle}`, () => {
+      const consumer = {
+        id: "consumer",
+        type: "modifier",
+        data: { modifierType: "round" },
+      };
+      const other = {
+        ...sink,
+        id: "other",
+        data: { fields: [{ fieldKey: "weight", unitCode: "kg" }] },
+      };
+      const resolved = resolveConversionUnits(
+        [source, convert, sink, consumer, other],
+        [
+          ...edges,
+          { source: "convert", target: "consumer", targetHandle: handle },
+          { source: "consumer", target: "other", targetHandle: "f:weight" },
+        ],
+        sources,
+      );
+      assert.equal(resolved.get("convert").toUnit, "g");
+    });
+  }
+  it("takes the input unit of a downstream manual conversion as a constraint", () => {
+    const bend = { id: "bend", type: "reroute" };
+    const manual = {
+      id: "manual",
+      type: "modifier",
+      data: {
+        modifierType: "unitConversion",
+        params: { autoDetect: false, fromUnit: "грамм", toUnit: "mg" },
+      },
+    };
+    const resolved = resolveConversionUnits(
+      [source, convert, bend, manual],
+      [
+        edges[0],
+        { source: "convert", target: "bend", targetHandle: "in" },
+        { source: "bend", target: "manual", targetHandle: "in" },
+      ],
+      sources,
+    );
+    assert.equal(resolved.get("convert").toUnit, "g");
+    assert.deepEqual(resolved.get("manual"), manual.data.params);
+  });
+  it("preserves conflicts behind a reroute instead of dropping the ambiguous branch", () => {
+    const bend = { id: "bend", type: "reroute" };
+    const other = {
+      ...sink,
+      id: "other",
+      data: {
+        fields: [
+          { fieldKey: "weight", unitCode: "kg" },
+          { fieldKey: "grams", unitCode: "g" },
+        ],
+      },
+    };
+    const resolved = resolveConversionUnits(
+      [source, convert, sink, bend, other],
+      [
+        ...edges,
+        { source: "convert", target: "bend", targetHandle: "in" },
+        { source: "bend", target: "other", targetHandle: "f:grams" },
+        { source: "bend", target: "other", targetHandle: "f:weight" },
+      ],
+      sources,
+    );
+    assert.equal(resolved.get("convert").toUnit, null);
+  });
+  it("rejects a manual input unit that conflicts with a direct field", () => {
+    const manual = {
+      id: "manual",
+      type: "modifier",
+      data: {
+        modifierType: "unitConversion",
+        params: { autoDetect: false, fromUnit: "kg", toUnit: "mg" },
+      },
+    };
+    const resolved = resolveConversionUnits(
+      [source, convert, sink, manual],
+      [...edges, { source: "convert", target: "manual", targetHandle: "in" }],
+      sources,
+    );
+    assert.equal(resolved.get("convert").toUnit, null);
+  });
   it("ignores operand pins when tracing the main value", () => {
     const round = {
       id: "round",

@@ -9,6 +9,19 @@ namespace Delegat.Tests;
 
 public sealed class WildberriesVideoMediaTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DuplicateSelectedPhotosAreRemovedBeforeCheckingTheLimit(bool update)
+    {
+        var photos = Enumerable.Range(0, 30).Select(i => $"https://cdn.example.test/{i}.jpg").ToList();
+        var selected = photos.Concat([photos[0], photos[1] + "#preview"]);
+        var urls = WildberriesPlugin.BuildMediaUrls(update ? ExistingCard() : null, selected, []);
+
+        Assert.Equal(photos, update ? urls.Skip(1) : urls);
+        Assert.Equal(update ? 31 : 30, urls.Count);
+    }
+
     [Fact]
     public void RepeatedExportDoesNotAppendRemotePhotosOrExceedLimit()
     {

@@ -83,30 +83,42 @@ export function resolveConversionUnits(nodes = [], edges = [], sources = {}) {
   }
   const resolved = new Map();
   const visiting = new Set();
-  function targetUnit(id, seen = new Set()) {
-    if (seen.has(id)) return null;
+  function targetUnits(id, seen = new Set()) {
+    const units = new Set();
+    if (seen.has(id)) return units;
     seen.add(id);
-    const units = (outgoing.get(id) || []).map((edge) => {
+    for (const edge of outgoing.get(id) || []) {
       const target = byId.get(edge.target);
       if (edge.targetHandle?.startsWith("f:")) {
         const field = target?.data?.fields?.find(
           (f) => `f:${f.fieldKey}` === edge.targetHandle,
         );
-        return normalizeUnitCode(field?.unitCode ?? field?.unit);
+        const unit = normalizeUnitCode(field?.unitCode ?? field?.unit);
+        if (unit) units.add(unit);
+        continue;
       }
-      if (edge.targetHandle && edge.targetHandle !== "in") return null;
+      // Only value inputs constrain the flowing unit; operand/auxiliary pins do not.
+      if (edge.targetHandle && edge.targetHandle !== "in") continue;
       if (
+        target?.type === "modifier" &&
+        target.data?.modifierType === "unitConversion"
+      ) {
+        // An automatic conversion gets its input unit from upstream, whereas a manual
+        // conversion provides an independent constraint on the intermediate unit.
+        if (target.data.params?.autoDetect === false) {
+          const unit = normalizeUnitCode(target.data.params.fromUnit);
+          if (unit) units.add(unit);
+        }
+      } else if (
         target?.type === "reroute" ||
         (target?.type === "modifier" &&
-          target.data?.modifierType !== "unitConversion" &&
           !UNIT_CHANGING_MODIFIERS.has(target.data?.modifierType))
-      )
-        return targetUnit(edge.target, new Set(seen));
-      return null;
-    });
-    return units.length && units.every((unit) => unit && unit === units[0])
-      ? units[0]
-      : null;
+      ) {
+        for (const unit of targetUnits(edge.target, new Set(seen)))
+          units.add(unit);
+      }
+    }
+    return units;
   }
   function sourceUnit(id, seen = new Set()) {
     if (seen.has(id)) return null;
@@ -141,13 +153,14 @@ export function resolveConversionUnits(nodes = [], edges = [], sources = {}) {
     const inputs = (incoming.get(node.id) || []).filter(
       (e) => !e.targetHandle || e.targetHandle === "in",
     );
+    const destinations = targetUnits(node.id);
     const units =
       params.autoDetect === false
         ? params
         : {
             ...params,
             fromUnit: inputs.length === 1 ? sourceUnit(inputs[0].source) : null,
-            toUnit: targetUnit(node.id),
+            toUnit: destinations.size === 1 ? [...destinations][0] : null,
           };
     resolved.set(node.id, units);
     visiting.delete(node.id);

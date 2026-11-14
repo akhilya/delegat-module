@@ -69,6 +69,78 @@ public class GraphUnitMetadataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ChainedAutomaticConversionsKeepTheIntermediateUnit(bool reverseNodeOrder)
+    {
+        var graph = WeightGraph()
+            .Modifier("second", "unitConversion", new() { ["fromUnit"] = "g", ["toUnit"] = "kg" })
+            .Edge("convert", "second")
+            .Field("kilograms", "number", configure: f => f.unitCode = "kg")
+            .WireToField("second", "kilograms");
+        if (reverseNodeOrder) graph.Graph.nodes.Reverse();
+
+        GraphUnitMetadata.Reconcile(graph.Graph, (_, _) => "kg");
+        var result = graph.Eval();
+        GraphAssert.Output(result, "weight", 2000m, "number");
+        GraphAssert.Output(result, "kilograms", 2m, "number");
+    }
+
+    [Theory]
+    [InlineData("p:factor")]
+    [InlineData("field:extra")]
+    public void AuxiliaryConsumersDoNotChangeTheValueUnit(string handle)
+    {
+        var graph = WeightGraph()
+            .Modifier("consumer", "multiply")
+            .Edge("convert", "consumer", handle)
+            .Field("other", "number", configure: f => f.unitCode = "kg")
+            .WireToField("consumer", "other");
+
+        GraphUnitMetadata.Reconcile(graph.Graph, (_, _) => "kg");
+        GraphAssert.Output(graph.Eval(), "weight", 2000m, "number");
+    }
+
+    [Fact]
+    public void ManualConversionInputDefinesTheIntermediateUnit()
+    {
+        var graph = WeightGraph();
+        graph.Graph.edges.RemoveAll(e => e.source == "convert");
+        graph.Reroute("manual-bend").Edge("convert", "manual-bend")
+            .Modifier("manual", "unitConversion", new()
+            {
+                ["autoDetect"] = false, ["fromUnit"] = "g", ["toUnit"] = "mg"
+            })
+            .Edge("manual-bend", "manual")
+            .Field("milligrams", "number", configure: f => f.unitCode = "mg")
+            .WireToField("manual", "milligrams");
+
+        GraphUnitMetadata.Reconcile(graph.Graph, (_, _) => "kg");
+        var result = graph.Eval();
+        Assert.Equal(2000m, result.NodeValues["convert"]);
+        GraphAssert.Output(result, "milligrams", 2000000m, "number");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConflictingUnitsRemainAmbiguousAcrossBranches(bool manualBoundary)
+    {
+        var graph = WeightGraph().Reroute("branch").Edge("convert", "branch");
+        if (manualBoundary)
+            graph.Modifier("manual", "unitConversion", new()
+                { ["autoDetect"] = false, ["fromUnit"] = "kg", ["toUnit"] = "mg" })
+                .Edge("branch", "manual");
+        else
+            graph.Field("conflicting", "number", configure: f => f.unitCode = "kg")
+                .Field("branchGrams", "number", configure: f => f.unitCode = "g")
+                .WireToField("branch", "conflicting").WireToField("branch", "branchGrams");
+
+        GraphUnitMetadata.Reconcile(graph.Graph, (_, _) => "kg");
+        Assert.Equal("", graph.Graph.nodes.Single(n => n.id == "convert").data!.@params!["toUnit"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void PackageDepthDividedByTenReachesRequiredLength(bool storeAttribute)
     {
         var graph = new GraphEvalHarness();
