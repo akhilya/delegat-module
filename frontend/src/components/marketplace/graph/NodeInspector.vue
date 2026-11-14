@@ -446,6 +446,12 @@ const selectedArrayValues = computed(() => {
 });
 
 const arrayOptionFilter = ref("");
+watch(
+  () => props.node?.id,
+  () => {
+    arrayOptionFilter.value = "";
+  },
+);
 const filteredArrayOptions = computed(() => {
   const query = arrayOptionFilter.value.trim().toLowerCase();
   const opts = data.value.options || [];
