@@ -260,6 +260,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Attribute option lookup for the mapping editor (`GET /marketplace/attribute-options`) is now limited to the selected store.
 
 - Ozon product imports now bring every gallery video into product media, including videos returned as separate complex attributes or in the regular attribute list, instead of only the first or none. Video and cover links are no longer written as text into mapped File attributes.
+- Ozon video import reads complex attribute IDs returned as either `id` or `attribute_id`, and adapter logs now show the returned video attributes and why a video link was skipped.
+- Ozon video imports continue processing valid media when optional complex attribute lists or values are null.
 - Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.
 - Store deletion works with MySQL automatic retries and handles trashed folder trees, restricting catalog references, scoped job/chat/history data, and both current and legacy storage prefixes; archive/chat objects are cleaned only after database commit.
 - Product transfers stage file bytes before opening the database transaction and atomically include category/group creation. Failed/cancelled attempts restore tracking and clean staged objects; database retries do not recopy files, and post-commit notification failures cannot delete committed media.
