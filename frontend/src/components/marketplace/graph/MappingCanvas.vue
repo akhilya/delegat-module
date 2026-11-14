@@ -7,6 +7,7 @@ import {
   watch,
   nextTick,
   toRaw,
+  provide,
 } from "vue";
 import { useStore } from "vuex";
 import { VueFlow, useVueFlow } from "@vue-flow/core";
@@ -90,6 +91,7 @@ import {
   sanitizeGraphNodes,
   sanitizeGraphEdges,
   mergeProductFieldSources,
+  attributeValueType,
 } from "./graphModel.js";
 import { layoutGraph, sinksOverlap } from "./graphLayout.js";
 import {
@@ -441,8 +443,179 @@ function applyFieldDefEnrichment() {
   }
 }
 
+function attributeDefinition(node) {
+  const list =
+    node.type === "attribute"
+      ? props.availableSources.categoryAttributes
+      : props.availableSources.storeAttributes;
+  return (list || []).find(
+    (item) => String(item.id) === String(node.data?.attributeId),
+  );
+}
+
+function incomingEdgesByTarget() {
+  const map = new Map();
+  for (const edge of edges.value) {
+    const list = map.get(edge.target) || [];
+    list.push(edge);
+    map.set(edge.target, list);
+  }
+  return map;
+}
+
+/**
+ * Keep derived block metadata in step with the attribute definitions and wiring:
+ * attribute blocks get their definition's type/unit, and a unit conversion without
+ * explicit units takes them from its input source and the adapter field it feeds.
+ */
+// Set when reconcileUnitMetadata repairs persisted params, so a load keeps the canvas dirty.
+let unitMetadataRepaired = false;
+
+function reconcileUnitMetadata() {
+  let changed = false;
+  for (const node of nodes.value) {
+    if (node.type !== "attribute" && node.type !== "storeAttribute") continue;
+    const def = attributeDefinition(node);
+    if (!def) continue;
+    const patch = {};
+    const type = attributeValueType(def.type);
+    // Multiselect changes how the evaluator reads stored values; only new blocks get it.
+    if (
+      type &&
+      type !== "multiselect" &&
+      (!node.data?.valueType || node.data.valueType === "any")
+    )
+      patch.valueType = type;
+    const unit = normalizeUnitCode(def.unitCode);
+    if ((node.data?.unitCode || null) !== (unit || null)) patch.unitCode = unit;
+    if (Object.keys(patch).length) updateNodeData(node.id, patch);
+  }
+
+  const nodesById = new Map(nodes.value.map((node) => [node.id, node]));
+  const incoming = incomingEdgesByTarget();
+  for (const node of nodes.value) {
+    if (
+      node.type !== "modifier" ||
+      node.data?.modifierType !== "unitConversion"
+    )
+      continue;
+    const params = node.data?.params || {};
+    if (params.fromUnit && params.toUnit) continue;
+    const inputs = incoming.get(node.id) || [];
+    const fromUnit =
+      params.fromUnit ||
+      (inputs.length === 1
+        ? normalizeUnitCode(
+            resolveTerminalUnit(
+              inputs[0].source,
+              nodesById,
+              incoming,
+              props.availableSources,
+            ),
+          )
+        : null);
+    let toUnit = params.toUnit || null;
+    if (!toUnit) {
+      for (const edge of edges.value) {
+        if (edge.source !== node.id || !edge.targetHandle?.startsWith("f:"))
+          continue;
+        const field = (nodesById.get(edge.target)?.data?.fields || []).find(
+          (f) => `f:${f.fieldKey}` === edge.targetHandle,
+        );
+        toUnit = normalizeUnitCode(field?.unitCode ?? field?.unit);
+        if (toUnit) break;
+      }
+    }
+    if (
+      (fromUnit && fromUnit !== params.fromUnit) ||
+      (toUnit && toUnit !== params.toUnit)
+    ) {
+      updateNodeData(node.id, {
+        params: {
+          ...params,
+          ...(fromUnit ? { fromUnit } : {}),
+          ...(toUnit ? { toUnit } : {}),
+        },
+      });
+      changed = true;
+    }
+  }
+  if (changed) {
+    unitMetadataRepaired = true;
+    dirty.value = true;
+  }
+}
+
+/** Insert a unit conversion block on a wire into an adapter field. */
+function insertUnitConversion(edge, fromUnit, toUnit) {
+  const sink = findNode(edge.target);
+  const source = findNode(edge.source);
+  const position = sink?.position || { x: 700, y: 0 };
+  const conversionNode = createModifierNode("unitConversion", {
+    x: position.x - 260,
+    y: source?.position?.y ?? position.y + 40,
+  });
+  conversionNode.data = {
+    ...conversionNode.data,
+    collapsed: true,
+    params: { fromUnit, toUnit },
+  };
+  addNodes([conversionNode]);
+  addEdges([
+    {
+      source: edge.source,
+      sourceHandle: edge.sourceHandle,
+      id: genId("e"),
+      target: conversionNode.id,
+      targetHandle: "in",
+    },
+    {
+      id: genId("e"),
+      source: conversionNode.id,
+      sourceHandle: "out",
+      target: edge.target,
+      targetHandle: edge.targetHandle,
+    },
+  ]);
+  return conversionNode;
+}
+
+function directSourceValue(source) {
+  if (source?.type === "attribute") return `a:${source.attributeId}`;
+  if (source?.type === "storeAttribute") return `s:${source.attributeId}`;
+  return null;
+}
+
+/** Resolve a unit warning by inserting the matching conversion block. */
+function fixUnitMismatch(warning) {
+  if (!warning?.convertible) return;
+  if (warning.edgeId) {
+    const edge = edges.value.find((e) => e.id === warning.edgeId);
+    if (!edge) return;
+    removeEdges([edge.id]);
+    insertUnitConversion(edge, warning.sourceUnit, warning.targetUnit);
+  } else if (warning.sinkId && warning.fieldKey) {
+    const field = (findNode(warning.sinkId)?.data?.fields || []).find(
+      (f) => f.fieldKey === warning.fieldKey,
+    );
+    const value = directSourceValue(field?.source);
+    if (!value) return;
+    setSinkFieldSource(warning.sinkId, warning.fieldKey, value);
+  } else {
+    return;
+  }
+  dirty.value = true;
+  nextTick(() => {
+    refreshAnalysis();
+    schedulePreview();
+  });
+}
+
+provide("mappingUnitFix", fixUnitMismatch);
+
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
+  reconcileUnitMetadata();
   const { analysisBySink } = analyzeFields(nodes.value, edges.value);
   const unitWarnings = analyzeUnitWarnings(
     nodes.value,
@@ -679,8 +852,7 @@ function setSinkFieldSource(sinkId, fieldKey, value) {
       {
         id: src.attributeId,
         name: sourceDefinition?.name,
-        valueType:
-          sourceDefinition?.type?.toLowerCase() === "number" ? "number" : "any",
+        valueType: attributeValueType(sourceDefinition?.type) || "any",
         unitCode: normalizedSourceUnit,
       },
     );
@@ -1158,35 +1330,11 @@ onConnect((conn) => {
         ? getUnitConversion(normalizedSourceUnit, normalizedTargetUnit)
         : null;
     if (conversion) {
-      const position = sink.position || { x: 700, y: 0 };
-      conversionNode = createModifierNode("unitConversion", {
-        x: position.x - 260,
-        y: position.y + 40,
-      });
-      conversionNode.data = {
-        ...conversionNode.data,
-        collapsed: true,
-        params: {
-          fromUnit: normalizedSourceUnit,
-          toUnit: normalizedTargetUnit,
-        },
-      };
-      addNodes([conversionNode]);
-      addEdges([
-        {
-          ...next,
-          id: genId("e"),
-          target: conversionNode.id,
-          targetHandle: "in",
-        },
-        {
-          id: genId("e"),
-          source: conversionNode.id,
-          sourceHandle: "out",
-          target: next.target,
-          targetHandle: next.targetHandle,
-        },
-      ]);
+      conversionNode = insertUnitConversion(
+        next,
+        normalizedSourceUnit,
+        normalizedTargetUnit,
+      );
     }
   }
   if (!conversionNode) addEdges([{ ...next, id: genId("e") }]);
@@ -1526,6 +1674,7 @@ async function load(options = {}) {
     return;
   }
   if (previewTimer) clearTimeout(previewTimer);
+  unitMetadataRepaired = false;
   loading.value = true;
   loadingPhase.value = "graph";
   await waitForPaint();
@@ -1666,7 +1815,8 @@ async function load(options = {}) {
       );
     }
 
-    dirty.value = false;
+    // Repaired conversion units must be saved to affect export.
+    dirty.value = unitMetadataRepaired;
     await loadStep(
       "load:historySnapshot",
       async () => {

@@ -63,7 +63,7 @@ public static class MappingFieldSchema
         options = f.Options,
         description = f.Description,
         unit = f.Unit,
-        unitCode = f.UnitCode,
+        unitCode = AttributeUnits.NormalizeCode(f.UnitCode ?? f.Unit),
         unitId = f.UnitId,
         group = f.Group,
         minValue = f.MinValue,

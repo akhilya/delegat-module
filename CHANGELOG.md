@@ -254,6 +254,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Mapping editor units: the same unit written differently (for example "mm" and "Миллиметр") no longer shows a mismatch. Attribute blocks take their type and unit from the attribute definition instead of showing "Any" or a stale unit. Values passed through multiply/divide/add/subtract no longer inherit the source unit. Hovering the mismatch icon explains the problem; when a conversion exists, clicking it inserts a Unit conversion block. Unit conversion blocks without explicit units take them from their input attribute and the marketplace field they feed, instead of showing "? → ?".
+
 - The mapping editor asks before you leave with unsaved changes and offers to save first. If a graph was changed elsewhere (another tab or the assistant) since it was opened, saving it returns a conflict: you can load the latest version or overwrite it. Assistant edits no longer reload the canvas over unsaved work without asking. Importing a graph file and auto-arranging blocks now ask for confirmation in the app's own dialogs.
 - Attribute option lookup for the mapping editor (`GET /marketplace/attribute-options`) is now limited to the selected store.
 

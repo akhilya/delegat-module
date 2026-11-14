@@ -8,6 +8,7 @@ import { setPageTitle, setBreadcrumbParentLabel } from "@/router";
 import { mappingDisplayName } from "@/lib/mappingDisplayName";
 import { localizeExternalFieldOptions } from "@/components/marketplace/graph/fieldLabels.js";
 import { confirm } from "@/composables/useConfirm";
+import { normalizeUnitCode } from "@/lib/attributeUnits";
 
 const EMPTY_SOURCES = Object.freeze({
   productFields: [],
@@ -26,7 +27,7 @@ function toFieldDef(f) {
     group: f.group ?? null,
     sortOrder: f.sortOrder,
     unit: f.unit || null,
-    unitCode: f.unitCode || null,
+    unitCode: normalizeUnitCode(f.unitCode || f.unit),
     unitId: f.unitId || null,
     minValue: f.minValue ?? null,
     maxValue: f.maxValue ?? null,

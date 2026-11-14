@@ -422,6 +422,27 @@ function productFieldType(key, sources) {
 
 // ---- Palette node factories ---------------------------------------------
 
+/** Pin type for a category/store attribute definition type (e.g. "Number"). */
+export function attributeValueType(type) {
+  switch (String(type || "").toLowerCase()) {
+    case "number":
+    case "integer":
+    case "decimal":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "select":
+      return "select";
+    case "multiselect":
+      return "multiselect";
+    case "text":
+    case "string":
+      return "string";
+    default:
+      return null;
+  }
+}
+
 export function createSourceNode(kind, position, payload = {}) {
   switch (kind) {
     case "attribute":
@@ -429,7 +450,8 @@ export function createSourceNode(kind, position, payload = {}) {
       return node(kind, position, {
         attributeId: payload.id,
         label: payload.name,
-        valueType: payload.valueType || "any",
+        valueType:
+          payload.valueType || attributeValueType(payload.type) || "any",
         unitCode: payload.unitCode || null,
       });
     case "productField":
