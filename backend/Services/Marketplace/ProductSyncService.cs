@@ -2259,11 +2259,13 @@ public partial class ProductSyncService
 
         var existingProductAttrs = await _context.productAttributeValues
             .AsNoTracking()
+            .Include(pav => pav.files)
             .Where(pav => pav.productId == productId)
             .ToListAsync(ct);
 
         var existingStoreAttrs = await _context.storeProductAttributeValues
             .AsNoTracking()
+            .Include(sav => sav.files)
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
@@ -2288,7 +2290,19 @@ public partial class ProductSyncService
                     if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
                         continue;
                     if (categorySpec.Type == AttributeType.File)
+                    {
+                        var existing = existingProductAttrs.FirstOrDefault(
+                            a => a.attributeId == fieldMapping.sourceAttributeId.Value);
+                        if (existing?.files.Count > 0)
+                            break;
+                        var urls = GetImportedFileUrls(externalValue, categorySpec);
+                        if (urls.Count > 0)
+                        {
+                            result.Add(new AttributeChangeDetail(
+                                fieldName, null, string.Join("\n", urls)));
+                        }
                         continue;
+                    }
                     var stringValue = FormatImportedAttribute(
                         externalValue, categorySpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
@@ -2310,7 +2324,19 @@ public partial class ProductSyncService
                     if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
                         continue;
                     if (storeSpec.Type == AttributeType.File)
+                    {
+                        var existing = existingStoreAttrs.FirstOrDefault(
+                            a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+                        if (existing?.files.Count > 0)
+                            break;
+                        var urls = GetImportedFileUrls(externalValue, storeSpec);
+                        if (urls.Count > 0)
+                        {
+                            result.Add(new AttributeChangeDetail(
+                                fieldName, null, string.Join("\n", urls)));
+                        }
                         continue;
+                    }
                     var stringValue = FormatImportedAttribute(
                         externalValue, storeSpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
