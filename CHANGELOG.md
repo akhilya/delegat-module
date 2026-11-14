@@ -9,7 +9,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+
 ### Added
+
+- Improve marketplace field auto-mapping and group adapter fields in the mapping graph.
 
 - The product page action formerly labeled Import photos is now Import media: it previews and queues downloadable marketplace videos alongside photos when the adapter provides them, still appending to the gallery without replacing existing files.
 

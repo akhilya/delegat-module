@@ -231,6 +231,10 @@ const adapterValueSourceName = computed(() => {
 });
 const adapterPreview = computed(() => data.value.preview || {});
 const adapterFieldFilter = ref("");
+const adapterGroupFilter = ref("__all__");
+const adapterGroups = computed(() =>
+  [...new Set(adapterFields.value.map((f) => f.group).filter(Boolean))].sort(),
+);
 const bindingDialogOpen = ref(false);
 const bindingDialogField = ref(null);
 /** While the binding dialog is open for a field that has no source yet, keep "bind" radio selected. */
@@ -277,11 +281,14 @@ function commitCustomName(field, raw) {
 const filteredAdapterFields = computed(() => {
   const q = adapterFieldFilter.value.trim().toLowerCase();
   const list = adapterFields.value;
-  if (!q) return list;
   return list.filter((f) => {
     const hay =
       `${f.label || ""} ${f.fieldKey || ""} ${f.description || ""}`.toLowerCase();
-    return hay.includes(q);
+    return (
+      hay.includes(q) &&
+      (adapterGroupFilter.value === "__all__" ||
+        f.group === adapterGroupFilter.value)
+    );
   });
 });
 
@@ -838,6 +845,20 @@ function resolvePreview(fieldKey, raw) {
             class="h-8"
           />
 
+          <Select v-if="adapterGroups.length" v-model="adapterGroupFilter">
+            <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{{
+                t("marketplace.graph.allGroups")
+              }}</SelectItem>
+              <SelectItem
+                v-for="group in adapterGroups"
+                :key="group"
+                :value="group"
+                >{{ group }}</SelectItem
+              >
+            </SelectContent>
+          </Select>
           <div class="space-y-3">
             <div
               v-for="f in filteredAdapterFields"

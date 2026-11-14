@@ -397,11 +397,14 @@ public class CategoryImportService
                     unselectedAttributeFieldKeys.Contains(field.Key)
                     || skippedAttributeFieldKeys.Contains(field.Key)
                         ? (FieldMappingSourceType.Static, null, (int?)null)
-                        : DetermineAutoMapping(field, attributeMap);
+                        : FieldAutoMapping.Resolve(field, category.attributes?.ToList() ?? [],
+                            attributeMap.TryGetValue(field.Key, out var id) ? id : null);
                 return new FieldSpec
                 {
                     externalFieldKey = field.Key,
                     externalFieldName = field.Name,
+                    externalFieldGroup = field.Group,
+                    modifiersJson = FieldAutoMapping.Conversion(field, category.attributes?.FirstOrDefault(a => a.Id == sourceAttributeId)),
                     externalFieldType = field.Type,
                     externalFieldUnit = AttributeFieldConstraints.ResolveUnitLabel(field),
                     externalFieldUnitCode = AttributeFieldConstraints.ResolveUnitCode(field),
@@ -588,7 +591,7 @@ public class CategoryImportService
     {
         // Ozon attribute 9024 = SKU/Article
         if (key == "9024") return true;
-        if (key == "model" || name == "model") return true;
+
 
         var patterns = new[] { "sku", "\u0430\u0440\u0442\u0438\u043a\u0443\u043b", "article", "vendor_code", "vendorcode" };
         return patterns.Any(p => key.Contains(p) || name.Contains(p));
@@ -616,8 +619,8 @@ public class CategoryImportService
         if (key == "4191") return true;
 
         // "annotation" and "description" are the same thing
-        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "desc", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
-        return patterns.Any(p => key.Contains(p) || name.Contains(p));
+        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
+        return key == "desc" || name == "desc" || patterns.Any(p => key.Contains(p) || name.Contains(p));
     }
 
     internal static bool IsPriceField(string key, string name)

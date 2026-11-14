@@ -251,22 +251,14 @@ public static class GraphGenerator
                 existing.unit = fm.externalFieldUnit;
                 existing.unitCode = fm.externalFieldUnitCode;
                 existing.unitId = fm.externalFieldUnitId;
+                existing.group = fm.externalFieldGroup;
+                existing.description = fm.externalFieldDescription;
                 continue;
             }
-            adapter.data.fields.Add(new AdapterField
-            {
-                fieldKey = fm.externalFieldKey,
-                unit = fm.externalFieldUnit,
-                unitCode = fm.externalFieldUnitCode,
-                unitId = fm.externalFieldUnitId,
-                label = fm.externalFieldName ?? fm.externalFieldKey,
-                outputType = fm.externalFieldType ?? "string",
-                isRequired = fm.isRequired,
-                aliasOf = fm.aliasOf,
-                source = string.IsNullOrEmpty(fm.aliasOf) && ParseActiveModifiers(fm.modifiersJson).Count == 0
-                    ? DirectBinding(fm)
-                    : null,
-            });
+            graph.edges ??= new List<GraphEdge>();
+            var added = AppendSpecsToSink([fm], adapter.id ?? "adapter-fields", graph.nodes, graph.edges,
+                prefix => $"{prefix}-{Guid.NewGuid():N}");
+            adapter.data.fields.AddRange(added);
             have.Add(fm.externalFieldKey);
         }
 
