@@ -2374,6 +2374,7 @@ public partial class ProductSyncService
             .Select(item => item.Trim())
             .Where(item => item.Length > 0)
             .Where(item => UrlSafety.TryValidateHttpUrl(item, out _, out _))
+            .Distinct(StringComparer.Ordinal)
             .ToList();
         return urls.Take(spec.AllowMultipleFiles ? 20 : 1).ToList();
     }
@@ -2444,7 +2445,7 @@ public partial class ProductSyncService
         {
             var matchingRows = pendingRows
                 .Where(row => row.status == ImageDownloadStatus.Pending
-                    && ImageSourceUrl.EqualsNormalized(row.imageUrl, url))
+                    && string.Equals(row.imageUrl.Trim(), url.Trim(), StringComparison.Ordinal))
                 .ToList();
             if (matchingRows.Any(row =>
                     row.targetAttributeId == categoryAttributeId

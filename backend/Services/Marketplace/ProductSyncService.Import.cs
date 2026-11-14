@@ -339,7 +339,10 @@ public partial class ProductSyncService
             var galleryRow = galleryRows.FirstOrDefault(row =>
                 !row.targetAttributeId.HasValue
                 && !row.targetStoreAttributeId.HasValue
-                && ImageSourceUrl.EqualsNormalized(row.imageUrl, attributeRow.imageUrl));
+                && string.Equals(
+                    row.imageUrl.Trim(),
+                    attributeRow.imageUrl.Trim(),
+                    StringComparison.Ordinal));
             if (galleryRow != null)
             {
                 galleryRow.targetAttributeId = attributeRow.targetAttributeId;

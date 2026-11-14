@@ -106,12 +106,19 @@ public class ProductSyncImportAttributesTests
             .Where(row => row.productId == product.Id)
             .OrderBy(row => row.imageIndex)
             .ToListAsync();
-        Assert.Equal(2, rows.Count);
+        Assert.Equal(3, rows.Count);
+
+        var galleryVideoDownload = Assert.Single(rows,
+            row => row.imageUrl == "https://8.8.8.8/asset_1_h264.mp4?token=fresh");
+        Assert.Null(galleryVideoDownload.targetAttributeId);
+        Assert.False(galleryVideoDownload.skipGallery);
+        Assert.Equal("революционеры.mp4", galleryVideoDownload.mediaFileName);
 
         var videoDownload = Assert.Single(rows, row => row.targetAttributeId == video.Id);
+        Assert.Equal("https://8.8.8.8/asset_1_h264.mp4", videoDownload.imageUrl);
         Assert.Equal(PendingMediaKind.Video, videoDownload.mediaKind);
         Assert.Equal("революционеры.mp4", videoDownload.mediaFileName);
-        Assert.False(videoDownload.skipGallery);
+        Assert.True(videoDownload.skipGallery);
         Assert.Null(videoDownload.targetStoreAttributeId);
 
         var coverDownload = Assert.Single(rows, row => row.targetAttributeId == cover.Id);
@@ -161,7 +168,9 @@ public class ProductSyncImportAttributesTests
         var multiUrlValues = new List<string>
         {
             "https://8.8.8.8/first.jpg",
-            "https://8.8.8.8/no-extension"
+            "https://8.8.8.8/no-extension",
+            "https://8.8.8.8/download?id=1",
+            "https://8.8.8.8/download?id=2"
         };
         multiUrlValues.AddRange(Enumerable.Range(0, 20)
             .Select(index => $"https://8.8.8.8/multi-{index}.jpg"));
@@ -201,6 +210,8 @@ public class ProductSyncImportAttributesTests
         Assert.Equal(20, storeRows.Count);
         Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/first.jpg");
         Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/no-extension");
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/download?id=1");
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/download?id=2");
         Assert.DoesNotContain(storeRows, row => row.imageUrl == "https://8.8.8.8/multi-18.jpg");
         Assert.Equal(PendingMediaKind.Image, storeRows.Single(row => row.imageUrl.EndsWith("first.jpg")).mediaKind);
         var typedVideo = Assert.Single(storeRows, row => row.imageUrl.EndsWith("no-extension"));
