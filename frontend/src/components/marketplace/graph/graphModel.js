@@ -757,6 +757,16 @@ export function validateGraph(nodes, edges) {
       });
     }
 
+    if (n.type === "modifier" && ins.length > 0 &&
+        !ins.some((edge) => !edge.targetHandle || edge.targetHandle === "in") &&
+        ins.some((edge) => edge.targetHandle?.startsWith("p:"))) {
+      issues.push({
+        level: "warning",
+        nodeId: n.id,
+        message: t("marketplace.graph.validation.modifierWithoutValue"),
+      });
+    }
+
     if (n.type === "modifier" && !MODIFIER_CATALOG[n.data?.modifierType]) {
       issues.push({
         level: "error",

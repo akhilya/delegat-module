@@ -1811,7 +1811,10 @@ public partial class ProductSyncService
         int connectionId,
         int categoryId,
         Dictionary<string, object> externalAttributes,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? authorUserId = null,
+        string? mediaBatchId = null,
+        IReadOnlyList<ExternalMedia>? externalMedia = null)
     {
         // Check whether the product has a selected mapping
         var existingLink = await _context.productMarketplaceLinks
@@ -1841,13 +1844,31 @@ public partial class ProductSyncService
             return 0;
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
         var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
 
         var (categoryAttributeSpecs, storeAttributeSpecs) =
             await LoadAttributeSpecsAsync(categoryId, noTracking: true, ct);
 
+        var existingProductAttrs = await _context.productAttributeValues
+            .Include(value => value.files)
+            .Where(value => value.productId == productId)
+            .ToListAsync(ct);
+        var existingStoreAttrs = await _context.storeProductAttributeValues
+            .Include(value => value.files)
+            .Where(value => value.productId == productId)
+            .ToListAsync(ct);
+        var pendingRows = authorUserId.HasValue
+            ? await _context.pendingImageDownloads
+                .Where(row => row.productId == productId && row.status == ImageDownloadStatus.Pending)
+                .ToListAsync(ct)
+            : [];
+        var productStoreId = authorUserId.HasValue
+            ? await _context.products.Where(product => product.Id == productId)
+                .Select(product => product.storeId).FirstOrDefaultAsync(ct)
+            : 0;
         var importedCount = 0;
+        var dirty = false;
 
         foreach (var fieldMapping in enabledMappings)
         {
@@ -1860,6 +1881,35 @@ public partial class ProductSyncService
                 case FieldMappingSourceType.CategoryAttribute when fieldMapping.sourceAttributeId.HasValue:
                     if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
                         continue;
+
+                    var existing = existingProductAttrs.FirstOrDefault(
+                        value => value.attributeId == fieldMapping.sourceAttributeId.Value);
+                    if (categorySpec.Type == AttributeType.File)
+                    {
+                        if (existing?.files.Count > 0)
+                            continue;
+                        if (existing != null && existing.value.Length > 0)
+                        {
+                            existing.value = string.Empty;
+                            dirty = true;
+                        }
+                        if (authorUserId.HasValue && QueueFileAttributeUrls(
+                                productId,
+                                productStoreId,
+                                authorUserId.Value,
+                                mediaBatchId,
+                                categoryAttributeId: fieldMapping.sourceAttributeId.Value,
+                                storeAttributeId: null,
+                                categorySpec,
+                                externalValue,
+                                externalMedia,
+                                pendingRows))
+                        {
+                            importedCount++;
+                            dirty = true;
+                        }
+                        continue;
+                    }
 
                     var productValue = FormatImportedAttribute(
                         externalValue, categorySpec, fieldMapping.modifiersJson);
@@ -1875,11 +1925,41 @@ public partial class ProductSyncService
                     });
                     _context.productAttributeValues.Add(productAttrValue);
                     importedCount++;
+                    dirty = true;
                     break;
 
                 case FieldMappingSourceType.StoreAttribute when fieldMapping.sourceAttributeId.HasValue:
                     if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
                         continue;
+
+                    var existingStore = existingStoreAttrs.FirstOrDefault(
+                        value => value.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+                    if (storeSpec.Type == AttributeType.File)
+                    {
+                        if (existingStore?.files.Count > 0)
+                            continue;
+                        if (existingStore != null && existingStore.value.Length > 0)
+                        {
+                            existingStore.value = string.Empty;
+                            dirty = true;
+                        }
+                        if (authorUserId.HasValue && QueueFileAttributeUrls(
+                                productId,
+                                productStoreId,
+                                authorUserId.Value,
+                                mediaBatchId,
+                                categoryAttributeId: null,
+                                storeAttributeId: fieldMapping.sourceAttributeId.Value,
+                                storeSpec,
+                                externalValue,
+                                externalMedia,
+                                pendingRows))
+                        {
+                            importedCount++;
+                            dirty = true;
+                        }
+                        continue;
+                    }
 
                     var storeValue = FormatImportedAttribute(
                         externalValue, storeSpec, fieldMapping.modifiersJson);
@@ -1895,14 +1975,13 @@ public partial class ProductSyncService
                     });
                     _context.storeProductAttributeValues.Add(storeAttrValue);
                     importedCount++;
+                    dirty = true;
                     break;
             }
         }
 
-        if (importedCount > 0)
-        {
+        if (dirty)
             await _context.SaveChangesAsync(ct);
-        }
 
         return importedCount;
     }
@@ -1919,7 +1998,10 @@ public partial class ProductSyncService
         int categoryId,
         Dictionary<string, object> externalAttributes,
         CancellationToken ct,
-        HashSet<string>? excludeFieldNames = null)
+        HashSet<string>? excludeFieldNames = null,
+        int? authorUserId = null,
+        string? mediaBatchId = null,
+        IReadOnlyList<ExternalMedia>? externalMedia = null)
     {
         var changes = new List<AttributeChangeDetail>();
 
@@ -1937,7 +2019,7 @@ public partial class ProductSyncService
         }
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
 
         if (enabledMappings.Count == 0)
         {
@@ -1948,10 +2030,12 @@ public partial class ProductSyncService
 
         // Pre-load existing attribute values for this product
         var existingProductAttrs = await _context.productAttributeValues
+            .Include(value => value.files)
             .Where(pav => pav.productId == productId)
             .ToListAsync(ct);
 
         var existingStoreAttrs = await _context.storeProductAttributeValues
+            .Include(value => value.files)
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
@@ -1959,6 +2043,15 @@ public partial class ProductSyncService
             await LoadAttributeSpecsAsync(categoryId, noTracking: false, ct);
 
         var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
+        var pendingRows = authorUserId.HasValue
+            ? await _context.pendingImageDownloads
+                .Where(row => row.productId == productId && row.status == ImageDownloadStatus.Pending)
+                .ToListAsync(ct)
+            : [];
+        var productStoreId = authorUserId.HasValue
+            ? await _context.products.Where(item => item.Id == productId)
+                .Select(item => item.storeId).FirstOrDefaultAsync(ct)
+            : 0;
 
         _logger.LogDebug(
             "Updating attributes: productId={ProductId}, enabledMappings={Count}, externalKeys=[{Keys}]",
@@ -1995,13 +2088,36 @@ public partial class ProductSyncService
                         continue;
                     }
 
+                    var existing = existingProductAttrs.FirstOrDefault(
+                        a => a.attributeId == fieldMapping.sourceAttributeId.Value);
+                    if (categorySpec.Type == AttributeType.File)
+                    {
+                        if (existing?.files.Count > 0)
+                            break;
+                        if (existing != null && existing.value.Length > 0)
+                        {
+                            existing.value = string.Empty;
+                            dirty = true;
+                        }
+                        if (authorUserId.HasValue && QueueFileAttributeUrls(
+                                productId,
+                                productStoreId,
+                                authorUserId.Value,
+                                mediaBatchId,
+                                categoryAttributeId: fieldMapping.sourceAttributeId.Value,
+                                storeAttributeId: null,
+                                categorySpec,
+                                externalValue,
+                                externalMedia,
+                                pendingRows))
+                            dirty = true;
+                        break;
+                    }
+
                     var stringValue = FormatImportedAttribute(
                         externalValue, categorySpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
                         continue;
-
-                    var existing = existingProductAttrs.FirstOrDefault(
-                        a => a.attributeId == fieldMapping.sourceAttributeId.Value);
 
                     if (existing != null)
                     {
@@ -2038,13 +2154,36 @@ public partial class ProductSyncService
                     if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
                         continue;
 
+                    var existing = existingStoreAttrs.FirstOrDefault(
+                        a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+                    if (storeSpec.Type == AttributeType.File)
+                    {
+                        if (existing?.files.Count > 0)
+                            break;
+                        if (existing != null && existing.value.Length > 0)
+                        {
+                            existing.value = string.Empty;
+                            dirty = true;
+                        }
+                        if (authorUserId.HasValue && QueueFileAttributeUrls(
+                                productId,
+                                productStoreId,
+                                authorUserId.Value,
+                                mediaBatchId,
+                                categoryAttributeId: null,
+                                storeAttributeId: fieldMapping.sourceAttributeId.Value,
+                                storeSpec,
+                                externalValue,
+                                externalMedia,
+                                pendingRows))
+                            dirty = true;
+                        break;
+                    }
+
                     var stringValue = FormatImportedAttribute(
                         externalValue, storeSpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
                         continue;
-
-                    var existing = existingStoreAttrs.FirstOrDefault(
-                        a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
 
                     if (existing != null)
                     {
@@ -2116,15 +2255,17 @@ public partial class ProductSyncService
             return result;
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
 
         var existingProductAttrs = await _context.productAttributeValues
             .AsNoTracking()
+            .Include(pav => pav.files)
             .Where(pav => pav.productId == productId)
             .ToListAsync(ct);
 
         var existingStoreAttrs = await _context.storeProductAttributeValues
             .AsNoTracking()
+            .Include(sav => sav.files)
             .Where(sav => sav.productId == productId)
             .ToListAsync(ct);
 
@@ -2148,6 +2289,20 @@ public partial class ProductSyncService
                 {
                     if (!categoryAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var categorySpec))
                         continue;
+                    if (categorySpec.Type == AttributeType.File)
+                    {
+                        var existingFileValue = existingProductAttrs.FirstOrDefault(
+                            a => a.attributeId == fieldMapping.sourceAttributeId.Value);
+                        if (existingFileValue?.files.Count > 0)
+                            break;
+                        var urls = GetImportedFileUrls(externalValue, categorySpec);
+                        if (urls.Count > 0)
+                        {
+                            result.Add(new AttributeChangeDetail(
+                                fieldName, null, string.Join("\n", urls)));
+                        }
+                        continue;
+                    }
                     var stringValue = FormatImportedAttribute(
                         externalValue, categorySpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
@@ -2168,6 +2323,20 @@ public partial class ProductSyncService
                 {
                     if (!storeAttributeSpecs.TryGetValue(fieldMapping.sourceAttributeId.Value, out var storeSpec))
                         continue;
+                    if (storeSpec.Type == AttributeType.File)
+                    {
+                        var existingFileValue = existingStoreAttrs.FirstOrDefault(
+                            a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
+                        if (existingFileValue?.files.Count > 0)
+                            break;
+                        var urls = GetImportedFileUrls(externalValue, storeSpec);
+                        if (urls.Count > 0)
+                        {
+                            result.Add(new AttributeChangeDetail(
+                                fieldName, null, string.Join("\n", urls)));
+                        }
+                        continue;
+                    }
                     var stringValue = FormatImportedAttribute(
                         externalValue, storeSpec, fieldMapping.modifiersJson);
                     if (string.IsNullOrEmpty(stringValue))
@@ -2189,7 +2358,133 @@ public partial class ProductSyncService
         return result;
     }
 
-    private readonly record struct AttrSpec(AttributeType Type, string? Options);
+    private readonly record struct AttrSpec(
+        AttributeType Type,
+        string? Options,
+        bool AllowMultipleFiles);
+
+    private static readonly HashSet<string> ImportedVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"
+    };
+
+    private static List<string> GetImportedFileUrls(object? value, AttrSpec spec)
+    {
+        var urls = ReadStringValues(value)
+            .Select(item => item.Trim())
+            .Where(item => item.Length > 0)
+            .Where(item => UrlSafety.TryValidateHttpUrl(item, out _, out _))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return urls.Take(spec.AllowMultipleFiles ? 20 : 1).ToList();
+    }
+
+    private static IEnumerable<string> ReadStringValues(object? value)
+    {
+        if (value is string text)
+        {
+            yield return text;
+            yield break;
+        }
+
+        if (value is JsonElement json)
+        {
+            if (json.ValueKind == JsonValueKind.String && json.GetString() is string jsonText)
+                yield return jsonText;
+            else if (json.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in json.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is string itemText)
+                        yield return itemText;
+                }
+            }
+            yield break;
+        }
+
+        if (value is System.Collections.IEnumerable values)
+        {
+            foreach (var item in values)
+            {
+                foreach (var textItem in ReadStringValues(item))
+                    yield return textItem;
+            }
+        }
+    }
+
+    private static (PendingMediaKind Kind, string? FileName) GetImportedMediaMetadata(
+        string url,
+        IReadOnlyList<ExternalMedia>? externalMedia)
+    {
+        var typedVideo = externalMedia?.FirstOrDefault(media =>
+            string.Equals(media.Kind, "video", StringComparison.OrdinalIgnoreCase)
+            && ImageSourceUrl.EqualsNormalized(media.Url, url));
+        var isVideoExtension = Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && ImportedVideoExtensions.Contains(Path.GetExtension(uri.AbsolutePath));
+        return (isVideoExtension || typedVideo != null ? PendingMediaKind.Video : PendingMediaKind.Image,
+            SafeMediaFileName(typedVideo?.FileName));
+    }
+
+    private bool QueueFileAttributeUrls(
+        int productId,
+        int storeId,
+        int authorUserId,
+        string? mediaBatchId,
+        int? categoryAttributeId,
+        int? storeAttributeId,
+        AttrSpec spec,
+        object externalValue,
+        IReadOnlyList<ExternalMedia>? externalMedia,
+        List<PendingImageDownload> pendingRows)
+    {
+        if (storeId <= 0 || (categoryAttributeId.HasValue == storeAttributeId.HasValue))
+            return false;
+
+        var changed = false;
+        foreach (var url in GetImportedFileUrls(externalValue, spec))
+        {
+            var matchingRows = pendingRows
+                .Where(row => row.status == ImageDownloadStatus.Pending
+                    && string.Equals(row.imageUrl.Trim(), url.Trim(), StringComparison.Ordinal))
+                .ToList();
+            if (matchingRows.Any(row =>
+                    row.targetAttributeId == categoryAttributeId
+                    && row.targetStoreAttributeId == storeAttributeId))
+                continue;
+
+            var unassigned = matchingRows.FirstOrDefault(row =>
+                !row.targetAttributeId.HasValue && !row.targetStoreAttributeId.HasValue);
+            if (unassigned != null)
+            {
+                unassigned.targetAttributeId = categoryAttributeId;
+                unassigned.targetStoreAttributeId = storeAttributeId;
+                changed = true;
+                continue;
+            }
+
+            var (kind, fileName) = GetImportedMediaMetadata(url, externalMedia);
+            var nextIndex = pendingRows.Count == 0 ? 0 : pendingRows.Max(row => row.imageIndex) + 1;
+            var pending = new PendingImageDownload
+            {
+                productId = productId,
+                storeId = storeId,
+                authorUserId = authorUserId,
+                imageUrl = url,
+                mediaKind = kind,
+                mediaFileName = fileName,
+                imageIndex = nextIndex,
+                targetAttributeId = categoryAttributeId,
+                targetStoreAttributeId = storeAttributeId,
+                skipGallery = true,
+                batchId = mediaBatchId
+            };
+            _context.pendingImageDownloads.Add(pending);
+            pendingRows.Add(pending);
+            changed = true;
+        }
+
+        return changed;
+    }
 
     private async Task<(Dictionary<int, AttrSpec> Category, Dictionary<int, AttrSpec> Store)> LoadAttributeSpecsAsync(
         int categoryId,
@@ -2206,9 +2501,9 @@ public partial class ProductSyncService
         }
 
         var category = await categoryQuery.ToDictionaryAsync(
-            ca => ca.Id, ca => new AttrSpec(ca.type, ca.options), ct);
+            ca => ca.Id, ca => new AttrSpec(ca.type, ca.options, ca.allowMultipleFiles), ct);
         var store = await storeQuery.ToDictionaryAsync(
-            sa => sa.Id, sa => new AttrSpec(sa.type, sa.options), ct);
+            sa => sa.Id, sa => new AttrSpec(sa.type, sa.options, sa.allowMultipleFiles), ct);
         return (category, store);
     }
 

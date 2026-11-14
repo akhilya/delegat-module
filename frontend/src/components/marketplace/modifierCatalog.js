@@ -18,7 +18,6 @@ export const MODIFIER_CATALOG = {
     category: "number",
     reversible: true,
     applicableTypes: ["number", "integer"],
-    hiddenFromPalette: true,
     params: [],
     summary: (p) =>
       t("marketplace.graph.unitConversion.summary", {

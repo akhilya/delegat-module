@@ -9,11 +9,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
-
 ### Added
 
 - Improve marketplace field auto-mapping and group adapter fields in the mapping graph. Ambiguous duplicate attributes require a choice, and compatible units are converted automatically.
 
+- Mapping unit conversions offer automatic detection by default and manual source/destination unit selectors. Automatic mode refreshes units from current attribute definitions and adapter field names or descriptions for both export and reverse import.
 - The product page action formerly labeled Import photos is now Import media: it previews and queues downloadable marketplace videos alongside photos when the adapter provides them, still appending to the gallery without replacing existing files.
 
 - Product categories and store attributes support File values with ordered, product-owned attachments; the product gallery can mix images and downloaded videos. Ozon, Wildberries, and Yandex Market video imports are typed separately from image URLs. Their implemented export paths use stable, revocable HTTPS grants for selected gallery videos; Yandex supports up to six, Wildberries one MP4/MOV up to 50 MB, and Ozon applies no unverified limits. Ozon and Wildberries media payloads have fake-test coverage but have not been verified against live seller accounts.
@@ -257,6 +257,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Extra mapping branches and parameter-pin consumers no longer disable a valid unit conversion. Chained conversions retain the intermediate unit established by a destination field or the next manual conversion.
+- Collapsed mapping blocks keep parameter inputs from intercepting wires intended for the value input; existing connections to a parameter without a value input show a warning.
+- Wildberries photo exports replace the selected gallery instead of appending existing remote photos. Repeated photo URLs are removed before checking the 30-photo limit; video-only updates preserve remote photos.
+- Wildberries characteristic exports decode stored JSON arrays into individual values, so colors no longer require an extra To Text block to avoid sending a serialized array as the color name.
+
 - Mapping editor units: the same unit written differently (for example "mm" and "Миллиметр") no longer shows a mismatch. Attribute blocks take their type and unit from the attribute definition instead of showing "Any" or a stale unit. Values passed through multiply/divide/add/subtract no longer inherit the source unit. Hovering the mismatch icon explains the problem; when a conversion exists, clicking it inserts a Unit conversion block. Unit conversion blocks without explicit units take them from their input attribute and the marketplace field they feed, instead of showing "? → ?".
 
 - The mapping editor asks before you leave with unsaved changes and offers to save first. If a graph was changed elsewhere (another tab or the assistant) since it was opened, saving it returns a conflict: you can load the latest version or overwrite it. Assistant edits no longer reload the canvas over unsaved work without asking. Importing a graph file and auto-arranging blocks now ask for confirmation in the app's own dialogs.
@@ -266,6 +271,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Ozon video import reads complex attribute IDs returned as either `id` or `attribute_id`, and adapter logs now show the returned video attributes and why a video link was skipped.
 - Ozon video imports continue processing valid media when optional complex attribute lists or values are null.
 - Ozon imports now read gallery videos when Ozon returns complex attributes as a flat list, and exports no longer risk sending empty video groups back to Ozon.
+- Marketplace imports now download linked files into mapped File attributes, including Ozon “Видео” and “Видеообложка”, reusing gallery downloads where possible without replacing attributes that already have files.
+- Marketplace import previews now report mapped File attributes that have downloadable URLs but no attachments; fields excluded by the user remain untouched.
+- Multi-file marketplace imports preserve distinct download URLs even when only their query strings differ.
+- Extensionless marketplace downloads use content-type metadata to classify and name non-image files.
 - Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.
 - Store deletion works with MySQL automatic retries and handles trashed folder trees, restricting catalog references, scoped job/chat/history data, and both current and legacy storage prefixes; archive/chat objects are cleaned only after database commit.
 - Product transfers stage file bytes before opening the database transaction and atomically include category/group creation. Failed/cancelled attempts restore tracking and clean staged objects; database retries do not recopy files, and post-commit notification failures cannot delete committed media.

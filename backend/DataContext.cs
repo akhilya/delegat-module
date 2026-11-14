@@ -373,6 +373,9 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<PendingImageDownload>()
             .Property(x => x.mediaKind)
             .HasDefaultValue(PendingMediaKind.Image);
+        builder.Entity<PendingImageDownload>()
+            .Property(x => x.skipGallery)
+            .HasDefaultValue(false);
 
         builder.Entity<ProductAttributeFile>()
             .HasIndex(x => new { x.attributeValueId, x.fileId })

@@ -9,6 +9,7 @@ using Delegat.Models.Marketplace.DTOs;
 using Delegat.Models.Products;
 using Delegat.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using ExternalMedia = Delegat.Marketplace.SDK.DTOs.ExternalMedia;
 
 namespace Delegat.Services.Marketplace;
 
@@ -75,8 +76,18 @@ public partial class ProductSyncService
                 var mappings = categoryId.HasValue ? await _context.categoryMappings.AsNoTracking()
                     .Where(m => m.connectionId == connection.Id && m.localCategoryId == categoryId.Value)
                     .OrderBy(m => m.Id).ToListAsync(ct) : [];
+                var attributeMedia = new List<PendingImageDownload>();
                 if (categoryId.HasValue && mappings.Count == 1)
-                    await PrepareNewImportAttributesAsync(product, mappings[0], ImportedAttributeValue.Collect(external), ct);
+                {
+                    attributeMedia = await PrepareNewImportAttributesAsync(
+                        product,
+                        mappings[0],
+                        ImportedAttributeValue.Collect(external),
+                        authorId,
+                        mediaBatchId,
+                        external.Media,
+                        ct);
+                }
 
                 ProductMarketplaceLink? link = null;
                 if (linked)
@@ -99,8 +110,9 @@ public partial class ProductSyncService
                 if (linked && !string.IsNullOrEmpty(external.GroupId))
                     await PrepareNewImportGroupAsync(product, connection.Id, external.GroupId, external.GroupName, ct);
 
-                var media = authorId.HasValue
+                var galleryMedia = authorId.HasValue
                     ? PrepareNewImportMedia(product, external, authorId.Value, mediaBatchId) : [];
+                var media = MergeNewImportMedia(galleryMedia, attributeMedia);
                 await _quotaService.EnsureProductQuotaAsync(connection.storeId);
                 ct.ThrowIfCancellationRequested();
                 _context.products.Add(product);
@@ -125,11 +137,18 @@ public partial class ProductSyncService
         }
     }
 
-    private async Task PrepareNewImportAttributesAsync(Product product, CategoryMapping mapping,
-        Dictionary<string, object> external, CancellationToken ct)
+    private async Task<List<PendingImageDownload>> PrepareNewImportAttributesAsync(
+        Product product,
+        CategoryMapping mapping,
+        Dictionary<string, object> external,
+        int? authorId,
+        string? mediaBatchId,
+        IReadOnlyList<ExternalMedia>? externalMedia,
+        CancellationToken ct)
     {
-        if (external.Count == 0) return;
-        var fields = MappingService.ProjectGraphForImport(mapping.graphJson);
+        var downloads = new List<PendingImageDownload>();
+        if (external.Count == 0) return downloads;
+        var fields = await _mappingService.ProjectGraphForImportAsync(mapping.graphJson, ct);
         var byKey = new Dictionary<string, object>(external, StringComparer.OrdinalIgnoreCase);
         var (category, store) = await LoadAttributeSpecsAsync(mapping.localCategoryId, noTracking: true, ct);
         foreach (var field in fields)
@@ -139,17 +158,69 @@ public partial class ProductSyncService
             var id = field.sourceAttributeId.Value;
             if (field.sourceType == FieldMappingSourceType.CategoryAttribute && category.TryGetValue(id, out var categorySpec))
             {
+                if (categorySpec.Type == AttributeType.File)
+                {
+                    if (authorId.HasValue)
+                    {
+                        foreach (var url in GetImportedFileUrls(externalValue, categorySpec))
+                        {
+                            var (kind, fileName) = GetImportedMediaMetadata(url, externalMedia);
+                            downloads.Add(new PendingImageDownload
+                            {
+                                product = product,
+                                storeId = product.storeId,
+                                authorUserId = authorId.Value,
+                                imageUrl = url,
+                                imageIndex = downloads.Count,
+                                mediaKind = kind,
+                                mediaFileName = fileName,
+                                targetAttributeId = id,
+                                skipGallery = true,
+                                batchId = mediaBatchId
+                            });
+                        }
+                    }
+                    continue;
+                }
+
                 var value = FormatImportedAttribute(externalValue, categorySpec, field.modifiersJson);
                 if (!string.IsNullOrEmpty(value))
                     product.attributeValues.Add(new ProductAttributeValue { attributeId = id, value = value });
             }
             else if (field.sourceType == FieldMappingSourceType.StoreAttribute && store.TryGetValue(id, out var storeSpec))
             {
+                if (storeSpec.Type == AttributeType.File)
+                {
+                    if (authorId.HasValue)
+                    {
+                        foreach (var url in GetImportedFileUrls(externalValue, storeSpec))
+                        {
+                            var (kind, fileName) = GetImportedMediaMetadata(url, externalMedia);
+                            downloads.Add(new PendingImageDownload
+                            {
+                                product = product,
+                                storeId = product.storeId,
+                                authorUserId = authorId.Value,
+                                imageUrl = url,
+                                imageIndex = downloads.Count,
+                                mediaKind = kind,
+                                mediaFileName = fileName,
+                                targetStoreAttributeId = id,
+                                skipGallery = true,
+                                batchId = mediaBatchId
+                            });
+                        }
+                    }
+                    continue;
+                }
+
                 var value = FormatImportedAttribute(externalValue, storeSpec, field.modifiersJson);
                 if (!string.IsNullOrEmpty(value))
                     product.storeAttributeValues.Add(new StoreProductAttributeValue { storeAttributeId = id, value = value });
             }
         }
+
+        return downloads;
     }
 
     private static void PrepareNewImportVariants(Product product, int connectionId,
@@ -257,5 +328,32 @@ public partial class ProductSyncService
             .DistinctBy(m => ImageSourceUrl.Normalize(m.Url) ?? m.Url.Trim()).Take(100))
             Add(media.Url, PendingMediaKind.Video, media.FileName);
         return rows;
+    }
+
+    private static List<PendingImageDownload> MergeNewImportMedia(
+        List<PendingImageDownload> galleryRows,
+        List<PendingImageDownload> attributeRows)
+    {
+        foreach (var attributeRow in attributeRows)
+        {
+            var galleryRow = galleryRows.FirstOrDefault(row =>
+                !row.targetAttributeId.HasValue
+                && !row.targetStoreAttributeId.HasValue
+                && string.Equals(
+                    row.imageUrl.Trim(),
+                    attributeRow.imageUrl.Trim(),
+                    StringComparison.Ordinal));
+            if (galleryRow != null)
+            {
+                galleryRow.targetAttributeId = attributeRow.targetAttributeId;
+                galleryRow.targetStoreAttributeId = attributeRow.targetStoreAttributeId;
+                continue;
+            }
+
+            attributeRow.imageIndex = galleryRows.Count;
+            galleryRows.Add(attributeRow);
+        }
+
+        return galleryRows;
     }
 }

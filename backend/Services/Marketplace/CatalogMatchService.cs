@@ -355,7 +355,7 @@ public class CatalogMatchService
         }
 
         attributesImported = await ImportLinkedAttributesAsync(
-            connection, remotesById, linkedPairs, operationId, ct);
+            connection, remotesById, linkedPairs, operationId, userId, $"{operationId}-img", ct);
 
         await _operationLogger.ProgressAsync(
             operationId, connection.storeId, items.Count, linked, failed);
@@ -502,7 +502,7 @@ public class CatalogMatchService
             connection, adapter, mappingCache, operationId, ct);
 
         var attributesImported = await ImportLinkedAttributesAsync(
-            connection, repaired.Remotes, repaired.Pairs, operationId, ct);
+            connection, repaired.Remotes, repaired.Pairs, operationId, userId, $"{operationId}-img", ct);
 
         await _operationLogger.FinishAsync(
             operationId,
@@ -712,6 +712,8 @@ public class CatalogMatchService
         IReadOnlyDictionary<string, ExternalProduct> remotesById,
         IReadOnlyList<(int ProductId, string ExternalId)> linkedPairs,
         string operationId,
+        int authorUserId,
+        string? mediaBatchId,
         CancellationToken ct)
     {
         if (linkedPairs.Count == 0)
@@ -738,7 +740,14 @@ public class CatalogMatchService
                 continue;
 
             imported += await _productSync.ImportProductAttributesAsync(
-                productId, connection.Id, categoryId, attrs, ct);
+                productId,
+                connection.Id,
+                categoryId,
+                attrs,
+                ct,
+                authorUserId: authorUserId,
+                mediaBatchId: mediaBatchId,
+                externalMedia: remote.Media);
 
             if (n == linkedPairs.Count || n % 10 == 0)
             {

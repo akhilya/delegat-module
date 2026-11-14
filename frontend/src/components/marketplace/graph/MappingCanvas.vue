@@ -102,6 +102,7 @@ import { samePriceFieldSchema } from "./graphPriceFields.js";
 import {
   analyzeUnitWarnings,
   resolveTerminalUnit,
+  resolveConversionUnits,
 } from "@/lib/mappingUnitWarnings";
 import { getUnitConversion, normalizeUnitCode } from "@/lib/attributeUnits";
 
@@ -453,20 +454,10 @@ function attributeDefinition(node) {
   );
 }
 
-function incomingEdgesByTarget() {
-  const map = new Map();
-  for (const edge of edges.value) {
-    const list = map.get(edge.target) || [];
-    list.push(edge);
-    map.set(edge.target, list);
-  }
-  return map;
-}
-
 /**
  * Keep derived block metadata in step with the attribute definitions and wiring:
- * attribute blocks get their definition's type/unit, and a unit conversion without
- * explicit units takes them from its input source and the adapter field it feeds.
+ * attribute blocks get their definition's type/unit, and automatic conversions
+ * refresh both units from the input source and the adapter field they feed.
  */
 // Set when reconcileUnitMetadata repairs persisted params, so a load keeps the canvas dirty.
 let unitMetadataRepaired = false;
@@ -491,52 +482,24 @@ function reconcileUnitMetadata() {
     if (Object.keys(patch).length) updateNodeData(node.id, patch);
   }
 
-  const nodesById = new Map(nodes.value.map((node) => [node.id, node]));
-  const incoming = incomingEdgesByTarget();
+  const conversions = resolveConversionUnits(
+    nodes.value,
+    edges.value,
+    props.availableSources,
+  );
   for (const node of nodes.value) {
+    const params = conversions.get(node.id);
+    if (!params) continue;
     if (
-      node.type !== "modifier" ||
-      node.data?.modifierType !== "unitConversion"
-    )
-      continue;
-    const params = node.data?.params || {};
-    if (params.fromUnit && params.toUnit) continue;
-    const inputs = incoming.get(node.id) || [];
-    const fromUnit =
-      params.fromUnit ||
-      (inputs.length === 1
-        ? normalizeUnitCode(
-            resolveTerminalUnit(
-              inputs[0].source,
-              nodesById,
-              incoming,
-              props.availableSources,
-            ),
-          )
-        : null);
-    let toUnit = params.toUnit || null;
-    if (!toUnit) {
-      for (const edge of edges.value) {
-        if (edge.source !== node.id || !edge.targetHandle?.startsWith("f:"))
-          continue;
-        const field = (nodesById.get(edge.target)?.data?.fields || []).find(
-          (f) => `f:${f.fieldKey}` === edge.targetHandle,
-        );
-        toUnit = normalizeUnitCode(field?.unitCode ?? field?.unit);
-        if (toUnit) break;
-      }
-    }
-    if (
-      (fromUnit && fromUnit !== params.fromUnit) ||
-      (toUnit && toUnit !== params.toUnit)
+      params.fromUnit !== node.data?.params?.fromUnit ||
+      params.toUnit !== node.data?.params?.toUnit
     ) {
-      updateNodeData(node.id, {
-        params: {
-          ...params,
-          ...(fromUnit ? { fromUnit } : {}),
-          ...(toUnit ? { toUnit } : {}),
-        },
-      });
+      updateNodeData(node.id, { params });
+      if (selected.value?.id === node.id)
+        selected.value = {
+          ...selected.value,
+          data: { ...selected.value.data, params },
+        };
       changed = true;
     }
   }
@@ -1930,6 +1893,11 @@ function onContextMenu(e) {
 function isValidConnection(conn) {
   if (conn.source === conn.target) return false;
   if (conn.targetHandle === "out") return false; // output→output
+  const target = findNode(conn.target);
+  if (
+    target?.type === "modifier" && target.data?.collapsed &&
+    (conn.targetHandle?.startsWith("p:") || conn.targetHandle?.startsWith("field:"))
+  ) return false;
   return true;
 }
 
@@ -2099,7 +2067,8 @@ function onInspectorUpdate(patch) {
     ...(live || selected.value),
     data: next,
   };
-  if ("importable" in patch) nextTick(refreshAnalysis);
+  if ("importable" in patch || "params" in patch || "attributeId" in patch)
+    nextTick(refreshAnalysis);
   dirty.value = true;
   schedulePreview();
 }

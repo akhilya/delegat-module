@@ -16,6 +16,7 @@ import ValueMapEditor from "../ValueMapEditor.vue";
 import OptionMapEditor from "../OptionMapEditor.vue";
 import TemplateEditor from "../TemplateEditor.vue";
 import SearchableSelect from "@/components/ui/searchable-select/SearchableSelect.vue";
+import AttributeUnitSelect from "@/components/products/AttributeUnitSelect.vue";
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { Trash2, X, Plus } from "lucide-vue-next";
 import {
@@ -1035,17 +1036,30 @@ function resolvePreview(fieldKey, raw) {
 
       <!-- Modifier params -->
       <template v-else-if="type === 'modifier'">
-        <p
-          v-if="data.modifierType === 'unitConversion'"
-          class="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-        >
-          {{
-            t("marketplace.graph.unitConversion.inspectorHint", {
-              from: data.params?.fromUnit || "?",
-              to: data.params?.toUnit || "?",
-            })
-          }}
-        </p>
+        <div v-if="data.modifierType === 'unitConversion'" class="space-y-3">
+          <Label class="flex items-center gap-2">
+            <Checkbox
+              :model-value="data.params?.autoDetect !== false"
+              @update:model-value="setParam('autoDetect', $event === true)"
+            />
+            {{ t("marketplace.graph.unitConversion.autoDetect") }}
+          </Label>
+          <div v-for="key in ['fromUnit', 'toUnit']" :key="key" class="space-y-1.5">
+            <Label :for="`conversion-${key}`">{{ t(`marketplace.graph.unitConversion.${key}`) }}</Label>
+            <AttributeUnitSelect
+              :id="`conversion-${key}`"
+              :model-value="data.params?.[key] || ''"
+              :placeholder="t(`marketplace.graph.unitConversion.${key}`)"
+              :disabled="data.params?.autoDetect !== false"
+              @update:model-value="setParam(key, $event)"
+            />
+          </div>
+          <p class="text-xs text-muted-foreground">
+            {{ t("marketplace.graph.unitConversion.inspectorHint", {
+              from: data.params?.fromUnit || "?", to: data.params?.toUnit || "?",
+            }) }}
+          </p>
+        </div>
         <div v-if="isLlmGenerate" class="mb-4 space-y-2 rounded-md border p-3">
           <Label class="text-xs font-medium">{{
             t("marketplace.graph.inspector.additionalInputs")

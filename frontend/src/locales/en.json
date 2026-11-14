@@ -1927,6 +1927,9 @@
       "unitMismatchFixHint": "Click to insert a Unit conversion block ({source} → {target}).",
       "unitMismatchExport": "Export is allowed and sends the original value unchanged.",
       "unitConversion": {
+        "autoDetect": "Detect automatically",
+        "fromUnit": "From unit",
+        "toUnit": "To unit",
         "title": "Unit conversion",
         "summary": "{from} → {to}",
         "inspectorHint": "Converts numeric values from {from} to {to}. The inverse is applied when importing values back."
@@ -2077,6 +2080,7 @@
         }
       },
       "validation": {
+        "modifierWithoutValue": "A parameter is connected, but the Value input is empty. Connect the attribute to the Value input.",
         "fieldNotConnectedAdapter": "Adapter field «{label}» is not connected",
         "fieldNotConnectedPrice": "Price field «{label}» is not connected",
         "requiredFieldOmitted": "Required field «{label}» is set to not send",

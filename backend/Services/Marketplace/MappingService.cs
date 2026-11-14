@@ -78,6 +78,11 @@ public class MappingService
         if (graph == null)
             return new GraphEvalResult();
 
+        GraphUnitMetadata.Reconcile(graph, (type, id) => type == "attribute"
+            ? product.category?.attributes?.FirstOrDefault(a => a.Id == id)?.unitCode
+                ?? product.attributeValues?.FirstOrDefault(a => a.attributeId == id)?.attribute?.unitCode
+            : product.storeAttributeValues?.FirstOrDefault(a => a.storeAttributeId == id)?.storeAttribute?.unitCode);
+
         var modifierContext = new ModifierContext
         {
             ResolveReference = (reference) => ResolveFieldReference(product, reference)
@@ -590,10 +595,29 @@ public class MappingService
     /// chain back to an attribute. Fan-in / ops / productField / static / groupName lanes are export-only
     /// and omitted (so the import path naturally skips them).
     /// </summary>
+    public async Task<List<ImportField>> ProjectGraphForImportAsync(string? graphJson, CancellationToken ct = default)
+    {
+        var graph = ParseGraph(graphJson);
+        if (graph?.nodes == null) return new();
+        if (!graph.nodes.Any(n => n.type == "modifier" && n.data?.modifierType == "unitConversion"))
+            return ProjectGraphForImport(graph);
+        var categoryIds = graph.nodes.Where(n => n.type == "attribute").Select(n => n.data?.attributeId ?? 0).ToList();
+        var storeIds = graph.nodes.Where(n => n.type == "storeAttribute").Select(n => n.data?.attributeId ?? 0).ToList();
+        var categoryUnits = await _context.categoryAttributes.AsNoTracking().Where(a => categoryIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.unitCode, ct);
+        var storeUnits = await _context.storeAttributes.AsNoTracking().Where(a => storeIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.unitCode, ct);
+        GraphUnitMetadata.Reconcile(graph, (type, id) =>
+            (type == "attribute" ? categoryUnits : storeUnits).GetValueOrDefault(id));
+        return ProjectGraphForImport(graph);
+    }
+
     public static List<ImportField> ProjectGraphForImport(string? graphJson)
+        => ProjectGraphForImport(ParseGraph(graphJson));
+
+    private static List<ImportField> ProjectGraphForImport(MappingGraph? graph)
     {
         var result = new List<ImportField>();
-        var graph = ParseGraph(graphJson);
         if (graph?.nodes == null)
             return result;
 

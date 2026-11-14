@@ -88,6 +88,8 @@ public sealed class OzonVideoMediaTests
         var media = Assert.Single(product.Media!);
         Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
         Assert.Equal("Clip", media.FileName);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", product.Attributes!["21841"]);
+        Assert.Equal("Clip", product.Attributes["21837"]);
 
         var serialized = JsonSerializer.Serialize(attributes);
         Assert.Contains("\"id\":21841", serialized);
@@ -129,7 +131,7 @@ public sealed class OzonVideoMediaTests
               {
                 "{{attributeIdProperty}}": 21845,
                 "complex_id": 100002,
-                "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video-cover/cover.jpg" }]
+                "values": [{ "value": "https://v-1.ozone.ru/video/asset_2_h264.mp4" }]
               }
             ]
             """);
@@ -152,6 +154,10 @@ public sealed class OzonVideoMediaTests
         var media = Assert.Single(product.Media!);
         Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
         Assert.Equal("Clip", media.FileName);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", product.Attributes!["21841"]);
+        Assert.Equal("Clip", product.Attributes["21837"]);
+        Assert.Equal("https://v-1.ozone.ru/video/asset_2_h264.mp4", product.Attributes["21845"]);
+        Assert.DoesNotContain(product.Media!, item => item.Url.Contains("video-cover", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -194,6 +200,12 @@ public sealed class OzonVideoMediaTests
             ["https://cdn.example.test/nested.mp4", "https://cdn.example.test/flat.mp4"],
             product.Media!.Select(media => media.Url));
         Assert.Equal(["Nested clip", "Flat clip"], product.Media!.Select(media => media.FileName));
+        Assert.Equal(
+            new[] { "https://cdn.example.test/nested.mp4", "https://cdn.example.test/flat.mp4" },
+            Assert.IsType<List<string>>(product.Attributes!["21841"]));
+        Assert.Equal(
+            new[] { "Nested clip", "Flat clip" },
+            Assert.IsType<List<string>>(product.Attributes["21837"]));
     }
 
     [Fact]
@@ -269,7 +281,7 @@ public sealed class OzonVideoMediaTests
     }
 
     [Fact]
-    public void ProductImportMapsEveryVideoFromSeparateComplexAttributeGroups()
+    public void ProductImportMapsVideoAttributesAndEveryVideoFromSeparateComplexAttributeGroups()
     {
         var attributes = new ProductAttributesItem
         {
@@ -291,6 +303,10 @@ public sealed class OzonVideoMediaTests
                         Attribute(100001, 21837, "second clip"),
                         Attribute(100001, 21841, "https://cdn.example.test/second.mp4")
                     ]
+                },
+                new ComplexAttributeInfo
+                {
+                    Attributes = [Attribute(100002, 21845, "https://cdn.example.test/cover.mp4")]
                 }
             ]
         };
@@ -302,12 +318,20 @@ public sealed class OzonVideoMediaTests
         Assert.Equal(
             ["https://cdn.example.test/first.mp4", "https://cdn.example.test/second.mp4"],
             product.Media!.Select(media => media.Url));
+        Assert.Equal(
+            new[] { "https://cdn.example.test/first.mp4", "https://cdn.example.test/second.mp4" },
+            Assert.IsType<List<string>>(product.Attributes!["21841"]));
+        Assert.Equal(
+            new[] { "first clip", "second clip" },
+            Assert.IsType<List<string>>(product.Attributes["21837"]));
+        Assert.Equal("https://cdn.example.test/cover.mp4", product.Attributes["21845"]);
+        Assert.DoesNotContain(product.Media!, item => item.Url.Contains("cover", StringComparison.Ordinal));
         Assert.Equal(["first clip", "second clip"], product.Media!.Select(media => media.FileName));
         Assert.Equal([0, 1], product.Media!.Select(media => media.Index));
     }
 
     [Fact]
-    public void ProductImportReadsGalleryVideoFromTopLevelAttributesWithoutTextUrlValues()
+    public void ProductImportMapsVideoAndCoverAttributesFromTopLevelAttributes()
     {
         var attributes = new ProductAttributesItem
         {
@@ -327,8 +351,34 @@ public sealed class OzonVideoMediaTests
         var media = Assert.Single(product.Media!);
         Assert.Equal("https://cdn.example.test/clip.mp4", media.Url);
         Assert.Equal("clip", media.FileName);
-        Assert.False(product.Attributes?.ContainsKey("21841") ?? false);
-        Assert.False(product.Attributes?.ContainsKey("21845") ?? false);
+        Assert.Equal("https://cdn.example.test/clip.mp4", product.Attributes!["21841"]);
+        Assert.Equal("clip", product.Attributes["21837"]);
+        Assert.Equal("https://cdn.example.test/cover.mp4", product.Attributes["21845"]);
+        Assert.DoesNotContain(product.Media!, item => item.Url.Contains("cover", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ProductExportDoesNotSendMappedVideoFileAttributeUrls()
+    {
+        var item = OzonPlugin.BuildImportItem(new Dictionary<string, object>
+        {
+            ["name"] = "Desk lamp",
+            ["sku"] = "LAMP-1",
+            ["21841"] = "https://cdn.example.test/video.mp4",
+            ["21837"] = "mapped graph name",
+            ["21845"] = "https://cdn.example.test/cover.mp4",
+            ["videos"] = new List<string> { "https://cdn.example.test/gallery.mp4" },
+            ["videoNames"] = new List<string> { "gallery video name" }
+        }, existingExternalId: "42");
+
+        Assert.DoesNotContain(item.Attributes, attribute => attribute.Id is 21841 or 21837 or 21845);
+        var galleryAttributes = Assert.Single(item.ComplexAttributes!).Attributes;
+        Assert.Contains(galleryAttributes,
+            attribute => attribute.Id == 21841
+                && Assert.Single(attribute.Values).Value == "https://cdn.example.test/gallery.mp4");
+        Assert.Contains(galleryAttributes,
+            attribute => attribute.Id == 21837
+                && Assert.Single(attribute.Values).Value == "gallery video name");
     }
 
     [Fact]
