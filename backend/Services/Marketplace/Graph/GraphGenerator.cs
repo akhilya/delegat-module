@@ -32,6 +32,14 @@ public sealed class FieldSpec
     /// Export copies the primary's value; import ignores the alias.
     /// </summary>
     public string? aliasOf { get; set; }
+    /// <summary>
+    /// Semantic-duplicate marker: the field carries the same information as another adapter field
+    /// (by <see cref="externalFieldKey"/>) but keeps its own source wiring and conversion.
+    /// Visual-only dedup - the field is collapsed under the hidden group, still exported on its own.
+    /// </summary>
+    public string? repeatOf { get; set; }
+    /// <summary>Key of the bound category/store attribute (for cross-type duplicate detection).</summary>
+    public string? sourceAttributeKey { get; set; }
 }
 
 /// <summary>
@@ -169,6 +177,8 @@ public static class GraphGenerator
                 fields.Add(field);
                 continue;
             }
+
+            field.repeatOf = fm.repeatOf;
 
             var mods = ParseActiveModifiers(fm.modifiersJson);
 
@@ -398,6 +408,7 @@ public static class GraphGenerator
                 sortOrder = fm.sortOrder,
                 isRequired = fm.isRequired,
                 aliasOf = fm.aliasOf,
+                repeatOf = fm.repeatOf,
                 source = migratedSource ?? (string.IsNullOrEmpty(fm.aliasOf)
                     && ParseActiveModifiers(fm.modifiersJson).Count == 0
                     ? DirectBinding(fm)
@@ -451,14 +462,13 @@ public static class GraphGenerator
     /// </summary>
     internal static List<FieldSpec> AliasDuplicateProductFieldSources(List<FieldSpec> specs)
     {
-        var groups = specs
-            .Where(s =>
-                string.IsNullOrEmpty(s.aliasOf) &&
-                s.sourceType == FieldMappingSourceType.ProductField &&
-                !string.IsNullOrEmpty(s.sourceField))
-            .GroupBy(s => s.sourceField!, StringComparer.OrdinalIgnoreCase);
+        // Same binding target (product field, category/store attribute, or group name):
+        // keep one primary and merge the rest via aliasOf.
+        var bound = specs
+            .Where(s => string.IsNullOrEmpty(s.aliasOf) && BindingKey(s) != null)
+            .GroupBy(s => BindingKey(s)!, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var group in groups)
+        foreach (var group in bound)
         {
             var members = group.ToList();
             if (members.Count < 2)
@@ -473,21 +483,67 @@ public static class GraphGenerator
                 other.sourceType = FieldMappingSourceType.Static;
                 other.sourceField = null;
                 other.sourceAttributeId = null;
+                other.sourceAttributeKey = null;
                 other.staticValue = null;
+            }
+        }
+
+        // Cross-type duplicates: an attribute-bound field whose bound attribute's key equals a
+        // product field another spec is bound to (e.g. named "weight" vs attribute keyed "weight").
+        // These keep their own source + conversion - marked repeatOf and hidden visually.
+        var productFieldPrimaries = specs
+            .Where(s =>
+                string.IsNullOrEmpty(s.aliasOf) &&
+                s.sourceType == FieldMappingSourceType.ProductField &&
+                !string.IsNullOrEmpty(s.sourceField))
+            .GroupBy(s => s.sourceField!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(m => IsNamedKey(m.externalFieldKey) ? 0 : 1)
+                    .ThenBy(m => m.sortOrder)
+                    .First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var s in specs)
+        {
+            if (!string.IsNullOrEmpty(s.aliasOf) || string.IsNullOrEmpty(s.sourceAttributeKey))
+                continue;
+            if (productFieldPrimaries.TryGetValue(s.sourceAttributeKey, out var primary) &&
+                !ReferenceEquals(s, primary))
+            {
+                s.repeatOf = primary.externalFieldKey;
             }
         }
 
         return specs;
     }
 
+    private static string? BindingKey(FieldSpec s) => s.sourceType switch
+    {
+        FieldMappingSourceType.ProductField when !string.IsNullOrEmpty(s.sourceField) =>
+            "pf:" + s.sourceField,
+        FieldMappingSourceType.CategoryAttribute when s.sourceAttributeId != null =>
+            "ca:" + s.sourceAttributeId,
+        FieldMappingSourceType.StoreAttribute when s.sourceAttributeId != null =>
+            "sa:" + s.sourceAttributeId,
+        FieldMappingSourceType.GroupName => "groupName",
+        _ => null,
+    };
+
+    /// <summary>Named (non-numeric) adapter keys like <c>weight</c> are the canonical fields;
+    /// pure numeric keys are marketplace attribute ids.</summary>
+    private static bool IsNamedKey(string? key) =>
+        !string.IsNullOrEmpty(key) && key.Any(c => !char.IsDigit(c));
+
     private static FieldSpec PickPrimaryProductField(List<FieldSpec> members)
     {
         var target = members[0].sourceField ?? "";
         return members
-            .OrderByDescending(m =>
+            .OrderBy(m => IsNamedKey(m.externalFieldKey) ? 0 : 1)
+            .ThenByDescending(m =>
                 string.Equals(m.externalFieldKey, target, StringComparison.OrdinalIgnoreCase))
             .ThenBy(m => m.sortOrder)
-            .ThenBy(m => m.externalFieldKey.Length)
+            .ThenBy(m => m.externalFieldKey?.Length)
             .ThenBy(m => m.externalFieldKey, StringComparer.OrdinalIgnoreCase)
             .First();
     }

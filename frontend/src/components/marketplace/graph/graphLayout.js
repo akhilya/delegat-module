@@ -65,7 +65,9 @@ export function estimateNodeHeight(node) {
         ? priceFieldGroupCount(fields) * PRICE_FIELD_GROUP_HEADER_HEIGHT
         : new Set(
             fields.map((f) =>
-              f.omit || f.aliasOf ? "__hidden" : f.group || "__other",
+              f.omit || f.aliasOf || f.repeatOf
+                ? "__hidden"
+                : f.group || "__other",
             ),
           ).size * ADAPTER_ROW;
     return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + groups + 6;

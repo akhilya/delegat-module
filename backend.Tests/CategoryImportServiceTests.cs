@@ -680,6 +680,75 @@ public class CategoryImportServiceTests
     }
 
     [Fact]
+    public async Task Import_AliasesFieldsBoundToSameCategoryAttribute()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("shade", "Shade", true, "string", SortOrder: 0),
+            new ExternalField("31565", "Shade", false, "string", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Shade", AttributeType.Text, key: "shade");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "shade", action = "reuse", existingAttributeId = attr.Id },
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // The named field keeps the binding; the numeric attribute id aliases it.
+        Assert.Equal(attr.Id, fields["shade"].GetProperty("source").GetProperty("attributeId").GetInt32());
+        Assert.Equal("shade", fields["31565"].GetProperty("aliasOf").GetString());
+        Assert.False(fields["31565"].TryGetProperty("source", out _));
+    }
+
+    [Fact]
+    public async Task Import_MarksAttributeFieldRepeatingNamedProductField()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("name", "Name", true, "string", SortOrder: 0),
+            new ExternalField("31565", "Название", false, "string", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Название", AttributeType.Text, key: "name");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // Visual-only dedup: 31565 keeps its own attribute binding but is flagged as a repeat.
+        Assert.Equal("name", fields["name"].GetProperty("source").GetProperty("field").GetString());
+        Assert.Equal("name", fields["31565"].GetProperty("repeatOf").GetString());
+        Assert.Equal(attr.Id, fields["31565"].GetProperty("source").GetProperty("attributeId").GetInt32());
+    }
+
+    [Fact]
     public async Task Import_SkipsBarcodeAttribute()
     {
         var (svc, db, connection) = Create("leaf",

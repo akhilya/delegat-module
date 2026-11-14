@@ -34,8 +34,10 @@ const fields = computed(() => props.data.fields || []);
 const analysis = computed(() => props.data.analysis || {});
 
 function aliasPrimaryLabel(f) {
-  const primary = fields.value.find((x) => x.fieldKey === f.aliasOf);
-  return primary?.label || f.aliasOf;
+  const primary = fields.value.find(
+    (x) => x.fieldKey === (f.aliasOf || f.repeatOf),
+  );
+  return primary?.label || f.aliasOf || f.repeatOf;
 }
 
 const avail = computed(() => props.data.availableSources || {});
@@ -97,16 +99,22 @@ function pinHidden(f) {
 
 // Consecutive runs of same-group fields become collapsible sections, mirroring
 // AdapterFieldsNode; ungrouped runs render their fields without a header.
-const collapsed = ref(new Set());
+const collapsed = ref(new Set(["__hidden"]));
 const { updateNodeInternals } = useVueFlow();
 const sections = computed(() => {
   const out = [];
+  const hidden = [];
   for (const field of fields.value) {
+    if (field.omit || field.aliasOf || field.repeatOf) {
+      hidden.push(field);
+      continue;
+    }
     const key = String(field.group || "").trim();
     const last = out[out.length - 1];
     if (last && last.key === key) last.items.push(field);
     else out.push({ key, items: [field] });
   }
+  if (hidden.length) out.push({ key: "__hidden", items: hidden });
   return out;
 });
 const rows = computed(() => {
@@ -152,6 +160,7 @@ function groupLabel(group) {
   const normalized = String(group || "")
     .trim()
     .toLowerCase();
+  if (normalized === "__hidden") return t("marketplace.graph.hiddenFields");
   if (normalized === "prices") return t("marketplace.graph.priceGroupValues");
   if (normalized === "price strategy")
     return t("marketplace.graph.priceGroupStrategy");
@@ -250,6 +259,24 @@ function groupLabel(group) {
               </TooltipTrigger>
               <TooltipContent>
                 {{ t("marketplace.graph.omitFieldTitle") }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="row.field.repeatOf">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--alias"
+                  @click.stop="data.openField?.(row.field.fieldKey)"
+                >
+                  ≈ {{ aliasPrimaryLabel(row.field) }}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{
+                  t("marketplace.graph.repeatOfTitle", {
+                    primary: aliasPrimaryLabel(row.field),
+                  })
+                }}
               </TooltipContent>
             </Tooltip>
 

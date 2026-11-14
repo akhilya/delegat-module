@@ -17,12 +17,17 @@ export const PRICE_FIELD_GROUP_HEADER_HEIGHT = 24;
 export function priceFieldGroupCount(fields) {
   let count = 0;
   let previous = "";
+  let hasHidden = false;
   for (const field of fields || []) {
+    if (field?.omit || field?.aliasOf || field?.repeatOf) {
+      hasHidden = true;
+      continue;
+    }
     const group = String(field?.group || "").trim();
     if (group && group !== previous) count += 1;
     previous = group;
   }
-  return count;
+  return count + (hasHidden ? 1 : 0);
 }
 
 /**

@@ -39,8 +39,10 @@ const fields = computed(() => props.data.fields || []);
 const analysis = computed(() => props.data.analysis || {});
 
 function aliasPrimaryLabel(f) {
-  const primary = fields.value.find((x) => x.fieldKey === f.aliasOf);
-  return primary?.label || f.aliasOf;
+  const primary = fields.value.find(
+    (x) => x.fieldKey === (f.aliasOf || f.repeatOf),
+  );
+  return primary?.label || f.aliasOf || f.repeatOf;
 }
 
 const avail = computed(() => props.data.availableSources || {});
@@ -145,7 +147,9 @@ const sections = computed(() => {
   const groups = new Map();
   for (const field of fields.value) {
     const key =
-      field.omit || field.aliasOf ? "__hidden" : field.group || "__other";
+      field.omit || field.aliasOf || field.repeatOf
+        ? "__hidden"
+        : field.group || "__other";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(field);
   }
@@ -319,6 +323,24 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
               </TooltipTrigger>
               <TooltipContent>
                 {{ t("marketplace.graph.omitFieldTitle") }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="row.field.repeatOf">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--alias"
+                  @click.stop="data.openField?.(row.field.fieldKey)"
+                >
+                  ≈ {{ aliasPrimaryLabel(row.field) }}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{
+                  t("marketplace.graph.repeatOfTitle", {
+                    primary: aliasPrimaryLabel(row.field),
+                  })
+                }}
               </TooltipContent>
             </Tooltip>
 

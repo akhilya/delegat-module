@@ -1913,6 +1913,7 @@
       "priceGroupValues": "Цены",
       "priceGroupStrategy": "Ценовая стратегия",
       "aliasMergedTitle": "Объединено с «{primary}»: при экспорте получает его значение, при импорте игнорируется",
+      "repeatOfTitle": "Дублирует «{primary}»: скрыто как повтор - проводка и значение свои",
       "aliasMergedShortTitle": "Объединено с «{primary}»",
       "omitFieldShort": "не отпр.",
       "omitFieldTitle": "Не отправляется на маркетплейс",

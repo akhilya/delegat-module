@@ -1353,6 +1353,7 @@ public class CategoryMappingController : ControllerBase
                 sourceType = sourceType,
                 sourceField = sourceField,
                 sourceAttributeId = sourceAttributeId,
+                sourceAttributeKey = sourceAttribute?.key,
             };
         }).ToList();
 

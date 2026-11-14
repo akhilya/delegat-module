@@ -1913,6 +1913,7 @@
       "priceGroupValues": "Prices",
       "priceGroupStrategy": "Price strategy",
       "aliasMergedTitle": "Merged with «{primary}»: takes its value on export, ignored on import",
+      "repeatOfTitle": "Duplicates «{primary}»: hidden as a repeat - keeps its own wiring and value",
       "aliasMergedShortTitle": "Merged with «{primary}»",
       "omitFieldShort": "skip",
       "omitFieldTitle": "Not sent to the marketplace",

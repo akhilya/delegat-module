@@ -409,6 +409,7 @@ public class CategoryImportService
                         ? (FieldMappingSourceType.Static, null, (int?)null)
                         : FieldAutoMapping.Resolve(field, category.attributes?.ToList() ?? [],
                             attributeMap.TryGetValue(field.Key, out var id) ? id : null);
+                var sourceAttribute = category.attributes?.FirstOrDefault(a => a.Id == sourceAttributeId);
                 return new FieldSpec
                 {
                     externalFieldKey = field.Key,
@@ -426,6 +427,7 @@ public class CategoryImportService
                     sourceType = sourceType,
                     sourceField = sourceField,
                     sourceAttributeId = sourceAttributeId,
+                    sourceAttributeKey = sourceAttribute?.key,
                 };
             })
             .ToList();
