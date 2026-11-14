@@ -33,6 +33,27 @@ public class ImageDownloadAttachTests
     }
 
     [Fact]
+    public async Task Worker_ClassifiesExtensionlessDocumentByContentType()
+    {
+        var (worker, db, storage, pending, _) = await SeedPendingAsync();
+        pending.imageUrl = "https://8.8.8.8/download?file=invoice";
+        pending.mediaKind = PendingMediaKind.Image;
+        storage.UploadContentType = "application/pdf";
+        await db.SaveChangesAsync();
+
+        await worker.ProcessSingleImageAsync(db, storage, Quota(db), pending, CancellationToken.None);
+
+        var file = await db.files.SingleAsync(item => item.sourceUrl == pending.imageUrl);
+        Assert.Equal(FileType.Other, file.fileType);
+        Assert.Equal("application/pdf", file.contentType);
+        Assert.NotNull(file.displayName);
+        Assert.EndsWith(".pdf", file.displayName);
+        Assert.EndsWith(".jpg", file.filePath);
+        Assert.NotNull(storage.LastUploadPath);
+        Assert.EndsWith(".jpg", storage.LastUploadPath);
+    }
+
+    [Fact]
     public async Task Worker_AttachesCategoryFileToGalleryDownload()
     {
         var seeded = await SeedAttributePendingAsync(skipGallery: false);
@@ -398,13 +419,16 @@ public class ImageDownloadAttachTests
         public bool CancelVideoUpload { get; set; }
         public CancellationTokenSource? CancellationSource { get; set; }
         public Action? AfterUpload { get; set; }
+        public string UploadContentType { get; set; } = "image/jpeg";
+        public string? LastUploadPath { get; private set; }
         public string Bucket => "test";
 
         public Task<FileUploadResult?> UploadFromUriWithMetadataAsync(string uri, string path, CancellationToken ct = default)
         {
             UploadCalls++;
+            LastUploadPath = path;
             AfterUpload?.Invoke();
-            return Task.FromResult<FileUploadResult?>(new FileUploadResult("image/jpeg", 1024));
+            return Task.FromResult<FileUploadResult?>(new FileUploadResult(UploadContentType, 1024));
         }
 
         public Task<FileUploadResult?> UploadVideoFromUriWithMetadataAsync(

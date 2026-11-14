@@ -2291,9 +2291,9 @@ public partial class ProductSyncService
                         continue;
                     if (categorySpec.Type == AttributeType.File)
                     {
-                        var existing = existingProductAttrs.FirstOrDefault(
+                        var existingFileValue = existingProductAttrs.FirstOrDefault(
                             a => a.attributeId == fieldMapping.sourceAttributeId.Value);
-                        if (existing?.files.Count > 0)
+                        if (existingFileValue?.files.Count > 0)
                             break;
                         var urls = GetImportedFileUrls(externalValue, categorySpec);
                         if (urls.Count > 0)
@@ -2325,9 +2325,9 @@ public partial class ProductSyncService
                         continue;
                     if (storeSpec.Type == AttributeType.File)
                     {
-                        var existing = existingStoreAttrs.FirstOrDefault(
+                        var existingFileValue = existingStoreAttrs.FirstOrDefault(
                             a => a.storeAttributeId == fieldMapping.sourceAttributeId.Value);
-                        if (existing?.files.Count > 0)
+                        if (existingFileValue?.files.Count > 0)
                             break;
                         var urls = GetImportedFileUrls(externalValue, storeSpec);
                         if (urls.Count > 0)

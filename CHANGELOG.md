@@ -266,6 +266,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Marketplace imports now download linked files into mapped File attributes, including Ozon “Видео” and “Видеообложка”, reusing gallery downloads where possible without replacing attributes that already have files.
 - Marketplace import previews now report mapped File attributes that have downloadable URLs but no attachments; fields excluded by the user remain untouched.
 - Multi-file marketplace imports preserve distinct download URLs even when only their query strings differ.
+- Extensionless marketplace downloads use content-type metadata to classify and name non-image files.
 - Single-category deletion now commits trash detachment together with category removal, preventing partial changes after a failed delete.
 - Store deletion works with MySQL automatic retries and handles trashed folder trees, restricting catalog references, scoped job/chat/history data, and both current and legacy storage prefixes; archive/chat objects are cleaned only after database commit.
 - Product transfers stage file bytes before opening the database transaction and atomically include category/group creation. Failed/cancelled attempts restore tracking and clean staged objects; database retries do not recopy files, and post-commit notification failures cannot delete committed media.

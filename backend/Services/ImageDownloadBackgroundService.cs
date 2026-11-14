@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.StaticFiles;
 using Delegat.Enums;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Storage;
@@ -248,9 +249,10 @@ public class ImageDownloadBackgroundService : BackgroundService
             }
 
             var fileId = Guid.NewGuid().ToString("N");
+            var urlExtension = isVideo ? null : GetExtensionFromUrl(pending.imageUrl);
             var extension = isVideo
                 ? GetVideoExtension(pending.mediaFileName)
-                : GetExtensionFromUrl(pending.imageUrl) ?? ".jpg";
+                : urlExtension ?? ".jpg";
             var mediaFolder = isVideo ? "media" : "images";
             var filePath = $"stores/{pending.storeId}/products/{pending.productId}/{mediaFolder}/{fileId}{extension}";
             uploadedFilePath = filePath;
@@ -336,9 +338,23 @@ public class ImageDownloadBackgroundService : BackgroundService
                 uploadResult.Length,
                 pending.imageUrl
             ));
-            file.fileType = isVideo ? FileType.Other : FileType.Image;
+            var isExtensionlessNonImage = !isVideo
+                && urlExtension == null
+                && !uploadResult.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+            file.fileType = isVideo || isExtensionlessNonImage ? FileType.Other : FileType.Image;
             if (isVideo)
                 file.displayName = pending.mediaFileName;
+            else if (isExtensionlessNonImage)
+            {
+                var contentTypeExtension = new FileExtensionContentTypeProvider().Mappings
+                    .FirstOrDefault(mapping => string.Equals(
+                        mapping.Value,
+                        uploadResult.ContentType,
+                        StringComparison.OrdinalIgnoreCase))
+                    .Key;
+                if (!string.IsNullOrEmpty(contentTypeExtension))
+                    file.displayName = $"{fileId}{contentTypeExtension}";
+            }
 
             importedFile = file;
             context.files.Add(file);
