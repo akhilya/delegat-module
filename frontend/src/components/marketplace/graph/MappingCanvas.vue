@@ -3150,21 +3150,7 @@ async function importMappingFile(event) {
   padding: 0 10px;
   font-size: 12px;
 }
-.vf-adapter__group {
-  box-sizing: border-box;
-  height: 18px;
-  padding: 0 10px;
-  border-top: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 17px;
-  text-transform: uppercase;
-}
-.vf-adapter__group--first {
-  border-top: 0;
-}
+
 .vf-adapter__row:hover {
   background: var(--accent);
 }

@@ -117,12 +117,13 @@ const collapsed = computed(() => !!props.data.collapsed);
         <div v-if="summary" class="vf-card__title vf-card__title--sm">
           {{ summary }}
         </div>
-        <div
-          v-if="isFixed && inputLabels.length"
-          class="vf-pin-label"
-          style="margin-top: 4px"
-        >
-          {{ inputLabels.join(" · ") }}
+        <div v-if="isFixed && inputLabels.length" class="mt-1 flex flex-col">
+          <span
+            v-for="(inputLabel, i) in inputLabels"
+            :key="i"
+            class="vf-pin-label"
+            >{{ inputLabel }}</span
+          >
         </div>
 
         <div v-if="isMulti" class="vf-combine__inputs">

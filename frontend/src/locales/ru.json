@@ -1901,6 +1901,7 @@
       "otherFields": "Другие поля",
       "hiddenFields": "Скрытые поля",
       "unconnectedOnly": "Без связи",
+      "allFieldsConnected": "Все поля связаны",
       "adapterHeader": "Поля адаптера",
       "addCustomField": "Добавить поле",
       "addCustomFieldHint": "Киньте провод сюда или нажмите, чтобы добавить поле для этого маппинга",

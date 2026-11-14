@@ -57,13 +57,17 @@ export function estimateNodeHeight(node) {
   if (!node) return 56;
 
   if (node.type === "adapterFields" || node.type === "adapterPriceFields") {
-    const n = node.data?.fields?.length || 1;
+    const fields = node.data?.fields || [];
+    const n = fields.length || 1;
     const extra = node.type === "adapterFields" ? 1 : 0;
     const groups =
       node.type === "adapterPriceFields"
-        ? priceFieldGroupCount(node.data?.fields) *
-          PRICE_FIELD_GROUP_HEADER_HEIGHT
-        : 0;
+        ? priceFieldGroupCount(fields) * PRICE_FIELD_GROUP_HEADER_HEIGHT
+        : new Set(
+            fields.map((f) =>
+              f.omit || f.aliasOf ? "__hidden" : f.group || "__other",
+            ),
+          ).size * ADAPTER_ROW;
     return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + groups + 6;
   }
 

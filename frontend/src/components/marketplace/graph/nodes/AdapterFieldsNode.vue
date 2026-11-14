@@ -154,16 +154,19 @@ const sections = computed(() => {
 const rows = computed(() => {
   const result = [];
   for (const section of sections.value) {
+    const isCollapsed = collapsed.value.has(section.key);
+    const items = isCollapsed
+      ? []
+      : section.items.filter(
+          (field) =>
+            !onlyUnconnected.value ||
+            (!field.source && !analysis.value[field.fieldKey]?.connected),
+        );
+    // Expanded sections emptied by the "unconnected only" filter get no
+    // orphan header row.
+    if (!isCollapsed && !items.length) continue;
     result.push({ key: section.key, header: true });
-    if (!collapsed.value.has(section.key)) {
-      for (const field of section.items) {
-        if (
-          !onlyUnconnected.value ||
-          (!field.source && !analysis.value[field.fieldKey]?.connected)
-        )
-          result.push({ key: field.fieldKey, field });
-      }
-    }
+    for (const field of items) result.push({ key: field.fieldKey, field });
   }
   return result;
 });
@@ -249,7 +252,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         }}</span>
         <span class="vf-pin-label">{{ fields.length }}</span>
         <Button
-          variant="ghost"
+          :variant="onlyUnconnected ? 'secondary' : 'ghost'"
           size="sm"
           class="nodrag ml-auto h-6 px-1 text-xs"
           :aria-pressed="onlyUnconnected"
@@ -259,6 +262,12 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
       </div>
 
       <div class="vf-adapter__list">
+        <div
+          v-if="!rows.length"
+          class="px-2 py-1 text-xs text-muted-foreground"
+        >
+          {{ t("marketplace.graph.allFieldsConnected") }}
+        </div>
         <template
           v-for="row in rows"
           :key="row.header ? `group:${row.key}` : `field:${row.key}`"
