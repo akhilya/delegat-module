@@ -10,8 +10,21 @@ import {
   Plus,
   Minus,
 } from "lucide-vue-next";
-import { OP_SPECS, opSummary, opLabel, opInputLabels, pinColor } from "../graphModel.js";
+import {
+  OP_SPECS,
+  opSummary,
+  opLabel,
+  opInputLabels,
+  pinColor,
+} from "../graphModel.js";
 import NodePreview from "./NodePreview.vue";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { t } from "@/i18n";
 
 const props = defineProps({
@@ -55,85 +68,112 @@ const collapsed = computed(() => !!props.data.collapsed);
 </script>
 
 <template>
-  <div
-    :class="[
-      'vf-card',
-      'vf-card--combine',
-      selected && 'vf-card--selected',
-      collapsed && 'vf-card--collapsed',
-      collapsed && (isMulti || isFixed) && 'vf-card--collapsed-multi',
-    ]"
-  >
-    <template v-if="isMulti">
-      <Handle
-        v-for="i in multiInputs"
-        :key="i"
-        :id="`in-${i}`"
-        type="target"
-        :position="Position.Left"
-        :style="{ top: topMulti(i) }"
-      />
-    </template>
-    <template v-else-if="isFixed">
-      <Handle
-        v-for="i in fixedInputs"
-        :key="i"
-        :id="`in-${i}`"
-        type="target"
-        :position="Position.Left"
-        :style="{ top: topFixed(i) }"
-      />
-    </template>
-    <Handle v-else id="in" type="target" :position="Position.Left" />
+  <TooltipProvider :delay-duration="300">
+    <div
+      :class="[
+        'vf-card',
+        'vf-card--combine',
+        selected && 'vf-card--selected',
+        collapsed && 'vf-card--collapsed',
+        collapsed && (isMulti || isFixed) && 'vf-card--collapsed-multi',
+      ]"
+    >
+      <template v-if="isMulti">
+        <Handle
+          v-for="i in multiInputs"
+          :key="i"
+          :id="`in-${i}`"
+          type="target"
+          :position="Position.Left"
+          :style="{ top: topMulti(i) }"
+        />
+      </template>
+      <template v-else-if="isFixed">
+        <Handle
+          v-for="i in fixedInputs"
+          :key="i"
+          :id="`in-${i}`"
+          type="target"
+          :position="Position.Left"
+          :style="{ top: topFixed(i) }"
+        />
+      </template>
+      <Handle v-else id="in" type="target" :position="Position.Left" />
 
-    <div class="vf-card__head">
-      <component :is="icon" class="size-3.5 text-muted-foreground" />
-      <span class="vf-card__kind" :title="summary || label">{{
-        collapsed && summary ? summary : label
-      }}</span>
+      <div class="vf-card__head">
+        <component :is="icon" class="size-3.5 text-muted-foreground" />
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <span class="vf-card__kind">{{
+              collapsed && summary ? summary : label
+            }}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {{ summary || label }}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <template v-if="!collapsed">
+        <div v-if="summary" class="vf-card__title vf-card__title--sm">
+          {{ summary }}
+        </div>
+        <div
+          v-if="isFixed && inputLabels.length"
+          class="vf-pin-label"
+          style="margin-top: 4px"
+        >
+          {{ inputLabels.join(" · ") }}
+        </div>
+
+        <div v-if="isMulti" class="vf-combine__inputs">
+          <span class="vf-pin-label">{{
+            t("marketplace.graph.inputsCount", { count })
+          }}</span>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                class="nodrag size-[18px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                :aria-label="t('marketplace.graph.removeInput')"
+                @mousedown.stop
+                @click="removeInput"
+              >
+                <Minus class="size-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {{ t("marketplace.graph.removeInput") }}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                class="nodrag size-[18px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                :aria-label="t('marketplace.graph.addInput')"
+                @mousedown.stop
+                @click="addInput"
+              >
+                <Plus class="size-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {{ t("marketplace.graph.addInput") }}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        <NodePreview :value="data.previewValue" />
+      </template>
+
+      <Handle
+        id="out"
+        type="source"
+        :position="Position.Right"
+        :style="{ background: outColor }"
+      />
     </div>
-    <template v-if="!collapsed">
-      <div v-if="summary" class="vf-card__title vf-card__title--sm">
-        {{ summary }}
-      </div>
-      <div
-        v-if="isFixed && inputLabels.length"
-        class="vf-pin-label"
-        style="margin-top: 4px"
-      >
-        {{ inputLabels.join(" · ") }}
-      </div>
-
-      <div v-if="isMulti" class="vf-combine__inputs">
-        <span class="vf-pin-label">{{ t("marketplace.graph.inputsCount", { count }) }}</span>
-        <button
-          type="button"
-          class="vf-iconbtn nodrag"
-          :title="t('marketplace.graph.removeInput')"
-          @mousedown.stop
-          @click="removeInput"
-        >
-          <Minus class="size-3" />
-        </button>
-        <button
-          type="button"
-          class="vf-iconbtn nodrag"
-          :title="t('marketplace.graph.addInput')"
-          @mousedown.stop
-          @click="addInput"
-        >
-          <Plus class="size-3" />
-        </button>
-      </div>
-
-      <NodePreview :value="data.previewValue" />
-    </template>
-
-    <Handle
-      id="out"
-      type="source"
-      :position="Position.Right"
-      :style="{ background: outColor }"
-    />
-  </div>
+  </TooltipProvider>
 </template>

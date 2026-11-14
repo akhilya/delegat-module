@@ -1895,9 +1895,12 @@ function isValidConnection(conn) {
   if (conn.targetHandle === "out") return false; // output→output
   const target = findNode(conn.target);
   if (
-    target?.type === "modifier" && target.data?.collapsed &&
-    (conn.targetHandle?.startsWith("p:") || conn.targetHandle?.startsWith("field:"))
-  ) return false;
+    target?.type === "modifier" &&
+    target.data?.collapsed &&
+    (conn.targetHandle?.startsWith("p:") ||
+      conn.targetHandle?.startsWith("field:"))
+  )
+    return false;
   return true;
 }
 
@@ -2465,117 +2468,133 @@ async function importMappingFile(event) {
         class="relative min-w-0 h-full w-full"
         @contextmenu="onContextMenu"
       >
-        <div
-          class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
-        >
-          <ButtonGroup joined>
-            <Button
-              size="sm"
-              :disabled="saving || errorCount > 0"
-              :title="
-                dirty ? t('marketplace.canvas.unsavedChanges') : undefined
-              "
-              @click="save()"
-            >
-              <Spinner v-if="saving" />
-              <Save v-else class="size-4" />
-              {{ t("marketplace.canvas.save") }}
-              <span
-                v-if="dirty && !saving"
-                class="size-1.5 rounded-full bg-current opacity-80"
-                aria-hidden="true"
-              />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <Button
-                  size="sm"
-                  class="px-2"
-                  :aria-label="t('marketplace.canvas.actions')"
-                >
-                  <ChevronDown class="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" class="w-56">
-                <DropdownMenuItem @select="confirmAutoArrange">
-                  <LayoutGrid class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.autoArrange") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  :disabled="syncingFields"
-                  @select="syncAdapterFieldSchema"
-                >
-                  <Spinner v-if="syncingFields" class="size-4" />
-                  <RefreshCw v-else class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem @select="exportMappingFile">
-                  <Download class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.export") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem @select="triggerImportFile">
-                  <Upload class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.import") }}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </ButtonGroup>
-
+        <TooltipProvider :delay-duration="300">
           <div
-            class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
+            class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
           >
-            <SearchableSelect
-              class="h-8 w-full bg-card dark:bg-card"
-              content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
-              remote
-              :loading="previewProductsLoading"
-              :options="previewProducts"
-              :model-value="previewProductId ? String(previewProductId) : ''"
-              @update:modelValue="emit('select-preview', $event)"
-              @search="emit('search-preview', $event)"
-              :placeholder="t('marketplace.canvas.previewPlaceholder')"
-            />
-          </div>
+            <ButtonGroup joined>
+              <Tooltip :disabled="!dirty">
+                <TooltipTrigger as-child>
+                  <Button
+                    size="sm"
+                    :disabled="saving || errorCount > 0"
+                    @click="save()"
+                  >
+                    <Spinner v-if="saving" />
+                    <Save v-else class="size-4" />
+                    {{ t("marketplace.canvas.save") }}
+                    <span
+                      v-if="dirty && !saving"
+                      class="size-1.5 rounded-full bg-current opacity-80"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.unsavedChanges") }}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    size="sm"
+                    class="px-2"
+                    :aria-label="t('marketplace.canvas.actions')"
+                  >
+                    <ChevronDown class="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" class="w-56">
+                  <DropdownMenuItem @select="confirmAutoArrange">
+                    <LayoutGrid class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.autoArrange") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    :disabled="syncingFields"
+                    @select="syncAdapterFieldSchema"
+                  >
+                    <Spinner v-if="syncingFields" class="size-4" />
+                    <RefreshCw v-else class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem @select="exportMappingFile">
+                    <Download class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.export") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @select="triggerImportFile">
+                    <Upload class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.import") }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
 
-          <ButtonGroup v-if="previewProductId">
-            <Button size="sm" as-child>
-              <RouterLink
-                :to="`/products/${previewProductId}/edit`"
-                :title="t('marketplace.canvas.openPreviewProductTitle')"
-              >
-                <ExternalLink class="size-4" />
-                {{ t("marketplace.canvas.openPreviewProduct") }}
-              </RouterLink>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              @click="emit('clear-preview')"
-              :title="t('marketplace.canvas.resetPreviewTitle')"
+            <div
+              class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
             >
-              <EyeOff class="size-4" />
-              {{ t("marketplace.canvas.resetPreview") }}
-            </Button>
-          </ButtonGroup>
+              <SearchableSelect
+                class="h-8 w-full bg-card dark:bg-card"
+                content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
+                remote
+                :loading="previewProductsLoading"
+                :options="previewProducts"
+                :model-value="previewProductId ? String(previewProductId) : ''"
+                @update:modelValue="emit('select-preview', $event)"
+                @search="emit('search-preview', $event)"
+                :placeholder="t('marketplace.canvas.previewPlaceholder')"
+              />
+            </div>
 
-          <span
-            v-if="previewing"
-            class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
-          >
-            <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
-          </span>
-          <input
-            ref="importFileInput"
-            type="file"
-            accept="application/json,.json"
-            class="hidden"
-            @change="importMappingFile"
-          />
-          <Badge v-if="errorCount" variant="destructive" class="gap-1">
-            <AlertTriangle class="size-3" /> {{ errorCount }}
-          </Badge>
-        </div>
+            <ButtonGroup v-if="previewProductId">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button size="sm" as-child>
+                    <RouterLink :to="`/products/${previewProductId}/edit`">
+                      <ExternalLink class="size-4" />
+                      {{ t("marketplace.canvas.openPreviewProduct") }}
+                    </RouterLink>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.openPreviewProductTitle") }}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    @click="emit('clear-preview')"
+                  >
+                    <EyeOff class="size-4" />
+                    {{ t("marketplace.canvas.resetPreview") }}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.resetPreviewTitle") }}
+                </TooltipContent>
+              </Tooltip>
+            </ButtonGroup>
+
+            <span
+              v-if="previewing"
+              class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+            >
+              <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
+            </span>
+            <input
+              ref="importFileInput"
+              type="file"
+              accept="application/json,.json"
+              class="hidden"
+              @change="importMappingFile"
+            />
+            <Badge v-if="errorCount" variant="destructive" class="gap-1">
+              <AlertTriangle class="size-3" /> {{ errorCount }}
+            </Badge>
+          </div>
+        </TooltipProvider>
 
         <div v-if="debugMode" class="vf-debug-panel">
           <div class="vf-debug-section">
@@ -3106,19 +3125,6 @@ async function importMappingFile(event) {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
-}
-.vf-iconbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  color: var(--muted-foreground);
-}
-.vf-iconbtn:hover {
-  background: var(--accent);
 }
 
 /* Single "adapter fields" sink node - metrics must match HEADER/ROW in AdapterFieldsNode.vue. */

@@ -17,6 +17,12 @@ import {
   priceFieldGroupCount,
 } from "../graphPriceFields.js";
 import { t } from "@/i18n";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import UnitMismatchNotice from "../UnitMismatchNotice.vue";
 
 const props = defineProps({
@@ -117,105 +123,140 @@ function groupLabel(group) {
 </script>
 
 <template>
-  <div
-    :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
-  >
-    <Handle
-      v-for="(f, i) in fields"
-      :key="f.fieldKey"
-      :id="`f:${f.fieldKey}`"
-      type="target"
-      :position="Position.Left"
-      :connectable="!pinHidden(f)"
-      :style="{
-        top: topFor(i),
-        background: pinColor(f.outputType),
-        opacity: pinHidden(f) ? 0 : 1,
-        pointerEvents: pinHidden(f) ? 'none' : 'auto',
-      }"
-    />
+  <TooltipProvider :delay-duration="300">
+    <div
+      :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
+    >
+      <Handle
+        v-for="(f, i) in fields"
+        :key="f.fieldKey"
+        :id="`f:${f.fieldKey}`"
+        type="target"
+        :position="Position.Left"
+        :connectable="!pinHidden(f)"
+        :style="{
+          top: topFor(i),
+          background: pinColor(f.outputType),
+          opacity: pinHidden(f) ? 0 : 1,
+          pointerEvents: pinHidden(f) ? 'none' : 'auto',
+        }"
+      />
 
-    <div class="vf-adapter__head">
-      <Banknote class="size-3.5 text-primary" />
-      <span class="vf-card__kind">{{
-        t("marketplace.graph.priceHeader")
-      }}</span>
-      <span class="vf-pin-label">{{ fields.length }}</span>
-    </div>
+      <div class="vf-adapter__head">
+        <Banknote class="size-3.5 text-primary" />
+        <span class="vf-card__kind">{{
+          t("marketplace.graph.priceHeader")
+        }}</span>
+        <span class="vf-pin-label">{{ fields.length }}</span>
+      </div>
 
-    <div class="vf-adapter__list">
-      <template v-for="(f, i) in fields" :key="f.fieldKey">
-        <div
-          v-if="isGroupStart(i)"
-          :class="['vf-adapter__group', i === 0 && 'vf-adapter__group--first']"
-        >
-          {{ groupLabel(f.group) }}
-        </div>
-        <div
-          class="vf-adapter__row cursor-pointer"
-          :title="fieldTooltip(f)"
-          @click.stop="data.openField?.(f.fieldKey)"
-        >
-          <span class="vf-adapter__label" :title="fieldTooltip(f)">
-            {{ fieldLabel(f)
-            }}<span v-if="f.isRequired" class="vf-req"> *</span>
-          </span>
-
-          <UnitMismatchNotice
-            v-if="f.source"
-            :warning="data.unitWarnings?.[f.fieldKey]"
-          />
-
-          <span
-            v-if="f.omit"
-            class="vf-adapter__pill vf-adapter__pill--omit"
-            :title="t('marketplace.graph.omitFieldTitle')"
-            @click.stop="data.openField?.(f.fieldKey)"
-            >{{ t("marketplace.graph.omitFieldShort") }}</span
-          >
-
-          <span
-            v-if="f.aliasOf"
-            class="vf-adapter__pill vf-adapter__pill--alias"
-            :title="
-              t('marketplace.graph.aliasMergedShortTitle', {
-                primary: aliasPrimaryLabel(f),
-              })
-            "
-            @click.stop="data.openField?.(f.fieldKey)"
-          >
-            = {{ aliasPrimaryLabel(f) }}
-          </span>
-
-          <component
-            v-if="f.source"
-            :is="analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft"
+      <div class="vf-adapter__list">
+        <template v-for="(f, i) in fields" :key="f.fieldKey">
+          <div
+            v-if="isGroupStart(i)"
             :class="[
-              'vf-adapter__dir',
-              analysis[f.fieldKey]?.importable
-                ? 'vf-adapter__dir--import'
-                : 'vf-adapter__dir--export',
+              'vf-adapter__group',
+              i === 0 && 'vf-adapter__group--first',
             ]"
-          />
-
-          <AlertTriangle
-            v-if="analysis[f.fieldKey]?.fanOut"
-            class="size-2.5 shrink-0 cursor-help text-amber-500"
-            :title="t('marketplace.graph.fanOutPriceUsed')"
-          />
-
-          <span
-            v-if="f.source"
-            class="vf-adapter__pill"
-            :style="pillStyle(f.outputType)"
-            :title="
-              t('marketplace.graph.sourceClickTitle', { label: boundLabel(f) })
-            "
-            @click.stop="data.openField?.(f.fieldKey)"
-            >{{ boundLabel(f) }}</span
           >
-        </div>
-      </template>
+            {{ groupLabel(f.group) }}
+          </div>
+          <div
+            class="vf-adapter__row cursor-pointer"
+            @click.stop="data.openField?.(f.fieldKey)"
+          >
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span class="vf-adapter__label">
+                  {{ fieldLabel(f)
+                  }}<span v-if="f.isRequired" class="vf-req"> *</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-72 whitespace-pre-line">
+                {{ fieldTooltip(f) }}
+              </TooltipContent>
+            </Tooltip>
+
+            <UnitMismatchNotice
+              v-if="f.source"
+              :warning="data.unitWarnings?.[f.fieldKey]"
+            />
+
+            <Tooltip v-if="f.omit">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--omit"
+                  @click.stop="data.openField?.(f.fieldKey)"
+                  >{{ t("marketplace.graph.omitFieldShort") }}</span
+                >
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ t("marketplace.graph.omitFieldTitle") }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="f.aliasOf">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--alias"
+                  @click.stop="data.openField?.(f.fieldKey)"
+                >
+                  = {{ aliasPrimaryLabel(f) }}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{
+                  t("marketplace.graph.aliasMergedShortTitle", {
+                    primary: aliasPrimaryLabel(f),
+                  })
+                }}
+              </TooltipContent>
+            </Tooltip>
+
+            <component
+              v-if="f.source"
+              :is="
+                analysis[f.fieldKey]?.importable ? ArrowLeftRight : ArrowLeft
+              "
+              :class="[
+                'vf-adapter__dir',
+                analysis[f.fieldKey]?.importable
+                  ? 'vf-adapter__dir--import'
+                  : 'vf-adapter__dir--export',
+              ]"
+            />
+
+            <Tooltip v-if="analysis[f.fieldKey]?.fanOut">
+              <TooltipTrigger as-child>
+                <AlertTriangle
+                  class="size-2.5 shrink-0 cursor-help text-amber-500"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ t("marketplace.graph.fanOutPriceUsed") }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="f.source">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill"
+                  :style="pillStyle(f.outputType)"
+                  @click.stop="data.openField?.(f.fieldKey)"
+                  >{{ boundLabel(f) }}</span
+                >
+              </TooltipTrigger>
+              <TooltipContent>
+                {{
+                  t("marketplace.graph.sourceClickTitle", {
+                    label: boundLabel(f),
+                  })
+                }}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </template>
+      </div>
     </div>
-  </div>
+  </TooltipProvider>
 </template>

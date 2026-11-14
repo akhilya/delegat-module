@@ -1,6 +1,7 @@
 <script setup>
 import { inject } from "vue";
 import { AlertTriangle } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
 import {
   Tooltip,
@@ -28,15 +29,16 @@ function onClick() {
   <TooltipProvider v-if="warning" :delay-duration="150">
     <Tooltip>
       <TooltipTrigger as-child>
-        <button
-          type="button"
-          class="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-warning-foreground hover:bg-warning-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          class="shrink-0 rounded-sm text-warning-foreground hover:bg-warning-muted"
           :class="warning.convertible ? 'cursor-pointer' : 'cursor-help'"
           :aria-label="t('marketplace.graph.unitMismatchTitle')"
           @click.stop="onClick"
         >
           <AlertTriangle class="size-3.5" aria-hidden="true" />
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent
         side="top"

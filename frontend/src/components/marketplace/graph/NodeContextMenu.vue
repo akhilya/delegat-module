@@ -32,6 +32,7 @@ import {
   opLabel,
 } from "./graphModel.js";
 import { localizeStandardSourceName } from "./fieldLabels.js";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const { t } = useI18n();
@@ -57,7 +58,8 @@ onMounted(async () => {
 
 const q = computed(() => search.value.trim().toLowerCase());
 const match = (label, ...aliases) =>
-  !q.value || [label, ...aliases].some((a) => (a || "").toLowerCase().includes(q.value));
+  !q.value ||
+  [label, ...aliases].some((a) => (a || "").toLowerCase().includes(q.value));
 
 const connecting = computed(
   () => !!props.filterType && props.filterType !== "any",
@@ -88,28 +90,50 @@ const sourceItems = computed(() => {
   const s = props.availableSources;
   const out = [];
   const push = (icon, label, desc, ...aliases) => {
-    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc))
+      out.push({ icon, label, desc });
   };
   (s.productFields || []).forEach((f) =>
-    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
-      group: "source",
-      kind: "productField",
-      payload: f,
-    }, "product", f.key, f.displayName),
+    push(
+      Database,
+      localizeStandardSourceName(f.key, f.displayName || f.key),
+      {
+        group: "source",
+        kind: "productField",
+        payload: f,
+      },
+      "product",
+      f.key,
+      f.displayName,
+    ),
   );
   (s.stockFields || []).forEach((f) =>
-    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
-      group: "source",
-      kind: "productField",
-      payload: f,
-    }, "stock", f.key, f.displayName),
+    push(
+      Database,
+      localizeStandardSourceName(f.key, f.displayName || f.key),
+      {
+        group: "source",
+        kind: "productField",
+        payload: f,
+      },
+      "stock",
+      f.key,
+      f.displayName,
+    ),
   );
   (s.priceFields || []).forEach((f) =>
-    push(Database, localizeStandardSourceName(f.key, f.displayName || f.key), {
-      group: "source",
-      kind: "productField",
-      payload: f,
-    }, "price", f.key, f.displayName),
+    push(
+      Database,
+      localizeStandardSourceName(f.key, f.displayName || f.key),
+      {
+        group: "source",
+        kind: "productField",
+        payload: f,
+      },
+      "price",
+      f.key,
+      f.displayName,
+    ),
   );
   (s.categoryAttributes || []).forEach((a) =>
     push(Tag, a.name, { group: "source", kind: "attribute", payload: a }),
@@ -121,7 +145,13 @@ const sourceItems = computed(() => {
       payload: a,
     }),
   );
-  push(Boxes, t("marketplace.graph.contextMenu.groupNameItem"), { group: "source", kind: "groupName" }, "group name", "group");
+  push(
+    Boxes,
+    t("marketplace.graph.contextMenu.groupNameItem"),
+    { group: "source", kind: "groupName" },
+    "group name",
+    "group",
+  );
   return out;
 });
 
@@ -134,20 +164,67 @@ const literalItems = computed(() => {
       kind: "static",
       payload: { valueType, staticValue, label },
     };
-    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc))
+      out.push({ icon, label, desc });
   };
-  push(Hash, t("marketplace.graph.contextMenu.numberLiteral"), "number", "0", "number", "int", "float");
-  push(Type, t("marketplace.graph.contextMenu.textLiteral"), "string", "", "text", "string", "str");
-  push(ToggleLeft, t("marketplace.graph.contextMenu.booleanLiteral"), "boolean", "false", "boolean", "bool", "true", "false", "flag");
-  push(List, t("marketplace.graph.contextMenu.arrayLiteral"), "array", "", "array", "list", "arr");
+  push(
+    Hash,
+    t("marketplace.graph.contextMenu.numberLiteral"),
+    "number",
+    "0",
+    "number",
+    "int",
+    "float",
+  );
+  push(
+    Type,
+    t("marketplace.graph.contextMenu.textLiteral"),
+    "string",
+    "",
+    "text",
+    "string",
+    "str",
+  );
+  push(
+    ToggleLeft,
+    t("marketplace.graph.contextMenu.booleanLiteral"),
+    "boolean",
+    "false",
+    "boolean",
+    "bool",
+    "true",
+    "false",
+    "flag",
+  );
+  push(
+    List,
+    t("marketplace.graph.contextMenu.arrayLiteral"),
+    "array",
+    "",
+    "array",
+    "list",
+    "arr",
+  );
   // Adapter value: static node backed by the adapter field's parsedOptions.
   // Options are populated on connect or manually in the inspector.
   const adapterValueLabel = t("marketplace.graph.contextMenu.adapterValueItem");
-  if (match(adapterValueLabel, "default", "enum", "preset", "select") && srcVisible({ group: "source", kind: "static" })) {
+  if (
+    match(adapterValueLabel, "default", "enum", "preset", "select") &&
+    srcVisible({ group: "source", kind: "static" })
+  ) {
     out.push({
       icon: ListChecks,
       label: adapterValueLabel,
-      desc: { group: "source", kind: "static", payload: { isAdapterValue: true, valueType: "string", staticValue: "", label: "" } },
+      desc: {
+        group: "source",
+        kind: "static",
+        payload: {
+          isAdapterValue: true,
+          valueType: "string",
+          staticValue: "",
+          label: "",
+        },
+      },
     });
   }
   return out;
@@ -158,11 +235,34 @@ const productFileItems = computed(() => {
   const out = [];
   const push = (icon, label, kind, ...aliases) => {
     const desc = { group: "source", kind };
-    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc))
+      out.push({ icon, label, desc });
   };
-  push(Link, t("marketplace.graph.contextMenu.productFileByNameLink"), "productFileByName", "file", "url", "link", "image");
-  push(FileText, t("marketplace.graph.contextMenu.productFileContentByNameText"), "productFileContentByName", "file", "text", "content");
-  push(Files, t("marketplace.graph.contextMenu.productFilesByExtensionItem"), "productFilesByExtension", "extension", "ext", "files");
+  push(
+    Link,
+    t("marketplace.graph.contextMenu.productFileByNameLink"),
+    "productFileByName",
+    "file",
+    "url",
+    "link",
+    "image",
+  );
+  push(
+    FileText,
+    t("marketplace.graph.contextMenu.productFileContentByNameText"),
+    "productFileContentByName",
+    "file",
+    "text",
+    "content",
+  );
+  push(
+    Files,
+    t("marketplace.graph.contextMenu.productFilesByExtensionItem"),
+    "productFilesByExtension",
+    "extension",
+    "ext",
+    "files",
+  );
   return out;
 });
 
@@ -172,12 +272,29 @@ const storageItems = computed(() => {
   const out = [];
   const push = (icon, label, kind, ...aliases) => {
     const desc = { group: "source", kind };
-    if (match(label, ...aliases) && srcVisible(desc)) out.push({ icon, label, desc });
+    if (match(label, ...aliases) && srcVisible(desc))
+      out.push({ icon, label, desc });
   };
   // Pre-pick a file only when there's exactly one (otherwise chosen in the inspector).
   const only = files.length === 1 ? files[0] : null;
-  push(HardDrive, t("marketplace.graph.contextMenu.storeFileUrlItem"), "storeFileUrl", "store", "storage", "file", "url");
-  push(FileText, t("marketplace.graph.contextMenu.storeFileContentItem"), "storeFileContent", "store", "storage", "file", "text");
+  push(
+    HardDrive,
+    t("marketplace.graph.contextMenu.storeFileUrlItem"),
+    "storeFileUrl",
+    "store",
+    "storage",
+    "file",
+    "url",
+  );
+  push(
+    FileText,
+    t("marketplace.graph.contextMenu.storeFileContentItem"),
+    "storeFileContent",
+    "store",
+    "storage",
+    "file",
+    "text",
+  );
   if (only)
     out.forEach(
       (it) =>
@@ -209,7 +326,10 @@ const modifierGroups = computed(() => {
   Object.values(MODIFIER_CATALOG).forEach((m) => {
     if (m.type === "llmGenerate" && !aiOn) return;
     const desc = { group: "modifier", modifierType: m.type };
-    if (match(m.displayName, ...(m.aliases || [])) && opVisible(desc, m.applicableTypes))
+    if (
+      match(m.displayName, ...(m.aliases || [])) &&
+      opVisible(desc, m.applicableTypes)
+    )
       (byCat[m.category] ||= []).push({
         icon: Wand2,
         label: m.displayName,
@@ -226,16 +346,36 @@ const modifierGroups = computed(() => {
 // Unified, ordered, collapsible groups.
 const groups = computed(() =>
   [
-    { key: "sources", label: t("marketplace.graph.contextMenu.groups.sources"), items: sourceItems.value },
-    { key: "literals", label: t("marketplace.graph.contextMenu.groups.literals"), items: literalItems.value },
-    { key: "storage", label: t("marketplace.graph.contextMenu.groups.storage"), items: storageItems.value },
+    {
+      key: "sources",
+      label: t("marketplace.graph.contextMenu.groups.sources"),
+      items: sourceItems.value,
+    },
+    {
+      key: "literals",
+      label: t("marketplace.graph.contextMenu.groups.literals"),
+      items: literalItems.value,
+    },
+    {
+      key: "storage",
+      label: t("marketplace.graph.contextMenu.groups.storage"),
+      items: storageItems.value,
+    },
     {
       key: "productFiles",
       label: t("marketplace.graph.contextMenu.groups.productFiles"),
       items: productFileItems.value,
     },
-    { key: "ops", label: t("marketplace.graph.contextMenu.groups.ops"), items: opItems.value },
-    { key: "logic", label: t("marketplace.graph.contextMenu.groups.logic"), items: logicItems.value },
+    {
+      key: "ops",
+      label: t("marketplace.graph.contextMenu.groups.ops"),
+      items: opItems.value,
+    },
+    {
+      key: "logic",
+      label: t("marketplace.graph.contextMenu.groups.logic"),
+      items: logicItems.value,
+    },
     ...modifierGroups.value,
   ].filter((g) => g.items.length),
 );
@@ -273,27 +413,34 @@ const pick = (desc) => {
     />
     <div class="vf-ctx__list thin-scrollbar">
       <template v-for="g in groups" :key="g.key">
-        <button class="vf-ctx__group" type="button" @click.stop="toggle(g)">
+        <Button
+          variant="ghost"
+          class="vf-ctx__group h-auto w-full justify-start"
+          @click.stop="toggle(g)"
+        >
           <component
             :is="isOpen(g) ? ChevronDown : ChevronRight"
             class="size-3"
           />
           {{ g.label }}
           <span class="vf-ctx__count">{{ g.items.length }}</span>
-        </button>
-        <button
+        </Button>
+        <Button
           v-for="(it, i) in isOpen(g) ? g.items : []"
           :key="g.key + '-' + i"
-          class="vf-ctx__item"
+          variant="ghost"
+          class="vf-ctx__item h-auto w-full justify-start"
           @click="pick(it.desc)"
         >
           <component :is="it.icon" class="size-3.5 text-muted-foreground" />{{
             it.label
           }}
-        </button>
+        </Button>
       </template>
 
-      <div v-if="empty" class="vf-ctx__empty">{{ t("marketplace.graph.contextMenu.empty") }}</div>
+      <div v-if="empty" class="vf-ctx__empty">
+        {{ t("marketplace.graph.contextMenu.empty") }}
+      </div>
     </div>
   </div>
 </template>
@@ -315,21 +462,19 @@ const pick = (desc) => {
   padding: 4px;
 }
 .vf-ctx__group {
-  display: flex;
-  align-items: center;
   gap: 5px;
-  width: 100%;
   margin-top: 2px;
   padding: 6px 8px 3px;
+  border-radius: 0;
   font-size: 10px;
+  font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  text-align: left;
   color: var(--muted-foreground);
-  cursor: pointer;
 }
 .vf-ctx__group:hover {
   color: var(--foreground);
+  background: transparent;
 }
 .vf-ctx__count {
   margin-left: auto;
@@ -337,18 +482,12 @@ const pick = (desc) => {
   opacity: 0.7;
 }
 .vf-ctx__item {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  width: 100%;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  text-align: left;
+  font-weight: normal;
   color: var(--foreground);
-}
-.vf-ctx__item:hover {
-  background: var(--accent);
 }
 .vf-ctx__empty {
   padding: 12px;

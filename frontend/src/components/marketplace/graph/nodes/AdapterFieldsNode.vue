@@ -12,6 +12,12 @@ import { ChevronRight } from "@/lib/icons.js";
 import { Button } from "@/components/ui/button";
 import { InsetGroupLabel } from "@/components/ui/inset-group";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ADD_ADAPTER_FIELD_HANDLE,
   mergeProductFieldSources,
   pinColor,
@@ -196,154 +202,189 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 </script>
 
 <template>
-  <div
-    :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
-  >
-    <Handle
-      v-for="f in fields"
-      :key="f.fieldKey"
-      :id="`f:${f.fieldKey}`"
-      type="target"
-      :position="Position.Left"
-      :connectable="
-        !pinHidden(f) && rows.some((row) => row.field?.fieldKey === f.fieldKey)
-      "
-      :style="{
-        top: topFor(fieldRows.get(f.fieldKey) ?? 0),
-        background: pinColor(f.outputType),
-        opacity:
-          pinHidden(f) ||
-          !rows.some((row) => row.field?.fieldKey === f.fieldKey)
-            ? 0
-            : 1,
-        pointerEvents:
-          pinHidden(f) ||
-          !rows.some((row) => row.field?.fieldKey === f.fieldKey)
-            ? 'none'
-            : 'auto',
-      }"
-    />
+  <TooltipProvider :delay-duration="300">
+    <div
+      :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
+    >
+      <Handle
+        v-for="f in fields"
+        :key="f.fieldKey"
+        :id="`f:${f.fieldKey}`"
+        type="target"
+        :position="Position.Left"
+        :connectable="
+          !pinHidden(f) &&
+          rows.some((row) => row.field?.fieldKey === f.fieldKey)
+        "
+        :style="{
+          top: topFor(fieldRows.get(f.fieldKey) ?? 0),
+          background: pinColor(f.outputType),
+          opacity:
+            pinHidden(f) ||
+            !rows.some((row) => row.field?.fieldKey === f.fieldKey)
+              ? 0
+              : 1,
+          pointerEvents:
+            pinHidden(f) ||
+            !rows.some((row) => row.field?.fieldKey === f.fieldKey)
+              ? 'none'
+              : 'auto',
+        }"
+      />
 
-    <Handle
-      :id="ADD_ADAPTER_FIELD_HANDLE"
-      type="target"
-      :position="Position.Left"
-      :style="{
-        top: topFor(rows.length),
-        background: pinColor('any'),
-      }"
-    />
+      <Handle
+        :id="ADD_ADAPTER_FIELD_HANDLE"
+        type="target"
+        :position="Position.Left"
+        :style="{
+          top: topFor(rows.length),
+          background: pinColor('any'),
+        }"
+      />
 
-    <div class="vf-adapter__head">
-      <Target class="size-3.5 text-primary" />
-      <span class="vf-card__kind">{{
-        t("marketplace.graph.adapterHeader")
-      }}</span>
-      <span class="vf-pin-label">{{ fields.length }}</span>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="nodrag ml-auto h-6 px-1 text-xs"
-        :aria-pressed="onlyUnconnected"
-        @click.stop="onlyUnconnected = !onlyUnconnected"
-        >{{ t("marketplace.graph.unconnectedOnly") }}</Button
-      >
-    </div>
-
-    <div class="vf-adapter__list">
-      <template
-        v-for="row in rows"
-        :key="row.header ? `group:${row.key}` : `field:${row.key}`"
-      >
-        <Button
-          v-if="row.header"
-          variant="ghost"
-          class="nodrag h-6 w-full justify-start rounded-none px-2"
-          :aria-expanded="!collapsed.has(row.key)"
-          @click.stop="toggleSection(row.key)"
-        >
-          <ChevronRight
-            class="size-3 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
-            :class="{ 'rotate-90': !collapsed.has(row.key) }"
-          />
-          <InsetGroupLabel class="mb-0 truncate">{{
-            sectionLabel(row.key)
-          }}</InsetGroupLabel>
-        </Button>
-        <div
-          v-else
-          class="vf-adapter__row cursor-pointer"
-          :title="fieldTooltip(row.field)"
-          @click.stop="data.openField?.(row.field.fieldKey)"
-        >
-          <span class="vf-adapter__label" :title="fieldTooltip(row.field)">
-            {{ fieldLabel(row.field)
-            }}<span v-if="row.field.isRequired" class="vf-req"> *</span>
-          </span>
-
-          <UnitMismatchNotice
-            v-if="row.field.source"
-            :warning="data.unitWarnings?.[row.field.fieldKey]"
-          />
-
-          <span
-            v-if="row.field.omit"
-            class="vf-adapter__pill vf-adapter__pill--omit"
-            :title="t('marketplace.graph.omitFieldTitle')"
-            @click.stop="data.openField?.(row.field.fieldKey)"
-            >{{ t("marketplace.graph.omitFieldShort") }}</span
-          >
-
-          <span
-            v-if="row.field.aliasOf"
-            class="vf-adapter__pill vf-adapter__pill--alias"
-            :title="aliasTitle(row.field)"
-            @click.stop="data.openField?.(row.field.fieldKey)"
-          >
-            = {{ aliasPrimaryLabel(row.field) }}
-          </span>
-
-          <component
-            v-if="row.field.source"
-            :is="
-              analysis[row.field.fieldKey]?.importable
-                ? ArrowLeftRight
-                : ArrowLeft
-            "
-            :class="[
-              'vf-adapter__dir',
-              analysis[row.field.fieldKey]?.importable
-                ? 'vf-adapter__dir--import'
-                : 'vf-adapter__dir--export',
-            ]"
-          />
-
-          <AlertTriangle
-            v-if="analysis[row.field.fieldKey]?.fanOut"
-            class="size-2.5 shrink-0 cursor-help text-amber-500"
-            :title="fanOutTitle(row.field)"
-          />
-
-          <span
-            v-if="row.field.source"
-            class="vf-adapter__pill"
-            :style="pillStyle(row.field.outputType)"
-            :title="sourceTitle(row.field)"
-            @click.stop="data.openField?.(row.field.fieldKey)"
-            >{{ boundLabel(row.field) }}</span
-          >
-        </div>
-      </template>
-      <div
-        class="vf-adapter__row vf-adapter__row--add cursor-pointer"
-        :title="t('marketplace.graph.addCustomFieldHint')"
-        @click.stop="data.addCustomField?.()"
-      >
-        <Plus class="size-3 shrink-0 text-muted-foreground" />
-        <span class="vf-adapter__label text-muted-foreground">{{
-          t("marketplace.graph.addCustomField")
+      <div class="vf-adapter__head">
+        <Target class="size-3.5 text-primary" />
+        <span class="vf-card__kind">{{
+          t("marketplace.graph.adapterHeader")
         }}</span>
+        <span class="vf-pin-label">{{ fields.length }}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="nodrag ml-auto h-6 px-1 text-xs"
+          :aria-pressed="onlyUnconnected"
+          @click.stop="onlyUnconnected = !onlyUnconnected"
+          >{{ t("marketplace.graph.unconnectedOnly") }}</Button
+        >
+      </div>
+
+      <div class="vf-adapter__list">
+        <template
+          v-for="row in rows"
+          :key="row.header ? `group:${row.key}` : `field:${row.key}`"
+        >
+          <Button
+            v-if="row.header"
+            variant="ghost"
+            class="nodrag h-6 w-full justify-start rounded-none px-2"
+            :aria-expanded="!collapsed.has(row.key)"
+            @click.stop="toggleSection(row.key)"
+          >
+            <ChevronRight
+              class="size-3 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
+              :class="{ 'rotate-90': !collapsed.has(row.key) }"
+            />
+            <InsetGroupLabel class="mb-0 truncate">{{
+              sectionLabel(row.key)
+            }}</InsetGroupLabel>
+          </Button>
+          <div
+            v-else
+            class="vf-adapter__row cursor-pointer"
+            @click.stop="data.openField?.(row.field.fieldKey)"
+          >
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span class="vf-adapter__label">
+                  {{ fieldLabel(row.field)
+                  }}<span v-if="row.field.isRequired" class="vf-req"> *</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-72 whitespace-pre-line">
+                {{ fieldTooltip(row.field) }}
+              </TooltipContent>
+            </Tooltip>
+
+            <UnitMismatchNotice
+              v-if="row.field.source"
+              :warning="data.unitWarnings?.[row.field.fieldKey]"
+            />
+
+            <Tooltip v-if="row.field.omit">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--omit"
+                  @click.stop="data.openField?.(row.field.fieldKey)"
+                  >{{ t("marketplace.graph.omitFieldShort") }}</span
+                >
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ t("marketplace.graph.omitFieldTitle") }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="row.field.aliasOf">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill vf-adapter__pill--alias"
+                  @click.stop="data.openField?.(row.field.fieldKey)"
+                >
+                  = {{ aliasPrimaryLabel(row.field) }}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ aliasTitle(row.field) }}
+              </TooltipContent>
+            </Tooltip>
+
+            <component
+              v-if="row.field.source"
+              :is="
+                analysis[row.field.fieldKey]?.importable
+                  ? ArrowLeftRight
+                  : ArrowLeft
+              "
+              :class="[
+                'vf-adapter__dir',
+                analysis[row.field.fieldKey]?.importable
+                  ? 'vf-adapter__dir--import'
+                  : 'vf-adapter__dir--export',
+              ]"
+            />
+
+            <Tooltip v-if="analysis[row.field.fieldKey]?.fanOut">
+              <TooltipTrigger as-child>
+                <AlertTriangle
+                  class="size-2.5 shrink-0 cursor-help text-amber-500"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ fanOutTitle(row.field) }}
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="row.field.source">
+              <TooltipTrigger as-child>
+                <span
+                  class="vf-adapter__pill"
+                  :style="pillStyle(row.field.outputType)"
+                  @click.stop="data.openField?.(row.field.fieldKey)"
+                  >{{ boundLabel(row.field) }}</span
+                >
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ sourceTitle(row.field) }}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </template>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <div
+              class="vf-adapter__row vf-adapter__row--add cursor-pointer"
+              @click.stop="data.addCustomField?.()"
+            >
+              <Plus class="size-3 shrink-0 text-muted-foreground" />
+              <span class="vf-adapter__label text-muted-foreground">{{
+                t("marketplace.graph.addCustomField")
+              }}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {{ t("marketplace.graph.addCustomFieldHint") }}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
-  </div>
+  </TooltipProvider>
 </template>
