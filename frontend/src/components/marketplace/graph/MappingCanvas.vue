@@ -468,6 +468,9 @@ function incomingEdgesByTarget() {
  * attribute blocks get their definition's type/unit, and a unit conversion without
  * explicit units takes them from its input source and the adapter field it feeds.
  */
+// Set when reconcileUnitMetadata repairs persisted params, so a load keeps the canvas dirty.
+let unitMetadataRepaired = false;
+
 function reconcileUnitMetadata() {
   let changed = false;
   for (const node of nodes.value) {
@@ -537,7 +540,10 @@ function reconcileUnitMetadata() {
       changed = true;
     }
   }
-  if (changed) dirty.value = true;
+  if (changed) {
+    unitMetadataRepaired = true;
+    dirty.value = true;
+  }
 }
 
 /** Insert a unit conversion block on a wire into an adapter field. */
@@ -1668,6 +1674,7 @@ async function load(options = {}) {
     return;
   }
   if (previewTimer) clearTimeout(previewTimer);
+  unitMetadataRepaired = false;
   loading.value = true;
   loadingPhase.value = "graph";
   await waitForPaint();
@@ -1808,7 +1815,8 @@ async function load(options = {}) {
       );
     }
 
-    dirty.value = false;
+    // Repaired conversion units must be saved to affect export.
+    dirty.value = unitMetadataRepaired;
     await loadStep(
       "load:historySnapshot",
       async () => {
