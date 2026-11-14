@@ -89,12 +89,13 @@ const wordOk = (qw, cw) =>
 const match = (label, ...aliases) => {
   if (!q.value) return true;
   const qWords = q.value.split(/\s+/).filter(Boolean);
+  // Whole strings stay in the hay too: "S/M" or "10/12" are query words but
+  // only the full label contains the slash.
   const hay = [label, ...aliases]
-    .flatMap((a) =>
-      String(a || "")
-        .toLowerCase()
-        .split(/[\s,;/|]+/),
-    )
+    .flatMap((a) => {
+      const s = String(a || "").toLowerCase();
+      return [s, ...s.split(/[\s,;/|]+/)];
+    })
     .filter(Boolean);
   return qWords.every((w) => hay.some((h) => wordOk(w, h)));
 };
