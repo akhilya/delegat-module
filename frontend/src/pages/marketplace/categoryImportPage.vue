@@ -12,6 +12,7 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Switch from "@/components/ui/switch/Switch.vue";
 import { getAttributeUnit } from "@/lib/attributeUnits";
+import { defaultImportAttributeDecisions } from "@/lib/importAttributeDecisions";
 import { mapActions } from "vuex";
 import {
   displaySonnerError,
@@ -356,21 +357,7 @@ export default {
     },
 
     defaultAttributeDecisions(fields) {
-      return Object.fromEntries(
-        fields.flatMap((field) => {
-          const candidate = field.isBaseField
-            ? null
-            : field.potentialDuplicates?.[0];
-          return candidate
-            ? [
-                [
-                  field.key,
-                  { action: "reuse", existingAttributeId: candidate.id },
-                ],
-              ]
-            : [];
-        }),
-      );
+      return defaultImportAttributeDecisions(fields);
     },
 
     attributeDecisionValue(fieldKey) {

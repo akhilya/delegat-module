@@ -1127,7 +1127,7 @@ public class CategoryMappingController : ControllerBase
                         f,
                         importType,
                         unitCode,
-                        localAttributes).ToArray();
+                        localAttributes, allowConvertibleUnits: true).ToArray();
                 var attributeKey = CategoryImportService.SanitizeKey(f.Key);
                 var maxLength = isFile ? null : AttributeFieldConstraints.NormalizeMaxLength(f.MaxLength);
                 var (minValue, maxValue) = AttributeFieldConstraints.NormalizeRange(

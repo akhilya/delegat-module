@@ -14,6 +14,10 @@ public class FieldAutoMappingTests
     [Theory]
     [InlineData("model", "Model", "select")]
     [InlineData("descriptive_code", "Characteristic", "string")]
+    [InlineData("sku_length", "SKU length", "number")]
+    [InlineData("sku_color", "SKU color", "string")]
+    [InlineData("description_length", "Description length", "string")]
+    [InlineData("product_name", "Product name", "boolean")]
     public void DoesNotBindUnrelatedFieldsToProductFields(string key, string name, string type)
     {
         var result = FieldAutoMapping.Resolve(new ExternalField(key, name, true, type), []);

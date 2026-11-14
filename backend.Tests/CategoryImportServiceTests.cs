@@ -11,6 +11,79 @@ namespace Delegat.Tests;
 public class CategoryImportServiceTests
 {
     [Fact]
+    public async Task Import_LeavesAmbiguousLegacyMatchesUnwired()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("colour", "Product color", true, "string")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var first = data.AddCategoryAttribute(category.Id, "Product color", key: "one");
+        var second = data.AddCategoryAttribute(category.Id, "Product color", key: "two");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            requireDuplicateDecisions: false);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.DoesNotContain($"\"attributeId\":{first.Id}", graph);
+        Assert.DoesNotContain($"\"attributeId\":{second.Id}", graph);
+        Assert.Equal(2, await db.categoryAttributes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Import_ReusesRenamedSimilarAttributeForLegacyJob()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("ext_width", "Ширина товара", true, "string")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(category.Id, "Ширина товара общая", key: "local_width");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            requireDuplicateDecisions: false);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        Assert.Contains($"\"attributeId\":{existing.Id}", (await db.categoryMappings.SingleAsync()).graphJson);
+    }
+
+    [Fact]
+    public async Task Import_ReusesConvertibleUnitWithConversionInGraph()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("mass", "Weight", true, "number", UnitCode: "g")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(category.Id, "Вес", AttributeType.Number, key: "local_weight");
+        existing.unitCode = "kg";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions: [new CategoryImportAttributeDecision { fieldKey = "mass", action = "reuse", existingAttributeId = existing.Id }]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.Contains("unitConversion", graph);
+        Assert.Contains("\"fromUnit\":\"kg\"", graph);
+        Assert.Contains("\"toUnit\":\"g\"", graph);
+        Assert.Contains($"\"attributeId\":{existing.Id}", graph);
+    }
+
+    [Fact]
+    public async Task Import_DoesNotTreatDictionaryCharacteristicsAsProductFields()
+    {
+        var (svc, db, connection) = Create("leaf", [
+            new ExternalField("model", "Model", true, "select"),
+            new ExternalField("sku_color", "SKU color", true, "select"),
+            new ExternalField("descriptive_code", "Characteristic", true, "string")]);
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", "Products");
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(3, await db.categoryAttributes.CountAsync());
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.DoesNotContain("\"field\":\"sku\"", graph);
+        Assert.DoesNotContain("\"field\":\"description\"", graph);
+    }
+
+    [Fact]
     public async Task Import_ReusesNormalizedFileDuplicateWithoutMutatingDefinition()
     {
         var (svc, db, connection) = Create("leaf",

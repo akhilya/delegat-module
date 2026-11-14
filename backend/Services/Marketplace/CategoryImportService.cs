@@ -185,6 +185,7 @@ public class CategoryImportService
         var existingAttributes = category.attributes?.ToList() ?? [];
         var duplicateCandidatesByFieldKey = new Dictionary<string, AttributeDuplicateCandidate[]>(StringComparer.Ordinal);
         var unitCodesByFieldKey = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var ambiguousFieldKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in fieldsForAttributes)
         {
             var unitCode = AttributeImportSemantics.ResolveType(field) == AttributeType.Number
@@ -195,7 +196,7 @@ public class CategoryImportService
                 field,
                 AttributeImportSemantics.ResolveType(field),
                 unitCode,
-                existingAttributes).ToArray();
+                existingAttributes, allowConvertibleUnits: true).ToArray();
             duplicateCandidatesByFieldKey[field.Key] = duplicateCandidates;
 
             decisionsByFieldKey.TryGetValue(field.Key, out var decision);
@@ -207,7 +208,14 @@ public class CategoryImportService
                         $"Choose whether to reuse, create, or skip an attribute for field '{field.Key}'");
                 }
 
-                // Preserve already-enqueued legacy imports from before the choice UI existed.
+                // Old queued imports cannot ask for a choice. Leave close candidates unwired.
+                if (duplicateCandidates.Length > 1 && duplicateCandidates[0].Score - duplicateCandidates[1].Score < 5)
+                {
+                    ambiguousFieldKeys.Add(field.Key);
+                    continue;
+                }
+
+                // Preserve unambiguous already-enqueued legacy imports from before the choice UI existed.
                 decision = new CategoryImportAttributeDecision
                 {
                     fieldKey = field.Key,
@@ -249,10 +257,12 @@ public class CategoryImportService
         // (excluding base product fields: sku, barcode, name, description, price, stock)
         int attributesCreated = 0;
         var pendingAttributes = new List<(ExternalField Field, CategoryAttribute Attribute, string SanitizedKey)>();
-        var skippedAttributeFieldKeys = new HashSet<string>(StringComparer.Ordinal);
+        var skippedAttributeFieldKeys = new HashSet<string>(ambiguousFieldKeys, StringComparer.Ordinal);
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
         {
+            if (ambiguousFieldKeys.Contains(field.Key))
+                continue;
             var sanitizedKey = SanitizeKey(field.Key);
             var unitCode = unitCodesByFieldKey[field.Key];
             var importedName = AttributeImportSemantics.NormalizeName(field, unitCode);
@@ -479,23 +489,28 @@ public class CategoryImportService
         var keyLower = field.Key.ToLowerInvariant();
         var nameLower = field.Name.ToLowerInvariant();
 
-        // Try to match against base product fields
-        if (IsSkuField(keyLower, nameLower))
+        // Dictionary and aspect characteristics must not be inferred as product fields.
+        // Grouping is a separate adapter capability and remains eligible below.
+        var characteristic = IsCharacteristicField(field);
+        var fieldType = MapExternalFieldType(field.Type);
+        var textCompatible = fieldType is AttributeType.Text or AttributeType.Barcode;
+        var numberCompatible = fieldType is AttributeType.Number or AttributeType.Text;
+        if (!characteristic && textCompatible && IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
-        if (IsBarcodeField(field))
+        if (!characteristic && textCompatible && IsBarcodeField(field))
             return (FieldMappingSourceType.ProductField, "barcode", null);
 
-        if (IsNameField(keyLower, nameLower))
+        if (!characteristic && fieldType == AttributeType.Text && IsNameField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "name", null);
 
-        if (IsDescriptionField(keyLower, nameLower))
+        if (!characteristic && fieldType == AttributeType.Text && IsDescriptionField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "description", null);
 
-        if (IsPriceField(keyLower, nameLower))
+        if (!characteristic && numberCompatible && IsPriceField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "price", null);
 
-        if (IsStockField(keyLower, nameLower))
+        if (!characteristic && numberCompatible && IsStockField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "storageQuantity", null);
 
         // Product grouping fields are mapped to the group name
@@ -503,7 +518,7 @@ public class CategoryImportService
             return (FieldMappingSourceType.GroupName, null, null);
 
         // Image fields are mapped to the product's images
-        if (IsImageField(field.Key, field.Name))
+        if (!characteristic && IsImageField(field.Key, field.Name))
             return (FieldMappingSourceType.ProductField, "images", null);
 
         // WB rejects this characteristic (HTTP 400) and reads packaging weight only
@@ -523,18 +538,23 @@ public class CategoryImportService
     /// Check whether a field is a base product field (SKU, barcode, name, description, price, stock, images, grouping).
     /// These fields don't need attribute creation - they are handled by product fields or special mappings.
     /// </summary>
-    internal static bool IsBaseOrSpecialField(ExternalField field)
+    internal static bool IsBaseOrSpecialField(ExternalField field) =>
+        DetermineAutoMapping(field, new Dictionary<string, int>()).sourceType != FieldMappingSourceType.Static;
+
+    private static bool IsCharacteristicField(ExternalField field)
     {
-        var keyLower = field.Key.ToLowerInvariant();
-        var nameLower = field.Name.ToLowerInvariant();
-        return IsSkuField(keyLower, nameLower) ||
-               IsBarcodeField(field) ||
-               IsNameField(keyLower, nameLower) ||
-               IsDescriptionField(keyLower, nameLower) ||
-               IsPriceField(keyLower, nameLower) ||
-               IsStockField(keyLower, nameLower) ||
-               IsGroupingField(field.Key, field.Name) ||
-               IsImageField(field.Key, field.Name);
+        if (field.IsAspect || field.Options is { Count: > 0 } ||
+            field.Type.Trim().ToLowerInvariant() is "select" or "multiselect" or "enum" or "dictionary")
+            return true;
+
+        // A product-field word inside a characteristic name is not enough evidence
+        // to bind a base field (for example, "SKU color" or "description length").
+        var tokens = (field.Key + " " + field.Name).ToLowerInvariant()
+            .Split([' ', '_', '-', ':', '.', '/', '(', ')'], StringSplitOptions.RemoveEmptyEntries);
+        return tokens.Any(token => token is "color" or "colour" or "size" or "length" or "width" or "height"
+            or "цвет" or "размер" or "длина" or "ширина" or "высота"
+            || token.StartsWith("characteristic", StringComparison.Ordinal)
+            || token.StartsWith("характеристик", StringComparison.Ordinal));
     }
 
     /// <summary>
