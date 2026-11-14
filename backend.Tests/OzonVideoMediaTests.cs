@@ -225,6 +225,20 @@ public sealed class OzonVideoMediaTests
     }
 
     [Fact]
+    public void FormatUnrecognizedComplexAttributeIncludesKnownAndExtensionData()
+    {
+        var element = JsonSerializer.Deserialize<ComplexAttributeInfo>(
+            """{"complex_id":100001,"values":[{"value":"x"}],"foo":1}""");
+
+        var formatted = OzonComplexAttributes.FormatUnrecognizedElement(element);
+
+        Assert.Contains("\"complex_id\":100001", formatted);
+        Assert.Contains("\"values\"", formatted);
+        Assert.Contains("\"x\"", formatted);
+        Assert.Contains("\"foo\":1", formatted);
+    }
+
+    [Fact]
     public async Task ProductImportMapsVideoWhenComplexAttributesContainNullValues()
     {
         var attributes = await DeserializeProductAttributesAsync("id", """
