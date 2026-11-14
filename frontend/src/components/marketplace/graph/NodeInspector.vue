@@ -445,6 +445,18 @@ const selectedArrayValues = computed(() => {
     : [];
 });
 
+const arrayOptionFilter = ref("");
+const filteredArrayOptions = computed(() => {
+  const query = arrayOptionFilter.value.trim().toLowerCase();
+  const opts = data.value.options || [];
+  if (!query) return opts;
+  return opts.filter((o) =>
+    String(o.label ?? o.value)
+      .toLowerCase()
+      .includes(query),
+  );
+});
+
 function toggleArrayValue(val) {
   const cur = selectedArrayValues.value;
   const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
@@ -760,11 +772,19 @@ function resolvePreview(fieldKey, raw) {
             <template
               v-else-if="data.options?.length && data.valueType === 'array'"
             >
+              <Input
+                v-if="data.options.length > 5"
+                v-model="arrayOptionFilter"
+                :placeholder="
+                  t('components.searchableSelect.searchPlaceholder')
+                "
+                class="h-8 text-xs"
+              />
               <div
-                class="max-h-52 overflow-y-auto rounded border p-2 space-y-1.5"
+                class="max-h-52 space-y-1.5 overflow-y-auto rounded border p-2"
               >
                 <label
-                  v-for="opt in data.options"
+                  v-for="opt in filteredArrayOptions"
                   :key="opt.value"
                   class="flex cursor-pointer items-center gap-2 text-xs"
                 >
@@ -774,6 +794,12 @@ function resolvePreview(fieldKey, raw) {
                   />
                   <span>{{ opt.label }}</span>
                 </label>
+                <p
+                  v-if="!filteredArrayOptions.length"
+                  class="text-[11px] text-muted-foreground"
+                >
+                  {{ t("components.searchableSelect.nothingFound") }}
+                </p>
               </div>
             </template>
 

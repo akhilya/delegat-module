@@ -206,11 +206,16 @@ const literalItems = computed(() => {
     "arr",
   );
   // Adapter value: static node backed by the adapter field's parsedOptions.
-  // Options are populated on connect or manually in the inspector.
+  // Options are populated on connect or manually in the inspector, and the
+  // bound field decides the real valueType - so offer it for any dragged pin.
   const adapterValueLabel = t("marketplace.graph.contextMenu.adapterValueItem");
   if (
     match(adapterValueLabel, "default", "enum", "preset", "select") &&
-    srcVisible({ group: "source", kind: "static" })
+    srcVisible({
+      group: "source",
+      kind: "static",
+      payload: { valueType: "any" },
+    })
   ) {
     out.push({
       icon: ListChecks,
