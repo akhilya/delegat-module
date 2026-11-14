@@ -761,7 +761,7 @@ export default {
         linkId: conn.linkId,
         onSuccess: (response) => {
           const result = extractResponseData(response, {});
-          const images = result.images || [];
+          const images = result.media || [];
           if (images.length === 0) {
             displaySonnerSuccess(
               t("productMarketplaceIntegrations.importImagesNoneOnAdapter"),
@@ -2015,7 +2015,7 @@ export default {
     <ImportImagesPreviewDialog
       v-if="showImportImagesDialog"
       :open="showImportImagesDialog"
-      :images="importImagesPreview?.images || []"
+      :media="importImagesPreview?.media || []"
       :local-gallery-count="importImagesPreview?.localGalleryCount || 0"
       :confirm-loading="isApplyingImportImages"
       @update:open="(v) => (showImportImagesDialog = v)"

@@ -1,9 +1,9 @@
 <script setup>
 /**
- * Preview marketplace photos and pick which to download (append-only).
+ * Preview marketplace media and pick which files to download (append-only).
  */
 import { computed, ref, watch } from "vue";
-import { Download, ImageOff } from "lucide-vue-next";
+import { Download, ImageOff, Play } from "lucide-vue-next";
 import { t } from "@/i18n";
 import {
   Dialog,
@@ -27,7 +27,7 @@ import {
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  images: { type: Array, default: () => [] },
+  media: { type: Array, default: () => [] },
   localGalleryCount: { type: Number, default: 0 },
   confirmLoading: { type: Boolean, default: false },
 });
@@ -38,11 +38,11 @@ const selectedUrls = ref(new Set());
 const brokenUrls = ref(new Set());
 
 const newImages = computed(() =>
-  props.images.filter((img) => img.status === "new"),
+  props.media.filter((img) => img.status === "new"),
 );
 
 const selectableImages = computed(() =>
-  props.images.filter((img) => img.status !== "queued"),
+  props.media.filter((img) => img.status !== "queued"),
 );
 
 const allSelectableSelected = computed(() => {
@@ -55,7 +55,7 @@ const confirmDisabled = computed(
 );
 
 watch(
-  () => props.images,
+  () => props.media,
   () => {
     selectedUrls.value = new Set(newImages.value.map((img) => img.url));
     brokenUrls.value = new Set();
@@ -159,7 +159,7 @@ function onConfirm() {
             class="grid grid-cols-2 gap-3 sm:grid-cols-3"
             data-slot="checkbox-group"
           >
-            <Field v-for="(img, idx) in images" :key="img.url" class="min-w-0">
+            <Field v-for="(img, idx) in media" :key="img.url" class="min-w-0">
               <FieldLabel
                 class="w-full cursor-pointer items-stretch rounded-lg border p-3 has-data-[state=checked]:border-primary"
                 :class="
@@ -176,17 +176,28 @@ function onConfirm() {
                     />
                     <span class="text-sm font-medium leading-none">
                       {{
-                        t("productMarketplaceIntegrations.importImagesPhotoN", {
-                          n: idx + 1,
-                        })
+                        t(
+                          img.kind === "video"
+                            ? "productMarketplaceIntegrations.importMediaVideoN"
+                            : "productMarketplaceIntegrations.importImagesPhotoN",
+                          {
+                            n: idx + 1,
+                          },
+                        )
                       }}
                     </span>
                   </div>
                   <div
                     class="bg-muted relative aspect-square w-full overflow-hidden rounded-md"
                   >
+                    <div
+                      v-if="img.kind === 'video'"
+                      class="text-muted-foreground flex size-full items-center justify-center"
+                    >
+                      <Play class="size-8" aria-hidden="true" />
+                    </div>
                     <AppImage
-                      v-if="!brokenUrls.has(img.url)"
+                      v-else-if="!brokenUrls.has(img.url)"
                       :src="img.url"
                       :alt="
                         t('productMarketplaceIntegrations.importImagesPhotoN', {
@@ -204,6 +215,13 @@ function onConfirm() {
                       <ImageOff class="size-8" />
                     </div>
                   </div>
+                  <span
+                    v-if="img.fileName"
+                    class="truncate text-sm"
+                    :title="img.fileName"
+                  >
+                    {{ img.fileName }}
+                  </span>
                   <span class="text-muted-foreground text-xs">
                     {{ statusLabel(img.status) }}
                   </span>

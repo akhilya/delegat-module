@@ -13,6 +13,51 @@ namespace Delegat.Tests;
 public class ProductImageImportTests
 {
     [Fact]
+    public async Task MediaPreviewAndQueue_KeepVideoTypeAndFreshUrlAlongsidePhotos()
+    {
+        var (svc, db, product, user) = Create();
+        var media = new List<Delegat.Marketplace.SDK.DTOs.ExternalMedia>
+        {
+            new("video", "https://cdn.example.test/clip.mp4?token=fresh", 0, FileName: "clip.mp4"),
+            new("image", "https://cdn.example.test/typed.jpg", 1)
+        };
+        var images = new List<string> { "https://cdn.example.test/photo.jpg" };
+        var preview = await svc.PreviewImportImagesAsync(product.Id, images, remoteMedia: media);
+        Assert.Equal(3, preview.Images.Count);
+        var video = Assert.Single(preview.Images, item => item.Kind == "video");
+        Assert.Equal("clip.mp4", video.FileName);
+        Assert.Equal("new", video.Status);
+
+        var queued = await svc.QueueImportImagesAsync(product.Id, product.storeId, user.Id,
+            ["https://cdn.example.test/clip.mp4?token=old", images[0]], images,
+            batchId: "media", remoteMedia: media);
+        Assert.Equal(2, queued.QueuedCount);
+        var rows = await db.pendingImageDownloads.OrderBy(row => row.imageIndex).ToListAsync();
+        Assert.Equal(PendingMediaKind.Video, rows[0].mediaKind);
+        Assert.Equal(media[0].Url, rows[0].imageUrl);
+        Assert.Equal("clip.mp4", rows[0].mediaFileName);
+        Assert.Equal(PendingMediaKind.Image, rows[1].mediaKind);
+        Assert.Equal(new[] { 0, 1 }, rows.Select(row => row.imageIndex));
+
+        var retry = await svc.QueueImportImagesAsync(product.Id, product.storeId, user.Id,
+            [media[0].Url], images, remoteMedia: media);
+        Assert.Equal(0, retry.QueuedCount);
+        Assert.Equal(1, retry.SkippedCount);
+    }
+
+    [Fact]
+    public async Task MediaQueue_RejectsUnlistedVideoWithoutQueueingSelectedPhotos()
+    {
+        var (svc, db, product, user) = Create();
+        var images = new List<string> { "https://cdn.example.test/photo.jpg" };
+        await Assert.ThrowsAsync<ApiException>(() => svc.QueueImportImagesAsync(
+            product.Id, product.storeId, user.Id,
+            [images[0], "https://evil.test/unlisted.mp4"], images,
+            remoteMedia: [new("video", "https://cdn.example.test/clip.mp4", 0)]));
+        Assert.Empty(await db.pendingImageDownloads.ToListAsync());
+    }
+
+    [Fact]
     public async Task Preview_MarksImportedQueuedAndNew()
     {
         var (svc, db, product, user) = Create();
