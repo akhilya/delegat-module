@@ -245,9 +245,10 @@ public static class GraphGenerator
         // Newly appended nodes get positions only when the graph already stores a layout:
         // the frontend auto-lays-out a fully position-less graph, but a mixed graph would
         // leave the appended chain piled at the origin.
-        var hasSavedLayout = graph.nodes.Any(n => n.position != null);
-        var nextRowY = hasSavedLayout ? graph.nodes.Max(n => n.position!.y) + AppendedRowGap : 0;
-        var leftColumnX = hasSavedLayout ? graph.nodes.Min(n => n.position!.x) : 0;
+        var positioned = graph.nodes.Where(n => n.position != null).ToList();
+        var hasSavedLayout = positioned.Count > 0;
+        var nextRowY = hasSavedLayout ? positioned.Max(n => n.position!.y) + AppendedRowGap : 0;
+        var leftColumnX = hasSavedLayout ? positioned.Min(n => n.position!.x) : 0;
 
         var incoming = AliasDuplicateProductFieldSources(
             specs.Where(f => f.isEnabled).ToList());

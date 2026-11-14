@@ -491,4 +491,55 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         Assert.True(modifier.GetProperty("position").GetProperty("x").GetDouble()
             > source.GetProperty("position").GetProperty("x").GetDouble());
     }
+
+    [Fact]
+    public void SyncAdapterFields_PositionsAppendedChainWhenLayoutIsPartial()
+    {
+        // SyncPriceFields can append an unpositioned sink to a positioned graph;
+        // syncing that mixed graph must not throw and must still position new nodes.
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "adapter-fields",
+                  "type": "adapterFields",
+                  "position": { "x": 400, "y": 0 },
+                  "data": { "fields": [ { "fieldKey": "title", "label": "Title", "outputType": "string" } ] }
+                },
+                {
+                  "id": "adapter-price-fields",
+                  "type": "adapterPriceFields",
+                  "data": { "fields": [] }
+                }
+              ],
+              "edges": []
+            }
+            """;
+
+        var result = GraphGenerator.SyncAdapterFields(
+            graph,
+            [
+                new FieldSpec
+                {
+                    externalFieldKey = "weight",
+                    externalFieldName = "Weight",
+                    externalFieldType = "number",
+                    isEnabled = true,
+                    sortOrder = 5,
+                    sourceType = FieldMappingSourceType.CategoryAttribute,
+                    sourceAttributeId = 9,
+                    modifiersJson = """[{"type":"unitConversion","enabled":true,"params":{"fromUnit":"kg","toUnit":"g"}}]""",
+                },
+            ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var appended = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .Where(n => n.GetProperty("id").GetString() is not ("adapter-fields" or "adapter-price-fields"))
+            .ToList();
+
+        Assert.Equal(2, appended.Count);
+        Assert.All(appended, n => Assert.True(n.TryGetProperty("position", out _)));
+        Assert.All(appended, n =>
+            Assert.True(n.GetProperty("position").GetProperty("y").GetDouble() > 0));
+    }
 }
