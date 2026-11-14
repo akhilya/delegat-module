@@ -1844,7 +1844,7 @@ public partial class ProductSyncService
             return 0;
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
         var byKey = new Dictionary<string, object>(externalAttributes, StringComparer.OrdinalIgnoreCase);
 
         var (categoryAttributeSpecs, storeAttributeSpecs) =
@@ -2019,7 +2019,7 @@ public partial class ProductSyncService
         }
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
 
         if (enabledMappings.Count == 0)
         {
@@ -2255,7 +2255,7 @@ public partial class ProductSyncService
             return result;
 
         // Import is graph-native: project the node graph to per-field import descriptors.
-        var enabledMappings = MappingService.ProjectGraphForImport(categoryMapping.graphJson);
+        var enabledMappings = await _mappingService.ProjectGraphForImportAsync(categoryMapping.graphJson, ct);
 
         var existingProductAttrs = await _context.productAttributeValues
             .AsNoTracking()

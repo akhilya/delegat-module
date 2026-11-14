@@ -10,7 +10,19 @@ namespace Delegat.Tests;
 public sealed class WildberriesVideoMediaTests
 {
     [Fact]
-    public void BuildMediaUrls_PhotoOnlyUpdatePreservesExistingVideoAndPhotos()
+    public void RepeatedExportDoesNotAppendRemotePhotosOrExceedLimit()
+    {
+        var existing = ExistingCard();
+        existing.Photos = Enumerable.Range(0, 21).Select(i => new WbPhoto { Big = $"https://wb.example.test/{i}.jpg" }).ToList();
+        var selected = Enumerable.Range(0, 21).Select(i => $"https://pim.example.test/{i}.jpg").ToList();
+        var urls = WildberriesPlugin.BuildMediaUrls(existing, selected, []);
+        Assert.Equal(selected, urls.Skip(1));
+        Assert.Equal(22, urls.Count);
+        Assert.Equal(urls, WildberriesPlugin.BuildMediaUrls(existing, selected, []));
+    }
+
+    [Fact]
+    public void BuildMediaUrls_PhotoOnlyUpdateReplacesPhotosAndPreservesVideo()
     {
         var existing = ExistingCard();
 
@@ -22,8 +34,6 @@ public sealed class WildberriesVideoMediaTests
         Assert.Equal(
         [
             "https://cdn.example.test/old-video.mp4",
-            "https://cdn.example.test/old-1.jpg",
-            "https://cdn.example.test/old-2.jpg",
             "https://cdn.example.test/new.jpg"
         ], urls);
     }
@@ -107,7 +117,7 @@ public sealed class WildberriesVideoMediaTests
             data,
             json.RootElement.GetProperty("data").EnumerateArray().Select(value => value.GetString()!).ToList());
         Assert.StartsWith("https://media.example.test/", data[0]);
-        Assert.Equal(4, data.Count);
+        Assert.Equal(2, data.Count);
     }
 
     private static WbCard ExistingCard() => new()

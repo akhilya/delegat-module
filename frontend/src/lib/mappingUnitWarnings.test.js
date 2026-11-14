@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { analyzeUnitWarnings, unitMismatch } from "./mappingUnitWarnings.js";
+import {
+  analyzeUnitWarnings,
+  unitMismatch,
+  resolveConversionUnits,
+} from "./mappingUnitWarnings.js";
 
 describe("mapping unit warnings", () => {
   it("does not warn when known aliases resolve to the same unit", () => {
@@ -204,5 +208,139 @@ describe("mapping unit warnings (definitions and conversions)", () => {
     assert.equal(warning.sinkId, "adapter-fields");
     assert.equal(warning.fieldKey, "height");
     assert.equal(unitMismatch("mm", "kg").convertible, false);
+  });
+});
+
+describe("automatic conversion parameters", () => {
+  const source = {
+    id: "source",
+    type: "attribute",
+    data: { attributeId: 7, unitCode: "g" },
+  };
+  const convert = {
+    id: "convert",
+    type: "modifier",
+    data: {
+      modifierType: "unitConversion",
+      params: { fromUnit: "g", toUnit: "kg" },
+    },
+  };
+  const sink = {
+    id: "sink",
+    type: "adapterFields",
+    data: { fields: [{ fieldKey: "weight", unitCode: "g" }] },
+  };
+  const edges = [
+    { source: "source", target: "convert", targetHandle: "in" },
+    { source: "convert", target: "sink", targetHandle: "f:weight" },
+  ];
+  const sources = { categoryAttributes: [{ id: 7, unitCode: "kg" }] };
+
+  it("refreshes both stale units by default", () => {
+    const units = resolveConversionUnits(
+      [source, convert, sink],
+      edges,
+      sources,
+    ).get("convert");
+    assert.equal(units.fromUnit, "kg");
+    assert.equal(units.toUnit, "g");
+  });
+  it("preserves manual units", () => {
+    const manual = {
+      ...convert,
+      data: {
+        ...convert.data,
+        params: { ...convert.data.params, autoDetect: false },
+      },
+    };
+    assert.deepEqual(
+      resolveConversionUnits([source, manual, sink], edges, sources).get(
+        "convert",
+      ),
+      manual.data.params,
+    );
+  });
+  it("clears stale units when disconnected or removed from the definition", () => {
+    const units = resolveConversionUnits([source, convert, sink], edges, {
+      categoryAttributes: [{ id: 7, unitCode: null }],
+    }).get("convert");
+    assert.equal(units.fromUnit, null);
+    const disconnected = resolveConversionUnits(
+      [source, convert, sink],
+      [],
+      sources,
+    ).get("convert");
+    assert.equal(disconnected.fromUnit, null);
+    assert.equal(disconnected.toUnit, null);
+  });
+  it("traces reroutes to the destination", () => {
+    const bend = { id: "bend", type: "reroute" };
+    const rewired = [
+      edges[0],
+      { source: "convert", target: "bend", targetHandle: "in" },
+      { ...edges[1], source: "bend" },
+    ];
+    assert.equal(
+      resolveConversionUnits(
+        [source, convert, sink, bend],
+        rewired,
+        sources,
+      ).get("convert").toUnit,
+      "g",
+    );
+  });
+  it("does not guess a unit after arithmetic or across conflicting destinations", () => {
+    const divide = {
+      id: "divide",
+      type: "modifier",
+      data: { modifierType: "divide" },
+    };
+    const rewired = [
+      { source: "source", target: "divide", targetHandle: "in" },
+      { ...edges[0], source: "divide" },
+      edges[1],
+    ];
+    assert.equal(
+      resolveConversionUnits(
+        [source, divide, convert, sink],
+        rewired,
+        sources,
+      ).get("convert").fromUnit,
+      null,
+    );
+    const other = {
+      ...sink,
+      id: "other",
+      data: { fields: [{ fieldKey: "weight", unitCode: "kg" }] },
+    };
+    assert.equal(
+      resolveConversionUnits(
+        [source, convert, sink, other],
+        [...edges, { ...edges[1], target: "other" }],
+        sources,
+      ).get("convert").toUnit,
+      null,
+    );
+  });
+  it("ignores operand pins when tracing the main value", () => {
+    const round = {
+      id: "round",
+      type: "modifier",
+      data: { modifierType: "round" },
+    };
+    const rewired = [
+      { source: "source", target: "round", targetHandle: "in" },
+      { source: "digits", target: "round", targetHandle: "p:decimals" },
+      { ...edges[0], source: "round" },
+      edges[1],
+    ];
+    assert.equal(
+      resolveConversionUnits(
+        [source, round, convert, sink],
+        rewired,
+        sources,
+      ).get("convert").fromUnit,
+      "kg",
+    );
   });
 });

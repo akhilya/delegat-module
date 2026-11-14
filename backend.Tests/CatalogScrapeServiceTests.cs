@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Delegat;
 using Delegat.Enums;
 using Delegat.Marketplace.SDK.RateLimit;
@@ -402,7 +403,7 @@ public class CatalogScrapeServiceTests
         var productSync = new ProductSyncService(
             db,
             registry,
-            mappingService: null!,
+            mappingService: new MappingService(db, new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider()),
             storageService: null!,
             NullLogger<ProductSyncService>.Instance,
             new NoopOperationLogger(),
