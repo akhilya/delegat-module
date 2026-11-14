@@ -42,6 +42,421 @@ public class ProductSyncImportAttributesTests
     }
 
     [Fact]
+    public async Task NewImport_CombinesMappedVideoAttributeWithGalleryAndQueuesCoverWithoutGallery()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Local");
+        var video = data.AddCategoryAttribute(category.Id, "Видео", AttributeType.File, key: "21841");
+        var cover = data.AddCategoryAttribute(category.Id, "Видеообложка", AttributeType.File, key: "21845");
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var mapping = data.AddMapping(connection.Id, category.Id, "10");
+        mapping.graphJson = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "21841",
+                externalFieldName = "Видео: ссылка",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = video.Id,
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "21845",
+                externalFieldName = "Видеообложка: ссылка",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = cover.Id,
+            }
+        ]);
+        await db.SaveChangesAsync();
+
+        var external = new ExternalProduct(
+            "ext-video",
+            "VIDEO-1",
+            "Video product",
+            Attributes: new Dictionary<string, object>
+            {
+                ["21841"] = "https://8.8.8.8/asset_1_h264.mp4",
+                ["21845"] = "https://8.8.8.8/asset_2_h264.mp4"
+            })
+        {
+            Media =
+            [
+                new("video", "https://8.8.8.8/asset_1_h264.mp4?token=fresh", 0, FileName: "революционеры.mp4")
+            ]
+        };
+        var svc = CreateService(db, new ImportAdapter(external));
+
+        var result = await svc.ImportProductAsync(
+            connection.Id,
+            "ext-video",
+            targetCategoryId: category.Id,
+            importByUserId: user.Id,
+            batchId: "import-batch",
+            batchStoreId: store.Id,
+            imageBatchId: "import-batch-img");
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var product = await db.products.SingleAsync(item => item.sku == "VIDEO-1");
+        var rows = await db.pendingImageDownloads
+            .Where(row => row.productId == product.Id)
+            .OrderBy(row => row.imageIndex)
+            .ToListAsync();
+        Assert.Equal(3, rows.Count);
+
+        var galleryVideoDownload = Assert.Single(rows,
+            row => row.imageUrl == "https://8.8.8.8/asset_1_h264.mp4?token=fresh");
+        Assert.Null(galleryVideoDownload.targetAttributeId);
+        Assert.False(galleryVideoDownload.skipGallery);
+        Assert.Equal("революционеры.mp4", galleryVideoDownload.mediaFileName);
+
+        var videoDownload = Assert.Single(rows, row => row.targetAttributeId == video.Id);
+        Assert.Equal("https://8.8.8.8/asset_1_h264.mp4", videoDownload.imageUrl);
+        Assert.Equal(PendingMediaKind.Video, videoDownload.mediaKind);
+        Assert.Equal("революционеры.mp4", videoDownload.mediaFileName);
+        Assert.True(videoDownload.skipGallery);
+        Assert.Null(videoDownload.targetStoreAttributeId);
+
+        var coverDownload = Assert.Single(rows, row => row.targetAttributeId == cover.Id);
+        Assert.Equal(PendingMediaKind.Video, coverDownload.mediaKind);
+        Assert.True(coverDownload.skipGallery);
+        Assert.Null(coverDownload.mediaFileName);
+        Assert.Null(coverDownload.targetStoreAttributeId);
+        Assert.Empty(await db.productAttributeValues.Where(value => value.productId == product.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task ImportAttributes_QueuesSingleCategoryAndMultipleStoreFilesInUrlOrder()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Local");
+        var singleFile = data.AddCategoryAttribute(category.Id, "Single file", AttributeType.File, key: "single");
+        var multipleFiles = data.AddStoreAttribute(store.Id, "Multiple files", AttributeType.File, key: "multiple");
+        multipleFiles.allowMultipleFiles = true;
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var mapping = data.AddMapping(connection.Id, category.Id, "10");
+        mapping.graphJson = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "single",
+                externalFieldName = "Single",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = singleFile.Id,
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "multiple",
+                externalFieldName = "Multiple",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.StoreAttribute,
+                sourceAttributeId = multipleFiles.Id,
+            }
+        ]);
+        var product = data.AddProduct(store.Id, "Local", "ART-1", category.Id);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db, new ImportAdapter(null));
+        var multiUrlValues = new List<string>
+        {
+            "https://8.8.8.8/first.jpg",
+            "https://8.8.8.8/no-extension",
+            "https://8.8.8.8/download?id=1",
+            "https://8.8.8.8/download?id=2"
+        };
+        multiUrlValues.AddRange(Enumerable.Range(0, 20)
+            .Select(index => $"https://8.8.8.8/multi-{index}.jpg"));
+        multiUrlValues.Add("ftp://8.8.8.8/rejected.jpg");
+        var imported = await svc.ImportProductAttributesAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            new Dictionary<string, object>
+            {
+                ["single"] = new List<string>
+                {
+                    "https://8.8.8.8/first.mp4",
+                    "https://8.8.8.8/ignored.mp4",
+                    "ftp://8.8.8.8/rejected.mp4"
+                },
+                ["multiple"] = multiUrlValues
+            },
+            CancellationToken.None,
+            authorUserId: user.Id,
+            mediaBatchId: "file-import-img",
+            externalMedia:
+            [
+                new("video", "https://8.8.8.8/no-extension", 0, FileName: "external-video.mkv")
+            ]);
+
+        Assert.Equal(2, imported);
+        var rows = await db.pendingImageDownloads.OrderBy(row => row.imageIndex).ToListAsync();
+        Assert.Equal(21, rows.Count);
+        var singleRow = Assert.Single(rows, row => row.targetAttributeId == singleFile.Id);
+        Assert.Equal("https://8.8.8.8/first.mp4", singleRow.imageUrl);
+        Assert.Equal(PendingMediaKind.Video, singleRow.mediaKind);
+        Assert.True(singleRow.skipGallery);
+        var storeRows = rows.Where(row => row.targetStoreAttributeId == multipleFiles.Id)
+            .OrderBy(row => row.imageUrl)
+            .ToList();
+        Assert.Equal(20, storeRows.Count);
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/first.jpg");
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/no-extension");
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/download?id=1");
+        Assert.Contains(storeRows, row => row.imageUrl == "https://8.8.8.8/download?id=2");
+        Assert.DoesNotContain(storeRows, row => row.imageUrl == "https://8.8.8.8/multi-18.jpg");
+        Assert.Equal(PendingMediaKind.Image, storeRows.Single(row => row.imageUrl.EndsWith("first.jpg")).mediaKind);
+        var typedVideo = Assert.Single(storeRows, row => row.imageUrl.EndsWith("no-extension"));
+        Assert.Equal(PendingMediaKind.Video, typedVideo.mediaKind);
+        Assert.Equal("external-video.mkv", typedVideo.mediaFileName);
+        Assert.All(rows, row => Assert.True(row.skipGallery));
+        Assert.Empty(await db.productAttributeValues.Where(value => value.productId == product.Id).ToListAsync());
+        Assert.Empty(await db.storeProductAttributeValues.Where(value => value.productId == product.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task UpdateAttributes_QueuesFileWithoutWritingUrlText()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Local");
+        var fileAttribute = data.AddCategoryAttribute(category.Id, "Video", AttributeType.File, key: "video");
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var mapping = data.AddMapping(connection.Id, category.Id, "10");
+        mapping.graphJson = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "video",
+                externalFieldName = "Video",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = fileAttribute.Id,
+            }
+        ]);
+        var product = data.AddProduct(store.Id, "Local", "ART-1", category.Id);
+        var existingValue = new ProductAttributeValue
+        {
+            productId = product.Id,
+            attributeId = fileAttribute.Id,
+            value = "https://8.8.8.8/old.mp4"
+        };
+        db.productAttributeValues.Add(existingValue);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db, new ImportAdapter(null));
+        var changes = await svc.UpdateProductAttributesFromExternalAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            new Dictionary<string, object> { ["video"] = "https://8.8.8.8/new.mp4" },
+            CancellationToken.None,
+            authorUserId: user.Id,
+            mediaBatchId: "update-img");
+
+        Assert.Empty(changes);
+        Assert.Equal(string.Empty, existingValue.value);
+        var pending = await db.pendingImageDownloads.SingleAsync();
+        Assert.Equal(fileAttribute.Id, pending.targetAttributeId);
+        Assert.Equal("https://8.8.8.8/new.mp4", pending.imageUrl);
+        Assert.True(pending.skipGallery);
+    }
+
+    [Fact]
+    public async Task ImportAttributes_DoesNotQueueFileWhenTheAttributeAlreadyHasFiles()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Local");
+        var fileAttribute = data.AddCategoryAttribute(category.Id, "Video", AttributeType.File, key: "video");
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var mapping = data.AddMapping(connection.Id, category.Id, "10");
+        mapping.graphJson = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "video",
+                externalFieldName = "Video",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = fileAttribute.Id,
+            }
+        ]);
+        var product = data.AddProduct(store.Id, "Local", "ART-1", category.Id);
+        var existingFile = new Delegat.Models.File
+        {
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "stores/1/products/1/media/existing.mp4",
+            contentType = "video/mp4",
+            length = 10,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow,
+            sourceUrl = "https://8.8.8.8/existing.mp4"
+        };
+        db.files.Add(existingFile);
+        var existingValue = new ProductAttributeValue
+        {
+            productId = product.Id,
+            attributeId = fileAttribute.Id,
+            value = string.Empty
+        };
+        existingValue.files.Add(new ProductAttributeFile { file = existingFile, index = 0 });
+        db.productAttributeValues.Add(existingValue);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db, new ImportAdapter(null));
+        await svc.ImportProductAttributesAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            new Dictionary<string, object> { ["video"] = "https://8.8.8.8/replacement.mp4" },
+            CancellationToken.None,
+            authorUserId: user.Id,
+            mediaBatchId: "existing-file-img");
+
+        Assert.Empty(await db.pendingImageDownloads.ToListAsync());
+        Assert.Empty(existingValue.value);
+        Assert.Single(existingValue.files);
+    }
+
+    [Fact]
+    public async Task Preview_ReportsEmptyFileMappingsWithoutQueueingDownloads()
+    {
+        var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore();
+        var category = data.AddCategory(store.Id, "Local");
+        var fileAttribute = data.AddCategoryAttribute(category.Id, "Video", AttributeType.File, key: "video");
+        var storeFileAttribute = data.AddStoreAttribute(store.Id, "Store video", AttributeType.File, key: "storeVideo");
+        var connection = data.AddConnection(store.Id, adapterKey: "fake");
+        var mapping = data.AddMapping(connection.Id, category.Id, "10");
+        mapping.graphJson = GraphGenerator.BuildGraphJson(
+        [
+            new FieldSpec
+            {
+                externalFieldKey = "video",
+                externalFieldName = "Video",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.CategoryAttribute,
+                sourceAttributeId = fileAttribute.Id,
+                modifiersJson = """{"toUppercase":true}"""
+            },
+            new FieldSpec
+            {
+                externalFieldKey = "storeVideo",
+                externalFieldName = "StoreVideo",
+                externalFieldType = "string",
+                sourceType = FieldMappingSourceType.StoreAttribute,
+                sourceAttributeId = storeFileAttribute.Id,
+            }
+        ]);
+        var product = data.AddProduct(store.Id, "Local", "ART-1", category.Id);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db, new ImportAdapter(null));
+        var externalAttributes = new Dictionary<string, object>
+        {
+            ["video"] = "https://8.8.8.8/video.mp4",
+            ["storeVideo"] = "https://8.8.8.8/store-video.pdf"
+        };
+        var changes = await svc.GetAttributeChangesDetailedAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            externalAttributes,
+            CancellationToken.None);
+
+        Assert.Equal(2, changes.Count);
+        Assert.Contains(changes, change =>
+            change.FieldName == "Video"
+            && change.OldValue == null
+            && change.NewValue == "https://8.8.8.8/video.mp4"
+            && !change.HasIrreversibleModifiers);
+        Assert.Contains(changes, change =>
+            change.FieldName == "StoreVideo"
+            && change.OldValue == null
+            && change.NewValue == "https://8.8.8.8/store-video.pdf"
+            && !change.HasIrreversibleModifiers);
+        Assert.Empty(await db.pendingImageDownloads.ToListAsync());
+        Assert.Empty(await db.productAttributeValues.ToListAsync());
+
+        var excludedChanges = await svc.UpdateProductAttributesFromExternalAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            new Dictionary<string, object> { ["video"] = "https://8.8.8.8/video.mp4" },
+            CancellationToken.None,
+            excludeFieldNames: new HashSet<string> { "Video" },
+            authorUserId: user.Id);
+
+        Assert.Empty(excludedChanges);
+        Assert.Empty(await db.pendingImageDownloads.ToListAsync());
+
+        var categoryFile = new Delegat.Models.File
+        {
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "stores/1/products/1/media/category-existing.mp4",
+            contentType = "video/mp4",
+            length = 10,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow
+        };
+        var storeFile = new Delegat.Models.File
+        {
+            productId = product.Id,
+            authorUserId = user.Id,
+            filePath = "stores/1/products/1/media/store-existing.pdf",
+            contentType = "application/pdf",
+            length = 10,
+            fileType = FileType.Other,
+            uploadDateTime = DateTime.UtcNow
+        };
+        var categoryValue = new ProductAttributeValue
+        {
+            productId = product.Id,
+            attributeId = fileAttribute.Id,
+            value = string.Empty
+        };
+        categoryValue.files.Add(new ProductAttributeFile { file = categoryFile, index = 0 });
+        var storeValue = new StoreProductAttributeValue
+        {
+            productId = product.Id,
+            storeAttributeId = storeFileAttribute.Id,
+            value = string.Empty
+        };
+        storeValue.files.Add(new StoreProductAttributeFile { file = storeFile, index = 0 });
+        db.files.AddRange(categoryFile, storeFile);
+        db.productAttributeValues.Add(categoryValue);
+        db.storeProductAttributeValues.Add(storeValue);
+        await db.SaveChangesAsync();
+
+        var changesWithFiles = await svc.GetAttributeChangesDetailedAsync(
+            product.Id,
+            connection.Id,
+            category.Id,
+            externalAttributes,
+            CancellationToken.None);
+
+        Assert.Empty(changesWithFiles);
+        Assert.Empty(await db.pendingImageDownloads.ToListAsync());
+    }
+
+    [Fact]
     public async Task ImportAttributes_MatchesPublicOptionNameToCharcKey()
     {
         var (svc, db, connection, category, _) = await SeedMappedCategoryAsync(includeBrand: false);
