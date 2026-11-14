@@ -76,6 +76,40 @@ public sealed class OzonVideoMediaTests
     }
 
     [Fact]
+    public async Task ProductImportMapsV4ComplexAttributesUsingLegacyAttributeId()
+    {
+        var attributes = await DeserializeProductAttributesAsync("attribute_id");
+
+        Assert.Equal(901, Assert.Single(attributes.Attributes).AttributeId);
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
+        Assert.Equal("Clip", media.FileName);
+
+        var serialized = JsonSerializer.Serialize(attributes);
+        Assert.Contains("\"id\":21841", serialized);
+        Assert.DoesNotContain("\"attribute_id\"", serialized);
+    }
+
+    [Fact]
+    public async Task ProductImportMapsV4ComplexAttributesUsingId()
+    {
+        var attributes = await DeserializeProductAttributesAsync("id");
+
+        Assert.Equal(901, Assert.Single(attributes.Attributes).AttributeId);
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
+        Assert.Equal("Clip", media.FileName);
+    }
+
+    [Fact]
     public void ProductImportMapsEveryVideoFromSeparateComplexAttributeGroups()
     {
         var attributes = new ProductAttributesItem
@@ -269,6 +303,54 @@ public sealed class OzonVideoMediaTests
             AttributeId = id,
             Values = values.Select(value => new AttributeValueInfo { Value = value }).ToList()
         };
+
+    private static async Task<ProductAttributesItem> DeserializeProductAttributesAsync(
+        string complexAttributeIdProperty)
+    {
+        var responseJson = $$"""
+            {
+              "result": [
+                {
+                  "id": 42,
+                  "offer_id": "LAMP-1",
+                  "attributes": [
+                    {
+                      "id": 901,
+                      "complex_id": 0,
+                      "values": [{ "value": "top-level" }]
+                    }
+                  ],
+                  "complex_attributes": [
+                    {
+                      "attributes": [
+                        {
+                          "{{complexAttributeIdProperty}}": 21841,
+                          "complex_id": 100001,
+                          "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }]
+                        },
+                        {
+                          "{{complexAttributeIdProperty}}": 21837,
+                          "complex_id": 100001,
+                          "values": [{ "value": "Clip" }]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        using var http = new HttpClient(new CaptureHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+        })))
+        {
+            BaseAddress = new Uri("https://api-seller.ozon.ru/")
+        };
+        var client = new OzonApiClient("fake-client", "fake-key", http);
+        var response = await client.GetProductAttributesAsync(productIds: ["42"]);
+        return Assert.Single(response.Result);
+    }
 
     private static ProductAttributesItem ExistingAttributes() => new()
     {
