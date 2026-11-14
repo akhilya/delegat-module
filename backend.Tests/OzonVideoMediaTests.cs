@@ -110,6 +110,36 @@ public sealed class OzonVideoMediaTests
     }
 
     [Fact]
+    public async Task ProductImportMapsVideoWhenComplexAttributesContainNullValues()
+    {
+        var attributes = await DeserializeProductAttributesAsync("id", """
+            [
+              { "attributes": null },
+              {
+                "attributes": [
+                  { "id": 21837, "complex_id": 100001, "values": null },
+                  {
+                    "id": 21841,
+                    "complex_id": 100001,
+                    "values": [
+                      { "value": null },
+                      { "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }
+                    ]
+                  }
+                ]
+              }
+            ]
+            """);
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
+    }
+
+    [Fact]
     public void ProductImportMapsEveryVideoFromSeparateComplexAttributeGroups()
     {
         var attributes = new ProductAttributesItem
@@ -305,8 +335,27 @@ public sealed class OzonVideoMediaTests
         };
 
     private static async Task<ProductAttributesItem> DeserializeProductAttributesAsync(
-        string complexAttributeIdProperty)
+        string complexAttributeIdProperty,
+        string? complexAttributesJsonFragment = null)
     {
+        var complexAttributesJson = complexAttributesJsonFragment ?? $$"""
+            [
+              {
+                "attributes": [
+                  {
+                    "{{complexAttributeIdProperty}}": 21841,
+                    "complex_id": 100001,
+                    "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }]
+                  },
+                  {
+                    "{{complexAttributeIdProperty}}": 21837,
+                    "complex_id": 100001,
+                    "values": [{ "value": "Clip" }]
+                  }
+                ]
+              }
+            ]
+            """;
         var responseJson = $$"""
             {
               "result": [
@@ -320,22 +369,7 @@ public sealed class OzonVideoMediaTests
                       "values": [{ "value": "top-level" }]
                     }
                   ],
-                  "complex_attributes": [
-                    {
-                      "attributes": [
-                        {
-                          "{{complexAttributeIdProperty}}": 21841,
-                          "complex_id": 100001,
-                          "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }]
-                        },
-                        {
-                          "{{complexAttributeIdProperty}}": 21837,
-                          "complex_id": 100001,
-                          "values": [{ "value": "Clip" }]
-                        }
-                      ]
-                    }
-                  ]
+                  "complex_attributes": {{complexAttributesJson}}
                 }
               ]
             }
