@@ -170,12 +170,23 @@ function groupLabel(group) {
         :id="`f:${f.fieldKey}`"
         type="target"
         :position="Position.Left"
-        :connectable="!pinHidden(f)"
+        :connectable="
+          !pinHidden(f) &&
+          rows.some((row) => row.field?.fieldKey === f.fieldKey)
+        "
         :style="{
           top: topFor(fieldRows.get(f.fieldKey) ?? 0),
           background: pinColor(f.outputType),
-          opacity: pinHidden(f) ? 0 : 1,
-          pointerEvents: pinHidden(f) ? 'none' : 'auto',
+          opacity:
+            pinHidden(f) ||
+            !rows.some((row) => row.field?.fieldKey === f.fieldKey)
+              ? 0
+              : 1,
+          pointerEvents:
+            pinHidden(f) ||
+            !rows.some((row) => row.field?.fieldKey === f.fieldKey)
+              ? 'none'
+              : 'auto',
         }"
       />
 
