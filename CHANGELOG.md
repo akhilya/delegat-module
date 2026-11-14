@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Mapping unit conversions offer automatic detection by default and manual source/destination unit selectors. Automatic mode refreshes units from current attribute definitions and adapter field names or descriptions for both export and reverse import.
+
 - The product page action formerly labeled Import photos is now Import media: it previews and queues downloadable marketplace videos alongside photos when the adapter provides them, still appending to the gallery without replacing existing files.
 
 - Product categories and store attributes support File values with ordered, product-owned attachments; the product gallery can mix images and downloaded videos. Ozon, Wildberries, and Yandex Market video imports are typed separately from image URLs. Their implemented export paths use stable, revocable HTTPS grants for selected gallery videos; Yandex supports up to six, Wildberries one MP4/MOV up to 50 MB, and Ozon applies no unverified limits. Ozon and Wildberries media payloads have fake-test coverage but have not been verified against live seller accounts.
@@ -253,6 +255,11 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
 ### Fixed
+
+- Extra mapping branches and parameter-pin consumers no longer disable a valid unit conversion. Chained conversions retain the intermediate unit established by a destination field or the next manual conversion.
+- Collapsed mapping blocks keep parameter inputs from intercepting wires intended for the value input; existing connections to a parameter without a value input show a warning.
+- Wildberries photo exports replace the selected gallery instead of appending existing remote photos. Repeated photo URLs are removed before checking the 30-photo limit; video-only updates preserve remote photos.
+- Wildberries characteristic exports decode stored JSON arrays into individual values, so colors no longer require an extra To Text block to avoid sending a serialized array as the color name.
 
 - Mapping editor units: the same unit written differently (for example "mm" and "Миллиметр") no longer shows a mismatch. Attribute blocks take their type and unit from the attribute definition instead of showing "Any" or a stale unit. Values passed through multiply/divide/add/subtract no longer inherit the source unit. Hovering the mismatch icon explains the problem; when a conversion exists, clicking it inserts a Unit conversion block. Unit conversion blocks without explicit units take them from their input attribute and the marketplace field they feed, instead of showing "? → ?".
 

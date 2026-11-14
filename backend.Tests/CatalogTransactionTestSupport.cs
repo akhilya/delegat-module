@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Data.Common;
 using System.Reflection;
 using Delegat.Models.Marketplace;
@@ -86,6 +87,6 @@ internal sealed class TransactionAdapterRegistry(IMarketplaceAdapter adapter) : 
 internal static class CatalogTransactionTestSupport
 {
     public static ProductSyncService ImportService(DataContext db, IMarketplaceAdapter adapter) => new(
-        db, new TransactionAdapterRegistry(adapter), null!, null!, NullLogger<ProductSyncService>.Instance,
+        db, new TransactionAdapterRegistry(adapter), new MappingService(db, new ServiceCollection().BuildServiceProvider()), null!, NullLogger<ProductSyncService>.Instance,
         new RecordingCatalogLogger(db), new QuotaService(TestDbFactory.CreateUnitOfWork(db), db));
 }

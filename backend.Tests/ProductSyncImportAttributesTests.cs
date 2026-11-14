@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Globalization;
 using Delegat.Enums;
 using Delegat.Marketplace.SDK.RateLimit;
@@ -709,7 +710,7 @@ public class ProductSyncImportAttributesTests
         return new ProductSyncService(
             db,
             new SingleAdapterRegistry(adapter),
-            mappingService: null!,
+            mappingService: new MappingService(db, new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider()),
             storageService: null!,
             NullLogger<ProductSyncService>.Instance,
             new NoopOperationLogger(),

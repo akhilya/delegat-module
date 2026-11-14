@@ -28,6 +28,7 @@ export const MODIFIER_CATEGORIES = {
   uppercase: "text",
   lowercase: "text",
   trim: "text",
+  unitConversion: "number",
   multiply: "number",
   divide: "number",
   add: "number",

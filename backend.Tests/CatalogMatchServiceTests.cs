@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK.RateLimit;
 using Delegat.Models;
@@ -694,7 +695,7 @@ public class CatalogMatchServiceTests
         var productSync = new ProductSyncService(
             db,
             registry,
-            mappingService: null!,
+            mappingService: new MappingService(db, new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider()),
             storageService: null!,
             NullLogger<ProductSyncService>.Instance,
             new NoopOperationLogger(),

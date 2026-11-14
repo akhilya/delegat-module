@@ -148,7 +148,7 @@ public partial class ProductSyncService
     {
         var downloads = new List<PendingImageDownload>();
         if (external.Count == 0) return downloads;
-        var fields = MappingService.ProjectGraphForImport(mapping.graphJson);
+        var fields = await _mappingService.ProjectGraphForImportAsync(mapping.graphJson, ct);
         var byKey = new Dictionary<string, object>(external, StringComparer.OrdinalIgnoreCase);
         var (category, store) = await LoadAttributeSpecsAsync(mapping.localCategoryId, noTracking: true, ct);
         foreach (var field in fields)
