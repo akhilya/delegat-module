@@ -109,6 +109,135 @@ public sealed class OzonVideoMediaTests
         Assert.Equal("Clip", media.FileName);
     }
 
+    [Theory]
+    [InlineData("id")]
+    [InlineData("attribute_id")]
+    public async Task ProductImportMapsFlatComplexAttributes(string attributeIdProperty)
+    {
+        var attributes = await DeserializeProductAttributesAsync(attributeIdProperty, $$"""
+            [
+              {
+                "{{attributeIdProperty}}": 21841,
+                "complex_id": 100001,
+                "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }]
+              },
+              {
+                "{{attributeIdProperty}}": 21837,
+                "complex_id": 100001,
+                "values": [{ "value": "Clip" }]
+              },
+              {
+                "{{attributeIdProperty}}": 21845,
+                "complex_id": 100002,
+                "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video-cover/cover.jpg" }]
+              }
+            ]
+            """);
+
+        var group = Assert.Single(attributes.ComplexAttributes!);
+        Assert.Equal(3, group.Attributes!.Count);
+        Assert.Equal(0, group.AttributeId);
+        Assert.Null(group.Values);
+        Assert.Null(group.ExtensionData);
+        var serializedGroup = JsonSerializer.SerializeToElement(group);
+        Assert.False(serializedGroup.TryGetProperty("id", out _));
+        Assert.False(serializedGroup.TryGetProperty("attribute_id", out _));
+        Assert.False(serializedGroup.TryGetProperty("complex_id", out _));
+        Assert.False(serializedGroup.TryGetProperty("values", out _));
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4", media.Url);
+        Assert.Equal("Clip", media.FileName);
+    }
+
+    [Fact]
+    public async Task ProductImportMapsMixedNestedAndFlatComplexAttributes()
+    {
+        var attributes = await DeserializeProductAttributesAsync("id", """
+            [
+              {
+                "attributes": [
+                  {
+                    "id": 21841,
+                    "complex_id": 100001,
+                    "values": [{ "value": "https://cdn.example.test/nested.mp4" }]
+                  },
+                  {
+                    "id": 21837,
+                    "complex_id": 100001,
+                    "values": [{ "value": "Nested clip" }]
+                  }
+                ]
+              },
+              {
+                "id": 21841,
+                "complex_id": 100001,
+                "values": [{ "value": "https://cdn.example.test/flat.mp4" }]
+              },
+              {
+                "id": 21837,
+                "complex_id": 100001,
+                "values": [{ "value": "Flat clip" }]
+              }
+            ]
+            """);
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        Assert.Equal(
+            ["https://cdn.example.test/nested.mp4", "https://cdn.example.test/flat.mp4"],
+            product.Media!.Select(media => media.Url));
+        Assert.Equal(["Nested clip", "Flat clip"], product.Media!.Select(media => media.FileName));
+    }
+
+    [Fact]
+    public async Task ProductImportIgnoresUnrecognizedComplexAttributesBesideFlatVideo()
+    {
+        var attributes = await DeserializeProductAttributesAsync("id", """
+            [
+              { "foo": 1 },
+              {
+                "id": 21841,
+                "complex_id": 100001,
+                "values": [{ "value": "https://cdn.example.test/flat.mp4" }]
+              },
+              {
+                "id": 21837,
+                "complex_id": 100001,
+                "values": [{ "value": "Flat clip" }]
+              }
+            ]
+            """);
+
+        var product = OzonPlugin.MapToExternalProduct(
+            new ProductInfoItem { Id = 42, OfferId = "LAMP-1", Name = "Desk lamp" },
+            attributes);
+
+        var media = Assert.Single(product.Media!);
+        Assert.Equal("https://cdn.example.test/flat.mp4", media.Url);
+        Assert.Equal("Flat clip", media.FileName);
+    }
+
+    [Fact]
+    public void FormatUnrecognizedComplexAttributeIncludesKnownAndExtensionData()
+    {
+        var element = JsonSerializer.Deserialize<ComplexAttributeInfo>(
+            """{"complex_id":100001,"values":[{"value":"x"}],"foo":1}""");
+
+        var formatted = OzonComplexAttributes.FormatUnrecognizedElement(element);
+
+        Assert.Contains("\"complex_id\":100001", formatted);
+        Assert.Contains("\"values\"", formatted);
+        Assert.Contains("\"x\"", formatted);
+        Assert.Contains("\"foo\":1", formatted);
+    }
+
     [Fact]
     public async Task ProductImportMapsVideoWhenComplexAttributesContainNullValues()
     {
@@ -233,6 +362,41 @@ public sealed class OzonVideoMediaTests
         Assert.Equal("https://media.example.test/new.mp4",
             Assert.Single(attributes, attribute => attribute.ComplexId == 100001 && attribute.Id == 21841).Values[0].Value);
         Assert.Contains(attributes, attribute => attribute.ComplexId == 100002 && attribute.Id == 21845);
+    }
+
+    [Fact]
+    public async Task EmptyLocalMediaPreservesFlatRemoteComplexAttributesWithoutEmptyGroups()
+    {
+        var existing = await DeserializeProductAttributesAsync("id", """
+            [
+              {
+                "id": 21841,
+                "complex_id": 100001,
+                "values": [{ "value": "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4" }]
+              },
+              {
+                "id": 21837,
+                "complex_id": 100001,
+                "values": [{ "value": "Clip" }]
+              }
+            ]
+            """);
+        var importItem = OzonPlugin.BuildImportItem(new Dictionary<string, object>
+        {
+            ["name"] = "Desk lamp",
+            ["sku"] = "LAMP-1"
+        }, existingExternalId: "42");
+
+        OzonPlugin.PreserveExistingMedia(importItem, existing);
+
+        var group = Assert.Single(importItem.ComplexAttributes!);
+        Assert.NotEmpty(group.Attributes);
+        var attributes = group.Attributes.ToList();
+        Assert.Contains(attributes, attribute => attribute.Id == 21841
+            && Assert.Single(attribute.Values).Value == "https://cdn1.ozone.ru/s3/multimedia-video/clip.mp4");
+        Assert.Contains(attributes, attribute => attribute.Id == 21837
+            && Assert.Single(attribute.Values).Value == "Clip");
+        Assert.All(importItem.ComplexAttributes!, preservedGroup => Assert.NotEmpty(preservedGroup.Attributes));
     }
 
     [Fact]
