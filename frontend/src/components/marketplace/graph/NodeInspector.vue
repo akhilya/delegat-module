@@ -236,6 +236,14 @@ const adapterGroupFilter = ref("__all__");
 const adapterGroups = computed(() =>
   [...new Set(adapterFields.value.map((f) => f.group).filter(Boolean))].sort(),
 );
+watch(adapterGroups, (groups) => {
+  if (
+    adapterGroupFilter.value !== "__all__" &&
+    !groups.includes(adapterGroupFilter.value)
+  ) {
+    adapterGroupFilter.value = "__all__";
+  }
+});
 const bindingDialogOpen = ref(false);
 const bindingDialogField = ref(null);
 /** While the binding dialog is open for a field that has no source yet, keep "bind" radio selected. */
