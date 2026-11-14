@@ -116,3 +116,93 @@ describe("mapping unit warnings", () => {
     assert.equal(result.edgeWarnings.size, 0);
   });
 });
+
+describe("mapping unit warnings (definitions and conversions)", () => {
+  it("treats the same unit written differently as a match", () => {
+    assert.equal(unitMismatch("mm", "Миллиметр"), null);
+    assert.equal(unitMismatch("мм", "mm"), null);
+  });
+
+  it("prefers the attribute definition unit over a stale block unit", () => {
+    const result = analyzeUnitWarnings(
+      [
+        {
+          id: "attribute-1",
+          type: "attribute",
+          data: { attributeId: 7, unitCode: "cm" },
+        },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "height", unitCode: "mm" }] },
+        },
+      ],
+      [
+        {
+          id: "wire",
+          source: "attribute-1",
+          target: "adapter-fields",
+          targetHandle: "f:height",
+        },
+      ],
+      { categoryAttributes: [{ id: 7, unitCode: "mm" }] },
+    );
+    assert.equal(result.edgeWarnings.size, 0);
+  });
+
+  it("does not carry the source unit through arithmetic modifiers", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "attribute-1", type: "attribute", data: { attributeId: 7 } },
+        {
+          id: "divide",
+          type: "modifier",
+          data: { modifierType: "divide", params: { divisor: 10 } },
+        },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "height", unitCode: "cm" }] },
+        },
+      ],
+      [
+        { id: "w1", source: "attribute-1", target: "divide" },
+        {
+          id: "w2",
+          source: "divide",
+          target: "adapter-fields",
+          targetHandle: "f:height",
+        },
+      ],
+      { categoryAttributes: [{ id: 7, unitCode: "mm" }] },
+    );
+    assert.equal(result.edgeWarnings.size, 0);
+  });
+
+  it("marks convertible warnings with where to insert the conversion", () => {
+    const result = analyzeUnitWarnings(
+      [
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: {
+            fields: [
+              {
+                fieldKey: "height",
+                unitCode: "cm",
+                source: { type: "attribute", attributeId: 7 },
+              },
+            ],
+          },
+        },
+      ],
+      [],
+      { categoryAttributes: [{ id: 7, unitCode: "mm" }] },
+    );
+    const warning = result.directWarnings["adapter-fields"].height;
+    assert.equal(warning.convertible, true);
+    assert.equal(warning.sinkId, "adapter-fields");
+    assert.equal(warning.fieldKey, "height");
+    assert.equal(unitMismatch("mm", "kg").convertible, false);
+  });
+});

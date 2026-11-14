@@ -1920,6 +1920,7 @@
       "unitMismatchTitle": "Unit mismatch",
       "unitMismatchWarning": "Source uses {source}; the marketplace field expects {target}.",
       "unitMismatchNoConversion": "Automatic conversion is not available for this unit pair.",
+      "unitMismatchFixHint": "Click to insert a Unit conversion block ({source} → {target}).",
       "unitMismatchExport": "Export is allowed and sends the original value unchanged.",
       "unitConversion": {
         "title": "Unit conversion",
