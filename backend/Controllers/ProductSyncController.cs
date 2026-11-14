@@ -2450,10 +2450,28 @@ public class ProductSyncController : ControllerBase
     [Route("/marketplace/links/{linkId}/import-images-preview")]
     [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportImagesFromLinkPreview(int linkId, CancellationToken ct)
+        => await PreviewLinkMediaAsync(linkId, false, ct);
+
+    /// <summary>
+    /// Preview downloadable marketplace images and videos without downloading files.
+    /// </summary>
+    [HttpPost("/marketplace/links/{linkId}/import-media-preview")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ImportMediaFromLinkPreview(int linkId, CancellationToken ct)
+        => await PreviewLinkMediaAsync(linkId, true, ct);
+
+    private async Task<IActionResult> PreviewLinkMediaAsync(int linkId, bool includeMedia, CancellationToken ct)
     {
         var (link, externalProduct) = await LoadImportableLinkProductAsync(linkId, ct);
         var preview = await _productSyncService.PreviewImportImagesAsync(
-            link.productId, externalProduct.ImageUrls, ct);
+            link.productId, externalProduct.ImageUrls, ct, includeMedia ? externalProduct.Media : null);
+
+        if (includeMedia)
+            return Ok(new
+            {
+                media = preview.Images.Select(i => new { url = i.Url, status = i.Status, kind = i.Kind, fileName = i.FileName }),
+                localGalleryCount = preview.LocalGalleryCount
+            });
 
         return Ok(new
         {
@@ -2472,6 +2490,20 @@ public class ProductSyncController : ControllerBase
         int linkId,
         [FromBody] ImportImagesFromLinkInput? input,
         CancellationToken ct)
+        => await QueueLinkMediaAsync(linkId, input, false, ct);
+
+    /// <summary>
+    /// Queue selected adapter image/video URLs for append-only download. The adapter
+    /// determines the media type; arbitrary client URLs and types are not accepted.
+    /// </summary>
+    [HttpPost("/marketplace/links/{linkId}/import-media")]
+    [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
+    public async Task<IActionResult> ImportMediaFromLink(
+        int linkId, [FromBody] ImportImagesFromLinkInput? input, CancellationToken ct)
+        => await QueueLinkMediaAsync(linkId, input, true, ct);
+
+    private async Task<IActionResult> QueueLinkMediaAsync(
+        int linkId, ImportImagesFromLinkInput? input, bool includeMedia, CancellationToken ct)
     {
         var userId = _currentUserService.GetUserId() ?? 0;
         var (link, externalProduct) = await LoadImportableLinkProductAsync(linkId, ct);
@@ -2484,7 +2516,7 @@ public class ProductSyncController : ControllerBase
         if (!opExists)
         {
             await _operationLogger.StartAsync(operationId, storeId, userId, "image-download",
-                $"Import photos: {link.product?.name ?? link.externalProductId}",
+                $"Import media: {link.product?.name ?? link.externalProductId}",
                 connectionId: link.connectionId, connectionName: link.connection.name,
                 batchId: operationId, batchType: "image-download", totalItems: 0);
         }
@@ -2509,11 +2541,12 @@ public class ProductSyncController : ControllerBase
             input?.Urls,
             externalProduct.ImageUrls,
             operationId,
-            ct);
+            ct,
+            includeMedia ? externalProduct.Media : null);
 
         if (result.QueuedCount == 0)
         {
-            await _operationLogger.FinishAsync(operationId, storeId, "completed", "No photos to download");
+            await _operationLogger.FinishAsync(operationId, storeId, "completed", "No media to download");
         }
         else
         {
@@ -2522,12 +2555,12 @@ public class ProductSyncController : ControllerBase
             if (existingOp != null)
             {
                 existingOp.totalItems = result.QueuedCount;
-                existingOp.title = $"Downloading {result.QueuedCount} images";
+                existingOp.title = $"Downloading {result.QueuedCount} media files";
                 await _context.SaveChangesAsync(ct);
             }
 
             await _operationLogger.LogAsync(operationId, storeId, "info",
-                $"Queued {result.QueuedCount} photos for download (skipped {result.SkippedCount})");
+                $"Queued {result.QueuedCount} media files for download (skipped {result.SkippedCount})");
         }
 
         return Ok(new

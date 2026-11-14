@@ -12,6 +12,7 @@ using Delegat.Models.Products;
 using Delegat.Services.Marketplace.Modifiers;
 using Delegat.Services;
 using System.Text.Json;
+using ExternalMedia = Delegat.Marketplace.SDK.DTOs.ExternalMedia;
 
 namespace Delegat.Services.Marketplace;
 
@@ -2705,15 +2706,17 @@ public partial class ProductSyncService
     public async Task<ImportImagesPreview> PreviewImportImagesAsync(
         int productId,
         IReadOnlyList<string>? remoteUrls,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<ExternalMedia>? remoteMedia = null)
     {
         var galleryCount = await _context.images.CountAsync(i => i.productId == productId, ct);
         var state = await LoadImageImportStateAsync(productId, ct);
         var items = new List<ImportImagePreviewItem>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var raw in remoteUrls ?? Array.Empty<string>())
+        foreach (var media in CollectImportMedia(remoteUrls, remoteMedia))
         {
+            var raw = media.Url;
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
 
@@ -2722,7 +2725,7 @@ public partial class ProductSyncService
             if (!seen.Add(key))
                 continue;
 
-            items.Add(new ImportImagePreviewItem(trimmed, ClassifyImportImage(state, trimmed)));
+            items.Add(new ImportImagePreviewItem(trimmed, ClassifyImportImage(state, trimmed), media.Kind, media.FileName));
         }
 
         return new ImportImagesPreview(items, galleryCount);
@@ -2741,30 +2744,28 @@ public partial class ProductSyncService
         IReadOnlyList<string>? selectedUrls,
         IReadOnlyList<string>? allowlist,
         string? batchId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<ExternalMedia>? remoteMedia = null)
     {
         var selected = (selectedUrls ?? Array.Empty<string>())
             .Where(u => !string.IsNullOrWhiteSpace(u))
             .Select(u => u.Trim())
             .ToList();
 
-        var allowed = (allowlist ?? Array.Empty<string>())
-            .Where(u => !string.IsNullOrWhiteSpace(u))
-            .Select(u => u.Trim())
-            .ToList();
+        var allowed = CollectImportMedia(allowlist, remoteMedia);
 
-        var canonical = new List<string>();
+        var canonical = new List<ExternalMedia>();
         foreach (var url in selected)
         {
-            var match = allowed.FirstOrDefault(a => ImageSourceUrl.EqualsNormalized(a, url));
+            var match = allowed.FirstOrDefault(a => ImageSourceUrl.EqualsNormalized(a.Url, url));
             if (match == null)
             {
                 throw ApiException.BadRequest(
-                    "Photo URL is not from the marketplace product",
+                    "Media URL is not from the marketplace product",
                     code: "image_url_not_from_adapter");
             }
 
-            if (!canonical.Any(c => ImageSourceUrl.EqualsNormalized(c, match)))
+            if (!canonical.Any(c => ImageSourceUrl.EqualsNormalized(c.Url, match.Url)))
                 canonical.Add(match);
         }
 
@@ -2773,8 +2774,9 @@ public partial class ProductSyncService
         var queued = 0;
         var skipped = 0;
 
-        foreach (var url in canonical)
+        foreach (var media in canonical)
         {
+            var url = media.Url;
             if (ClassifyImportImage(state, url) == ImportImageStatuses.Queued)
             {
                 skipped++;
@@ -2788,6 +2790,8 @@ public partial class ProductSyncService
                 authorUserId = authorUserId,
                 imageUrl = url,
                 imageIndex = nextIndex++,
+                mediaKind = media.Kind == "video" ? PendingMediaKind.Video : PendingMediaKind.Image,
+                mediaFileName = SafeMediaFileName(media.FileName),
                 status = ImageDownloadStatus.Pending,
                 createdAt = DateTime.UtcNow,
                 batchId = batchId
@@ -2803,10 +2807,28 @@ public partial class ProductSyncService
             await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Queued {Count} images for download for product {ProductId} (skipped {Skipped})",
+            "Queued {Count} media files for download for product {ProductId} (skipped {Skipped})",
             queued, productId, skipped);
 
         return new ImportImagesQueueResult(queued, skipped);
+    }
+
+    private static List<ExternalMedia> CollectImportMedia(
+        IReadOnlyList<string>? imageUrls, IReadOnlyList<ExternalMedia>? media)
+    {
+        var result = new List<ExternalMedia>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        // Prefer the adapter's explicit type when a URL appears in both projections.
+        foreach (var item in (media ?? []).Concat((imageUrls ?? [])
+            .Select((url, index) => new ExternalMedia("image", url, index))))
+        {
+            var kind = item.Kind?.ToLowerInvariant();
+            if (kind is not ("image" or "video") || string.IsNullOrWhiteSpace(item.Url)) continue;
+            var url = item.Url.Trim();
+            if (seen.Add(ImageSourceUrl.Normalize(url) ?? url))
+                result.Add(item with { Kind = kind, Url = url });
+        }
+        return result;
     }
 
     private async Task<ImageImportState> LoadImageImportStateAsync(int productId, CancellationToken ct)
@@ -3263,7 +3285,7 @@ public static class ImportImageStatuses
 /// <summary>
 /// One marketplace photo in a re-import preview.
 /// </summary>
-public sealed record ImportImagePreviewItem(string Url, string Status);
+public sealed record ImportImagePreviewItem(string Url, string Status, string Kind = "image", string? FileName = null);
 
 /// <summary>
 /// Preview of marketplace photos vs the local product gallery.

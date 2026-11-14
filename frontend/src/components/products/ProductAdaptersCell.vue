@@ -534,7 +534,7 @@ export default {
           linkId,
           onSuccess: (response) => {
             const result = extractResponseData(response, {});
-            const images = result.images || [];
+            const images = result.media || [];
             if (images.length === 0) {
               displaySonnerSuccess(
                 t("productMarketplaceIntegrations.importImagesNoneOnAdapter"),
@@ -714,7 +714,11 @@ export default {
       <AdapterIcon :adapter-key="conn.adapterKey" class="size-4" />
     </Button>
   </ButtonGroup>
-  <ButtonGroup v-else class="max-w-full flex-nowrap overflow-hidden" @click="stopRow">
+  <ButtonGroup
+    v-else
+    class="max-w-full flex-nowrap overflow-hidden"
+    @click="stopRow"
+  >
     <ProductAdapterConnectionMenu
       v-for="conn in activeConnections"
       :key="conn.id"
@@ -781,7 +785,7 @@ export default {
   <ImportImagesPreviewDialog
     v-if="showImportImagesDialog"
     :open="showImportImagesDialog"
-    :images="importImagesPreview?.images || []"
+    :media="importImagesPreview?.media || []"
     :local-gallery-count="importImagesPreview?.localGalleryCount || 0"
     :confirm-loading="isApplyingImportImages"
     @update:open="(v) => (showImportImagesDialog = v)"

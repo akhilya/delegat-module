@@ -1352,7 +1352,7 @@ export default {
 
     async importImagesFromLinkPreview(ctx, { linkId, onSuccess, onError }) {
       return await useAxios(
-        `/marketplace/links/${linkId}/import-images-preview`,
+        `/marketplace/links/${linkId}/import-media-preview`,
         {
           method: "POST",
           cache: false,
@@ -1372,7 +1372,7 @@ export default {
       { linkId, urls, operationId, onSuccess, onError },
     ) {
       return await useAxios(
-        `/marketplace/links/${linkId}/import-images`,
+        `/marketplace/links/${linkId}/import-media`,
         {
           method: "POST",
           data: { urls: urls || [], operationId: operationId || null },
