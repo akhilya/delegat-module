@@ -59,6 +59,7 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   templateFieldRefs: { type: Array, default: () => [] },
   focusFieldKey: { type: String, default: null },
+  allowCustomFields: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update", "delete", "close", "field-focused"]);
 
@@ -258,7 +259,7 @@ const bindingDialogField = ref(null);
 const pendingBindKey = ref(null);
 
 function addCustomAdapterField() {
-  if (type.value !== "adapterFields") return;
+  if (type.value !== "adapterFields" || !props.allowCustomFields) return;
   const { fields } = appendCustomAdapterField(adapterFields.value, {
     label: t("marketplace.graph.customFieldDefault"),
   });
@@ -1067,7 +1068,7 @@ function resolvePreview(fieldKey, raw) {
             </div>
 
             <Button
-              v-if="type === 'adapterFields'"
+              v-if="type === 'adapterFields' && allowCustomFields"
               type="button"
               variant="outline"
               size="sm"

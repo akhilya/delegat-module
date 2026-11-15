@@ -240,6 +240,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
       />
 
       <Handle
+        v-if="data.addCustomField"
         :id="ADD_ADAPTER_FIELD_HANDLE"
         type="target"
         :position="Position.Left"
@@ -418,7 +419,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             </span>
           </div>
         </template>
-        <Tooltip>
+        <Tooltip v-if="data.addCustomField">
           <TooltipTrigger as-child>
             <div
               class="vf-adapter__row vf-adapter__row--add cursor-pointer"

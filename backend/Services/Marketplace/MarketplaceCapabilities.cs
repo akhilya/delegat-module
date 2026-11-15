@@ -149,6 +149,11 @@ public enum MarketplaceCapabilities
     /// </summary>
     ManageShipments = 1 << 26,
 
+    /// <summary>
+    /// Mapping-local custom fields can be exported (open-ended field schema, e.g. store engines).
+    /// </summary>
+    CustomFields = 1 << 27,
+
     #endregion
 
     /// <summary>

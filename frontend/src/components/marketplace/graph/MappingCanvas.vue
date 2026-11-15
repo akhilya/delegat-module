@@ -203,6 +203,7 @@ const syncingFields = ref(false);
 const dirty = ref(false);
 // Content version of the stored graph this canvas was loaded from (conflict-safe save).
 let graphVersion = null;
+const allowCustomFields = ref(false);
 const previewing = ref(false);
 const selected = ref(null);
 const focusAdapterField = ref(null);
@@ -601,7 +602,7 @@ function refreshAnalysis(options = {}) {
     setFieldSource,
     setFieldMode,
     openField: openAdapterField,
-    addCustomField: addCustomAdapterField,
+    addCustomField: allowCustomFields.value ? addCustomAdapterField : undefined,
     unitWarnings: unitWarnings.directWarnings[ADAPTER_NODE_ID] || {},
   });
 
@@ -1260,6 +1261,7 @@ onConnect((conn) => {
     next.target === ADAPTER_NODE_ID &&
     next.targetHandle === ADD_ADAPTER_FIELD_HANDLE
   ) {
+    if (!allowCustomFields.value) return;
     const created = addCustomAdapterField();
     if (!created) return;
     next = { ...next, targetHandle: `f:${created.fieldKey}` };
@@ -1665,6 +1667,7 @@ async function load(options = {}) {
       stepCtx,
     );
     graphVersion = data?.graphVersion ?? null;
+    allowCustomFields.value = data?.allowCustomFields === true;
 
     let graph;
     let migrated = false;
@@ -3086,6 +3089,7 @@ async function importMappingFile(event) {
           :adapter-fields-with-options="adapterFieldsWithOptions"
           :ai-model-options="aiModelOptions"
           :available-sources="availableSources"
+          :allow-custom-fields="allowCustomFields"
           :template-field-refs="templateFieldRefs"
           :focus-field-key="focusAdapterField"
           @update="onInspectorUpdate"
