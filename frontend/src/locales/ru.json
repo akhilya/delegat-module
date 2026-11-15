@@ -2065,26 +2065,6 @@
           ],
           "params": {}
         },
-        "add": {
-          "label": "Прибавить",
-          "inputLabels": ["число"],
-          "params": {"operand": "Аргумент"}
-        },
-        "subtract": {
-          "label": "Вычесть",
-          "inputLabels": ["число"],
-          "params": {"operand": "Аргумент"}
-        },
-        "multiply": {
-          "label": "Умножить",
-          "inputLabels": ["число"],
-          "params": {"operand": "Множитель"}
-        },
-        "divide": {
-          "label": "Разделить",
-          "inputLabels": ["число"],
-          "params": {"operand": "Делитель"}
-        },
         "min": {
           "label": "Минимум",
           "params": {}

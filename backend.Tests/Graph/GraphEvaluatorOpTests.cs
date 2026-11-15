@@ -366,38 +366,6 @@ public class GraphEvaluatorOpTests
     }
 
     [Theory]
-    [InlineData("add", "10", 15, "25")]
-    [InlineData("subtract", "10", 15, "-5")]
-    [InlineData("multiply", "10", 15, "150")]
-    [InlineData("divide", "30", 15, "2")]
-    public void Arithmetic_AppliesOperand(string op, string input, int operand, string expected)
-    {
-        var result = new GraphEvalHarness()
-            .Static("a", input)
-            .Op("op", op, d => d.operand = operand)
-            .Edge("a", "op")
-            .Field("out", "number")
-            .WireToField("op", "out")
-            .Eval();
-
-        GraphAssert.Output(result, "out", expected, "number");
-    }
-
-    [Fact]
-    public void Divide_ByZeroYieldsNull()
-    {
-        var result = new GraphEvalHarness()
-            .Static("a", "30")
-            .Op("op", "divide", d => d.operand = 0)
-            .Edge("a", "op")
-            .Field("out", "number")
-            .WireToField("op", "out")
-            .Eval();
-
-        Assert.False(result.Outputs.TryGetValue("out", out var v) && v != null);
-    }
-
-    [Theory]
     [InlineData("min", "10", "4", "7", "4")]
     [InlineData("max", "10", "4", "7", "10")]
     [InlineData("min", "3", "nope", "8", "3")]

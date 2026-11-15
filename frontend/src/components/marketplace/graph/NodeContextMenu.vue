@@ -389,7 +389,7 @@ const adapterValueGroups = computed(() => {
   return groups;
 });
 
-// "<sign>[number]" queries ("+15", "/ 15", "15+") → the arithmetic block with
+// "<sign>[number]" queries ("+15", "/ 15", "15+") → the arithmetic modifier with
 // the operand prefilled; the argument is shown as a badge on the item.
 const ARITH_SIGN_TO_OP = {
   "+": "add",
@@ -401,6 +401,12 @@ const ARITH_SIGN_TO_OP = {
   "/": "divide",
   "÷": "divide",
   ":": "divide",
+};
+const ARITH_PARAM_KEY = {
+  add: "addend",
+  subtract: "subtrahend",
+  multiply: "factor",
+  divide: "divisor",
 };
 const arithItems = computed(() => {
   const s = q.value;
@@ -416,17 +422,19 @@ const arithItems = computed(() => {
   } else if ((m = s.match(/^([+\-−*x×/÷:])$/))) {
     sign = m[1];
   }
-  const opType = sign && ARITH_SIGN_TO_OP[sign];
-  if (!opType) return [];
-  const spec = OP_SPECS[opType];
-  if (!opVisible({ group: "op", opType }, spec?.accepts)) return [];
+  const modifierType = sign && ARITH_SIGN_TO_OP[sign];
+  const mod = modifierType && MODIFIER_CATALOG[modifierType];
+  if (!mod) return [];
+  const desc = { group: "modifier", modifierType };
+  if (!opVisible(desc, mod.applicableTypes)) return [];
   const operand =
-    num != null ? Number(num.replace(",", ".")) : spec.params[0].default;
+    num != null ? Number(num.replace(",", ".")) : mod.params[0].default;
+  desc.params = { [ARITH_PARAM_KEY[modifierType]]: operand };
   return [
     {
-      label: opLabel(opType),
+      label: mod.displayName,
       param: num != null ? String(operand) : null,
-      desc: { group: "op", opType, params: { operand } },
+      desc,
     },
   ];
 });

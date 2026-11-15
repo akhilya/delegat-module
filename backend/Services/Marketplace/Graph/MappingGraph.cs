@@ -115,7 +115,7 @@ public class GraphNodeData
     public int? inputCount { get; set; }
     /// <summary>Element index for "arrayIndex".</summary>
     public int? index { get; set; }
-    /// <summary>Right-hand operand for the arithmetic ops (add/subtract/multiply/divide).</summary>
+    /// <summary>Right-hand operand for the arithmetic ops (legacy graphs; arithmetic lives in modifiers).</summary>
     public decimal? operand { get; set; }
 
     // Output node(s)

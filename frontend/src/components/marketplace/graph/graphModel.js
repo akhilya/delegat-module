@@ -517,12 +517,12 @@ export function createSourceNode(kind, position, payload = {}) {
   }
 }
 
-export function createModifierNode(modifierType, position) {
+export function createModifierNode(modifierType, position, overrides) {
   const defaults = {};
   (MODIFIER_CATALOG[modifierType]?.params || []).forEach((p) => {
     defaults[p.key] = p.default;
   });
-  const data = { modifierType, params: defaults };
+  const data = { modifierType, params: { ...defaults, ...overrides } };
   if (modifierType === "llmGenerate") data.fieldPins = [];
   return {
     id: genId("mod"),
@@ -693,14 +693,11 @@ export function modifierNodeLabel(data) {
   return getModifierLabel({ type: data.modifierType, params: data.params });
 }
 
-const ARITH_SIGNS = { add: "+", subtract: "−", multiply: "×", divide: "÷" };
-
 export function opSummary(type, data) {
   if (type === "formatString") return data.template || "";
   if (type === "join" || type === "splitToArray")
     return data.delimiter ? `«${data.delimiter}»` : "";
   if (type === "arrayIndex") return `[${data.index ?? 0}]`;
-  if (ARITH_SIGNS[type]) return `${ARITH_SIGNS[type]} ${data.operand ?? 0}`;
   return "";
 }
 

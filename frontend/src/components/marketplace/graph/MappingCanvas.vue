@@ -2007,7 +2007,7 @@ function onMenuAdd(desc) {
   if (desc.group === "source")
     node = createSourceNode(desc.kind, pos, desc.payload || {});
   else if (desc.group === "modifier")
-    node = createModifierNode(desc.modifierType, pos);
+    node = createModifierNode(desc.modifierType, pos, desc.params);
   else if (desc.group === "op")
     node = createOpNode(desc.opType, pos, desc.params);
   if (node) {

@@ -300,28 +300,6 @@ public static class GraphEvaluator
                         pins[nodeId] = new PinValue(res);
                         break;
                     }
-                    case "add":
-                    case "subtract":
-                    case "multiply":
-                    case "divide":
-                    {
-                        var input = SingleInput(incoming, pins, nodeId);
-                        var operand = data.operand ?? 0m;
-                        if (!TryToDecimal(input.Value, out var a))
-                        {
-                            pins[nodeId] = new PinValue(null);
-                            break;
-                        }
-                        var res = node.type switch
-                        {
-                            "add" => a + operand,
-                            "subtract" => a - operand,
-                            "multiply" => a * operand,
-                            _ => operand == 0m ? (decimal?)null : a / operand,
-                        };
-                        pins[nodeId] = new PinValue(res);
-                        break;
-                    }
                     case "min":
                     case "max":
                     {
