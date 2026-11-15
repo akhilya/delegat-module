@@ -149,7 +149,7 @@ onMounted(() =>
       <text
         :x="labelX"
         :y="labelY"
-        fill="#4ade80"
+        fill="var(--success)"
         font-size="9"
         font-family="monospace"
         text-anchor="middle"

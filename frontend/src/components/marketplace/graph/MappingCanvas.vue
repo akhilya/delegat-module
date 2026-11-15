@@ -2777,7 +2777,9 @@ async function importMappingFile(event) {
                 v.importable ? "IMPORT" : "EXPORT"
               }}</span>
               {{ k }}: connected={{ v.connected }}, rev={{ v.reversible
-              }}<span v-if="v.fanOut" style="color: #f59e0b; margin-left: 4px"
+              }}<span
+                v-if="v.fanOut"
+                style="color: var(--warning); margin-left: 4px"
                 >⚠ fan-out</span
               >
             </div>
@@ -3491,7 +3493,7 @@ async function importMappingFile(event) {
   gap: 3px;
 }
 .vf-debug-section b {
-  color: #9ca3af;
+  color: var(--muted-foreground);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -3509,20 +3511,20 @@ async function importMappingFile(event) {
   border-radius: 3px;
   font-size: 9px;
   font-weight: bold;
-  background: #374151;
-  color: #9ca3af;
+  background: var(--muted);
+  color: var(--muted-foreground);
 }
 .vf-debug-row.ok .badge {
-  background: #14532d;
-  color: #4ade80;
+  background: var(--success-muted);
+  color: var(--success-foreground);
 }
 .vf-debug-row.no .badge {
-  background: #7c2d12;
-  color: #fb923c;
+  background: var(--warning-muted);
+  color: var(--warning-foreground);
 }
 .vf-debug-hint {
   font-size: 9px;
-  color: #6b7280;
+  color: var(--muted-foreground);
   text-align: right;
 }
 

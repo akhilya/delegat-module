@@ -271,7 +271,10 @@ public class GraphEvaluatorModifierTests
         new("join", "[\"a\",\"b\"]", "array", "string", "a|b", P(("delimiter", "|"))),
         new("sort", "[\"b\",\"a\"]", "array", "string", "[\"a\",\"b\"]", P()),
         new("addItems", "[\"a\"]", "array", "string", "[\"a\",\"z\"]", P(("items", new List<string> { "z" }))),
+        // A scalar input is a one-element list, not empty: it survives addItems.
+        new("addItems", "a", "string", "string", "[\"a\",\"z\"]", P(("items", new List<string> { "z" }))),
         new("removeItems", "[\"a\",\"z\"]", "array", "string", "[\"a\"]", P(("items", new List<string> { "z" }))),
+        new("removeItems", "a", "string", "string", "[]", P(("items", new List<string> { "a" }))),
         new("template", "v", null, "string", "pre-v", P(("template", "pre-{{value}}"))),
         new("randomInt", "x", null, "integer", ExpectedRandomInt(), P(("min", 4), ("max", 4), ("seed", 1))),
         new("randomFloat", "x", null, "string", ExpectedRandomFloat(), P(("min", 1m), ("max", 1m), ("decimals", 2), ("seed", 1))),
