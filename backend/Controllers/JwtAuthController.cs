@@ -83,13 +83,19 @@ public class JwtAuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(code))
             return Redirect("/signIn?ssoError=code_required");
 
-        var identity = await platformLink.ExchangeInstanceSsoAsync(code.Trim(), ct);
-        if (identity is null)
+        Delegat.Services.PlatformLink.PlatformInstanceSsoDto? identity;
+        try
+        {
+            identity = await platformLink.ExchangeInstanceSsoAsync(code.Trim(), ct);
+        }
+        catch
+        {
+            return Redirect("/signIn?ssoError=exchange_failed");
+        }
+        if (identity is null || string.IsNullOrWhiteSpace(identity.Email))
             return Redirect("/signIn?ssoError=invalid_code");
 
-        User? user = null;
-        if (!string.IsNullOrWhiteSpace(identity.Email))
-            user = await _userManager.FindByEmailAsync(identity.Email.Trim());
+        var user = await _userManager.FindByEmailAsync(identity.Email.Trim());
         user ??= await _userManager.Users.FirstOrDefaultAsync(u => u.isAdmin && u.isActive, ct);
 
         if (user is null)

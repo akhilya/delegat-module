@@ -203,6 +203,13 @@ export default {
 
     onMounted(async () => {
       startConditionalPasskey();
+      const ssoCode = route.query.platformSso;
+      if (ssoCode) {
+        window.location.assign(
+          `/api/auth/platformSso?code=${encodeURIComponent(ssoCode)}`,
+        );
+        return;
+      }
       if (route.query.ssoError) {
         displaySonnerError(t("auth.ssoFailed"));
         await router.replace({ query: {} });
