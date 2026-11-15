@@ -3,6 +3,9 @@ import {
   getUnitConversion,
   normalizeUnitCode,
 } from "./attributeUnits.js";
+import { OP_NODE_TYPES } from "../components/marketplace/graph/graphTypes.js";
+
+const OP_TYPES = new Set(OP_NODE_TYPES);
 
 // Arithmetic changes the magnitude, so the source unit no longer describes the value.
 const UNIT_CHANGING_MODIFIERS = new Set([
@@ -69,7 +72,33 @@ function resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, seen) {
       seen,
     );
   }
-  return { unit: null, opaque: false };
+  // Ops propagate a unit only when every connected input agrees on it.
+  if (OP_TYPES.has(node.type)) {
+    const inputs = (incomingByTarget.get(nodeId) || []).filter(
+      (edge) =>
+        edge.targetHandle === "in" || edge.targetHandle?.startsWith("in-"),
+    );
+    if (!inputs.length) return { unit: null, opaque: true };
+    let unit = null;
+    for (const edge of inputs) {
+      const info = resolveUnitInfo(
+        edge.source,
+        nodesById,
+        incomingByTarget,
+        sources,
+        seen,
+      );
+      if (info.opaque || info.unit == null) return { unit: null, opaque: true };
+      const normalized = normalizeUnitCode(info.unit);
+      if (unit && normalized && unit.toLowerCase() !== normalized.toLowerCase())
+        return { unit: null, opaque: true };
+      unit = unit ?? normalized ?? info.unit;
+    }
+    return { unit, opaque: false };
+  }
+  // Literals, product fields, files and other terminals cannot carry a unit:
+  // opaque (no "not specified" warning) rather than a bogus missing unit.
+  return { unit: null, opaque: true };
 }
 
 /** Resolve automatic conversions from current definitions and wiring, never cached params. */
@@ -230,10 +259,13 @@ export function analyzeUnitWarnings(nodes = [], edges = [], sources = {}) {
       if (!field?.fieldKey) continue;
       const targetUnit = field.unitCode ?? field.unit ?? null;
       if (field.source) {
-        const warning = unitMismatch(
-          unitForSource(field.source, sources),
-          targetUnit,
-        );
+        // Only attributes can carry a unit; other mapping kinds cannot miss one.
+        const capable =
+          field.source.type === "attribute" ||
+          field.source.type === "storeAttribute";
+        const warning = capable
+          ? unitMismatch(unitForSource(field.source, sources), targetUnit)
+          : null;
         if (warning) {
           directWarnings[sink.id] ??= {};
           directWarnings[sink.id][field.fieldKey] = {
