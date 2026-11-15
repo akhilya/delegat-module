@@ -18,6 +18,7 @@ public interface IPlatformLinkClient
     Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(string adapter, string? query, CancellationToken ct = default);
     Task<PlatformOzonGrantClaimDto?> ClaimOzonGrantAsync(string ticket, CancellationToken ct = default);
     Task<PlatformOzonRefreshResult> RefreshOzonTokenAsync(string refreshToken, CancellationToken ct = default);
+    Task<PlatformInstanceSsoDto?> ExchangeInstanceSsoAsync(string code, CancellationToken ct = default);
 }
 
 public sealed class PlatformLinkClient : IPlatformLinkClient
@@ -200,6 +201,31 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
             _logger.LogWarning(ex, "Platform Link POST /platform/v1/ozon/refresh failed");
             return new PlatformOzonRefreshResult(false, "transport_error", null, null, 0);
         }
+    }
+
+    /// <summary>
+    /// Redeems the one-time code a console member minted on the Control Plane
+    /// ("Открыть кабинет" SSO link). Returns null when the code is invalid,
+    /// used, expired or the CP rejects it.
+    /// </summary>
+    public async Task<PlatformInstanceSsoDto?> ExchangeInstanceSsoAsync(
+        string code, CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+
+        var body = JsonSerializer.Serialize(new { code }, JsonOptions);
+        using var response = await SendRawAsync(
+            HttpMethod.Post, "/platform/v1/sso/instance/exchange", body, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Platform Link POST /platform/v1/sso/instance/exchange returned {StatusCode}",
+                (int)response.StatusCode);
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        return await JsonSerializer.DeserializeAsync<PlatformInstanceSsoDto>(stream, JsonOptions, ct);
     }
 
     private static string? TryReadError(string json)

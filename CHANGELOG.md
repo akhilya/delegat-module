@@ -11,6 +11,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in the matching user — the instance admin when the platform account email is not present locally — and redirects to the catalog. Standard `isActive` and lockout rules apply; failures land on the sign-in page with an error toast.
+
 - Ozon App Store OAuth connection flow: a "Connect via Ozon" button on the connection form starts the seller consent flow, `/marketplace/ozon/oauth/start` + `/marketplace/ozon/oauth/complete` endpoints redeem the Control Plane grant, and the adapter talks to the Ozon API with `Authorization: Bearer`. A hosted service rotates access/refresh token pairs through the Control Plane proxy before expiry and flags `oauthReconnectRequired` when Ozon revokes the grant; the manual Client-Id/Api-Key flow is unchanged.
 
 - The dictionary Mapping block offers an auto-match button that pairs source options with adapter options by normalized name (exact, unambiguous containment, or fuzzy match), never overwriting existing rows.
