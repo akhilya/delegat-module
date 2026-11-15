@@ -90,7 +90,7 @@ export function estimateNodeHeight(node) {
 
   if (MULTI_INPUT_OPS.has(node.type)) {
     const count = Math.max(2, node.data?.inputCount || 2);
-    return 58 + count * 10 + (node.data?.previewValue != null ? 36 : 0);
+    return 52 + count * 20 + (node.data?.previewValue != null ? 36 : 0);
   }
 
   if (node.type === "reroute") return 18;

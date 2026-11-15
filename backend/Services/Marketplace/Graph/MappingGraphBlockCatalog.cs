@@ -148,7 +148,7 @@ public static class MappingGraphBlockCatalog
             type = o.Type,
             kind = "op",
             width = CardWidth,
-            height = MultiInputOps.Contains(o.Type) ? (object)"58 + max(2,inputCount)*10" : SourceHeight,
+            height = MultiInputOps.Contains(o.Type) ? (object)"52 + max(2,inputCount)*20" : SourceHeight,
             inputs = OpInputs(o.Inputs),
             outputs = new[] { new { id = "out", pinType = o.Output, side = "right" } },
             accepts = o.Accepts,
@@ -192,7 +192,7 @@ public static class MappingGraphBlockCatalog
         if (MultiInputOps.Contains(node.type ?? ""))
         {
             var count = Math.Max(2, node.data?.inputCount ?? 2);
-            return (CardWidth, 58 + count * 10);
+            return (CardWidth, 52 + count * 20);
         }
 
         if (node.type == "reroute") return (RerouteSize, 18);
