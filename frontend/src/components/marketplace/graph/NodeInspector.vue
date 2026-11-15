@@ -71,6 +71,15 @@ watch(
   () => props.focusFieldKey,
   (key) => {
     if (!key) return;
+    // Reveal the field's page first: a focused field beyond the current page
+    // is not mounted yet, so the scroll target below would not exist.
+    const idx = filteredAdapterFields.value.findIndex(
+      (f) => f.fieldKey === key,
+    );
+    if (idx >= adapterFieldPage.value) {
+      adapterFieldPage.value =
+        Math.ceil((idx + 1) / ADAPTER_FIELD_PAGE) * ADAPTER_FIELD_PAGE;
+    }
     nextTick(() => {
       const row = scrollEl.value?.querySelector(`[data-fk="${key}"]`);
       row?.scrollIntoView({ behavior: "instant", block: "nearest" });
