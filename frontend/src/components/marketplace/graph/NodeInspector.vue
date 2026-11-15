@@ -526,13 +526,21 @@ const selectedArrayValues = computed(() => {
 });
 
 const arrayOptionFilter = ref("");
+// Adapter dictionaries can carry hundreds of options; mount them in pages like
+// the adapter field list so selecting the node does not freeze.
+const ARRAY_OPTION_PAGE = 60;
+const arrayOptionPage = ref(ARRAY_OPTION_PAGE);
 watch(
   () => props.node?.id,
   () => {
     arrayOptionFilter.value = "";
+    arrayOptionPage.value = ARRAY_OPTION_PAGE;
     adapterFieldPage.value = ADAPTER_FIELD_PAGE;
   },
 );
+watch(arrayOptionFilter, () => {
+  arrayOptionPage.value = ARRAY_OPTION_PAGE;
+});
 const filteredArrayOptions = computed(() => {
   const query = arrayOptionFilter.value.trim().toLowerCase();
   const opts = data.value.options || [];
@@ -543,6 +551,12 @@ const filteredArrayOptions = computed(() => {
       .includes(query),
   );
 });
+const visibleArrayOptions = computed(() =>
+  filteredArrayOptions.value.slice(0, arrayOptionPage.value),
+);
+const hiddenArrayOptionCount = computed(
+  () => filteredArrayOptions.value.length - arrayOptionPage.value,
+);
 
 function toggleArrayValue(val) {
   const cur = selectedArrayValues.value;
@@ -871,7 +885,7 @@ function resolvePreview(fieldKey, raw) {
                 class="max-h-80 space-y-1.5 overflow-y-auto rounded-md border p-2"
               >
                 <label
-                  v-for="opt in filteredArrayOptions"
+                  v-for="opt in visibleArrayOptions"
                   :key="opt.value"
                   class="flex cursor-pointer items-center gap-2 text-xs"
                 >
@@ -887,6 +901,20 @@ function resolvePreview(fieldKey, raw) {
                 >
                   {{ t("components.searchableSelect.nothingFound") }}
                 </p>
+                <Button
+                  v-if="hiddenArrayOptionCount > 0"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-full text-xs text-muted-foreground"
+                  @click="arrayOptionPage += ARRAY_OPTION_PAGE"
+                >
+                  {{
+                    t("marketplace.graph.inspector.showMoreFields", {
+                      count: hiddenArrayOptionCount,
+                    })
+                  }}
+                </Button>
               </div>
             </template>
 
