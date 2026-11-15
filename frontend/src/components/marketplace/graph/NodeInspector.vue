@@ -868,7 +868,7 @@ function resolvePreview(fieldKey, raw) {
                 class="h-8 text-xs"
               />
               <div
-                class="max-h-52 space-y-1.5 overflow-y-auto rounded border p-2"
+                class="max-h-80 space-y-1.5 overflow-y-auto rounded-md border p-2"
               >
                 <label
                   v-for="opt in filteredArrayOptions"
