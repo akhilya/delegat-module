@@ -2209,21 +2209,21 @@ function clipboardNodeUsable(node, fieldKeys = new Set()) {
 
 /** Keeps usable nodes and edges between them; reports the dropped count. */
 function validateClipboard(clip) {
-  const nodes = [];
+  const kept = [];
   let dropped = 0;
   const fieldKeys = new Set([
     ...sinkFieldKeys(clip?.nodes),
     ...sinkFieldKeys(nodes.value),
   ]);
   for (const n of clip?.nodes || []) {
-    if (clipboardNodeUsable(n, fieldKeys)) nodes.push(n);
+    if (clipboardNodeUsable(n, fieldKeys)) kept.push(n);
     else dropped += 1;
   }
-  const ids = new Set(nodes.map((n) => n.id));
+  const ids = new Set(kept.map((n) => n.id));
   const edges = (clip?.edges || []).filter(
     (e) => e && ids.has(e.source) && ids.has(e.target),
   );
-  return { nodes, edges, dropped };
+  return { nodes: kept, edges, dropped };
 }
 
 function writeSystemClipboard(payload) {
