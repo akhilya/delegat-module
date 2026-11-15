@@ -233,3 +233,13 @@ public sealed record PlatformOzonRefreshResult(
     string? AccessToken,
     string? RefreshToken,
     int ExpiresIn);
+
+/// <summary>
+/// Identity the Control Plane hands back for a redeemed console SSO code:
+/// the platform account the cabinet sign-in should map to.
+/// </summary>
+public sealed class PlatformInstanceSsoDto
+{
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+}

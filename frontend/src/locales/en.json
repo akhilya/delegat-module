@@ -478,6 +478,7 @@
     "noAccount": "Don't have an account?",
     "hasAccount": "Already have an account?",
     "signInSuccess": "Signed in successfully.",
+    "ssoFailed": "Could not sign in from the platform console.",
     "signUpSuccess": "Signed up successfully.",
     "passwordsMismatch": "Passwords do not match",
     "userNamePlaceholder": "Enter name",

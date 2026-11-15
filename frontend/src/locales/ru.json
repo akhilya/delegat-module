@@ -478,6 +478,7 @@
     "noAccount": "Нет аккаунта?",
     "hasAccount": "Уже есть аккаунт?",
     "signInSuccess": "Вы вошли.",
+    "ssoFailed": "Не удалось войти через консоль платформы.",
     "signUpSuccess": "Аккаунт создан.",
     "passwordsMismatch": "Пароли не совпадают",
     "userNamePlaceholder": "Введите имя",

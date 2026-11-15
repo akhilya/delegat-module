@@ -203,6 +203,11 @@ export default {
 
     onMounted(async () => {
       startConditionalPasskey();
+      if (route.query.ssoError) {
+        displaySonnerError(t("auth.ssoFailed"));
+        await router.replace({ query: {} });
+        return;
+      }
       const creds = readSignInQuery(route.query);
       if (!creds || queryAutoSubmitStarted.value) return;
       queryAutoSubmitStarted.value = true;
