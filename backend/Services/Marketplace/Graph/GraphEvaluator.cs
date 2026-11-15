@@ -269,7 +269,7 @@ public static class GraphEvaluator
                         break;
                     case "and":
                     {
-                        var inputs = AllInputs(incoming, pins, nodeId);
+                        var inputs = ConnectedInputs(incoming, pins, nodeId);
                         pins[nodeId] = new PinValue(inputs.Count > 0 && inputs.All(IsTruthy));
                         break;
                     }
@@ -429,6 +429,17 @@ public static class GraphEvaluator
             else byIndex.Add(value); // second wire on the same pin: keep it at the tail
         }
         return byIndex;
+    }
+
+    /// <summary>Values of the node's wires in pin order, without gaps for unwired pins.</summary>
+    private static List<object?> ConnectedInputs(Dictionary<string, List<GraphEdge>> incoming,
+        Dictionary<string, PinValue> pins, string nodeId)
+    {
+        var values = new List<object?>();
+        if (incoming.TryGetValue(nodeId, out var edges))
+            foreach (var e in edges)
+                values.Add(pins.TryGetValue(e.source, out var pv) ? pv.Value : null);
+        return values;
     }
 
     // ---- Logic / predicate helpers ----
