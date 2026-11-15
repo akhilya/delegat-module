@@ -264,6 +264,8 @@ describe("locale message catalogs", () => {
       "sku_unchanged",
       "products_required",
       "file_required",
+      "excel_import_too_large",
+      "excel_import_invalid",
       "store_not_found",
       "store_name_required",
       "store_name_taken",

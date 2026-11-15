@@ -295,6 +295,7 @@ import {
 import { Button } from "@/components/ui/button";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { toast } from "vue-sonner";
+import { resolveApiErrorMessage } from "@/store/sonnerHelper";
 
 const props = defineProps({
   modelValue: Boolean,
@@ -395,9 +396,10 @@ async function processFile(file) {
       step.value = "preview";
     },
     onError: (error) => {
-      uploadError.value =
-        error.response?.data?.message ||
-        t("products.importExcelDialog.processError");
+      uploadError.value = resolveApiErrorMessage(
+        error.response?.data,
+        "products.importExcelDialog.processError",
+      );
       step.value = "upload";
     },
   });
@@ -423,9 +425,10 @@ async function handleApply() {
       }
     },
     onError: (error) => {
-      applyError.value =
-        error.response?.data?.message ||
-        t("products.importExcelDialog.applyError");
+      applyError.value = resolveApiErrorMessage(
+        error.response?.data,
+        "products.importExcelDialog.applyError",
+      );
       applyResult.value = null;
       step.value = "result";
     },

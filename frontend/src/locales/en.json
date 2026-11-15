@@ -677,6 +677,8 @@
     "sku_unchanged": "The new SKU is the same as the current SKU.",
     "products_required": "Select at least one product.",
     "file_required": "Choose a file to upload.",
+    "excel_import_too_large": "The spreadsheet is too large to import. Keep it under 20 MB, 50,000 rows and 1,000 columns, or split it into several files.",
+    "excel_import_invalid": "The file is not a valid .xlsx spreadsheet.",
     "store_not_found": "Store not found.",
     "store_name_required": "Enter a store name.",
     "store_name_taken": "A store with this name already exists.",

@@ -468,6 +468,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- Excel product import (`/products/import-preview`, `/products/import-apply`) rejects oversized workbooks before loading them: uploads are capped at 20 MB, decompressed content at 100 MB, archives at 1,000 entries, and sheets at 1,000,000 cells, 50,000 data rows and 1,000 columns. Crafted zip-bomb spreadsheets now return a 400 error instead of exhausting backend memory.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
 - Update Vue I18n to 11.4.16 and pin MySqlConnector to 2.6.1 to address published dependency advisories.
