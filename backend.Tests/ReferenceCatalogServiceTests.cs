@@ -147,5 +147,9 @@ public class ReferenceCatalogServiceTests
         public Task<PlatformOzonRefreshResult> RefreshOzonTokenAsync(
             string refreshToken, CancellationToken ct = default) =>
             Task.FromResult(new PlatformOzonRefreshResult(false, "not_configured", null, null, 0));
+
+        public Task<PlatformInstanceSsoDto?> ExchangeInstanceSsoAsync(
+            string code, CancellationToken ct = default) =>
+            Task.FromResult<PlatformInstanceSsoDto?>(null);
     }
 }
