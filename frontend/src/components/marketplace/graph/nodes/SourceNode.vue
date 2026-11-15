@@ -100,7 +100,7 @@ const collapsed = computed(() => !!props.data.collapsed);
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div
       :class="[
         'vf-card',

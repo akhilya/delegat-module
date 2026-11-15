@@ -542,7 +542,7 @@ function resolvePreview(fieldKey, raw) {
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div v-if="node" class="flex h-full w-full flex-col border-l bg-card">
       <div class="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div class="truncate text-sm font-semibold">{{ heading }}</div>

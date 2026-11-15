@@ -2615,7 +2615,7 @@ async function importMappingFile(event) {
         class="relative min-w-0 h-full w-full"
         @contextmenu="onContextMenu"
       >
-        <TooltipProvider :delay-duration="300">
+        <TooltipProvider :delay-duration="150">
           <div
             class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
           >
@@ -2824,7 +2824,7 @@ async function importMappingFile(event) {
             node-color="var(--muted-foreground)"
             mask-color="var(--muted)"
           />
-          <TooltipProvider :delay-duration="300">
+          <TooltipProvider :delay-duration="150">
             <Controls position="bottom-left" :show-interactive="false">
               <template #control-zoom-in>
                 <Tooltip>
@@ -3328,6 +3328,7 @@ async function importMappingFile(event) {
   min-width: 0;
   display: flex;
   align-items: center;
+  align-self: stretch;
   gap: 6px;
 }
 .vf-adapter__mid {
