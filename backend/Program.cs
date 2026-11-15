@@ -234,6 +234,24 @@ builder.Services.AddHttpClient("MinIOStorage", client =>
     PooledConnectionIdleTimeout = TimeSpan.FromSeconds(45),
     MaxConnectionsPerServer = 32
 });
+builder.Services.AddHttpClient(MinIOStorageService.ExternalDownloadHttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(30);
+    client.DefaultRequestVersion = HttpVersion.Version11;
+    client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    AutomaticDecompression = DecompressionMethods.None,
+    AllowAutoRedirect = false,
+    // A proxy would resolve the host itself and bypass the pinned connect.
+    UseProxy = false,
+    ConnectCallback = SafeConnect.CreateConnectCallback(),
+    ConnectTimeout = TimeSpan.FromSeconds(30),
+    PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+    PooledConnectionIdleTimeout = TimeSpan.FromSeconds(45),
+    MaxConnectionsPerServer = 32
+});
 builder.Services.AddSingleton<IStorageService>(sp =>
 {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();

@@ -136,7 +136,7 @@ public static class UrlSafety
         || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
         || host.Equals("metadata.google.internal", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsBlockedIp(IPAddress ip)
+    public static bool IsBlockedIp(IPAddress ip)
     {
         if (IPAddress.IsLoopback(ip))
             return true;
