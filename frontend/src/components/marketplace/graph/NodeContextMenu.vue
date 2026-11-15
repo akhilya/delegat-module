@@ -63,6 +63,15 @@ onMounted(async () => {
 
 const q = computed(() => search.value.trim().toLowerCase());
 
+// Query words are hoisted out of `match`: the matcher runs per menu item per
+// keystroke, so the split/normalize work must not repeat for every candidate.
+const qWords = computed(() =>
+  q.value
+    .split(/\s+/)
+    .map((w) => w.replace(/^[+\-−×*x/÷:]+/, ""))
+    .filter(Boolean),
+);
+
 // Word-level fuzzy match: a query word hits when it is a substring of a
 // candidate word, or close enough to tolerate a typo (1-2 edits for longer
 // words). Works the same for Cyrillic and Latin input.
@@ -86,26 +95,23 @@ const wordOk = (qw, cw) =>
   cw.includes(qw) ||
   (cw.length >= 3 && qw.startsWith(cw)) ||
   (qw.length >= 4 && lev(qw, cw) <= (qw.length >= 8 ? 2 : 1));
-const match = (label, ...aliases) => {
-  if (!q.value) return true;
-  // Strip leading operator signs so "+15" still hits "15+", "возраст 15" etc.
-  const qWords = q.value
-    .split(/\s+/)
-    .map((w) => w.replace(/^[+\-−×*x/÷:]+/, ""))
-    .filter(Boolean);
-  // Whole strings stay in the hay too: "S/M" or "10/12" are query words but
-  // only the full label contains the slash.
-  const hay = [label, ...aliases]
+const hayOf = (label, aliases) =>
+  [label, ...aliases]
     .flatMap((a) => {
       const s = String(a || "").toLowerCase();
       return [s, ...s.split(/[\s,;/|]+/)];
     })
     .filter(Boolean);
+
+const matchHay = (hay) => {
+  if (!q.value) return true;
   // A bare operator sign ("+", "/", "x") has no query words: only items with
   // that exact alias match, otherwise everything would be listed.
-  if (!qWords.length) return hay.some((h) => h === q.value);
-  return qWords.every((w) => hay.some((h) => wordOk(w, h)));
+  if (!qWords.value.length) return hay.some((h) => h === q.value);
+  return qWords.value.every((w) => hay.some((h) => wordOk(w, h)));
 };
+
+const match = (label, ...aliases) => matchHay(hayOf(label, aliases));
 
 const connecting = computed(
   () => !!props.filterType && props.filterType !== "any",
@@ -356,6 +362,33 @@ const optionItem = (field) => (o) => ({
     },
   },
 });
+// Option words are indexed once per field set (not per keystroke): adapter
+// dictionaries can hold thousands of options and the fuzzy matcher is the
+// menu's hot path.
+const pendingOptionIndex = computed(() =>
+  (props.adapterValueField?.options || []).map((o) => ({
+    o,
+    hay: hayOf(o.label, [o.value]),
+  })),
+);
+const fieldOptionIndex = computed(() =>
+  props.adapterFieldsWithOptions
+    .filter((f) => f.options?.length)
+    .map((f) => ({
+      field: f,
+      options: f.options.map((o) => ({ o, hay: hayOf(o.label, [o.value]) })),
+    })),
+);
+// Collect the first `limit` matching options - stops scanning a large
+// dictionary as soon as the group is full.
+const takeMatching = (indexed, limit) => {
+  const out = [];
+  for (const { o, hay } of indexed) {
+    if (matchHay(hay)) out.push(o);
+    if (out.length >= limit) break;
+  }
+  return out;
+};
 const adapterValueGroups = computed(() => {
   const groups = [];
   // Static sources have no input pin: skip them when the drag needs a consumer.
@@ -363,11 +396,10 @@ const adapterValueGroups = computed(() => {
   const groupLabel = (field) =>
     `${t("marketplace.graph.contextMenu.adapterValueItem")} · ${field.label}`;
   const pending = props.adapterValueField;
-  if (pending?.options?.length) {
-    const items = pending.options
-      .filter((o) => match(o.label, o.value))
-      .slice(0, 50)
-      .map(optionItem(pending));
+  if (pendingOptionIndex.value.length) {
+    const items = takeMatching(pendingOptionIndex.value, 50).map(
+      optionItem(pending),
+    );
     if (items.length)
       groups.push({
         key: `av:${pending.fieldKey}`,
@@ -376,12 +408,9 @@ const adapterValueGroups = computed(() => {
       });
   }
   if (q.value) {
-    for (const f of props.adapterFieldsWithOptions) {
-      if (f.fieldKey === pending?.fieldKey || !f.options?.length) continue;
-      const items = f.options
-        .filter((o) => match(o.label, o.value))
-        .slice(0, 10)
-        .map(optionItem(f));
+    for (const { field: f, options } of fieldOptionIndex.value) {
+      if (f.fieldKey === pending?.fieldKey) continue;
+      const items = takeMatching(options, 10).map(optionItem(f));
       if (items.length)
         groups.push({ key: `av:${f.fieldKey}`, label: groupLabel(f), items });
     }

@@ -257,6 +257,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Mapping canvas polish: block and pin selection no longer draws a glow ring, and the adapter-field inspector's group filter gained a "no group" entry so custom and hidden fields stay reachable while a group is selected. Pasting or importing a graph now also validates modifier parameters that reference adapter fields (such as value-map targets), and the block search indexes dictionary options once per menu instead of rescanning every option on each keystroke.
 - Extra mapping branches and parameter-pin consumers no longer disable a valid unit conversion. Chained conversions retain the intermediate unit established by a destination field or the next manual conversion.
 - Collapsed mapping blocks keep parameter inputs from intercepting wires intended for the value input; existing connections to a parameter without a value input show a warning.
 - Wildberries photo exports replace the selected gallery instead of appending existing remote photos. Repeated photo URLs are removed before checking the 30-photo limit; video-only updates preserve remote photos.

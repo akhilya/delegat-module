@@ -2161,9 +2161,22 @@ const PASTE_NODE_TYPES = new Set([
   "reroute",
 ]);
 
+const SINK_NODE_TYPES = new Set(["adapterFields", "adapterPriceFields"]);
+
 /** Whether a copied node can live in this cabinet/category: its external
    references (attributes, product fields, store files) must resolve here. */
-function clipboardNodeUsable(node) {
+// Field keys a pasted modifier can reference (valueMap/optionMap
+// targetFieldKey): fields of the sinks in the pasted set plus the sinks
+// already on the canvas.
+const sinkFieldKeys = (list) => {
+  const keys = new Set();
+  for (const n of list || [])
+    if (SINK_NODE_TYPES.has(n.type))
+      for (const f of n.data?.fields || []) keys.add(f.fieldKey);
+  return keys;
+};
+
+function clipboardNodeUsable(node, fieldKeys = new Set()) {
   if (!node || !PASTE_NODE_TYPES.has(node.type)) return false;
   const d = node.data || {};
   const src = props.availableSources;
@@ -2184,7 +2197,11 @@ function clipboardNodeUsable(node) {
         (f) => String(f.id) === String(d.storeFileId),
       );
     case "modifier":
-      return !!MODIFIER_CATALOG[d.modifierType];
+      if (!MODIFIER_CATALOG[d.modifierType]) return false;
+      // Map modifiers bound to a field absent in both the pasted set and the
+      // target graph would silently export wrong values.
+      if (d.targetFieldKey && !fieldKeys.has(d.targetFieldKey)) return false;
+      return true;
     default:
       return true;
   }
@@ -2194,8 +2211,12 @@ function clipboardNodeUsable(node) {
 function validateClipboard(clip) {
   const nodes = [];
   let dropped = 0;
+  const fieldKeys = new Set([
+    ...sinkFieldKeys(clip?.nodes),
+    ...sinkFieldKeys(nodes.value),
+  ]);
   for (const n of clip?.nodes || []) {
-    if (clipboardNodeUsable(n)) nodes.push(n);
+    if (clipboardNodeUsable(n, fieldKeys)) nodes.push(n);
     else dropped += 1;
   }
   const ids = new Set(nodes.map((n) => n.id));
@@ -2540,9 +2561,13 @@ async function importMappingFile(event) {
     const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
     // Cross-cabinet imports can reference attributes/fields that don't exist
     // here: drop those nodes (sinks are structural and always kept).
-    const SINK = new Set(["adapterFields", "adapterPriceFields"]);
+    const importFieldKeys = new Set([
+      ...sinkFieldKeys(importSafeNodes),
+      ...sinkFieldKeys(nodes.value),
+    ]);
     const usableNodes = importSafeNodes.filter(
-      (n) => SINK.has(n.type) || clipboardNodeUsable(n),
+      (n) =>
+        SINK_NODE_TYPES.has(n.type) || clipboardNodeUsable(n, importFieldKeys),
     );
     const droppedImport = importSafeNodes.length - usableNodes.length;
     const importIds = new Set(usableNodes.map((n) => n.id));
@@ -3184,7 +3209,6 @@ async function importMappingFile(event) {
 }
 .vf-card--selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary);
 }
 .vf-card--error {
   border-color: var(--destructive);
@@ -3398,7 +3422,6 @@ async function importMappingFile(event) {
 }
 .vue-flow__handle:hover {
   background: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 /* Default (static / floating) edges - plain wire, no animation. */

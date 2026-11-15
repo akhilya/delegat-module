@@ -2219,7 +2219,8 @@
         "outputValueLabel": "Значение на выходе",
         "deleteNode": "Удалить узел",
         "productField": "Поле товара",
-        "attributeFallback": "атрибут #{id}"
+        "attributeFallback": "атрибут #{id}",
+        "ungroupedFields": "Без группы"
       }
     },
     "canvas": {

@@ -245,13 +245,18 @@ const adapterGroupFilter = ref("__all__");
 const adapterGroups = computed(() =>
   [...new Set(adapterFields.value.map((f) => f.group).filter(Boolean))].sort(),
 );
-watch(adapterGroups, (groups) => {
-  if (
-    adapterGroupFilter.value !== "__all__" &&
-    !groups.includes(adapterGroupFilter.value)
-  ) {
-    adapterGroupFilter.value = "__all__";
-  }
+// Custom and hidden (omit/alias/repeat) fields often have no group: give them
+// their own filter entry so a selected group doesn't hide them completely.
+const UNGROUPED = "__ungrouped__";
+const hasUngroupedFields = computed(() =>
+  adapterFields.value.some((f) => !f.group),
+);
+watch([adapterGroups, hasUngroupedFields], ([groups]) => {
+  const valid =
+    adapterGroupFilter.value === "__all__" ||
+    groups.includes(adapterGroupFilter.value) ||
+    (adapterGroupFilter.value === UNGROUPED && hasUngroupedFields.value);
+  if (!valid) adapterGroupFilter.value = "__all__";
 });
 const bindingDialogOpen = ref(false);
 const bindingDialogField = ref(null);
@@ -305,7 +310,9 @@ const filteredAdapterFields = computed(() => {
     return (
       hay.includes(q) &&
       (adapterGroupFilter.value === "__all__" ||
-        f.group === adapterGroupFilter.value)
+        (adapterGroupFilter.value === UNGROUPED
+          ? !f.group
+          : f.group === adapterGroupFilter.value))
     );
   });
 });
@@ -908,6 +915,9 @@ function resolvePreview(fieldKey, raw) {
               <SelectContent>
                 <SelectItem value="__all__">{{
                   t("marketplace.graph.allGroups")
+                }}</SelectItem>
+                <SelectItem v-if="hasUngroupedFields" :value="UNGROUPED">{{
+                  t("marketplace.graph.inspector.ungroupedFields")
                 }}</SelectItem>
                 <SelectItem
                   v-for="group in adapterGroups"

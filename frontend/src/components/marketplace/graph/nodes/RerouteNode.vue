@@ -27,6 +27,5 @@ defineProps({
 }
 .vf-reroute--selected {
   background: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary);
 }
 </style>
