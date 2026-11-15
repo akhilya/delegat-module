@@ -461,6 +461,7 @@ const arithItems = computed(() => {
   desc.params = { [ARITH_PARAM_KEY[modifierType]]: operand };
   return [
     {
+      icon: Wand2,
       label: mod.displayName,
       param: num != null ? String(operand) : null,
       desc,
@@ -676,6 +677,7 @@ const pick = (desc) => {
           class="vf-ctx__item h-auto w-full justify-start"
           @click="pick(it.desc)"
         >
+          <component :is="it.icon" v-if="it.icon" class="vf-ctx__icon" />
           {{ it.label }}
           <span v-if="it.param" class="vf-ctx__param">{{ it.param }}</span>
         </Button>
@@ -726,6 +728,12 @@ const pick = (desc) => {
   font-size: 13px;
   font-weight: normal;
   color: var(--foreground);
+}
+.vf-ctx__icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
 }
 .vf-ctx__param {
   margin-left: auto;
