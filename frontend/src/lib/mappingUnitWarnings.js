@@ -4,6 +4,11 @@ import {
   normalizeUnitCode,
 } from "./attributeUnits.js";
 
+// Selection ops preserve the quantity (and its unit) when all inputs share one.
+const UNIT_PRESERVING_OPS = new Set(["min", "max"]);
+
+const OP_INPUT_HANDLE = /^(in|in-\d+)$/;
+
 // Arithmetic changes the magnitude, so the source unit no longer describes the value.
 const UNIT_CHANGING_MODIFIERS = new Set([
   "multiply",
@@ -33,14 +38,26 @@ function unitForSource(source, sources) {
 }
 
 /**
- * Unit of the value arriving from `nodeId`. `opaque` is true when arithmetic in the chain
- * changed the magnitude, so the unit cannot be inferred (and no warning is meaningful).
+ * Unit of the value arriving from `nodeId`. `opaque` is true when the unit
+ * cannot be inferred at all (arithmetic changed the magnitude, a literal or
+ * type-changing op produced the value), so no warning is meaningful.
+ * `state` is a per-walk {memo, visiting} pair: memo keeps shared upstream
+ * branches resolvable, visiting only guards real cycles.
  */
-function resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, seen) {
-  if (!nodeId || seen.has(nodeId)) return { unit: null, opaque: false };
-  seen.add(nodeId);
+function resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, state) {
+  if (!nodeId) return { unit: null, opaque: false };
+  if (state.memo.has(nodeId)) return state.memo.get(nodeId);
+  if (state.visiting.has(nodeId)) return { unit: null, opaque: false };
   const node = nodesById.get(nodeId);
   if (!node) return { unit: null, opaque: false };
+  state.visiting.add(nodeId);
+  const info = nodeUnitInfo(node, nodesById, incomingByTarget, sources, state);
+  state.visiting.delete(nodeId);
+  state.memo.set(nodeId, info);
+  return info;
+}
+
+function nodeUnitInfo(node, nodesById, incomingByTarget, sources, state) {
   if (node.type === "attribute" || node.type === "storeAttribute") {
     return {
       unit:
@@ -57,7 +74,7 @@ function resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, seen) {
   )
     return { unit: null, opaque: true };
   if (node.type === "reroute" || node.type === "modifier") {
-    const incoming = (incomingByTarget.get(nodeId) || []).filter(
+    const incoming = (incomingByTarget.get(node.id) || []).filter(
       (edge) => !edge.targetHandle || edge.targetHandle === "in",
     );
     if (incoming.length !== 1) return { unit: null, opaque: false };
@@ -66,10 +83,35 @@ function resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, seen) {
       nodesById,
       incomingByTarget,
       sources,
-      seen,
+      state,
     );
   }
-  return { unit: null, opaque: false };
+  // Selection ops propagate the unit only when every connected input agrees.
+  if (UNIT_PRESERVING_OPS.has(node.type)) {
+    const inputs = (incomingByTarget.get(node.id) || []).filter((edge) =>
+      OP_INPUT_HANDLE.test(edge.targetHandle || ""),
+    );
+    if (!inputs.length) return { unit: null, opaque: true };
+    let unit = null;
+    for (const edge of inputs) {
+      const info = resolveUnitInfo(
+        edge.source,
+        nodesById,
+        incomingByTarget,
+        sources,
+        state,
+      );
+      if (info.opaque || info.unit == null) return { unit: null, opaque: true };
+      const normalized = normalizeUnitCode(info.unit);
+      if (unit && normalized && unit.toLowerCase() !== normalized.toLowerCase())
+        return { unit: null, opaque: true };
+      unit = unit ?? normalized ?? info.unit;
+    }
+    return { unit, opaque: false };
+  }
+  // Literals, product fields, files, type-changing ops and other terminals
+  // cannot carry a unit: opaque rather than a bogus "not specified" warning.
+  return { unit: null, opaque: true };
 }
 
 /** Resolve automatic conversions from current definitions and wiring, never cached params. */
@@ -143,6 +185,23 @@ export function resolveConversionUnits(nodes = [], edges = [], sources = {}) {
       );
       return inputs.length === 1 ? sourceUnit(inputs[0].source, seen) : null;
     }
+    // Selection ops keep the unit when every input resolves to the same one.
+    if (UNIT_PRESERVING_OPS.has(node?.type)) {
+      const inputs = (incoming.get(id) || []).filter((e) =>
+        OP_INPUT_HANDLE.test(e.targetHandle || ""),
+      );
+      if (!inputs.length) return null;
+      let unit = null;
+      for (const edge of inputs) {
+        const resolved = normalizeUnitCode(
+          sourceUnit(edge.source, new Set(seen)),
+        );
+        if (!resolved) return null;
+        if (unit && unit.toLowerCase() !== resolved.toLowerCase()) return null;
+        unit = resolved;
+      }
+      return unit;
+    }
     return null;
   }
   function resolve(node) {
@@ -180,10 +239,11 @@ export function resolveTerminalUnit(
   nodesById,
   incomingByTarget,
   sources,
-  seen = new Set(),
 ) {
-  return resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, seen)
-    .unit;
+  return resolveUnitInfo(nodeId, nodesById, incomingByTarget, sources, {
+    memo: new Map(),
+    visiting: new Set(),
+  }).unit;
 }
 
 export function unitMismatch(sourceUnit, targetUnit) {
@@ -223,6 +283,7 @@ export function analyzeUnitWarnings(nodes = [], edges = [], sources = {}) {
 
   const edgeWarnings = new Map();
   const directWarnings = {};
+  const sharedState = { memo: new Map(), visiting: new Set() };
   for (const sink of nodes || []) {
     if (sink.type !== "adapterFields" && sink.type !== "adapterPriceFields")
       continue;
@@ -230,10 +291,13 @@ export function analyzeUnitWarnings(nodes = [], edges = [], sources = {}) {
       if (!field?.fieldKey) continue;
       const targetUnit = field.unitCode ?? field.unit ?? null;
       if (field.source) {
-        const warning = unitMismatch(
-          unitForSource(field.source, sources),
-          targetUnit,
-        );
+        // Only attributes can carry a unit; other mapping kinds cannot miss one.
+        const capable =
+          field.source.type === "attribute" ||
+          field.source.type === "storeAttribute";
+        const warning = capable
+          ? unitMismatch(unitForSource(field.source, sources), targetUnit)
+          : null;
         if (warning) {
           directWarnings[sink.id] ??= {};
           directWarnings[sink.id][field.fieldKey] = {
@@ -250,7 +314,7 @@ export function analyzeUnitWarnings(nodes = [], edges = [], sources = {}) {
           nodesById,
           incomingByTarget,
           sources,
-          new Set(),
+          sharedState,
         );
         if (info.opaque) continue;
         const warning = unitMismatch(info.unit, targetUnit);

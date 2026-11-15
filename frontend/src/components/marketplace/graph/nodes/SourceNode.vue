@@ -100,7 +100,7 @@ const collapsed = computed(() => !!props.data.collapsed);
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div
       :class="[
         'vf-card',
@@ -149,6 +149,9 @@ const collapsed = computed(() => !!props.data.collapsed);
           </TooltipContent>
         </Tooltip>
         <div class="vf-card__pin vf-card__pin--right">
+          <span v-if="data.unitCode" class="vf-adapter__unit">{{
+            data.unitCode
+          }}</span>
           <span class="vf-pin-label">{{ pinTypeLabel(outType) }}</span>
           <span class="vf-dot" :style="{ background: pinColor(outType) }" />
         </div>

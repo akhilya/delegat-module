@@ -2219,7 +2219,11 @@
         "outputValueLabel": "Значение на выходе",
         "deleteNode": "Удалить узел",
         "productField": "Поле товара",
-        "attributeFallback": "атрибут #{id}"
+        "attributeFallback": "атрибут #{id}",
+        "ungroupedFields": "Без группы",
+        "arrayItemPlaceholder": "Добавить значение…",
+        "showMoreFields": "Показать ещё ({count})",
+        "previewOutdated": "Не удалось обновить — показано устаревшее значение"
       }
     },
     "canvas": {
@@ -2279,7 +2283,9 @@
       "unmappedWarning": "Не указаны соответствия для {mapped} из {total} значений категории",
       "defaultOptionLabel": "Вариант по умолчанию (если нет соответствия)",
       "defaultValueLabel": "По умолчанию (если нет соответствия)",
-      "defaultValuePlaceholder": "Оставить как есть"
+      "defaultValuePlaceholder": "Оставить как есть",
+      "autoMatch": "Подобрать соответствия",
+      "autoMatchDone": "Подобрано соответствий: {count}"
     },
     "valueMapEditor": {
       "title": "Соответствия: вариант → valueId",

@@ -3,15 +3,16 @@
  * No i18n / Vue so node:test can import this module.
  */
 
+// Theme tokens, not raw hex: pin dots keep their hue coding in dark mode too.
 export const PIN_COLORS = {
-  string: "#3b82f6",
-  select: "#3b82f6",
-  number: "#10b981",
-  integer: "#10b981",
-  boolean: "#f59e0b",
-  multiselect: "#8b5cf6",
-  array: "#8b5cf6",
-  any: "#9ca3af",
+  string: "var(--vf-pin-string)",
+  select: "var(--vf-pin-string)",
+  number: "var(--vf-pin-number)",
+  integer: "var(--vf-pin-number)",
+  boolean: "var(--vf-pin-boolean)",
+  multiselect: "var(--vf-pin-array)",
+  array: "var(--vf-pin-array)",
+  any: "var(--vf-pin-any)",
 };
 
 export const pinColor = (type) => PIN_COLORS[type] || PIN_COLORS.any;

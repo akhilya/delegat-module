@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, inject } from "vue";
 import { ChevronDown, ChevronUp } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +18,12 @@ const props = defineProps({
 });
 
 const text = computed(() => (props.value == null ? "" : String(props.value)));
+// Provided by the canvas while a recompute is scheduled/running: swap the stale
+// value for a loader instead of displaying outdated output silently.
+const pending = inject("graphPreviewStale", ref(false));
+// Last recompute failed: keep the old value but render it dimmed so it reads
+// as outdated, not current.
+const outdated = inject("graphPreviewOutdated", ref(false));
 const expanded = ref(false);
 const bodyEl = ref(null);
 const overflowing = ref(false);
@@ -33,7 +40,12 @@ watch(text, () => {
 </script>
 
 <template>
-  <div v-if="text" class="vf-preview">
+  <div v-if="pending" class="vf-preview">
+    <div class="vf-preview__pending">
+      <Spinner class="size-3" />
+    </div>
+  </div>
+  <div v-else-if="text" class="vf-preview">
     <TooltipProvider :delay-duration="300">
       <Tooltip>
         <TooltipTrigger as-child>
@@ -42,6 +54,7 @@ watch(text, () => {
             :class="[
               'vf-preview__body',
               expanded ? 'nowheel' : 'vf-preview__body--clamp',
+              outdated && 'vf-preview__body--outdated',
             ]"
             @wheel.stop
           >
@@ -58,7 +71,7 @@ watch(text, () => {
       variant="link"
       size="xs"
       class="nodrag mt-[3px] h-auto gap-0.5 p-0 text-[10px] font-normal"
-      @click.stop="expanded = !expanded"
+      @click="expanded = !expanded"
       @mousedown.stop
     >
       <component :is="expanded ? ChevronUp : ChevronDown" class="size-3" />
@@ -95,5 +108,14 @@ watch(text, () => {
 .vf-preview__body:not(.vf-preview__body--clamp) {
   max-height: 160px;
   overflow-y: auto;
+}
+.vf-preview__body--outdated {
+  opacity: 0.45;
+}
+.vf-preview__pending {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  color: var(--muted-foreground);
 }
 </style>

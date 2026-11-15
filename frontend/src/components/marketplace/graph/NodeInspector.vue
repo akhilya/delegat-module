@@ -33,6 +33,7 @@ import {
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +60,11 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   templateFieldRefs: { type: Array, default: () => [] },
   focusFieldKey: { type: String, default: null },
+  // True while the canvas recomputes preview values — stale output is swapped
+  // for a loader so it never reads as current.
+  previewStale: { type: Boolean, default: false },
+  // True after a failed recompute: old values are shown dimmed.
+  previewOutdated: { type: Boolean, default: false },
   allowCustomFields: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update", "delete", "close", "field-focused"]);
@@ -71,6 +77,15 @@ watch(
   () => props.focusFieldKey,
   (key) => {
     if (!key) return;
+    // Reveal the field's page first: a focused field beyond the current page
+    // is not mounted yet, so the scroll target below would not exist.
+    const idx = filteredAdapterFields.value.findIndex(
+      (f) => f.fieldKey === key,
+    );
+    if (idx >= adapterFieldPage.value) {
+      adapterFieldPage.value =
+        Math.ceil((idx + 1) / ADAPTER_FIELD_PAGE) * ADAPTER_FIELD_PAGE;
+    }
     nextTick(() => {
       const row = scrollEl.value?.querySelector(`[data-fk="${key}"]`);
       row?.scrollIntoView({ behavior: "instant", block: "nearest" });
@@ -245,13 +260,18 @@ const adapterGroupFilter = ref("__all__");
 const adapterGroups = computed(() =>
   [...new Set(adapterFields.value.map((f) => f.group).filter(Boolean))].sort(),
 );
-watch(adapterGroups, (groups) => {
-  if (
-    adapterGroupFilter.value !== "__all__" &&
-    !groups.includes(adapterGroupFilter.value)
-  ) {
-    adapterGroupFilter.value = "__all__";
-  }
+// Custom and hidden (omit/alias/repeat) fields often have no group: give them
+// their own filter entry so a selected group doesn't hide them completely.
+const UNGROUPED = "__ungrouped__";
+const hasUngroupedFields = computed(() =>
+  adapterFields.value.some((f) => !f.group),
+);
+watch([adapterGroups, hasUngroupedFields], ([groups]) => {
+  const valid =
+    adapterGroupFilter.value === "__all__" ||
+    groups.includes(adapterGroupFilter.value) ||
+    (adapterGroupFilter.value === UNGROUPED && hasUngroupedFields.value);
+  if (!valid) adapterGroupFilter.value = "__all__";
 });
 const bindingDialogOpen = ref(false);
 const bindingDialogField = ref(null);
@@ -296,6 +316,13 @@ function commitCustomName(field, raw) {
   });
 }
 
+// Render adapter fields in pages: adapters can carry hundreds of fields and
+// mounting every row (radios, tooltips, selects) at once freezes the panel.
+const ADAPTER_FIELD_PAGE = 60;
+const adapterFieldPage = ref(ADAPTER_FIELD_PAGE);
+watch([adapterFieldFilter, adapterGroupFilter], () => {
+  adapterFieldPage.value = ADAPTER_FIELD_PAGE;
+});
 const filteredAdapterFields = computed(() => {
   const q = adapterFieldFilter.value.trim().toLowerCase();
   const list = adapterFields.value;
@@ -305,10 +332,18 @@ const filteredAdapterFields = computed(() => {
     return (
       hay.includes(q) &&
       (adapterGroupFilter.value === "__all__" ||
-        f.group === adapterGroupFilter.value)
+        (adapterGroupFilter.value === UNGROUPED
+          ? !f.group
+          : f.group === adapterGroupFilter.value))
     );
   });
 });
+const visibleAdapterFields = computed(() =>
+  filteredAdapterFields.value.slice(0, adapterFieldPage.value),
+);
+const hiddenAdapterFieldCount = computed(
+  () => filteredAdapterFields.value.length - adapterFieldPage.value,
+);
 
 const adapterSourceValue = (f) => {
   if (f.aliasOf) return `m:${f.aliasOf}`;
@@ -415,6 +450,52 @@ const splitTags = (v) =>
     .filter(Boolean);
 const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
 
+// --- static "array" literal: chip editor; staticValue is serialized as a
+// JSON array (the evaluator also accepts the legacy comma-separated form).
+const arrayItems = computed(() => {
+  const s = data.value.staticValue;
+  if (Array.isArray(s)) return s.map(String);
+  const str = String(s ?? "").trim();
+  if (!str) return [];
+  if (str.startsWith("[")) {
+    try {
+      const l = JSON.parse(str);
+      if (Array.isArray(l)) return l.map(String);
+    } catch {
+      // fall through to the comma-separated parse
+    }
+  }
+  return str
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+});
+const arrayDraft = ref("");
+// An empty list serializes as "" (never "[]"): DeserializeMultiselect returns
+// non-empty JSON only, so "[]" would survive as a truthy string literal.
+const emitArrayItems = (items) =>
+  setData({
+    staticValue: items.length ? JSON.stringify(items) : "",
+    label: items.join(", "),
+  });
+function arrayAdd() {
+  const v = arrayDraft.value.trim();
+  if (!v) return;
+  emitArrayItems([...arrayItems.value, v]);
+  arrayDraft.value = "";
+}
+function arrayRemove(i) {
+  emitArrayItems(arrayItems.value.filter((_, x) => x !== i));
+}
+function arrayKeydown(e) {
+  if (e.key === "Enter" || e.key === ",") {
+    e.preventDefault();
+    arrayAdd();
+  } else if (e.key === "Backspace" && !arrayDraft.value) {
+    arrayRemove(arrayItems.value.length - 1);
+  }
+}
+
 // --- "standard value" (isAdapterValue static node) ---
 
 function onAdapterValuePick(val) {
@@ -447,12 +528,21 @@ const selectedArrayValues = computed(() => {
 });
 
 const arrayOptionFilter = ref("");
+// Adapter dictionaries can carry hundreds of options; mount them in pages like
+// the adapter field list so selecting the node does not freeze.
+const ARRAY_OPTION_PAGE = 60;
+const arrayOptionPage = ref(ARRAY_OPTION_PAGE);
 watch(
   () => props.node?.id,
   () => {
     arrayOptionFilter.value = "";
+    arrayOptionPage.value = ARRAY_OPTION_PAGE;
+    adapterFieldPage.value = ADAPTER_FIELD_PAGE;
   },
 );
+watch(arrayOptionFilter, () => {
+  arrayOptionPage.value = ARRAY_OPTION_PAGE;
+});
 const filteredArrayOptions = computed(() => {
   const query = arrayOptionFilter.value.trim().toLowerCase();
   const opts = data.value.options || [];
@@ -463,6 +553,12 @@ const filteredArrayOptions = computed(() => {
       .includes(query),
   );
 });
+const visibleArrayOptions = computed(() =>
+  filteredArrayOptions.value.slice(0, arrayOptionPage.value),
+);
+const hiddenArrayOptionCount = computed(
+  () => filteredArrayOptions.value.length - arrayOptionPage.value,
+);
 
 function toggleArrayValue(val) {
   const cur = selectedArrayValues.value;
@@ -535,7 +631,7 @@ function resolvePreview(fieldKey, raw) {
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div v-if="node" class="flex h-full w-full flex-col border-l bg-card">
       <div class="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div class="truncate text-sm font-semibold">{{ heading }}</div>
@@ -788,10 +884,10 @@ function resolvePreview(fieldKey, raw) {
                 class="h-8 text-xs"
               />
               <div
-                class="max-h-52 space-y-1.5 overflow-y-auto rounded border p-2"
+                class="max-h-80 space-y-1.5 overflow-y-auto rounded-md border p-2"
               >
                 <label
-                  v-for="opt in filteredArrayOptions"
+                  v-for="opt in visibleArrayOptions"
                   :key="opt.value"
                   class="flex cursor-pointer items-center gap-2 text-xs"
                 >
@@ -807,6 +903,20 @@ function resolvePreview(fieldKey, raw) {
                 >
                   {{ t("components.searchableSelect.nothingFound") }}
                 </p>
+                <Button
+                  v-if="hiddenArrayOptionCount > 0"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-full text-xs text-muted-foreground"
+                  @click="arrayOptionPage += ARRAY_OPTION_PAGE"
+                >
+                  {{
+                    t("marketplace.graph.inspector.showMoreFields", {
+                      count: hiddenArrayOptionCount,
+                    })
+                  }}
+                </Button>
               </div>
             </template>
 
@@ -859,14 +969,32 @@ function resolvePreview(fieldKey, raw) {
               </span>
             </div>
 
-            <Input
-              v-else-if="data.valueType === 'array'"
-              :model-value="data.staticValue"
-              :placeholder="t('marketplace.graph.inspector.commaSeparated')"
-              @update:model-value="
-                setData({ staticValue: $event, label: $event })
-              "
-            />
+            <div v-else-if="data.valueType === 'array'" class="space-y-1.5">
+              <div v-if="arrayItems.length" class="flex flex-wrap gap-1">
+                <span
+                  v-for="(item, i) in arrayItems"
+                  :key="i"
+                  class="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs"
+                >
+                  {{ item }}
+                  <button
+                    type="button"
+                    class="text-muted-foreground hover:text-foreground"
+                    @click="arrayRemove(i)"
+                  >
+                    <X class="size-3" />
+                  </button>
+                </span>
+              </div>
+              <Input
+                v-model="arrayDraft"
+                :placeholder="
+                  t('marketplace.graph.inspector.arrayItemPlaceholder')
+                "
+                @keydown="arrayKeydown"
+                @blur="arrayAdd"
+              />
+            </div>
 
             <Input
               v-else
@@ -909,6 +1037,9 @@ function resolvePreview(fieldKey, raw) {
                 <SelectItem value="__all__">{{
                   t("marketplace.graph.allGroups")
                 }}</SelectItem>
+                <SelectItem v-if="hasUngroupedFields" :value="UNGROUPED">{{
+                  t("marketplace.graph.inspector.ungroupedFields")
+                }}</SelectItem>
                 <SelectItem
                   v-for="group in adapterGroups"
                   :key="group"
@@ -919,7 +1050,7 @@ function resolvePreview(fieldKey, raw) {
             </Select>
             <div class="space-y-3">
               <div
-                v-for="f in filteredAdapterFields"
+                v-for="f in visibleAdapterFields"
                 :key="f.fieldKey"
                 :data-fk="f.fieldKey"
                 :class="[
@@ -1037,10 +1168,13 @@ function resolvePreview(fieldKey, raw) {
                   </Button>
                 </div>
 
-                <Tooltip v-if="adapterPreview[f.fieldKey] != null">
+                <Tooltip
+                  v-if="adapterPreview[f.fieldKey] != null && !previewStale"
+                >
                   <TooltipTrigger as-child>
                     <div
                       class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                      :class="previewOutdated && 'opacity-50'"
                     >
                       {{
                         resolvePreview(f.fieldKey, adapterPreview[f.fieldKey])
@@ -1065,6 +1199,20 @@ function resolvePreview(fieldKey, raw) {
               >
                 {{ t("marketplace.graph.inspector.fieldSearchEmpty") }}
               </p>
+              <Button
+                v-if="hiddenAdapterFieldCount > 0"
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-7 w-full text-xs text-muted-foreground"
+                @click="adapterFieldPage += ADAPTER_FIELD_PAGE"
+              >
+                {{
+                  t("marketplace.graph.inspector.showMoreFields", {
+                    count: hiddenAdapterFieldCount,
+                  })
+                }}
+              </Button>
             </div>
 
             <Button
@@ -1358,12 +1506,35 @@ function resolvePreview(fieldKey, raw) {
         </template>
       </div>
 
-      <div v-if="data.previewValue != null" class="border-t px-3 py-2">
-        <div class="text-xs text-muted-foreground">
-          {{ t("marketplace.graph.inspector.outputValueLabel") }}
-        </div>
-        <div class="mt-0.5 break-words font-mono text-xs">
-          {{ data.previewValue }}
+      <div
+        v-if="data.previewValue != null || previewStale"
+        class="border-t p-3"
+      >
+        <div class="vf-inspect-preview">
+          <div class="vf-inspect-preview__label">
+            {{ t("marketplace.graph.inspector.outputValueLabel") }}
+          </div>
+          <div
+            v-if="previewStale"
+            class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            <Spinner size="sm" />
+            {{ t("marketplace.canvas.previewing") }}
+          </div>
+          <template v-else>
+            <div
+              class="vf-inspect-preview__value"
+              :class="previewOutdated && 'opacity-50'"
+            >
+              {{ data.previewValue }}
+            </div>
+            <div
+              v-if="previewOutdated"
+              class="mt-1.5 text-[11px] text-muted-foreground"
+            >
+              {{ t("marketplace.graph.inspector.previewOutdated") }}
+            </div>
+          </template>
         </div>
       </div>
 
@@ -1392,6 +1563,28 @@ function resolvePreview(fieldKey, raw) {
     background-color: rgba(120, 120, 120, 0);
   }
 }
+/* Preview card: inset platform surface, larger than the old bare text line. */
+.vf-inspect-preview {
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  padding: 10px 12px;
+}
+.vf-inspect-preview__label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.vf-inspect-preview__value {
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .vf-field-flash {
   animation: vf-flash 0.9s ease-out forwards;
 }

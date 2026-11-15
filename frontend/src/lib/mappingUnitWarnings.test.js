@@ -183,6 +183,147 @@ describe("mapping unit warnings (definitions and conversions)", () => {
     assert.equal(result.edgeWarnings.size, 0);
   });
 
+  it("does not warn for unit-incapable sources like a number literal", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "lit", type: "static", data: { staticValue: "5" } },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "qty", unitCode: "pcs" }] },
+        },
+      ],
+      [
+        {
+          id: "w",
+          source: "lit",
+          target: "adapter-fields",
+          targetHandle: "f:qty",
+        },
+      ],
+      {},
+    );
+    assert.equal(result.edgeWarnings.size, 0);
+  });
+
+  it("propagates a shared unit through multi-input ops", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "a1", type: "attribute", data: { attributeId: 7 } },
+        { id: "a2", type: "attribute", data: { attributeId: 8 } },
+        { id: "max", type: "max", data: {} },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "width", unitCode: "cm" }] },
+        },
+      ],
+      [
+        { id: "i1", source: "a1", target: "max", targetHandle: "in-0" },
+        { id: "i2", source: "a2", target: "max", targetHandle: "in-1" },
+        {
+          id: "w",
+          source: "max",
+          target: "adapter-fields",
+          targetHandle: "f:width",
+        },
+      ],
+      {
+        categoryAttributes: [
+          { id: 7, unitCode: "mm" },
+          { id: 8, unitCode: "mm" },
+        ],
+      },
+    );
+    assert.equal(result.edgeWarnings.get("w")?.sourceUnit, "mm");
+    assert.equal(result.edgeWarnings.get("w")?.targetUnit, "cm");
+  });
+
+  it("resolves shared upstream branches instead of treating them as cycles", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "a1", type: "attribute", data: { attributeId: 7 } },
+        { id: "max", type: "max", data: {} },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "width", unitCode: "cm" }] },
+        },
+      ],
+      [
+        { id: "i1", source: "a1", target: "max", targetHandle: "in-0" },
+        { id: "i2", source: "a1", target: "max", targetHandle: "in-1" },
+        {
+          id: "w",
+          source: "max",
+          target: "adapter-fields",
+          targetHandle: "f:width",
+        },
+      ],
+      { categoryAttributes: [{ id: 7, unitCode: "mm" }] },
+    );
+    assert.equal(result.edgeWarnings.get("w")?.sourceUnit, "mm");
+  });
+
+  it("does not assign a unit through type-changing ops", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "a1", type: "attribute", data: { attributeId: 7 } },
+        { id: "mk", type: "makeArray", data: {} },
+        { id: "len", type: "arrayLength", data: {} },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "qty", unitCode: "pcs" }] },
+        },
+      ],
+      [
+        { id: "i1", source: "a1", target: "mk", targetHandle: "in-0" },
+        { id: "i2", source: "mk", target: "len", targetHandle: "in" },
+        {
+          id: "w",
+          source: "len",
+          target: "adapter-fields",
+          targetHandle: "f:qty",
+        },
+      ],
+      { categoryAttributes: [{ id: 7, unitCode: "mm" }] },
+    );
+    assert.equal(result.edgeWarnings.size, 0);
+  });
+
+  it("stays silent when op inputs disagree on units", () => {
+    const result = analyzeUnitWarnings(
+      [
+        { id: "a1", type: "attribute", data: { attributeId: 7 } },
+        { id: "a2", type: "attribute", data: { attributeId: 8 } },
+        { id: "max", type: "max", data: {} },
+        {
+          id: "adapter-fields",
+          type: "adapterFields",
+          data: { fields: [{ fieldKey: "width", unitCode: "cm" }] },
+        },
+      ],
+      [
+        { id: "i1", source: "a1", target: "max", targetHandle: "in-0" },
+        { id: "i2", source: "a2", target: "max", targetHandle: "in-1" },
+        {
+          id: "w",
+          source: "max",
+          target: "adapter-fields",
+          targetHandle: "f:width",
+        },
+      ],
+      {
+        categoryAttributes: [
+          { id: 7, unitCode: "mm" },
+          { id: 8, unitCode: "kg" },
+        ],
+      },
+    );
+    assert.equal(result.edgeWarnings.size, 0);
+  });
+
   it("marks convertible warnings with where to insert the conversion", () => {
     const result = analyzeUnitWarnings(
       [

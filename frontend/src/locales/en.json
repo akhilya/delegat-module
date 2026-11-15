@@ -2219,7 +2219,11 @@
         "outputValueLabel": "Output value",
         "deleteNode": "Delete node",
         "productField": "Product field",
-        "attributeFallback": "attribute #{id}"
+        "attributeFallback": "attribute #{id}",
+        "ungroupedFields": "No group",
+        "arrayItemPlaceholder": "Add value…",
+        "showMoreFields": "Show {count} more",
+        "previewOutdated": "Refresh failed — showing the previous value"
       }
     },
     "canvas": {
@@ -2279,7 +2283,9 @@
       "unmappedWarning": "No mapping for {mapped} of {total} category values",
       "defaultOptionLabel": "Default option (if no mapping)",
       "defaultValueLabel": "Default (if no mapping)",
-      "defaultValuePlaceholder": "Leave as is"
+      "defaultValuePlaceholder": "Leave as is",
+      "autoMatch": "Auto-match",
+      "autoMatchDone": "Matched {count} option(s)"
     },
     "valueMapEditor": {
       "title": "Mappings: variant → valueId",

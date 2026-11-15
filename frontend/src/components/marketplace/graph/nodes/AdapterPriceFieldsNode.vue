@@ -70,7 +70,11 @@ function boundLabel(f) {
 
 function pillStyle(type) {
   const c = pinColor(type);
-  return { background: `${c}1f`, borderColor: `${c}47`, color: c };
+  return {
+    background: `color-mix(in srgb, ${c} 12%, transparent)`,
+    borderColor: `color-mix(in srgb, ${c} 28%, transparent)`,
+    color: c,
+  };
 }
 
 function fieldTooltip(f) {
@@ -169,7 +173,7 @@ function groupLabel(group) {
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div
       :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
     >
@@ -217,7 +221,7 @@ function groupLabel(group) {
             variant="ghost"
             class="nodrag h-7 w-full justify-start rounded-none px-2"
             :aria-expanded="!collapsed.has(row.key)"
-            @click.stop="toggleSection(row.key)"
+            @click="toggleSection(row.key)"
           >
             <ChevronRight
               class="size-3 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
@@ -232,22 +236,22 @@ function groupLabel(group) {
             class="vf-adapter__row cursor-pointer"
             @click.stop="data.openField?.(row.field.fieldKey)"
           >
-            <span class="vf-adapter__info">
-              <Tooltip>
-                <TooltipTrigger as-child>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span class="vf-adapter__info">
                   <span class="vf-adapter__label">
                     {{ fieldLabel(row.field) }}
                     <span v-if="row.field.isRequired" class="vf-req"> *</span>
                   </span>
-                </TooltipTrigger>
-                <TooltipContent class="max-w-72 whitespace-pre-line">
-                  {{ fieldTooltip(row.field) }}
-                </TooltipContent>
-              </Tooltip>
-              <span v-if="row.field.unit" class="vf-adapter__unit">
-                {{ row.field.unit }}
-              </span>
-            </span>
+                  <span v-if="row.field.unit" class="vf-adapter__unit">
+                    {{ row.field.unit }}
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-72 whitespace-pre-line">
+                {{ fieldTooltip(row.field) }}
+              </TooltipContent>
+            </Tooltip>
 
             <span class="vf-adapter__mid">
               <Tooltip v-if="row.field.source">

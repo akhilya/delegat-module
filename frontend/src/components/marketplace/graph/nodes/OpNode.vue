@@ -65,10 +65,15 @@ const addInput = () =>
 const removeInput = () =>
   updateNodeData(props.id, { inputCount: Math.max(1, count.value - 1) });
 const collapsed = computed(() => !!props.data.collapsed);
+// Multi-input pins sit at percentage tops: grow the card with input count so
+// they stay ~20px apart instead of crowding inside a fixed height.
+const multiMinHeight = computed(() =>
+  isMulti.value && !collapsed.value ? `${52 + count.value * 20}px` : null,
+);
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div
       :class="[
         'vf-card',
@@ -77,6 +82,7 @@ const collapsed = computed(() => !!props.data.collapsed);
         collapsed && 'vf-card--collapsed',
         collapsed && (isMulti || isFixed) && 'vf-card--collapsed-multi',
       ]"
+      :style="{ minHeight: multiMinHeight }"
     >
       <template v-if="isMulti">
         <Handle
@@ -133,9 +139,9 @@ const collapsed = computed(() => !!props.data.collapsed);
           <Tooltip>
             <TooltipTrigger as-child>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon-xs"
-                class="nodrag size-[20px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                class="nodrag"
                 :aria-label="t('marketplace.graph.removeInput')"
                 @mousedown.stop
                 @click="removeInput"
@@ -150,9 +156,9 @@ const collapsed = computed(() => !!props.data.collapsed);
           <Tooltip>
             <TooltipTrigger as-child>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon-xs"
-                class="nodrag size-[20px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                class="nodrag"
                 :aria-label="t('marketplace.graph.addInput')"
                 @mousedown.stop
                 @click="addInput"

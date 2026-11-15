@@ -366,6 +366,13 @@ public class ValueMapModifier : IFieldModifier
             var mapped = elements
                 .Select(el => MapSingle(el, mappings, defaultValue))
                 .ToList();
+            // A single mapped value reads as a scalar, not ["x"]: single-select
+            // targets need the bare value and multiselect parsing accepts it
+            // as a one-element list too. Keep JSON only when several values map
+            // or the value itself contains a comma (would split downstream).
+            if (mapped.Count == 0) return "";
+            if (mapped.Count == 1 && !mapped[0].Contains(','))
+                return mapped[0];
             return JsonSerializer.Serialize(mapped);
         }
 
@@ -681,7 +688,7 @@ public class AddItemsModifier : IFieldModifier
 
     public object? Apply(object? value, Dictionary<string, object> parameters)
     {
-        var list = TryParseList(value) ?? new List<string>();
+        var list = ParseListOrScalar(value);
         var items = GetStringList(parameters, "items");
         list.AddRange(items);
         return JsonSerializer.Serialize(list);
@@ -694,8 +701,9 @@ public class RemoveItemsModifier : IFieldModifier
 
     public object? Apply(object? value, Dictionary<string, object> parameters)
     {
-        var list = TryParseList(value);
-        if (list == null) return value;
+        var str = value?.ToString();
+        if (string.IsNullOrEmpty(str)) return value;
+        var list = ParseListOrScalar(value);
         var items = GetStringList(parameters, "items");
         var toRemove = new HashSet<string>(items, StringComparer.OrdinalIgnoreCase);
         return JsonSerializer.Serialize(list.Where(x => !toRemove.Contains(x)).ToList());
@@ -953,6 +961,18 @@ internal static class ModifierHelpers
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Parse value as a list, treating a non-empty scalar as a one-element list.
+    /// Used by mutating array ops so a scalar input is not silently dropped.
+    /// </summary>
+    public static List<string> ParseListOrScalar(object? value)
+    {
+        var list = TryParseList(value);
+        if (list != null) return list;
+        var str = value?.ToString();
+        return string.IsNullOrEmpty(str) ? new List<string>() : new List<string> { str };
     }
 
     /// <summary>

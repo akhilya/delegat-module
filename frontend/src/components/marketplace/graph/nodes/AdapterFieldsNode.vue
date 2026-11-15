@@ -75,7 +75,11 @@ function boundLabel(f) {
 
 function pillStyle(type) {
   const c = pinColor(type);
-  return { background: `${c}1f`, borderColor: `${c}47`, color: c };
+  return {
+    background: `color-mix(in srgb, ${c} 12%, transparent)`,
+    borderColor: `color-mix(in srgb, ${c} 28%, transparent)`,
+    color: c,
+  };
 }
 
 function aliasTitle(f) {
@@ -209,7 +213,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="300">
+  <TooltipProvider :delay-duration="150">
     <div
       :class="['vf-card', 'vf-card--adapter', selected && 'vf-card--selected']"
     >
@@ -261,7 +265,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           size="sm"
           class="nodrag ml-auto h-7 px-1.5 text-xs"
           :aria-pressed="onlyUnconnected"
-          @click.stop="onlyUnconnected = !onlyUnconnected"
+          @click="onlyUnconnected = !onlyUnconnected"
           >{{ t("marketplace.graph.unconnectedOnly") }}</Button
         >
       </div>
@@ -282,7 +286,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             variant="ghost"
             class="nodrag h-7 w-full justify-start rounded-none px-2"
             :aria-expanded="!collapsed.has(row.key)"
-            @click.stop="toggleSection(row.key)"
+            @click="toggleSection(row.key)"
           >
             <ChevronRight
               class="size-3 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
@@ -297,22 +301,22 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             class="vf-adapter__row cursor-pointer"
             @click.stop="data.openField?.(row.field.fieldKey)"
           >
-            <span class="vf-adapter__info">
-              <Tooltip>
-                <TooltipTrigger as-child>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span class="vf-adapter__info">
                   <span class="vf-adapter__label">
                     {{ fieldLabel(row.field) }}
                     <span v-if="row.field.isRequired" class="vf-req"> *</span>
                   </span>
-                </TooltipTrigger>
-                <TooltipContent class="max-w-72 whitespace-pre-line">
-                  {{ fieldTooltip(row.field) }}
-                </TooltipContent>
-              </Tooltip>
-              <span v-if="row.field.unit" class="vf-adapter__unit">
-                {{ row.field.unit }}
-              </span>
-            </span>
+                  <span v-if="row.field.unit" class="vf-adapter__unit">
+                    {{ row.field.unit }}
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-72 whitespace-pre-line">
+                {{ fieldTooltip(row.field) }}
+              </TooltipContent>
+            </Tooltip>
 
             <span class="vf-adapter__mid">
               <Tooltip v-if="row.field.source">
@@ -423,7 +427,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           <TooltipTrigger as-child>
             <div
               class="vf-adapter__row vf-adapter__row--add cursor-pointer"
-              @click.stop="data.addCustomField?.()"
+              @click="data.addCustomField?.()"
             >
               <Plus class="size-3 shrink-0 text-muted-foreground" />
               <span class="vf-adapter__label text-muted-foreground">{{
