@@ -3597,18 +3597,6 @@ async function importMappingFile(event) {
   stroke: none;
   opacity: 1;
 }
-/* Bottom two buttons: larger icons */
-.vf-canvas .vue-flow__controls-button:nth-last-child(-n + 2) {
-  width: 30px;
-  height: 32px;
-}
-.vf-canvas .vue-flow__controls-button:nth-last-child(-n + 2) svg {
-  width: 16px;
-  max-width: 16px;
-  height: 16px;
-  max-height: 16px;
-}
-
 /* ---- MiniMap ---- */
 .vf-canvas .vue-flow__minimap {
   background: var(--card);
