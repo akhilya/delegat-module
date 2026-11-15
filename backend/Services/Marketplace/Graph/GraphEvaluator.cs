@@ -413,10 +413,22 @@ public static class GraphEvaluator
         Dictionary<string, PinValue> pins, string nodeId)
     {
         var values = new List<object?>();
-        if (incoming.TryGetValue(nodeId, out var edges))
-            foreach (var e in edges)
-                values.Add(pins.TryGetValue(e.source, out var pv) ? pv.Value : null);
-        return values;
+        if (!incoming.TryGetValue(nodeId, out var edges))
+            return values;
+
+        // Preserve handle positions: a missing wire leaves its index empty instead of
+        // shifting later inputs (ifElse branches, formatString placeholders).
+        var byIndex = new List<object?>();
+        var occupied = new HashSet<int>();
+        foreach (var e in edges)
+        {
+            var index = HandleIndex(e.targetHandle);
+            while (byIndex.Count <= index) byIndex.Add(null);
+            var value = pins.TryGetValue(e.source, out var pv) ? pv.Value : null;
+            if (occupied.Add(index)) byIndex[index] = value;
+            else byIndex.Add(value); // second wire on the same pin: keep it at the tail
+        }
+        return byIndex;
     }
 
     // ---- Logic / predicate helpers ----

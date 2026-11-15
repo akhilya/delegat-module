@@ -418,6 +418,24 @@ public class GraphEvaluatorOpTests
         GraphAssert.Output(result, "out", expected, "number");
     }
 
+    [Fact]
+    public void IfElse_GappedInputIndexKeepsBranchPositions()
+    {
+        // Wire only the condition (in-0) and the else-branch (in-2): the missing
+        // true-branch must stay empty instead of shifting the else value up.
+        var result = new GraphEvalHarness()
+            .Static("cond", "true")
+            .Static("alt", "else-value")
+            .Op("op", "ifElse")
+            .Edge("cond", "op", "in-0")
+            .Edge("alt", "op", "in-2")
+            .Field("out", "string")
+            .WireToField("op", "out")
+            .Eval();
+
+        Assert.False(result.Outputs.TryGetValue("out", out var v) && v != null);
+    }
+
     private static Delegat.Services.Marketplace.Graph.GraphEvalResult EvalLogic(
         string op,
         string a,
