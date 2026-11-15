@@ -261,7 +261,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           size="sm"
           class="nodrag ml-auto h-7 px-1.5 text-xs"
           :aria-pressed="onlyUnconnected"
-          @click.stop="onlyUnconnected = !onlyUnconnected"
+          @click="onlyUnconnected = !onlyUnconnected"
           >{{ t("marketplace.graph.unconnectedOnly") }}</Button
         >
       </div>
@@ -282,7 +282,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             variant="ghost"
             class="nodrag h-7 w-full justify-start rounded-none px-2"
             :aria-expanded="!collapsed.has(row.key)"
-            @click.stop="toggleSection(row.key)"
+            @click="toggleSection(row.key)"
           >
             <ChevronRight
               class="size-3 shrink-0 transition-transform duration-[var(--duration-ui)] ease-[var(--ease-out-quart)] motion-reduce:transition-none"
@@ -423,7 +423,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           <TooltipTrigger as-child>
             <div
               class="vf-adapter__row vf-adapter__row--add cursor-pointer"
-              @click.stop="data.addCustomField?.()"
+              @click="data.addCustomField?.()"
             >
               <Plus class="size-3 shrink-0 text-muted-foreground" />
               <span class="vf-adapter__label text-muted-foreground">{{

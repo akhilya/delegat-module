@@ -2221,7 +2221,8 @@
         "productField": "Поле товара",
         "attributeFallback": "атрибут #{id}",
         "ungroupedFields": "Без группы",
-        "arrayItemPlaceholder": "Добавить значение…"
+        "arrayItemPlaceholder": "Добавить значение…",
+        "showMoreFields": "Показать ещё ({count})"
       }
     },
     "canvas": {

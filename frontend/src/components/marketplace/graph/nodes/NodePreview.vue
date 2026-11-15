@@ -58,7 +58,7 @@ watch(text, () => {
       variant="link"
       size="xs"
       class="nodrag mt-[3px] h-auto gap-0.5 p-0 text-[10px] font-normal"
-      @click.stop="expanded = !expanded"
+      @click="expanded = !expanded"
       @mousedown.stop
     >
       <component :is="expanded ? ChevronUp : ChevronDown" class="size-3" />
