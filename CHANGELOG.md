@@ -474,6 +474,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling
+- Pin `System.Formats.Cbor` to 9.0.24 (CVE-2026-118747) and `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.14 in tests — Fido2 and EFCore.Sqlite were resolving vulnerable transitives.
 
 ## [1.6.0] - 2026-08-18
 
