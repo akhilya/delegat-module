@@ -101,6 +101,9 @@ const match = (label, ...aliases) => {
       return [s, ...s.split(/[\s,;/|]+/)];
     })
     .filter(Boolean);
+  // A bare operator sign ("+", "/", "x") has no query words: only items with
+  // that exact alias match, otherwise everything would be listed.
+  if (!qWords.length) return hay.some((h) => h === q.value);
   return qWords.every((w) => hay.some((h) => wordOk(w, h)));
 };
 
@@ -351,6 +354,8 @@ const optionItem = (field) => (o) => ({
 });
 const adapterValueGroups = computed(() => {
   const groups = [];
+  // Static sources have no input pin: skip them when the drag needs a consumer.
+  if (wantConsumers.value) return groups;
   const groupLabel = (field) =>
     `${t("marketplace.graph.contextMenu.adapterValueItem")} · ${field.label}`;
   const pending = props.adapterValueField;
@@ -562,7 +567,13 @@ const groups = computed(() =>
     {
       key: "ops",
       label: t("marketplace.graph.contextMenu.groups.ops"),
-      items: [...arithItems.value, ...opItems.value],
+      items: [
+        ...arithItems.value,
+        ...opItems.value.filter(
+          (it) =>
+            !arithItems.value.some((a) => a.desc.opType === it.desc.opType),
+        ),
+      ],
     },
     {
       key: "logic",

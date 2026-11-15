@@ -59,6 +59,10 @@ public static class MappingGraphBlockCatalog
         ("contains", 2, "boolean", null),
         ("isEmpty", "single", "boolean", null),
         ("isValid", "single", "boolean", null),
+        ("add", "single", "number", ["number", "integer"]),
+        ("subtract", "single", "number", ["number", "integer"]),
+        ("multiply", "single", "number", ["number", "integer"]),
+        ("divide", "single", "number", ["number", "integer"]),
     ];
 
     /// <summary>JSON payload for GET graph / GET mapping-graph/blocks.</summary>

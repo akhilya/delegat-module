@@ -2913,6 +2913,10 @@ async function importMappingFile(event) {
           <template #node-contains="p"><OpNode v-bind="p" /></template>
           <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
           <template #node-isValid="p"><OpNode v-bind="p" /></template>
+          <template #node-add="p"><OpNode v-bind="p" /></template>
+          <template #node-subtract="p"><OpNode v-bind="p" /></template>
+          <template #node-multiply="p"><OpNode v-bind="p" /></template>
+          <template #node-divide="p"><OpNode v-bind="p" /></template>
           <template #node-adapterFields="p"
             ><AdapterFieldsNode v-bind="p"
           /></template>
