@@ -3262,7 +3262,7 @@ async function importMappingFile(event) {
   font-size: 11px;
   font-weight: 500;
   padding: 1px 7px;
-  border-radius: 9999px;
+  border-radius: var(--radius-md);
   background: var(--muted);
   border: 1px solid var(--border);
   color: var(--foreground);
@@ -3361,7 +3361,7 @@ async function importMappingFile(event) {
   font-size: 11px;
   font-weight: 500;
   padding: 1px 5px;
-  border-radius: 9999px;
+  border-radius: var(--radius-md);
   background: var(--muted);
   color: var(--muted-foreground);
   line-height: 1.5;
@@ -3382,7 +3382,7 @@ async function importMappingFile(event) {
   font-size: 11px;
   font-weight: 500;
   padding: 1px 6px;
-  border-radius: 9999px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   line-height: 1.5;
   cursor: pointer;

@@ -730,7 +730,7 @@ const pick = (desc) => {
 .vf-ctx__param {
   margin-left: auto;
   padding: 1px 6px;
-  border-radius: 9999px;
+  border-radius: var(--radius-md);
   background: var(--muted);
   color: var(--muted-foreground);
   font-family: var(--font-mono, ui-monospace, monospace);
