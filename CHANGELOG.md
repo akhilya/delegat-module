@@ -471,6 +471,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
 - Update Vue I18n to 11.4.16 and pin MySqlConnector to 2.6.1 to address published dependency advisories.
+- Product and store-storage image thumbnails are sent with `Cache-Control: private`, so a shared cache or CDN in front of an instance cannot store them and serve them to other visitors.
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling
