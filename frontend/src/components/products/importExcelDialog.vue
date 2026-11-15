@@ -297,6 +297,9 @@ import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { toast } from "vue-sonner";
 import { resolveApiErrorMessage } from "@/store/sonnerHelper";
 
+// Mirrors ExcelProductService.MaxImportUploadBytes; larger requests are cut off before the API can return its error code.
+const MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024;
+
 const props = defineProps({
   modelValue: Boolean,
 });
@@ -383,6 +386,10 @@ function handleDrop(event) {
 async function processFile(file) {
   if (!file.name.endsWith(".xlsx")) {
     uploadError.value = t("products.importExcelDialog.unsupportedFormat");
+    return;
+  }
+  if (file.size > MAX_IMPORT_UPLOAD_BYTES) {
+    uploadError.value = t("errors.excel_import_too_large");
     return;
   }
   uploadError.value = "";
