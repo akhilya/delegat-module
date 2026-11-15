@@ -16,6 +16,8 @@ public interface IPlatformLinkClient
     Task<PlatformHostedAiConfigDto?> GetHostedAiConfigAsync(CancellationToken ct = default) =>
         Task.FromResult<PlatformHostedAiConfigDto?>(null);
     Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(string adapter, string? query, CancellationToken ct = default);
+    Task<PlatformOzonGrantClaimDto?> ClaimOzonGrantAsync(string ticket, CancellationToken ct = default);
+    Task<PlatformOzonRefreshResult> RefreshOzonTokenAsync(string refreshToken, CancellationToken ct = default);
 }
 
 public sealed class PlatformLinkClient : IPlatformLinkClient
@@ -129,6 +131,88 @@ public sealed class PlatformLinkClient : IPlatformLinkClient
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         return await JsonSerializer.DeserializeAsync<PlatformMarketplaceDocDto>(stream, JsonOptions, ct);
+    }
+
+    /// <summary>
+    /// Redeems the one-time ticket embedded in the OAuth callback redirect.
+    /// Returns null when the ticket is invalid, used, expired or the CP rejects it.
+    /// </summary>
+    public async Task<PlatformOzonGrantClaimDto?> ClaimOzonGrantAsync(
+        string ticket, CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+
+        var body = JsonSerializer.Serialize(new { ticket }, JsonOptions);
+        using var response = await SendRawAsync(
+            HttpMethod.Post, "/platform/v1/ozon/grants/claim", body, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Platform Link POST /platform/v1/ozon/grants/claim returned {StatusCode}",
+                (int)response.StatusCode);
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        return await JsonSerializer.DeserializeAsync<PlatformOzonGrantClaimDto>(stream, JsonOptions, ct);
+    }
+
+    /// <summary>
+    /// Refreshes an Ozon App Store token through the Control Plane (which holds
+    /// the client secret). A null-ish failure carries Ozon's error string so the
+    /// caller can detect <c>invalid_grant</c> and force re-authorization.
+    /// </summary>
+    public async Task<PlatformOzonRefreshResult> RefreshOzonTokenAsync(
+        string refreshToken, CancellationToken ct = default)
+    {
+        if (!IsEnabled)
+            return new PlatformOzonRefreshResult(false, "platform_link_not_configured", null, null, 0);
+
+        var body = JsonSerializer.Serialize(new { refreshToken }, JsonOptions);
+        try
+        {
+            using var response = await SendRawAsync(
+                HttpMethod.Post, "/platform/v1/ozon/refresh", body, ct);
+            var json = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = TryReadError(json) ?? $"http_{(int)response.StatusCode}";
+                _logger.LogWarning(
+                    "Platform Link POST /platform/v1/ozon/refresh returned {StatusCode} ({Error})",
+                    (int)response.StatusCode, error);
+                return new PlatformOzonRefreshResult(false, error, null, null, 0);
+            }
+
+            var token = JsonSerializer.Deserialize<PlatformOzonTokenDto>(json, JsonOptions);
+            if (token is null || string.IsNullOrEmpty(token.AccessToken))
+                return new PlatformOzonRefreshResult(false, "empty_token", null, null, 0);
+
+            return new PlatformOzonRefreshResult(
+                true, null, token.AccessToken, token.RefreshToken, token.ExpiresIn);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Platform Link POST /platform/v1/ozon/refresh failed");
+            return new PlatformOzonRefreshResult(false, "transport_error", null, null, 0);
+        }
+    }
+
+    private static string? TryReadError(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<IReadOnlyList<T>> GetCatalogAsync<T>(string path, CancellationToken ct)
