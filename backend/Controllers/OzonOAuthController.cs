@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,9 +22,14 @@ namespace Delegat.Controllers;
 [JwtAuthorize]
 public class OzonOAuthController : ControllerBase
 {
+    private const string TxCookieName = "ozon_oauth_tx";
+    private const string TxCookiePath = "/api/marketplace/ozon/oauth";
+    private static readonly TimeSpan TxLifetime = TimeSpan.FromMinutes(15);
+
     private readonly IPlatformLinkClient _platformLink;
     private readonly PlatformLinkOptions _platformLinkOptions;
     private readonly ICurrentUserService _currentUserService;
+    private readonly QuotaService _quota;
     private readonly DataContext _db;
     private readonly EncryptionService? _encryption;
     private readonly ILogger<OzonOAuthController> _logger;
@@ -32,6 +38,7 @@ public class OzonOAuthController : ControllerBase
         IPlatformLinkClient platformLink,
         PlatformLinkOptions platformLinkOptions,
         ICurrentUserService currentUserService,
+        QuotaService quota,
         DataContext db,
         ILogger<OzonOAuthController> logger,
         EncryptionService? encryption = null)
@@ -39,6 +46,7 @@ public class OzonOAuthController : ControllerBase
         _platformLink = platformLink;
         _platformLinkOptions = platformLinkOptions;
         _currentUserService = currentUserService;
+        _quota = quota;
         _db = db;
         _logger = logger;
         _encryption = encryption;
@@ -60,6 +68,19 @@ public class OzonOAuthController : ControllerBase
         if (storeId == null)
             throw ApiException.BadRequest(code: "store_not_selected");
 
+        // Browser-bound transaction: Complete only accepts a ticket when this
+        // cookie is present — it proves the browser actually started the flow
+        // here, and binds the completion to the store the user picked.
+        var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        Response.Cookies.Append(TxCookieName, $"{storeId.Value}.{nonce}", new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            MaxAge = TxLifetime,
+            Path = TxCookiePath,
+        });
+
         var url = $"{_platformLinkOptions.ControlPlaneUrl}/api/ozon/oauth/start" +
                   $"?instance={Uri.EscapeDataString(_platformLinkOptions.InstanceId)}" +
                   $"&store={storeId.Value}";
@@ -80,16 +101,36 @@ public class OzonOAuthController : ControllerBase
         [FromQuery] string? error,
         CancellationToken ct)
     {
+        // GET is downgraded to workspace.view by the permission handler, but this
+        // endpoint writes credentials — enforce the manage claim explicitly
+        // (same bypass as PermissionAuthorizationHandler: admins / store creators).
+        var canManage = User.HasClaim(Permissions.ClaimType, Permissions.MarketplaceManage)
+            || User.HasClaim("is_admin", "true")
+            || User.HasClaim(Permissions.ClaimType, Permissions.StoresCreate);
+        if (!canManage)
+            return Redirect("/adapter?ozonError=forbidden");
+
         if (!string.IsNullOrWhiteSpace(error))
             return Redirect($"/adapter?ozonError={Uri.EscapeDataString(error)}");
         if (string.IsNullOrWhiteSpace(ticket))
             return Redirect("/adapter?ozonError=missing_ticket");
 
+        // A ticket is only redeemed in a browser that ran Start on this instance
+        // (transaction cookie is Lax, so the top-level CP redirect keeps it).
+        if (!Request.Cookies.TryGetValue(TxCookieName, out var tx)
+            || !TryParseTxStoreId(tx, out var txStoreId))
+        {
+            return Redirect("/adapter?ozonError=missing_oauth_transaction");
+        }
+        Response.Cookies.Delete(TxCookieName, new CookieOptions { Path = TxCookiePath });
+
         var grant = await _platformLink.ClaimOzonGrantAsync(ticket, ct);
         if (grant is null || string.IsNullOrEmpty(grant.AccessToken))
             return Redirect("/adapter?ozonError=claim_failed");
 
-        var storeId = await _currentUserService.GetSelectedStoreIdAsync() ?? grant.StoreHint;
+        var storeId = txStoreId
+            ?? await _currentUserService.GetSelectedStoreIdAsync()
+            ?? grant.StoreHint;
         if (storeId is null || !await _db.stores.AnyAsync(s => s.Id == storeId.Value, ct))
             return Redirect("/adapter?ozonError=store_not_found");
 
@@ -106,9 +147,18 @@ public class OzonOAuthController : ControllerBase
             ? enc.Encrypt(JsonSerializer.Serialize(credentials))
             : JsonSerializer.Serialize(credentials);
 
-        var connection = await FindOauthConnectionAsync(storeId.Value, ct);
+        var connection = await FindOauthConnectionAsync(storeId.Value, grant.SellerId, ct);
         if (connection is null)
         {
+            try
+            {
+                await _quota.EnsureConnectionQuotaAsync(storeId.Value);
+            }
+            catch (ApiException)
+            {
+                return Redirect("/adapter?ozonError=quota_connections_reached");
+            }
+
             connection = new MarketplaceConnection();
             connection.AddFill(new MarketplaceConnection.AddForm
             {
@@ -137,9 +187,12 @@ public class OzonOAuthController : ControllerBase
 
     /// <summary>
     /// Existing ozon connection on this store whose credentials carry
-    /// <c>authType: oauth</c>; encrypted values are decrypted one by one.
+    /// <c>authType: oauth</c> and — when the grant names one — the same seller.
+    /// A different seller must not overwrite the first connection (its mappings
+    /// and product links belong to that seller).
     /// </summary>
-    private async Task<MarketplaceConnection?> FindOauthConnectionAsync(int storeId, CancellationToken ct)
+    private async Task<MarketplaceConnection?> FindOauthConnectionAsync(
+        int storeId, string? sellerId, CancellationToken ct)
     {
         var candidates = await _db.marketplaceConnections
             .Where(c => c.storeId == storeId && c.adapterKey == "ozon" && c.credentialsJson != null)
@@ -149,13 +202,36 @@ public class OzonOAuthController : ControllerBase
         {
             var plain = ConnectionCredentialsHelper.DecryptCredentialsJson(candidate.credentialsJson, _encryption);
             var creds = ConnectionCredentialsHelper.ParseCredentialsObject(plain);
-            if (creds.TryGetValue("authType", out var authType)
-                && string.Equals(authType, "oauth", StringComparison.OrdinalIgnoreCase))
+            if (!creds.TryGetValue("authType", out var authType)
+                || !string.Equals(authType, "oauth", StringComparison.OrdinalIgnoreCase))
             {
-                return candidate;
+                continue;
             }
+
+            creds.TryGetValue("sellerId", out var existingSeller);
+            if (!string.IsNullOrEmpty(sellerId)
+                && !string.Equals(existingSeller, sellerId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return candidate;
         }
 
         return null;
+    }
+
+    /// <summary>Cookie value is <c>{storeId}.{nonce}</c>; store may be absent.</summary>
+    private static bool TryParseTxStoreId(string? value, out int? storeId)
+    {
+        storeId = null;
+        if (string.IsNullOrEmpty(value))
+            return false;
+        var dot = value.IndexOf('.');
+        if (dot <= 0 || dot == value.Length - 1)
+            return false;
+        if (int.TryParse(value[..dot], out var id))
+            storeId = id;
+        return true;
     }
 }
