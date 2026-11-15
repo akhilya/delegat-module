@@ -10,7 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, ArrowRight, AlertTriangle } from "lucide-vue-next";
+import {
+  Plus,
+  Trash2,
+  ArrowRight,
+  AlertTriangle,
+  Sparkles,
+} from "lucide-vue-next";
+import { autoMapOptions } from "./autoMapOptions";
 
 const NONE = "__none__";
 
@@ -42,6 +49,7 @@ export default {
     Trash2,
     ArrowRight,
     AlertTriangle,
+    Sparkles,
   },
   props: {
     mappings: { type: Array, default: () => [] },
@@ -56,12 +64,14 @@ export default {
     return {
       localMappings: [],
       localDefault: "",
+      autoMatched: null,
       NONE,
     };
   },
   computed: {
     targetOptionsList() {
-      if (this.persistedTargetOptions?.length) return this.persistedTargetOptions;
+      if (this.persistedTargetOptions?.length)
+        return this.persistedTargetOptions;
       return this.externalFieldOptions || [];
     },
     selectOptions() {
@@ -78,8 +88,12 @@ export default {
     },
     unmappedOptions() {
       if (!this.sourceFieldOptions?.length) return [];
-      const mappedFroms = new Set(this.localMappings.map((m) => String(m.from)));
-      return this.sourceFieldOptions.filter((o) => !mappedFroms.has(String(o.value)));
+      const mappedFroms = new Set(
+        this.localMappings.map((m) => String(m.from)),
+      );
+      return this.sourceFieldOptions.filter(
+        (o) => !mappedFroms.has(String(o.value)),
+      );
     },
   },
   watch: {
@@ -103,7 +117,8 @@ export default {
     },
     defaultValue: {
       handler(v) {
-        this.localDefault = normalizeOptionValue(v, this.targetOptionsList) || "";
+        this.localDefault =
+          normalizeOptionValue(v, this.targetOptionsList) || "";
       },
       immediate: true,
     },
@@ -117,7 +132,9 @@ export default {
     },
     onFieldPick(fieldKey) {
       if (!fieldKey || fieldKey === NONE) return;
-      const f = this.adapterFieldsWithOptions.find((x) => x.fieldKey === fieldKey);
+      const f = this.adapterFieldsWithOptions.find(
+        (x) => x.fieldKey === fieldKey,
+      );
       if (f) this.$emit("load-field-options", f);
     },
     addRow() {
@@ -143,18 +160,44 @@ export default {
     emitMappings() {
       this.$emit("update:mappings", [...this.localMappings]);
     },
+    autoMatch() {
+      const known = new Set(this.localMappings.map((m) => String(m.from)));
+      const added = autoMapOptions(
+        this.sourceFieldOptions,
+        this.targetOptionsList,
+        known,
+      );
+      // Rows the user already started: fill only an empty target.
+      let filled = 0;
+      for (const row of this.localMappings) {
+        if (!row.from || row.to) continue;
+        const src = this.sourceFieldOptions.find(
+          (o) => String(o.value) === String(row.from),
+        );
+        if (!src) continue;
+        const hit = autoMapOptions([src], this.targetOptionsList);
+        if (hit.length) {
+          row.to = hit[0].to;
+          filled += 1;
+        }
+      }
+      this.localMappings.push(...added);
+      this.autoMatched = added.length + filled;
+      this.emitMappings();
+      clearTimeout(this._amTimer);
+      this._amTimer = setTimeout(() => (this.autoMatched = null), 4000);
+    },
   },
 };
 </script>
 
 <template>
   <div class="space-y-2">
-    <Label class="text-xs font-medium">{{ $t("marketplace.optionMapEditor.title") }}</Label>
+    <Label class="text-xs font-medium">{{
+      $t("marketplace.optionMapEditor.title")
+    }}</Label>
 
-    <p
-      v-if="!sourceOptions.length"
-      class="text-[11px] text-muted-foreground"
-    >
+    <p v-if="!sourceOptions.length" class="text-[11px] text-muted-foreground">
       {{ $t("marketplace.optionMapEditor.sourceOptionsHint") }}
     </p>
 
@@ -164,7 +207,11 @@ export default {
     >
       <Select :model-value="NONE" @update:model-value="onFieldPick">
         <SelectTrigger class="h-7 text-xs">
-          <SelectValue :placeholder="$t('marketplace.optionMapEditor.loadFromFieldPlaceholder')" />
+          <SelectValue
+            :placeholder="
+              $t('marketplace.optionMapEditor.loadFromFieldPlaceholder')
+            "
+          />
         </SelectTrigger>
         <SelectContent>
           <SelectItem
@@ -204,7 +251,9 @@ export default {
         :model-value="row.to || ''"
         :disabled="!selectOptions.length"
         @update:modelValue="(v) => onToChange(index, v)"
-        :placeholder="$t('marketplace.optionMapEditor.adapterOptionPlaceholder')"
+        :placeholder="
+          $t('marketplace.optionMapEditor.adapterOptionPlaceholder')
+        "
         :search-threshold="3"
       />
       <Button
@@ -218,10 +267,32 @@ export default {
       </Button>
     </div>
 
-    <Button variant="outline" size="sm" class="w-full h-7 text-xs" @click="addRow">
-      <Plus class="size-3 mr-1" />
-      {{ $t("marketplace.optionMapEditor.addMapping") }}
-    </Button>
+    <div class="flex gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        class="flex-1 h-7 text-xs"
+        @click="addRow"
+      >
+        <Plus class="size-3 mr-1" />
+        {{ $t("marketplace.optionMapEditor.addMapping") }}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        class="flex-1 h-7 text-xs"
+        :disabled="!sourceOptions.length || !selectOptions.length"
+        @click="autoMatch"
+      >
+        <Sparkles class="size-3 mr-1" />
+        {{ $t("marketplace.optionMapEditor.autoMatch") }}
+      </Button>
+    </div>
+    <p v-if="autoMatched != null" class="text-[11px] text-muted-foreground">
+      {{
+        $t("marketplace.optionMapEditor.autoMatchDone", { count: autoMatched })
+      }}
+    </p>
 
     <div
       v-if="unmappedOptions.length > 0"
@@ -229,12 +300,19 @@ export default {
     >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>
-        {{ $t("marketplace.optionMapEditor.unmappedWarning", { mapped: unmappedOptions.length, total: sourceFieldOptions.length }) }}
+        {{
+          $t("marketplace.optionMapEditor.unmappedWarning", {
+            mapped: unmappedOptions.length,
+            total: sourceFieldOptions.length,
+          })
+        }}
       </span>
     </div>
 
     <div v-if="selectOptions.length > 0" class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">{{ $t("marketplace.optionMapEditor.defaultOptionLabel") }}</Label>
+      <Label class="text-xs">{{
+        $t("marketplace.optionMapEditor.defaultOptionLabel")
+      }}</Label>
       <SearchableSelect
         class="h-7 text-xs"
         :options="selectOptions"
@@ -245,7 +323,9 @@ export default {
       />
     </div>
     <div v-else class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">{{ $t("marketplace.optionMapEditor.defaultValueLabel") }}</Label>
+      <Label class="text-xs">{{
+        $t("marketplace.optionMapEditor.defaultValueLabel")
+      }}</Label>
       <Input
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"

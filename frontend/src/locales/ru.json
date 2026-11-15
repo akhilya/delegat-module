@@ -2280,7 +2280,9 @@
       "unmappedWarning": "Не указаны соответствия для {mapped} из {total} значений категории",
       "defaultOptionLabel": "Вариант по умолчанию (если нет соответствия)",
       "defaultValueLabel": "По умолчанию (если нет соответствия)",
-      "defaultValuePlaceholder": "Оставить как есть"
+      "defaultValuePlaceholder": "Оставить как есть",
+      "autoMatch": "Подобрать соответствия",
+      "autoMatchDone": "Подобрано соответствий: {count}"
     },
     "valueMapEditor": {
       "title": "Соответствия: вариант → valueId",
