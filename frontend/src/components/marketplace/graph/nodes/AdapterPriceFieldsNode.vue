@@ -70,7 +70,11 @@ function boundLabel(f) {
 
 function pillStyle(type) {
   const c = pinColor(type);
-  return { background: `${c}1f`, borderColor: `${c}47`, color: c };
+  return {
+    background: `color-mix(in srgb, ${c} 12%, transparent)`,
+    borderColor: `color-mix(in srgb, ${c} 28%, transparent)`,
+    color: c,
+  };
 }
 
 function fieldTooltip(f) {
