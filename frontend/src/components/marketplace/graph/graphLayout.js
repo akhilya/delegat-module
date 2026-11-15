@@ -8,6 +8,7 @@
  */
 
 import dagre from "@dagrejs/dagre";
+import { OP_SPECS } from "./graphTypes.js";
 import {
   PRICE_FIELD_GROUP_HEADER_HEIGHT,
   priceFieldGroupCount,
@@ -44,13 +45,12 @@ const MODIFIERS_WITH_PINS = new Set([
   "padEnd",
 ]);
 
-const MULTI_INPUT_OPS = new Set([
-  "formatString",
-  "join",
-  "makeArray",
-  "arrayAppend",
-  "arrayPrepend",
-]);
+// Same source of truth as OpNode's isMulti: ops declared inputs: "multi".
+const MULTI_INPUT_OPS = new Set(
+  Object.entries(OP_SPECS)
+    .filter(([, spec]) => spec.inputs === "multi")
+    .map(([type]) => type),
+);
 
 /** Visual height estimate — must be >= rendered card height to avoid overlap. */
 export function estimateNodeHeight(node) {
