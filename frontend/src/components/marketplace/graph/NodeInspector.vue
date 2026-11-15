@@ -33,6 +33,7 @@ import {
 import { MODIFIER_CATALOG, MODIFIER_CATEGORIES } from "../modifierCatalog.js";
 import { OP_SPECS, OP_NODE_TYPES } from "./graphModel.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +60,9 @@ const props = defineProps({
   availableSources: { type: Object, default: () => ({}) },
   templateFieldRefs: { type: Array, default: () => [] },
   focusFieldKey: { type: String, default: null },
+  // True while the canvas recomputes preview values — stale output is swapped
+  // for a loader so it never reads as current.
+  previewStale: { type: Boolean, default: false },
   allowCustomFields: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update", "delete", "close", "field-focused"]);
@@ -1134,7 +1138,9 @@ function resolvePreview(fieldKey, raw) {
                   </Button>
                 </div>
 
-                <Tooltip v-if="adapterPreview[f.fieldKey] != null">
+                <Tooltip
+                  v-if="adapterPreview[f.fieldKey] != null && !previewStale"
+                >
                   <TooltipTrigger as-child>
                     <div
                       class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
@@ -1469,12 +1475,24 @@ function resolvePreview(fieldKey, raw) {
         </template>
       </div>
 
-      <div v-if="data.previewValue != null" class="border-t px-3 py-2">
-        <div class="text-xs text-muted-foreground">
-          {{ t("marketplace.graph.inspector.outputValueLabel") }}
-        </div>
-        <div class="mt-0.5 break-words font-mono text-xs">
-          {{ data.previewValue }}
+      <div
+        v-if="data.previewValue != null || previewStale"
+        class="border-t p-3"
+      >
+        <div class="vf-inspect-preview">
+          <div class="vf-inspect-preview__label">
+            {{ t("marketplace.graph.inspector.outputValueLabel") }}
+          </div>
+          <div
+            v-if="previewStale"
+            class="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            <Spinner size="sm" />
+            {{ t("marketplace.canvas.previewing") }}
+          </div>
+          <div v-else class="vf-inspect-preview__value">
+            {{ data.previewValue }}
+          </div>
         </div>
       </div>
 
@@ -1503,6 +1521,28 @@ function resolvePreview(fieldKey, raw) {
     background-color: rgba(120, 120, 120, 0);
   }
 }
+/* Preview card: inset platform surface, larger than the old bare text line. */
+.vf-inspect-preview {
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  padding: 10px 12px;
+}
+.vf-inspect-preview__label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.vf-inspect-preview__value {
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .vf-field-flash {
   animation: vf-flash 0.9s ease-out forwards;
 }

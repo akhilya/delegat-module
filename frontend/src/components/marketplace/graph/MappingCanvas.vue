@@ -205,6 +205,10 @@ const dirty = ref(false);
 let graphVersion = null;
 const allowCustomFields = ref(false);
 const previewing = ref(false);
+// True from the moment a change is scheduled until fresh preview values land:
+// nodes and the inspector swap stale values for a loader instead of showing
+// outdated output without any indication.
+const previewStale = ref(false);
 const selected = ref(null);
 const focusAdapterField = ref(null);
 const menu = ref({
@@ -579,6 +583,7 @@ function fixUnitMismatch(warning) {
 }
 
 provide("mappingUnitFix", fixUnitMismatch);
+provide("graphPreviewStale", previewStale);
 
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
@@ -2417,10 +2422,12 @@ let previewToken = 0;
 function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   if (!props.previewProductId || loading.value) return;
+  previewStale.value = true;
   previewTimer = setTimeout(runPreview, 400);
 }
 
 function applyPreviewValues(outputs, nodeValues) {
+  previewStale.value = false;
   if (findNode(ADAPTER_NODE_ID)) {
     updateNodeData(ADAPTER_NODE_ID, { preview: outputs });
   }
@@ -2436,6 +2443,7 @@ function applyPreviewValues(outputs, nodeValues) {
 // Clearing the preview product also clears the per-node preview values from the blocks.
 function clearNodePreview() {
   if (previewTimer) clearTimeout(previewTimer);
+  previewStale.value = false;
   if (findNode(ADAPTER_NODE_ID)) {
     updateNodeData(ADAPTER_NODE_ID, { preview: {} });
   }
@@ -2473,7 +2481,10 @@ async function runPreview() {
     if (token !== previewToken) return;
     displaySonnerError(e);
   } finally {
-    if (token === previewToken) previewing.value = false;
+    if (token === previewToken) {
+      previewing.value = false;
+      previewStale.value = false;
+    }
   }
 }
 
@@ -3122,6 +3133,7 @@ async function importMappingFile(event) {
           :allow-custom-fields="allowCustomFields"
           :template-field-refs="templateFieldRefs"
           :focus-field-key="focusAdapterField"
+          :preview-stale="previewStale"
           @update="onInspectorUpdate"
           @delete="onInspectorDelete"
           @close="selected = null"

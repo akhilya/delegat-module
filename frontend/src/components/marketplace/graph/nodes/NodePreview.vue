@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, inject } from "vue";
 import { ChevronDown, ChevronUp } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +18,9 @@ const props = defineProps({
 });
 
 const text = computed(() => (props.value == null ? "" : String(props.value)));
+// Provided by the canvas while a recompute is scheduled/running: swap the stale
+// value for a loader instead of displaying outdated output silently.
+const pending = inject("graphPreviewStale", ref(false));
 const expanded = ref(false);
 const bodyEl = ref(null);
 const overflowing = ref(false);
@@ -33,7 +37,12 @@ watch(text, () => {
 </script>
 
 <template>
-  <div v-if="text" class="vf-preview">
+  <div v-if="pending" class="vf-preview">
+    <div class="vf-preview__pending">
+      <Spinner class="size-3" />
+    </div>
+  </div>
+  <div v-else-if="text" class="vf-preview">
     <TooltipProvider :delay-duration="300">
       <Tooltip>
         <TooltipTrigger as-child>
@@ -95,5 +104,11 @@ watch(text, () => {
 .vf-preview__body:not(.vf-preview__body--clamp) {
   max-height: 160px;
   overflow-y: auto;
+}
+.vf-preview__pending {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  color: var(--muted-foreground);
 }
 </style>
