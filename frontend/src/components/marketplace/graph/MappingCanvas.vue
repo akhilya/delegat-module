@@ -3349,7 +3349,7 @@ async function importMappingFile(event) {
   font-size: 11px;
   font-weight: 500;
   padding: 1px 5px;
-  border-radius: var(--radius-xs);
+  border-radius: 9999px;
   background: var(--muted);
   color: var(--muted-foreground);
   line-height: 1.5;
