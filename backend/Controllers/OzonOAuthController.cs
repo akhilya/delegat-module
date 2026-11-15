@@ -60,7 +60,7 @@ public class OzonOAuthController : ControllerBase
         if (storeId == null)
             throw ApiException.BadRequest(code: "store_not_selected");
 
-        var url = $"{_platformLinkOptions.ControlPlaneUrl}/ozon/oauth/start" +
+        var url = $"{_platformLinkOptions.ControlPlaneUrl}/api/ozon/oauth/start" +
                   $"?instance={Uri.EscapeDataString(_platformLinkOptions.InstanceId)}" +
                   $"&store={storeId.Value}";
 
