@@ -2624,538 +2624,552 @@ async function importMappingFile(event) {
 </script>
 
 <template>
-  <SplitterGroup
-    direction="horizontal"
-    :class="[
-      'flex min-h-0 overflow-hidden border bg-background',
-      maximized ? 'fixed inset-0 z-50' : 'relative h-full w-full rounded-xl',
-    ]"
-  >
-    <SplitterPanel :min-size="40">
-      <div
-        ref="flowWrap"
-        class="relative min-w-0 h-full w-full"
-        @contextmenu="onContextMenu"
-      >
-        <TooltipProvider :delay-duration="150">
-          <div
-            class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
-          >
-            <ButtonGroup joined>
-              <Tooltip :disabled="!dirty">
-                <TooltipTrigger as-child>
-                  <Button
-                    size="sm"
-                    :disabled="saving || errorCount > 0"
-                    @click="save()"
-                  >
-                    <Spinner v-if="saving" />
-                    <Save v-else class="size-4" />
-                    {{ t("marketplace.canvas.save") }}
-                    <span
-                      v-if="dirty && !saving"
-                      class="size-1.5 rounded-full bg-current opacity-80"
-                      aria-hidden="true"
-                    />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {{ t("marketplace.canvas.unsavedChanges") }}
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button
-                    size="sm"
-                    class="px-2"
-                    :aria-label="t('marketplace.canvas.actions')"
-                  >
-                    <ChevronDown class="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" class="w-56">
-                  <DropdownMenuItem @select="confirmAutoArrange">
-                    <LayoutGrid class="size-4" />
-                    {{ t("marketplace.fieldMappingPage.autoArrange") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    :disabled="syncingFields"
-                    @select="syncAdapterFieldSchema"
-                  >
-                    <Spinner v-if="syncingFields" class="size-4" />
-                    <RefreshCw v-else class="size-4" />
-                    {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem @select="exportMappingFile">
-                    <Download class="size-4" />
-                    {{ t("marketplace.fieldMappingPage.export") }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @select="triggerImportFile">
-                    <Upload class="size-4" />
-                    {{ t("marketplace.fieldMappingPage.import") }}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
-
-            <div
-              class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
-            >
-              <SearchableSelect
-                class="h-8 w-full bg-card dark:bg-card"
-                content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
-                remote
-                :loading="previewProductsLoading"
-                :options="previewProducts"
-                :model-value="previewProductId ? String(previewProductId) : ''"
-                @update:modelValue="emit('select-preview', $event)"
-                @search="emit('search-preview', $event)"
-                :placeholder="t('marketplace.canvas.previewPlaceholder')"
-              />
-            </div>
-
-            <ButtonGroup v-if="previewProductId">
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <Button size="sm" as-child>
-                    <RouterLink :to="`/products/${previewProductId}/edit`">
-                      <ExternalLink class="size-4" />
-                      {{ t("marketplace.canvas.openPreviewProduct") }}
-                    </RouterLink>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {{ t("marketplace.canvas.openPreviewProductTitle") }}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    @click="emit('clear-preview')"
-                  >
-                    <EyeOff class="size-4" />
-                    {{ t("marketplace.canvas.resetPreview") }}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {{ t("marketplace.canvas.resetPreviewTitle") }}
-                </TooltipContent>
-              </Tooltip>
-            </ButtonGroup>
-
-            <span
-              v-if="previewing"
-              class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
-            >
-              <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
-            </span>
-            <input
-              ref="importFileInput"
-              type="file"
-              accept="application/json,.json"
-              class="hidden"
-              @change="importMappingFile"
-            />
-            <Badge v-if="errorCount" variant="destructive" class="gap-1">
-              <AlertTriangle class="size-3" /> {{ errorCount }}
-            </Badge>
-          </div>
-        </TooltipProvider>
-
-        <div v-if="debugMode" class="vf-debug-panel">
-          <div class="vf-debug-section">
-            <b>{{ t("marketplace.canvas.fieldsAnalysis") }}</b>
-            <div
-              v-for="(v, k) in debugInfo.analysis"
-              :key="k"
-              :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
-            >
-              <span class="badge">{{
-                v.importable ? "IMPORT" : "EXPORT"
-              }}</span>
-              {{ k }}: connected={{ v.connected }}, rev={{ v.reversible
-              }}<span
-                v-if="v.fanOut"
-                style="color: var(--warning); margin-left: 4px"
-                >⚠ fan-out</span
-              >
-            </div>
-            <div
-              v-if="!Object.keys(debugInfo.analysis).length"
-              class="text-xs opacity-50"
-            >
-              {{ t("marketplace.canvas.noFields") }}
-            </div>
-          </div>
-          <div class="vf-debug-section">
-            <b
-              >{{ t("marketplace.canvas.edges") }} ({{
-                debugInfo.edges.length
-              }})</b
-            >
-            <div
-              v-for="e in debugInfo.edges"
-              :key="e.id"
-              :class="[
-                'vf-debug-row',
-                e.type === 'vf-import'
-                  ? 'ok'
-                  : e.type === 'vf-export'
-                    ? 'no'
-                    : '',
-              ]"
-            >
-              <span class="badge">{{ e.type }}</span>
-              <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
-            </div>
-          </div>
-          <div class="vf-debug-hint">
-            {{ t("marketplace.canvas.hideDebug") }}
-          </div>
-        </div>
-
-        <VueFlow
-          :min-zoom="0.2"
-          :max-zoom="1.75"
-          :delete-key-code="['Delete', 'Backspace']"
-          :selection-key-code="true"
-          :pan-on-drag="[1, 2]"
-          :only-render-visible-elements="false"
-          :elevate-edges-on-select="true"
-          :is-valid-connection="isValidConnection"
-          :snap-to-grid="snapToGrid"
-          :snap-grid="SNAP_GRID"
-          class="vf-canvas"
+  <!-- When maximized the canvas teleports to <body>: ancestors keep
+       .page-region-in's `animation-fill-mode: both`, which makes them a
+       containing block for position:fixed and traps the overlay under the
+       app sidebar. -->
+  <Teleport to="body" :disabled="!maximized">
+    <SplitterGroup
+      direction="horizontal"
+      :class="[
+        'flex min-h-0 overflow-hidden border bg-background',
+        maximized ? 'fixed inset-0 z-50' : 'relative h-full w-full rounded-xl',
+      ]"
+    >
+      <SplitterPanel :min-size="40">
+        <div
+          ref="flowWrap"
+          class="relative min-w-0 h-full w-full"
+          @contextmenu="onContextMenu"
         >
-          <Background
-            :variant="snapToGrid ? 'lines' : 'dots'"
-            :gap="snapToGrid ? SNAP_GRID[0] : 16"
-            :size="snapToGrid ? 1 : 1"
-            :line-width="1"
-            color="var(--vf-grid-color)"
-          />
-          <HelperLinesOverlay
-            v-if="showGuidelines"
-            :horizontal="helperLineHorizontal"
-            :vertical="helperLineVertical"
-          />
-          <MiniMap
-            pannable
-            zoomable
-            node-color="var(--muted-foreground)"
-            mask-color="var(--muted)"
-          />
           <TooltipProvider :delay-duration="150">
-            <Controls position="bottom-left" :show-interactive="false">
-              <template #control-zoom-in>
-                <Tooltip>
+            <div
+              class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
+            >
+              <ButtonGroup joined>
+                <Tooltip :disabled="!dirty">
                   <TooltipTrigger as-child>
-                    <button
-                      type="button"
-                      class="vue-flow__controls-button vue-flow__controls-zoomin"
-                      @click="zoomIn()"
+                    <Button
+                      size="sm"
+                      :disabled="saving || errorCount > 0"
+                      @click="save()"
                     >
-                      <Plus class="size-3.5" aria-hidden="true" />
-                    </button>
+                      <Spinner v-if="saving" />
+                      <Save v-else class="size-4" />
+                      {{ t("marketplace.canvas.save") }}
+                      <span
+                        v-if="dirty && !saving"
+                        class="size-1.5 rounded-full bg-current opacity-80"
+                        aria-hidden="true"
+                      />
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {{ t("marketplace.canvas.zoomIn") }}
+                  <TooltipContent>
+                    {{ t("marketplace.canvas.unsavedChanges") }}
                   </TooltipContent>
                 </Tooltip>
-              </template>
-              <template #control-zoom-out>
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <Button
+                      size="sm"
+                      class="px-2"
+                      :aria-label="t('marketplace.canvas.actions')"
+                    >
+                      <ChevronDown class="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" class="w-56">
+                    <DropdownMenuItem @select="confirmAutoArrange">
+                      <LayoutGrid class="size-4" />
+                      {{ t("marketplace.fieldMappingPage.autoArrange") }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      :disabled="syncingFields"
+                      @select="syncAdapterFieldSchema"
+                    >
+                      <Spinner v-if="syncingFields" class="size-4" />
+                      <RefreshCw v-else class="size-4" />
+                      {{
+                        t("marketplace.fieldMappingPage.checkFieldsUpToDate")
+                      }}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem @select="exportMappingFile">
+                      <Download class="size-4" />
+                      {{ t("marketplace.fieldMappingPage.export") }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem @select="triggerImportFile">
+                      <Upload class="size-4" />
+                      {{ t("marketplace.fieldMappingPage.import") }}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </ButtonGroup>
+
+              <div
+                class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
+              >
+                <SearchableSelect
+                  class="h-8 w-full bg-card dark:bg-card"
+                  content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
+                  remote
+                  :loading="previewProductsLoading"
+                  :options="previewProducts"
+                  :model-value="
+                    previewProductId ? String(previewProductId) : ''
+                  "
+                  @update:modelValue="emit('select-preview', $event)"
+                  @search="emit('search-preview', $event)"
+                  :placeholder="t('marketplace.canvas.previewPlaceholder')"
+                />
+              </div>
+
+              <ButtonGroup v-if="previewProductId">
                 <Tooltip>
                   <TooltipTrigger as-child>
-                    <button
-                      type="button"
-                      class="vue-flow__controls-button vue-flow__controls-zoomout"
-                      @click="zoomOut()"
-                    >
-                      <Minus class="size-3.5" aria-hidden="true" />
-                    </button>
+                    <Button size="sm" as-child>
+                      <RouterLink :to="`/products/${previewProductId}/edit`">
+                        <ExternalLink class="size-4" />
+                        {{ t("marketplace.canvas.openPreviewProduct") }}
+                      </RouterLink>
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {{ t("marketplace.canvas.zoomOut") }}
+                  <TooltipContent>
+                    {{ t("marketplace.canvas.openPreviewProductTitle") }}
                   </TooltipContent>
                 </Tooltip>
-              </template>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button
-                    class="vue-flow__controls-button"
-                    type="button"
-                    :aria-pressed="snapToGrid"
-                    :style="snapToGrid ? {} : { opacity: 0.4 }"
-                    @click="snapToGrid = !snapToGrid"
-                  >
-                    <!-- Snap-to-grid: cell grid + block on an intersection -->
-                    <svg
-                      class="vf-ctrl-icon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      @click="emit('clear-preview')"
                     >
-                      <path
-                        class="vf-ctrl-icon__soft"
-                        d="M4 9h16M4 15h16M9 4v16M15 4v16"
-                      />
-                      <rect
-                        class="vf-ctrl-icon__solid"
-                        x="9"
-                        y="9"
-                        width="6"
-                        height="6"
-                        rx="1"
-                      />
-                    </svg>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {{
-                    snapToGrid
-                      ? t("marketplace.canvas.disableSnapToGrid")
-                      : t("marketplace.canvas.enableSnapToGrid")
-                  }}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button
-                    class="vue-flow__controls-button"
-                    type="button"
-                    :aria-pressed="showGuidelines"
-                    :style="showGuidelines ? {} : { opacity: 0.4 }"
-                    @click="showGuidelines = !showGuidelines"
-                  >
-                    <!-- Alignment guides: two blocks + shared center guide -->
-                    <svg
-                      class="vf-ctrl-icon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        class="vf-ctrl-icon__soft vf-ctrl-icon__dash"
-                        d="M12 3v18"
-                      />
-                      <rect x="4" y="6" width="7" height="5" rx="1" />
-                      <rect x="13" y="13" width="7" height="5" rx="1" />
-                    </svg>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {{
-                    showGuidelines
-                      ? t("marketplace.canvas.disableGuidelines")
-                      : t("marketplace.canvas.enableGuidelines")
-                  }}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <button
-                    class="vue-flow__controls-button"
-                    type="button"
-                    :style="animateWires ? {} : { opacity: 0.4 }"
-                    @click="animateWires = !animateWires"
-                  >
-                    <Activity class="size-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {{
-                    animateWires
-                      ? t("marketplace.canvas.disableWireAnimation")
-                      : t("marketplace.canvas.enableWireAnimation")
-                  }}
-                </TooltipContent>
-              </Tooltip>
-              <template #control-fit-view>
+                      <EyeOff class="size-4" />
+                      {{ t("marketplace.canvas.resetPreview") }}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {{ t("marketplace.canvas.resetPreviewTitle") }}
+                  </TooltipContent>
+                </Tooltip>
+              </ButtonGroup>
+
+              <span
+                v-if="previewing"
+                class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+              >
+                <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
+              </span>
+              <input
+                ref="importFileInput"
+                type="file"
+                accept="application/json,.json"
+                class="hidden"
+                @change="importMappingFile"
+              />
+              <Badge v-if="errorCount" variant="destructive" class="gap-1">
+                <AlertTriangle class="size-3" /> {{ errorCount }}
+              </Badge>
+            </div>
+          </TooltipProvider>
+
+          <div v-if="debugMode" class="vf-debug-panel">
+            <div class="vf-debug-section">
+              <b>{{ t("marketplace.canvas.fieldsAnalysis") }}</b>
+              <div
+                v-for="(v, k) in debugInfo.analysis"
+                :key="k"
+                :class="['vf-debug-row', v.importable ? 'ok' : 'no']"
+              >
+                <span class="badge">{{
+                  v.importable ? "IMPORT" : "EXPORT"
+                }}</span>
+                {{ k }}: connected={{ v.connected }}, rev={{ v.reversible
+                }}<span
+                  v-if="v.fanOut"
+                  style="color: var(--warning); margin-left: 4px"
+                  >⚠ fan-out</span
+                >
+              </div>
+              <div
+                v-if="!Object.keys(debugInfo.analysis).length"
+                class="text-xs opacity-50"
+              >
+                {{ t("marketplace.canvas.noFields") }}
+              </div>
+            </div>
+            <div class="vf-debug-section">
+              <b
+                >{{ t("marketplace.canvas.edges") }} ({{
+                  debugInfo.edges.length
+                }})</b
+              >
+              <div
+                v-for="e in debugInfo.edges"
+                :key="e.id"
+                :class="[
+                  'vf-debug-row',
+                  e.type === 'vf-import'
+                    ? 'ok'
+                    : e.type === 'vf-export'
+                      ? 'no'
+                      : '',
+                ]"
+              >
+                <span class="badge">{{ e.type }}</span>
+                <span class="truncate">{{ e.src }} → {{ e.tgt }}</span>
+              </div>
+            </div>
+            <div class="vf-debug-hint">
+              {{ t("marketplace.canvas.hideDebug") }}
+            </div>
+          </div>
+
+          <VueFlow
+            :min-zoom="0.2"
+            :max-zoom="1.75"
+            :delete-key-code="['Delete', 'Backspace']"
+            :selection-key-code="true"
+            :pan-on-drag="[1, 2]"
+            :only-render-visible-elements="false"
+            :elevate-edges-on-select="true"
+            :is-valid-connection="isValidConnection"
+            :snap-to-grid="snapToGrid"
+            :snap-grid="SNAP_GRID"
+            class="vf-canvas"
+          >
+            <Background
+              :variant="snapToGrid ? 'lines' : 'dots'"
+              :gap="snapToGrid ? SNAP_GRID[0] : 16"
+              :size="snapToGrid ? 1 : 1"
+              :line-width="1"
+              color="var(--vf-grid-color)"
+            />
+            <HelperLinesOverlay
+              v-if="showGuidelines"
+              :horizontal="helperLineHorizontal"
+              :vertical="helperLineVertical"
+            />
+            <MiniMap
+              pannable
+              zoomable
+              node-color="var(--muted-foreground)"
+              mask-color="var(--muted)"
+            />
+            <TooltipProvider :delay-duration="150">
+              <Controls position="bottom-left" :show-interactive="false">
+                <template #control-zoom-in>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <button
+                        type="button"
+                        class="vue-flow__controls-button vue-flow__controls-zoomin"
+                        @click="zoomIn()"
+                      >
+                        <Plus class="size-3.5" aria-hidden="true" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {{ t("marketplace.canvas.zoomIn") }}
+                    </TooltipContent>
+                  </Tooltip>
+                </template>
+                <template #control-zoom-out>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <button
+                        type="button"
+                        class="vue-flow__controls-button vue-flow__controls-zoomout"
+                        @click="zoomOut()"
+                      >
+                        <Minus class="size-3.5" aria-hidden="true" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {{ t("marketplace.canvas.zoomOut") }}
+                    </TooltipContent>
+                  </Tooltip>
+                </template>
                 <Tooltip>
                   <TooltipTrigger as-child>
                     <button
                       class="vue-flow__controls-button"
                       type="button"
-                      @click="toggleMaximize"
+                      :aria-pressed="snapToGrid"
+                      :style="snapToGrid ? {} : { opacity: 0.4 }"
+                      @click="snapToGrid = !snapToGrid"
                     >
+                      <!-- Snap-to-grid: cell grid + block on an intersection -->
                       <svg
-                        v-if="maximized"
+                        class="vf-ctrl-icon"
                         viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                         aria-hidden="true"
                       >
-                        <path d="M8 3v3a2 2 0 0 1-2 2H3" />
-                        <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
-                        <path d="M3 16h3a2 2 0 0 1 2 2v3" />
-                        <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
-                      </svg>
-                      <svg
-                        v-else
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
-                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
-                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                        <path
+                          class="vf-ctrl-icon__soft"
+                          d="M4 9h16M4 15h16M9 4v16M15 4v16"
+                        />
+                        <rect
+                          class="vf-ctrl-icon__solid"
+                          x="9"
+                          y="9"
+                          width="6"
+                          height="6"
+                          rx="1"
+                        />
                       </svg>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="right">
                     {{
-                      maximized
-                        ? t("marketplace.canvas.collapse")
-                        : t("marketplace.canvas.fullscreen")
+                      snapToGrid
+                        ? t("marketplace.canvas.disableSnapToGrid")
+                        : t("marketplace.canvas.enableSnapToGrid")
                     }}
                   </TooltipContent>
                 </Tooltip>
-              </template>
-            </Controls>
-          </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button
+                      class="vue-flow__controls-button"
+                      type="button"
+                      :aria-pressed="showGuidelines"
+                      :style="showGuidelines ? {} : { opacity: 0.4 }"
+                      @click="showGuidelines = !showGuidelines"
+                    >
+                      <!-- Alignment guides: two blocks + shared center guide -->
+                      <svg
+                        class="vf-ctrl-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          class="vf-ctrl-icon__soft vf-ctrl-icon__dash"
+                          d="M12 3v18"
+                        />
+                        <rect x="4" y="6" width="7" height="5" rx="1" />
+                        <rect x="13" y="13" width="7" height="5" rx="1" />
+                      </svg>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {{
+                      showGuidelines
+                        ? t("marketplace.canvas.disableGuidelines")
+                        : t("marketplace.canvas.enableGuidelines")
+                    }}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button
+                      class="vue-flow__controls-button"
+                      type="button"
+                      :style="animateWires ? {} : { opacity: 0.4 }"
+                      @click="animateWires = !animateWires"
+                    >
+                      <Activity class="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {{
+                      animateWires
+                        ? t("marketplace.canvas.disableWireAnimation")
+                        : t("marketplace.canvas.enableWireAnimation")
+                    }}
+                  </TooltipContent>
+                </Tooltip>
+                <template #control-fit-view>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <button
+                        class="vue-flow__controls-button"
+                        type="button"
+                        @click="toggleMaximize"
+                      >
+                        <svg
+                          v-if="maximized"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="3"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                          <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+                          <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+                          <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                        </svg>
+                        <svg
+                          v-else
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="3"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                          <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                          <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                          <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                        </svg>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {{
+                        maximized
+                          ? t("marketplace.canvas.collapse")
+                          : t("marketplace.canvas.fullscreen")
+                      }}
+                    </TooltipContent>
+                  </Tooltip>
+                </template>
+              </Controls>
+            </TooltipProvider>
 
-          <template #edge-vf-import="p"
-            ><ImportableEdge
-              v-bind="p"
-              :debug="debugMode"
-              :animate="animateWires"
-          /></template>
-          <template #edge-vf-export="p"
-            ><ExportOnlyEdge
-              v-bind="p"
-              :debug="debugMode"
-              :animate="animateWires"
-          /></template>
+            <template #edge-vf-import="p"
+              ><ImportableEdge
+                v-bind="p"
+                :debug="debugMode"
+                :animate="animateWires"
+            /></template>
+            <template #edge-vf-export="p"
+              ><ExportOnlyEdge
+                v-bind="p"
+                :debug="debugMode"
+                :animate="animateWires"
+            /></template>
 
-          <template #node-attribute="p"><SourceNode v-bind="p" /></template>
-          <template #node-storeAttribute="p"
-            ><SourceNode v-bind="p"
-          /></template>
-          <template #node-productField="p"><SourceNode v-bind="p" /></template>
-          <template #node-static="p"><SourceNode v-bind="p" /></template>
-          <template #node-groupName="p"><SourceNode v-bind="p" /></template>
-          <template #node-storeFileUrl="p"><SourceNode v-bind="p" /></template>
-          <template #node-storeFileContent="p"
-            ><SourceNode v-bind="p"
-          /></template>
-          <template #node-productFileByName="p"
-            ><SourceNode v-bind="p"
-          /></template>
-          <template #node-productFileContentByName="p"
-            ><SourceNode v-bind="p"
-          /></template>
-          <template #node-productFilesByExtension="p"
-            ><SourceNode v-bind="p"
-          /></template>
-          <template #node-modifier="p"><ModifierNode v-bind="p" /></template>
-          <template #node-formatString="p"><OpNode v-bind="p" /></template>
-          <template #node-join="p"><OpNode v-bind="p" /></template>
-          <template #node-makeArray="p"><OpNode v-bind="p" /></template>
-          <template #node-arrayAppend="p"><OpNode v-bind="p" /></template>
-          <template #node-splitToArray="p"><OpNode v-bind="p" /></template>
-          <template #node-arrayIndex="p"><OpNode v-bind="p" /></template>
-          <template #node-arrayLength="p"><OpNode v-bind="p" /></template>
-          <template #node-ifElse="p"><OpNode v-bind="p" /></template>
-          <template #node-not="p"><OpNode v-bind="p" /></template>
-          <template #node-and="p"><OpNode v-bind="p" /></template>
-          <template #node-or="p"><OpNode v-bind="p" /></template>
-          <template #node-equals="p"><OpNode v-bind="p" /></template>
-          <template #node-notEquals="p"><OpNode v-bind="p" /></template>
-          <template #node-greaterThan="p"><OpNode v-bind="p" /></template>
-          <template #node-lessThan="p"><OpNode v-bind="p" /></template>
-          <template #node-contains="p"><OpNode v-bind="p" /></template>
-          <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
-          <template #node-isValid="p"><OpNode v-bind="p" /></template>
-          <template #node-add="p"><OpNode v-bind="p" /></template>
-          <template #node-subtract="p"><OpNode v-bind="p" /></template>
-          <template #node-multiply="p"><OpNode v-bind="p" /></template>
-          <template #node-divide="p"><OpNode v-bind="p" /></template>
-          <template #node-min="p"><OpNode v-bind="p" /></template>
-          <template #node-max="p"><OpNode v-bind="p" /></template>
-          <template #node-adapterFields="p"
-            ><AdapterFieldsNode v-bind="p"
-          /></template>
-          <template #node-adapterPriceFields="p"
-            ><AdapterPriceFieldsNode v-bind="p"
-          /></template>
-          <template #node-reroute="p"><RerouteNode v-bind="p" /></template>
-        </VueFlow>
+            <template #node-attribute="p"><SourceNode v-bind="p" /></template>
+            <template #node-storeAttribute="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-productField="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-static="p"><SourceNode v-bind="p" /></template>
+            <template #node-groupName="p"><SourceNode v-bind="p" /></template>
+            <template #node-storeFileUrl="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-storeFileContent="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-productFileByName="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-productFileContentByName="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-productFilesByExtension="p"
+              ><SourceNode v-bind="p"
+            /></template>
+            <template #node-modifier="p"><ModifierNode v-bind="p" /></template>
+            <template #node-formatString="p"><OpNode v-bind="p" /></template>
+            <template #node-join="p"><OpNode v-bind="p" /></template>
+            <template #node-makeArray="p"><OpNode v-bind="p" /></template>
+            <template #node-arrayAppend="p"><OpNode v-bind="p" /></template>
+            <template #node-splitToArray="p"><OpNode v-bind="p" /></template>
+            <template #node-arrayIndex="p"><OpNode v-bind="p" /></template>
+            <template #node-arrayLength="p"><OpNode v-bind="p" /></template>
+            <template #node-ifElse="p"><OpNode v-bind="p" /></template>
+            <template #node-not="p"><OpNode v-bind="p" /></template>
+            <template #node-and="p"><OpNode v-bind="p" /></template>
+            <template #node-or="p"><OpNode v-bind="p" /></template>
+            <template #node-equals="p"><OpNode v-bind="p" /></template>
+            <template #node-notEquals="p"><OpNode v-bind="p" /></template>
+            <template #node-greaterThan="p"><OpNode v-bind="p" /></template>
+            <template #node-lessThan="p"><OpNode v-bind="p" /></template>
+            <template #node-contains="p"><OpNode v-bind="p" /></template>
+            <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
+            <template #node-isValid="p"><OpNode v-bind="p" /></template>
+            <template #node-add="p"><OpNode v-bind="p" /></template>
+            <template #node-subtract="p"><OpNode v-bind="p" /></template>
+            <template #node-multiply="p"><OpNode v-bind="p" /></template>
+            <template #node-divide="p"><OpNode v-bind="p" /></template>
+            <template #node-min="p"><OpNode v-bind="p" /></template>
+            <template #node-max="p"><OpNode v-bind="p" /></template>
+            <template #node-adapterFields="p"
+              ><AdapterFieldsNode v-bind="p"
+            /></template>
+            <template #node-adapterPriceFields="p"
+              ><AdapterPriceFieldsNode v-bind="p"
+            /></template>
+            <template #node-reroute="p"><RerouteNode v-bind="p" /></template>
+          </VueFlow>
 
-        <!-- context menu + click-away catcher -->
-        <div
-          v-if="menu.open"
-          class="absolute inset-0 z-20"
-          @click="closeMenu"
-          @contextmenu.prevent="closeMenu"
-        />
-        <div
-          v-if="menu.open"
-          class="absolute z-30"
-          :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
-        >
-          <NodeContextMenu
-            :available-sources="availableSources"
-            :filter-type="menu.connectType"
-            :connect-dir="menu.connectDir"
-            :adapter-fields-with-options="adapterFieldsWithOptions"
-            :adapter-value-field="menuAdapterValueField"
-            @add="onMenuAdd"
-            @close="closeMenu"
+          <!-- context menu + click-away catcher -->
+          <div
+            v-if="menu.open"
+            class="absolute inset-0 z-20"
+            @click="closeMenu"
+            @contextmenu.prevent="closeMenu"
           />
-        </div>
-
-        <div
-          v-if="loading"
-          class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/60"
-          aria-busy="true"
-        >
-          <Spinner size="xl" class="text-muted-foreground" />
-          <p
-            class="text-sm text-muted-foreground text-center max-w-sm"
-            role="status"
-            aria-live="polite"
+          <div
+            v-if="menu.open"
+            class="absolute z-30"
+            :style="{ left: menu.left + 'px', top: menu.top + 'px' }"
           >
-            {{ loadingStatusText }}
-          </p>
-        </div>
-      </div>
-    </SplitterPanel>
+            <NodeContextMenu
+              :available-sources="availableSources"
+              :filter-type="menu.connectType"
+              :connect-dir="menu.connectDir"
+              :adapter-fields-with-options="adapterFieldsWithOptions"
+              :adapter-value-field="menuAdapterValueField"
+              @add="onMenuAdd"
+              @close="closeMenu"
+            />
+          </div>
 
-    <template v-if="selected">
-      <SplitterResizeHandle
-        class="w-1 bg-border hover:bg-primary/30 transition-colors cursor-col-resize"
-      />
-      <SplitterPanel :default-size="25" :min-size="15" :max-size="50">
-        <NodeInspector
-          :node="selected"
-          :external-field-options="selectedExternalOptions"
-          :source-field-options="selectedSourceOptions"
-          :store-file-options="availableSources.storeFiles || []"
-          :adapter-fields-with-options="adapterFieldsWithOptions"
-          :ai-model-options="aiModelOptions"
-          :available-sources="availableSources"
-          :allow-custom-fields="allowCustomFields"
-          :template-field-refs="templateFieldRefs"
-          :focus-field-key="focusAdapterField"
-          :preview-stale="previewStale"
-          :preview-outdated="previewOutdated"
-          @update="onInspectorUpdate"
-          @delete="onInspectorDelete"
-          @close="selected = null"
-          @field-focused="focusAdapterField = null"
-        />
+          <div
+            v-if="loading"
+            class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/60"
+            aria-busy="true"
+          >
+            <Spinner size="xl" class="text-muted-foreground" />
+            <p
+              class="text-sm text-muted-foreground text-center max-w-sm"
+              role="status"
+              aria-live="polite"
+            >
+              {{ loadingStatusText }}
+            </p>
+          </div>
+        </div>
       </SplitterPanel>
-    </template>
-  </SplitterGroup>
+
+      <template v-if="selected">
+        <SplitterResizeHandle
+          class="w-1 bg-border hover:bg-primary/30 transition-colors cursor-col-resize"
+        />
+        <SplitterPanel :default-size="25" :min-size="15" :max-size="50">
+          <NodeInspector
+            :node="selected"
+            :external-field-options="selectedExternalOptions"
+            :source-field-options="selectedSourceOptions"
+            :store-file-options="availableSources.storeFiles || []"
+            :adapter-fields-with-options="adapterFieldsWithOptions"
+            :ai-model-options="aiModelOptions"
+            :available-sources="availableSources"
+            :allow-custom-fields="allowCustomFields"
+            :template-field-refs="templateFieldRefs"
+            :focus-field-key="focusAdapterField"
+            :preview-stale="previewStale"
+            :preview-outdated="previewOutdated"
+            @update="onInspectorUpdate"
+            @delete="onInspectorDelete"
+            @close="selected = null"
+            @field-focused="focusAdapterField = null"
+          />
+        </SplitterPanel>
+      </template>
+    </SplitterGroup>
+  </Teleport>
 </template>
 
 <!-- Global (non-scoped) styles: node cards render into the Vue Flow tree via slots, so scoped
