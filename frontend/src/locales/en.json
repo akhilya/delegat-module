@@ -2220,7 +2220,8 @@
         "deleteNode": "Delete node",
         "productField": "Product field",
         "attributeFallback": "attribute #{id}",
-        "ungroupedFields": "No group"
+        "ungroupedFields": "No group",
+        "arrayItemPlaceholder": "Add value…"
       }
     },
     "canvas": {

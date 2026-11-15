@@ -422,6 +422,47 @@ const splitTags = (v) =>
     .filter(Boolean);
 const joinTags = (v) => (Array.isArray(v) ? v.join(", ") : v || "");
 
+// --- static "array" literal: chip editor; staticValue is serialized as a
+// JSON array (the evaluator also accepts the legacy comma-separated form).
+const arrayItems = computed(() => {
+  const s = data.value.staticValue;
+  if (Array.isArray(s)) return s.map(String);
+  const str = String(s ?? "").trim();
+  if (!str) return [];
+  if (str.startsWith("[")) {
+    try {
+      const l = JSON.parse(str);
+      if (Array.isArray(l)) return l.map(String);
+    } catch {
+      // fall through to the comma-separated parse
+    }
+  }
+  return str
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+});
+const arrayDraft = ref("");
+const emitArrayItems = (items) =>
+  setData({ staticValue: JSON.stringify(items), label: items.join(", ") });
+function arrayAdd() {
+  const v = arrayDraft.value.trim();
+  if (!v) return;
+  emitArrayItems([...arrayItems.value, v]);
+  arrayDraft.value = "";
+}
+function arrayRemove(i) {
+  emitArrayItems(arrayItems.value.filter((_, x) => x !== i));
+}
+function arrayKeydown(e) {
+  if (e.key === "Enter" || e.key === ",") {
+    e.preventDefault();
+    arrayAdd();
+  } else if (e.key === "Backspace" && !arrayDraft.value) {
+    arrayRemove(arrayItems.value.length - 1);
+  }
+}
+
 // --- "standard value" (isAdapterValue static node) ---
 
 function onAdapterValuePick(val) {
@@ -866,14 +907,32 @@ function resolvePreview(fieldKey, raw) {
               </span>
             </div>
 
-            <Input
-              v-else-if="data.valueType === 'array'"
-              :model-value="data.staticValue"
-              :placeholder="t('marketplace.graph.inspector.commaSeparated')"
-              @update:model-value="
-                setData({ staticValue: $event, label: $event })
-              "
-            />
+            <div v-else-if="data.valueType === 'array'" class="space-y-1.5">
+              <div v-if="arrayItems.length" class="flex flex-wrap gap-1">
+                <span
+                  v-for="(item, i) in arrayItems"
+                  :key="i"
+                  class="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs"
+                >
+                  {{ item }}
+                  <button
+                    type="button"
+                    class="text-muted-foreground hover:text-foreground"
+                    @click="arrayRemove(i)"
+                  >
+                    <X class="size-3" />
+                  </button>
+                </span>
+              </div>
+              <Input
+                v-model="arrayDraft"
+                :placeholder="
+                  t('marketplace.graph.inspector.arrayItemPlaceholder')
+                "
+                @keydown="arrayKeydown"
+                @blur="arrayAdd"
+              />
+            </div>
 
             <Input
               v-else

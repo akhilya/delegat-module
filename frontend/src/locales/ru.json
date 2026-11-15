@@ -2220,7 +2220,8 @@
         "deleteNode": "Удалить узел",
         "productField": "Поле товара",
         "attributeFallback": "атрибут #{id}",
-        "ungroupedFields": "Без группы"
+        "ungroupedFields": "Без группы",
+        "arrayItemPlaceholder": "Добавить значение…"
       }
     },
     "canvas": {
