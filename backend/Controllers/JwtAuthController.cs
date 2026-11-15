@@ -28,6 +28,7 @@ public class JwtAuthController : ControllerBase
 
     private const string ACCESS_COOKIE = "access_token";
     private const string REFRESH_COOKIE = "refresh_token";
+    private const int MaxRotationGraceHops = 3;
 
     private readonly IPermissionService _permissionService;
     private readonly LoginTicketProtector _loginTickets;
@@ -413,12 +414,18 @@ public class JwtAuthController : ControllerBase
             // revoke every session of the user and reject (committed before the 401 below).
             if (refreshToken.IsRevoked)
             {
+                // Follow the rotation chain (bounded) while every hop is still inside its grace window,
+                // so a stale tab is not mistaken for theft when a newer tab already rotated again.
                 RefreshToken? replacement = null;
-                if (refreshToken.IsWithinRotationGrace(now))
+                var current = refreshToken;
+                for (var hop = 0; hop < MaxRotationGraceHops && current.IsWithinRotationGrace(now); hop++)
                 {
-                    var replacementId = refreshToken.replacedByTokenId!.Value;
+                    var replacementId = current.replacedByTokenId!.Value;
                     replacement = await refreshRepo.FindAsync(rt =>
                         rt.Id == replacementId && rt.userId == userId);
+                    if (replacement == null || !replacement.IsRevoked)
+                        break;
+                    current = replacement;
                 }
 
                 var graceUser = replacement != null && replacement.IsActive

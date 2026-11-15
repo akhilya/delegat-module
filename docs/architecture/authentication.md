@@ -11,7 +11,7 @@ This page records authentication details that are easy to break during maintenan
 ## Refresh tokens
 
 - `POST /auth/refresh` rotates the presented refresh token: the old row gets `revokedAt` and `replacedByTokenId` pointing at its replacement.
-- A revoked token is accepted only within `RefreshToken.RotationGracePeriod` (30 seconds) of rotation, and only to return its own still-active replacement (concurrent tabs share one cookie). Logout revokes without a replacement, so logout-revoked tokens are never accepted.
+- A revoked token is accepted only within `RefreshToken.RotationGracePeriod` (30 seconds) of rotation, and only to return the still-active token at the end of its own rotation chain (concurrent tabs share one cookie; at most three hops, each inside its grace window). Logout revokes without a replacement, so logout-revoked tokens are never accepted.
 - Any other revoked-token use is treated as theft: all of the user's active refresh tokens are revoked, cookies are cleared, and the request returns 401. Covered by `backend.Tests/JwtAuthRefreshTokenTests.cs`.
 
 ## Passkeys

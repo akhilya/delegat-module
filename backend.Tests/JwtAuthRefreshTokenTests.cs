@@ -90,6 +90,25 @@ public class JwtAuthRefreshTokenTests
     }
 
     [Fact]
+    public async Task RotatedToken_WithinGrace_FollowsRecentRotationChain()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        using var users = CreateUserManager(db);
+        var userId = await AddUserAsync(db);
+        var latest = await AddTokenAsync(db, userId, "latest");
+        var middle = await AddTokenAsync(db, userId, "middle",
+            revokedAt: DateTime.UtcNow.AddSeconds(-2), replacedByTokenId: latest.Id);
+        await AddTokenAsync(db, userId, "oldest",
+            revokedAt: DateTime.UtcNow.AddSeconds(-5), replacedByTokenId: middle.Id);
+
+        var (controller, http) = CreateController(db, users, "oldest");
+        Assert.IsType<OkResult>(await controller.PostRefresh());
+
+        Assert.Equal("latest", ReadRefreshCookie(http));
+        Assert.True(await db.refreshTokens.AnyAsync(rt => rt.token == "latest" && rt.revokedAt == null));
+    }
+
+    [Fact]
     public async Task RotatedToken_WithinGrace_WhenReplacementRevoked_IsRejected()
     {
         await using var db = TestDbFactory.CreateDb();
