@@ -190,7 +190,7 @@ export default {
 
     <div
       v-if="unmappedOptions.length > 0"
-      class="flex items-start gap-1.5 text-xs text-warning-foreground bg-warning/10 rounded px-2 py-1.5"
+      class="flex items-start gap-1.5 text-xs text-warning-foreground"
     >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>
