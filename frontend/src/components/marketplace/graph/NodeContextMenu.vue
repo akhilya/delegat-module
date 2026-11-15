@@ -88,7 +88,11 @@ const wordOk = (qw, cw) =>
   (qw.length >= 4 && lev(qw, cw) <= (qw.length >= 8 ? 2 : 1));
 const match = (label, ...aliases) => {
   if (!q.value) return true;
-  const qWords = q.value.split(/\s+/).filter(Boolean);
+  // Strip leading operator signs so "+15" still hits "15+", "возраст 15" etc.
+  const qWords = q.value
+    .split(/\s+/)
+    .map((w) => w.replace(/^[+\-−×*x/÷:]+/, ""))
+    .filter(Boolean);
   // Whole strings stay in the hay too: "S/M" or "10/12" are query words but
   // only the full label contains the slash.
   const hay = [label, ...aliases]
@@ -257,6 +261,27 @@ const literalItems = computed(() => {
     "массив",
     "список",
   );
+  // Numeric query → a number literal prefilled with the typed value.
+  const num = q.value.match(/^(-?\d+(?:[.,]\d+)?)$/);
+  if (num) {
+    const value = num[1].replace(",", ".");
+    const desc = {
+      group: "source",
+      kind: "static",
+      payload: {
+        valueType: "number",
+        staticValue: value,
+        label: t("marketplace.graph.contextMenu.numberLiteral"),
+      },
+    };
+    if (srcVisible(desc))
+      out.push({
+        icon: Hash,
+        label: t("marketplace.graph.contextMenu.numberLiteral"),
+        param: value,
+        desc,
+      });
+  }
   // Adapter value: static node backed by the adapter field's parsedOptions.
   // Options are populated on connect or manually in the inspector, and the
   // bound field decides the real valueType - so offer it for any dragged pin.
@@ -305,30 +330,96 @@ const literalItems = computed(() => {
   return out;
 });
 
-// Values of the adapter field the menu was opened for (wire dropped on empty
-// space): each option creates a standard-value node already bound to that field.
-const adapterValueItems = computed(() => {
-  const field = props.adapterValueField;
-  if (!field?.options?.length) return [];
-  return field.options
-    .filter((o) => match(o.label, o.value))
-    .slice(0, 50)
-    .map((o) => ({
+// Values of a dictionary adapter field: each option creates a standard-value
+// node already bound to that field. The field whose pin the menu was opened for
+// comes first (shown even without a query); other fields appear while searching.
+const optionItem = (field) => (o) => ({
+  label: o.label,
+  desc: {
+    group: "source",
+    kind: "static",
+    payload: {
+      isAdapterValue: true,
+      valueType: field.valueType,
+      staticValue: o.value,
       label: o.label,
-      desc: {
-        group: "source",
-        kind: "static",
-        payload: {
-          isAdapterValue: true,
-          valueType: field.valueType,
-          staticValue: o.value,
-          label: o.label,
-          options: field.options,
-          optionSourceKey: field.fieldKey,
-          optionSourceLabel: field.label,
-        },
-      },
-    }));
+      options: field.options,
+      optionSourceKey: field.fieldKey,
+      optionSourceLabel: field.label,
+    },
+  },
+});
+const adapterValueGroups = computed(() => {
+  const groups = [];
+  const groupLabel = (field) =>
+    `${t("marketplace.graph.contextMenu.adapterValueItem")} · ${field.label}`;
+  const pending = props.adapterValueField;
+  if (pending?.options?.length) {
+    const items = pending.options
+      .filter((o) => match(o.label, o.value))
+      .slice(0, 50)
+      .map(optionItem(pending));
+    if (items.length)
+      groups.push({
+        key: `av:${pending.fieldKey}`,
+        label: groupLabel(pending),
+        items,
+      });
+  }
+  if (q.value) {
+    for (const f of props.adapterFieldsWithOptions) {
+      if (f.fieldKey === pending?.fieldKey || !f.options?.length) continue;
+      const items = f.options
+        .filter((o) => match(o.label, o.value))
+        .slice(0, 10)
+        .map(optionItem(f));
+      if (items.length)
+        groups.push({ key: `av:${f.fieldKey}`, label: groupLabel(f), items });
+    }
+  }
+  return groups;
+});
+
+// "<sign>[number]" queries ("+15", "/ 15", "15+") → the arithmetic block with
+// the operand prefilled; the argument is shown as a badge on the item.
+const ARITH_SIGN_TO_OP = {
+  "+": "add",
+  "-": "subtract",
+  "−": "subtract",
+  "*": "multiply",
+  x: "multiply",
+  "×": "multiply",
+  "/": "divide",
+  "÷": "divide",
+  ":": "divide",
+};
+const arithItems = computed(() => {
+  const s = q.value;
+  let sign = null;
+  let num = null;
+  let m = s.match(/^([+\-−*x×/÷:])\s*(-?\d+(?:[.,]\d+)?)$/);
+  if (m) {
+    sign = m[1];
+    num = m[2];
+  } else if ((m = s.match(/^(-?\d+(?:[.,]\d+)?)\s*([+\-−*x×/÷:])$/))) {
+    num = m[1];
+    sign = m[2];
+  } else if ((m = s.match(/^([+\-−*x×/÷:])$/))) {
+    sign = m[1];
+  }
+  const opType = sign && ARITH_SIGN_TO_OP[sign];
+  if (!opType) return [];
+  const spec = OP_SPECS[opType];
+  if (!opVisible({ group: "op", opType }, spec?.accepts)) return [];
+  const operand =
+    num != null ? Number(num.replace(",", ".")) : spec.params[0].default;
+  return [
+    {
+      label: opLabel(opType),
+      param: num != null ? String(operand) : null,
+      desc: { group: "op", opType, params: { operand } },
+    },
+  ];
 });
 
 // Product files referenced by name / extension (resolved per product at eval).
@@ -447,13 +538,7 @@ const modifierGroups = computed(() => {
 // Unified, ordered, collapsible groups.
 const groups = computed(() =>
   [
-    {
-      key: "adapterValues",
-      label: props.adapterValueField
-        ? `${t("marketplace.graph.contextMenu.adapterValueItem")} · ${props.adapterValueField.label}`
-        : t("marketplace.graph.contextMenu.adapterValueItem"),
-      items: adapterValueItems.value,
-    },
+    ...adapterValueGroups.value,
     {
       key: "sources",
       label: t("marketplace.graph.contextMenu.groups.sources"),
@@ -477,7 +562,7 @@ const groups = computed(() =>
     {
       key: "ops",
       label: t("marketplace.graph.contextMenu.groups.ops"),
-      items: opItems.value,
+      items: [...arithItems.value, ...opItems.value],
     },
     {
       key: "logic",
@@ -540,6 +625,7 @@ const pick = (desc) => {
           @click="pick(it.desc)"
         >
           {{ it.label }}
+          <span v-if="it.param" class="vf-ctx__param">{{ it.param }}</span>
         </Button>
       </template>
 
@@ -588,6 +674,15 @@ const pick = (desc) => {
   font-size: 13px;
   font-weight: normal;
   color: var(--foreground);
+}
+.vf-ctx__param {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
 }
 .vf-ctx__empty {
   padding: 12px;

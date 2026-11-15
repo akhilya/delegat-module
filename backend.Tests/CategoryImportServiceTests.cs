@@ -748,8 +748,9 @@ public class CategoryImportServiceTests
         // (the field keeps its own source-node chain with the g conversion).
         Assert.Equal("weight", fields["31565"].GetProperty("repeatOf").GetString());
         Assert.False(fields["31565"].TryGetProperty("aliasOf", out _));
-        Assert.True(doc.RootElement.GetProperty("edges").EnumerateArray()
-            .Any(e => e.GetProperty("targetHandle").GetString() == "f:31565"));
+        Assert.Contains(
+            doc.RootElement.GetProperty("edges").EnumerateArray(),
+            e => e.GetProperty("targetHandle").GetString() == "f:31565");
     }
 
     [Fact]

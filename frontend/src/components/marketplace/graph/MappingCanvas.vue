@@ -2001,7 +2001,8 @@ function onMenuAdd(desc) {
     node = createSourceNode(desc.kind, pos, desc.payload || {});
   else if (desc.group === "modifier")
     node = createModifierNode(desc.modifierType, pos);
-  else if (desc.group === "op") node = createOpNode(desc.opType, pos);
+  else if (desc.group === "op")
+    node = createOpNode(desc.opType, pos, desc.params);
   if (node) {
     addNodes([node]);
     // If this menu was opened by dropping a wire on empty space, auto-wire it to the new block.

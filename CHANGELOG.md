@@ -11,7 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Improve marketplace field auto-mapping and group adapter fields in the mapping graph. Ambiguous duplicate attributes require a choice, and compatible units are converted automatically. Adapter fields that duplicate another field's binding are merged under the named field, and attribute fields repeating a product field are collapsed into a revealable hidden group in the mapping graph.
+- Improve marketplace field auto-mapping and group adapter fields in the mapping graph. Ambiguous duplicate attributes require a choice, and compatible units are converted automatically. Adapter fields that duplicate another field's binding are merged under the named field, and attribute fields repeating a product field are collapsed into a revealable hidden group in the mapping graph. The mapping block search covers dictionary options of adapter fields and prefilled arithmetic blocks (add, subtract, multiply, divide) typed as sign-plus-number queries such as `/ 15`.
 
 - Mapping unit conversions offer automatic detection by default and manual source/destination unit selectors. Automatic mode refreshes units from current attribute definitions and adapter field names or descriptions for both export and reverse import.
 - The product page action formerly labeled Import photos is now Import media: it previews and queues downloadable marketplace videos alongside photos when the adapter provides them, still appending to the gallery without replacing existing files.

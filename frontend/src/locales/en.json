@@ -2064,6 +2064,26 @@
           ],
           "params": {}
         },
+        "add": {
+          "label": "Add",
+          "inputLabels": ["number"],
+          "params": {"operand": "Operand"}
+        },
+        "subtract": {
+          "label": "Subtract",
+          "inputLabels": ["number"],
+          "params": {"operand": "Operand"}
+        },
+        "multiply": {
+          "label": "Multiply",
+          "inputLabels": ["number"],
+          "params": {"operand": "Multiplier"}
+        },
+        "divide": {
+          "label": "Divide",
+          "inputLabels": ["number"],
+          "params": {"operand": "Divisor"}
+        },
         "contains": {
           "label": "Contains",
           "inputLabels": [

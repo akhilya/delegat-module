@@ -111,6 +111,10 @@ describe("OP_SPECS", () => {
       "notEquals",
       "greaterThan",
       "lessThan",
+      "add",
+      "subtract",
+      "multiply",
+      "divide",
       "contains",
       "isEmpty",
       "isValid",
@@ -135,6 +139,10 @@ describe("OP_SPECS", () => {
       notEquals: "boolean",
       greaterThan: "boolean",
       lessThan: "boolean",
+      add: "number",
+      subtract: "number",
+      multiply: "number",
+      divide: "number",
       contains: "boolean",
       isEmpty: "boolean",
       isValid: "boolean",
@@ -145,6 +153,10 @@ describe("OP_SPECS", () => {
       arrayLength: ["array", "multiselect"],
       greaterThan: ["number", "integer"],
       lessThan: ["number", "integer"],
+      add: ["number", "integer"],
+      subtract: ["number", "integer"],
+      multiply: ["number", "integer"],
+      divide: ["number", "integer"],
     };
     for (const [type, spec] of Object.entries(OP_SPECS)) {
       assert.equal(spec.output, output[type], type);

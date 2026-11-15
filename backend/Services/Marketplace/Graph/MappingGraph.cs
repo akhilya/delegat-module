@@ -115,6 +115,8 @@ public class GraphNodeData
     public int? inputCount { get; set; }
     /// <summary>Element index for "arrayIndex".</summary>
     public int? index { get; set; }
+    /// <summary>Right-hand operand for the arithmetic ops (add/subtract/multiply/divide).</summary>
+    public decimal? operand { get; set; }
 
     // Output node(s)
     /// <summary>Target marketplace field key for the legacy single-field "output" node.</summary>
