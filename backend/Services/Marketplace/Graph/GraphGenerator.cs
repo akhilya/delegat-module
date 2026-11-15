@@ -276,6 +276,9 @@ public static class GraphGenerator
                 existing.unitId = fm.externalFieldUnitId;
                 existing.group = fm.externalFieldGroup;
                 existing.description = fm.externalFieldDescription;
+                // repeatOf is schema-derived like group/description, so refresh it too;
+                // source/alias/omit stay the operator's state.
+                existing.repeatOf = fm.repeatOf;
                 continue;
             }
             graph.edges ??= new List<GraphEdge>();
@@ -392,6 +395,7 @@ public static class GraphGenerator
                 existingField.unitId = fm.externalFieldUnitId;
                 existingField.sortOrder = fm.sortOrder;
                 existingField.isRequired = fm.isRequired;
+                existingField.repeatOf = fm.repeatOf;
                 continue;
             }
 

@@ -542,4 +542,62 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         Assert.All(appended, n =>
             Assert.True(n.GetProperty("position").GetProperty("y").GetDouble() > 0));
     }
+
+    [Fact]
+    public void SyncAdapterFields_RefreshesRepeatOfOnExistingField()
+    {
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "adapter-fields",
+                  "type": "adapterFields",
+                  "deletable": false,
+                  "position": { "x": 400, "y": 0 },
+                  "data": {
+                    "fields": [
+                      { "fieldKey": "weight", "label": "Weight", "outputType": "number" },
+                      { "fieldKey": "31565", "label": "Вес", "outputType": "number" }
+                    ]
+                  }
+                }
+              ],
+              "edges": []
+            }
+            """;
+
+        var result = GraphGenerator.SyncAdapterFields(
+            graph,
+            [
+                new FieldSpec
+                {
+                    externalFieldKey = "weight",
+                    externalFieldName = "Weight",
+                    externalFieldType = "number",
+                    sourceType = FieldMappingSourceType.ProductField,
+                    sourceField = "weight",
+                    isEnabled = true,
+                },
+                new FieldSpec
+                {
+                    externalFieldKey = "31565",
+                    externalFieldName = "Вес",
+                    externalFieldType = "number",
+                    sourceType = FieldMappingSourceType.CategoryAttribute,
+                    sourceAttributeId = 7,
+                    sourceAttributeKey = "weight",
+                    isEnabled = true,
+                    sortOrder = 10,
+                },
+            ]);
+
+        using var doc = JsonDocument.Parse(result);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // Existing fields get the schema-derived repeat marker refreshed on re-sync.
+        Assert.Equal("weight", fields["31565"].GetProperty("repeatOf").GetString());
+    }
 }
