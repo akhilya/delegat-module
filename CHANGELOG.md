@@ -468,6 +468,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- Refresh-token reuse is now rejected. A rotated refresh token is accepted for 30 seconds only, and only to return the exact token it was rotated into (concurrent tabs). Any other use of a revoked refresh token, including one revoked by logout, returns 401 and signs the user out of every session. Existing sessions keep working; refresh cookies already rotated before the upgrade lose their grace window.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
 - Update Vue I18n to 11.4.16 and pin MySqlConnector to 2.6.1 to address published dependency advisories.

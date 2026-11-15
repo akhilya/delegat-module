@@ -390,18 +390,60 @@ public class JwtAuthController : ControllerBase
         var refreshRepo = _unitOfWork.Repository<RefreshToken>();
 
         // Capture results from within the transaction
-        string resultAccessToken = null!;
-        string resultRefreshToken = null!;
+        string? resultAccessToken = null;
+        string? resultRefreshToken = null;
         bool resultRememberMe = false;
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
+            resultAccessToken = null;
+            resultRefreshToken = null;
+
             var refreshToken = await refreshRepo.FindAsync(rt => rt.token == refreshTokenValue);
 
             if (refreshToken == null || refreshToken.IsExpired)
                 throw ApiException.Unauthorized(code: "invalid_token");
 
             var userId = refreshToken.userId;
+            var now = DateTime.UtcNow;
+
+            // CASE 1: Token already revoked. Only a token rotated moments ago (concurrent tabs)
+            // may resolve to the exact token it was rotated into. Anything else — logout-revoked,
+            // outside the grace window, or a replacement that is no longer active — is reuse:
+            // revoke every session of the user and reject (committed before the 401 below).
+            if (refreshToken.IsRevoked)
+            {
+                RefreshToken? replacement = null;
+                if (refreshToken.IsWithinRotationGrace(now))
+                {
+                    var replacementId = refreshToken.replacedByTokenId!.Value;
+                    replacement = await refreshRepo.FindAsync(rt =>
+                        rt.Id == replacementId && rt.userId == userId);
+                }
+
+                var graceUser = replacement != null && replacement.IsActive
+                    ? await _userManager.FindByIdAsync(userId.ToString())
+                    : null;
+
+                if (graceUser == null || !graceUser.isActive)
+                {
+                    var activeTokens = await refreshRepo.FindAllAsync(rt =>
+                        rt.userId == userId && rt.revokedAt == null);
+                    foreach (var rt in activeTokens)
+                    {
+                        rt.revokedAt = now;
+                        refreshRepo.UpdateWithoutSave(rt);
+                    }
+                    await _unitOfWork.SaveChangesAsync();
+                    return;
+                }
+
+                resultRememberMe = replacement!.expiresAt > replacement.createdAt.AddDays(14);
+                resultAccessToken = _jwtService.GenerateToken(userId, graceUser.UserName ?? "");
+                resultRefreshToken = replacement.token;
+                return;
+            }
+
             var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null || !user.isActive)
                 throw ApiException.Unauthorized(code: "user_not_found");
@@ -409,42 +451,27 @@ public class JwtAuthController : ControllerBase
             var rememberMe = refreshToken.expiresAt > refreshToken.createdAt.AddDays(14);
             resultRememberMe = rememberMe;
 
-            // CASE 1: Token already revoked - find latest active token (multi-tab scenario)
-            // Another tab already rotated this token; just hand the client the current active one.
-            if (refreshToken.IsRevoked)
-            {
-                var activeToken = await refreshRepo.FindAsync(rt =>
-                    rt.userId == userId &&
-                    rt.revokedAt == null &&
-                    rt.expiresAt > DateTime.UtcNow);
-
-                if (activeToken == null)
-                    throw ApiException.Unauthorized(code: "invalid_token");
-
-                resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
-                resultRefreshToken = activeToken.token;
-                return;
-            }
-
-            // CASE 2: Token is active - normal rotation
-            refreshToken.revokedAt = DateTime.UtcNow;
-            refreshRepo.UpdateWithoutSave(refreshToken);
-
+            // CASE 2: Token is active - normal rotation, linked to its replacement
             var (newRefreshTokenValue, newRefreshExpiresAt) = _jwtService.GenerateRefreshToken(rememberMe);
             var newRefreshToken = new RefreshToken
             {
                 userId = userId,
                 token = newRefreshTokenValue,
                 expiresAt = newRefreshExpiresAt,
-                createdAt = DateTime.UtcNow
+                createdAt = now
             };
             await refreshRepo.AddWithoutSaveAsync(newRefreshToken);
+            await _unitOfWork.SaveChangesAsync();
+
+            refreshToken.revokedAt = now;
+            refreshToken.replacedByTokenId = newRefreshToken.Id;
+            refreshRepo.UpdateWithoutSave(refreshToken);
 
             // Cleanup stale revoked tokens (older than 1 day)
             var staleTokens = await refreshRepo.FindAllAsync(rt =>
                 rt.userId == userId &&
                 rt.revokedAt != null &&
-                rt.revokedAt < DateTime.UtcNow.AddDays(-1));
+                rt.revokedAt < now.AddDays(-1));
             if (staleTokens.Any())
                 refreshRepo.DeleteRange(staleTokens);
 
@@ -453,6 +480,13 @@ public class JwtAuthController : ControllerBase
             resultAccessToken = _jwtService.GenerateToken(userId, user.UserName ?? "");
             resultRefreshToken = newRefreshTokenValue;
         });
+
+        if (resultAccessToken == null || resultRefreshToken == null)
+        {
+            Response.Cookies.Delete(ACCESS_COOKIE, new CookieOptions { Path = "/" });
+            Response.Cookies.Delete(REFRESH_COOKIE, new CookieOptions { Path = "/" });
+            throw ApiException.Unauthorized(code: "invalid_token");
+        }
 
         SetAccessTokenCookie(resultAccessToken, resultRememberMe);
         SetRefreshTokenCookie(resultRefreshToken, resultRememberMe);

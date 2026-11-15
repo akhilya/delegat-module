@@ -8,6 +8,12 @@ This page records authentication details that are easy to break during maintenan
 - Passkey sign-in is passwordless and does not require TOTP.
 - TOTP issuer is `Delegat`, not the hostname. QR codes use the local `qrcode` SVG helper.
 
+## Refresh tokens
+
+- `POST /auth/refresh` rotates the presented refresh token: the old row gets `revokedAt` and `replacedByTokenId` pointing at its replacement.
+- A revoked token is accepted only within `RefreshToken.RotationGracePeriod` (30 seconds) of rotation, and only to return its own still-active replacement (concurrent tabs share one cookie). Logout revokes without a replacement, so logout-revoked tokens are never accepted.
+- Any other revoked-token use is treated as theft: all of the user's active refresh tokens are revoked, cookies are cleared, and the request returns 401. Covered by `backend.Tests/JwtAuthRefreshTokenTests.cs`.
+
 ## Passkeys
 
 - WebAuthn uses discoverable credentials (`ResidentKey = Required`; keep `RequireResidentKey = true` for Bitwarden). Do not set `AuthenticatorAttachment`.
