@@ -2733,7 +2733,7 @@ async function importMappingFile(event) {
                 <TooltipTrigger as-child>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     @click="emit('clear-preview')"
                   >
                     <EyeOff class="size-4" />
