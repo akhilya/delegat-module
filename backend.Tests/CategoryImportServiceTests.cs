@@ -715,6 +715,44 @@ public class CategoryImportServiceTests
     }
 
     [Fact]
+    public async Task Import_RepeatsFieldsBoundToSameAttributeWithDifferentUnits()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("weight", "Weight", true, "number", UnitCode: "kg", SortOrder: 0),
+            new ExternalField("31565", "Weight", false, "number", UnitCode: "g", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Weight", AttributeType.Number, key: "weight");
+        attr.unitCode = "kg";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "weight", action = "reuse", existingAttributeId = attr.Id },
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // Different units need separate conversion: no alias merge, hidden as a repeat instead
+        // (the field keeps its own source-node chain with the g conversion).
+        Assert.Equal("weight", fields["31565"].GetProperty("repeatOf").GetString());
+        Assert.False(fields["31565"].TryGetProperty("aliasOf", out _));
+        Assert.True(doc.RootElement.GetProperty("edges").EnumerateArray()
+            .Any(e => e.GetProperty("targetHandle").GetString() == "f:31565"));
+    }
+
+    [Fact]
     public async Task Import_MarksAttributeFieldRepeatingNamedProductField()
     {
         var (svc, db, connection) = Create("leaf",

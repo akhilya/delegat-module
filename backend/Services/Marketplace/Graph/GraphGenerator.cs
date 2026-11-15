@@ -475,10 +475,18 @@ public static class GraphGenerator
                 continue;
 
             var primary = PickPrimaryProductField(members);
+            var primaryUnit = UnitKey(primary);
             foreach (var other in members)
             {
                 if (ReferenceEquals(other, primary))
                     continue;
+                if (UnitKey(other) != primaryUnit)
+                {
+                    // aliasOf would copy the primary's already-converted value - wrong units.
+                    // Keep the duplicate's own wiring+conversion, hide it visually instead.
+                    other.repeatOf ??= primary.externalFieldKey;
+                    continue;
+                }
                 other.aliasOf = primary.externalFieldKey;
                 other.sourceType = FieldMappingSourceType.Static;
                 other.sourceField = null;
@@ -529,6 +537,9 @@ public static class GraphGenerator
         FieldMappingSourceType.GroupName => "groupName",
         _ => null,
     };
+
+    private static string UnitKey(FieldSpec s) =>
+        s.externalFieldUnitCode ?? s.externalFieldUnitId ?? s.externalFieldUnit ?? "";
 
     /// <summary>Named (non-numeric) adapter keys like <c>weight</c> are the canonical fields;
     /// pure numeric keys are marketplace attribute ids.</summary>
