@@ -3190,7 +3190,17 @@ export default {
       createFromLocal,
       localCategoryId,
       localCategoryName,
+      ozonConnected,
     } = this.$route.query;
+
+    if (ozonConnected === "1" || ozonConnected === "true") {
+      displaySonnerSuccess(
+        this.$t("marketplace.marketplacePage.ozonConnected"),
+      );
+      const query = { ...this.$route.query };
+      delete query.ozonConnected;
+      this.$router.replace({ query });
+    }
 
     if (tab) {
       this.activeTab = tab;

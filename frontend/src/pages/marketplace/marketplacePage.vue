@@ -324,6 +324,17 @@ export default {
     },
   },
   mounted() {
+    const { ozonError } = this.$route.query;
+    if (ozonError) {
+      displaySonnerError(
+        this.$t("marketplace.marketplacePage.ozonConnectFailed", {
+          error: ozonError,
+        }),
+      );
+      const query = { ...this.$route.query };
+      delete query.ozonError;
+      this.$router.replace({ query });
+    }
     this.fetchData();
   },
 };
