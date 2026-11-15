@@ -19,7 +19,16 @@ function normalizeOptionValue(raw, options) {
 }
 
 export default {
-  components: { Input, Label, Button, SearchableSelect, Plus, Trash2, ArrowRight, AlertTriangle },
+  components: {
+    Input,
+    Label,
+    Button,
+    SearchableSelect,
+    Plus,
+    Trash2,
+    ArrowRight,
+    AlertTriangle,
+  },
   props: {
     mappings: { type: Array, default: () => [] },
     externalFieldOptions: { type: Array, default: () => [] },
@@ -45,8 +54,12 @@ export default {
     },
     unmappedOptions() {
       if (!this.sourceFieldOptions?.length) return [];
-      const mappedFroms = new Set(this.localMappings.map((m) => String(m.from)));
-      return this.sourceFieldOptions.filter((o) => !mappedFroms.has(String(o.value)));
+      const mappedFroms = new Set(
+        this.localMappings.map((m) => String(m.from)),
+      );
+      return this.sourceFieldOptions.filter(
+        (o) => !mappedFroms.has(String(o.value)),
+      );
     },
   },
   watch: {
@@ -84,7 +97,8 @@ export default {
       return opt?.label || null;
     },
     isBrokenRow(row) {
-      if (this.isTextSwitch || !row.from || !this.sourceOptions.length) return false;
+      if (this.isTextSwitch || !row.from || !this.sourceOptions.length)
+        return false;
       return !this.sourceOptions.some((o) => o.value === String(row.from));
     },
     addRow() {
@@ -117,12 +131,20 @@ export default {
 <template>
   <div class="space-y-2">
     <Label class="text-xs font-medium">{{
-      $t(isTextSwitch ? "marketplace.valueMapEditor.textTitle" : "marketplace.valueMapEditor.title")
+      $t(
+        isTextSwitch
+          ? "marketplace.valueMapEditor.textTitle"
+          : "marketplace.valueMapEditor.title",
+      )
     }}</Label>
 
     <p class="text-[11px] text-muted-foreground">
       {{
-        $t(isTextSwitch ? "marketplace.valueMapEditor.textHint" : "marketplace.valueMapEditor.valueIdHint")
+        $t(
+          isTextSwitch
+            ? "marketplace.valueMapEditor.textHint"
+            : "marketplace.valueMapEditor.valueIdHint",
+        )
       }}
     </p>
     <p
@@ -161,7 +183,11 @@ export default {
         <Input
           :model-value="row.to"
           @update:modelValue="(v) => onToChange(index, v)"
-          :placeholder="isTextSwitch ? $t('marketplace.valueMapEditor.toPlaceholder') : 'valueId'"
+          :placeholder="
+            isTextSwitch
+              ? $t('marketplace.valueMapEditor.toPlaceholder')
+              : 'valueId'
+          "
           :class="['h-7 text-xs', isTextSwitch ? '' : 'font-mono']"
         />
         <p
@@ -183,7 +209,12 @@ export default {
       </Button>
     </div>
 
-    <Button variant="outline" size="sm" class="w-full h-7 text-xs" @click="addRow">
+    <Button
+      variant="outline"
+      size="sm"
+      class="w-full h-7 text-xs"
+      @click="addRow"
+    >
       <Plus class="size-3 mr-1" />
       {{ $t("marketplace.valueMapEditor.addMapping") }}
     </Button>
@@ -194,12 +225,19 @@ export default {
     >
       <AlertTriangle class="size-3 shrink-0 mt-0.5" />
       <span>
-        {{ $t("marketplace.valueMapEditor.unmappedWarning", { mapped: unmappedOptions.length, total: sourceFieldOptions.length }) }}
+        {{
+          $t("marketplace.valueMapEditor.unmappedWarning", {
+            mapped: unmappedOptions.length,
+            total: sourceFieldOptions.length,
+          })
+        }}
       </span>
     </div>
 
     <div class="space-y-1 pt-1 border-t">
-      <Label class="text-xs">{{ $t("marketplace.valueMapEditor.defaultValueLabel") }}</Label>
+      <Label class="text-xs">{{
+        $t("marketplace.valueMapEditor.defaultValueLabel")
+      }}</Label>
       <Input
         :model-value="localDefault"
         @update:modelValue="onDefaultChange"
