@@ -21,6 +21,9 @@ const text = computed(() => (props.value == null ? "" : String(props.value)));
 // Provided by the canvas while a recompute is scheduled/running: swap the stale
 // value for a loader instead of displaying outdated output silently.
 const pending = inject("graphPreviewStale", ref(false));
+// Last recompute failed: keep the old value but render it dimmed so it reads
+// as outdated, not current.
+const outdated = inject("graphPreviewOutdated", ref(false));
 const expanded = ref(false);
 const bodyEl = ref(null);
 const overflowing = ref(false);
@@ -51,6 +54,7 @@ watch(text, () => {
             :class="[
               'vf-preview__body',
               expanded ? 'nowheel' : 'vf-preview__body--clamp',
+              outdated && 'vf-preview__body--outdated',
             ]"
             @wheel.stop
           >
@@ -104,6 +108,9 @@ watch(text, () => {
 .vf-preview__body:not(.vf-preview__body--clamp) {
   max-height: 160px;
   overflow-y: auto;
+}
+.vf-preview__body--outdated {
+  opacity: 0.45;
 }
 .vf-preview__pending {
   display: flex;

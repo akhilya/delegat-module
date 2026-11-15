@@ -209,6 +209,9 @@ const previewing = ref(false);
 // nodes and the inspector swap stale values for a loader instead of showing
 // outdated output without any indication.
 const previewStale = ref(false);
+// True when the last recompute failed: values still shown are knowingly old,
+// rendered dimmed instead of spinning forever or looking current.
+const previewOutdated = ref(false);
 const selected = ref(null);
 const focusAdapterField = ref(null);
 const menu = ref({
@@ -584,6 +587,7 @@ function fixUnitMismatch(warning) {
 
 provide("mappingUnitFix", fixUnitMismatch);
 provide("graphPreviewStale", previewStale);
+provide("graphPreviewOutdated", previewOutdated);
 
 function refreshAnalysis(options = {}) {
   const { updateLanes = true } = options;
@@ -2423,11 +2427,13 @@ function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   if (!props.previewProductId || loading.value) return;
   previewStale.value = true;
+  previewOutdated.value = false;
   previewTimer = setTimeout(runPreview, 400);
 }
 
 function applyPreviewValues(outputs, nodeValues) {
   previewStale.value = false;
+  previewOutdated.value = false;
   if (findNode(ADAPTER_NODE_ID)) {
     updateNodeData(ADAPTER_NODE_ID, { preview: outputs });
   }
@@ -2444,6 +2450,7 @@ function applyPreviewValues(outputs, nodeValues) {
 function clearNodePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   previewStale.value = false;
+  previewOutdated.value = false;
   if (findNode(ADAPTER_NODE_ID)) {
     updateNodeData(ADAPTER_NODE_ID, { preview: {} });
   }
@@ -2471,7 +2478,12 @@ async function runPreview() {
       productId: props.previewProductId,
       graph: buildGraph(),
     });
-    if (token !== previewToken || loading.value) return;
+    if (token !== previewToken || loading.value) {
+      // Aborted before new values landed: loading resets preview state anyway,
+      // a newer schedule owns the stale flag otherwise.
+      if (loading.value) previewStale.value = false;
+      return;
+    }
     await waitForPaint();
     const outputs = data?.outputs || {};
     const nodeValues = data?.nodeValues || {};
@@ -2479,12 +2491,11 @@ async function runPreview() {
     emit("preview-result", { outputs, fieldTypes: data?.fieldTypes || {} });
   } catch (e) {
     if (token !== previewToken) return;
+    previewStale.value = false;
+    previewOutdated.value = true;
     displaySonnerError(e);
   } finally {
-    if (token === previewToken) {
-      previewing.value = false;
-      previewStale.value = false;
-    }
+    if (token === previewToken) previewing.value = false;
   }
 }
 
@@ -3134,6 +3145,7 @@ async function importMappingFile(event) {
           :template-field-refs="templateFieldRefs"
           :focus-field-key="focusAdapterField"
           :preview-stale="previewStale"
+          :preview-outdated="previewOutdated"
           @update="onInspectorUpdate"
           @delete="onInspectorDelete"
           @close="selected = null"

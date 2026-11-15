@@ -2222,7 +2222,8 @@
         "attributeFallback": "атрибут #{id}",
         "ungroupedFields": "Без группы",
         "arrayItemPlaceholder": "Добавить значение…",
-        "showMoreFields": "Показать ещё ({count})"
+        "showMoreFields": "Показать ещё ({count})",
+        "previewOutdated": "Не удалось обновить — показано устаревшее значение"
       }
     },
     "canvas": {

@@ -63,6 +63,8 @@ const props = defineProps({
   // True while the canvas recomputes preview values — stale output is swapped
   // for a loader so it never reads as current.
   previewStale: { type: Boolean, default: false },
+  // True after a failed recompute: old values are shown dimmed.
+  previewOutdated: { type: Boolean, default: false },
   allowCustomFields: { type: Boolean, default: false },
 });
 const emit = defineEmits(["update", "delete", "close", "field-focused"]);
@@ -1172,6 +1174,7 @@ function resolvePreview(fieldKey, raw) {
                   <TooltipTrigger as-child>
                     <div
                       class="truncate rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                      :class="previewOutdated && 'opacity-50'"
                     >
                       {{
                         resolvePreview(f.fieldKey, adapterPreview[f.fieldKey])
@@ -1518,9 +1521,20 @@ function resolvePreview(fieldKey, raw) {
             <Spinner size="sm" />
             {{ t("marketplace.canvas.previewing") }}
           </div>
-          <div v-else class="vf-inspect-preview__value">
-            {{ data.previewValue }}
-          </div>
+          <template v-else>
+            <div
+              class="vf-inspect-preview__value"
+              :class="previewOutdated && 'opacity-50'"
+            >
+              {{ data.previewValue }}
+            </div>
+            <div
+              v-if="previewOutdated"
+              class="mt-1.5 text-[11px] text-muted-foreground"
+            >
+              {{ t("marketplace.graph.inspector.previewOutdated") }}
+            </div>
+          </template>
         </div>
       </div>
 
