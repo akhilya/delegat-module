@@ -3331,6 +3331,10 @@ async function importMappingFile(event) {
 .vf-adapter__row:hover {
   background: var(--accent);
 }
+/* Last row's hover fill must not escape the card's rounded bottom corners. */
+.vf-adapter__list > :last-child {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
 .vf-adapter__row--add {
   color: var(--muted-foreground);
   border-top: 1px dashed var(--border);
