@@ -256,6 +256,10 @@ public class GraphEvaluatorModifierTests
         new("ceiling", "1.1", "number", "number", 2m, P()),
         new("clamp", "50", "number", "number", 10m, P(("min", 0m), ("max", 10m))),
         new("valueMap", "a", "select", "select", "b", P(("mappings", Map(("a", "b"))), ("default", "z"))),
+        // Single-element list maps to the bare scalar, not ["b"], so select
+        // targets and previews read "b" (multiselect parses scalar as one item).
+        new("valueMap", "[\"a\"]", "array", "select", "b", P(("mappings", Map(("a", "b"))))),
+        new("valueMap", "[\"a\",\"c\"]", "array", "select", "[\"b\",\"c\"]", P(("mappings", Map(("a", "b"))))),
         new("optionMap", "a", "select", "select", "b", P(("mappings", Map(("a", "b"))))),
         new("toText", "x", "string", "string", "x", P()),
         new("forceType", "1", "string", "integer", 1L, P(("type", "integer"))),

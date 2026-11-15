@@ -366,6 +366,13 @@ public class ValueMapModifier : IFieldModifier
             var mapped = elements
                 .Select(el => MapSingle(el, mappings, defaultValue))
                 .ToList();
+            // A single mapped value reads as a scalar, not ["x"]: single-select
+            // targets need the bare value and multiselect parsing accepts it
+            // as a one-element list too. Keep JSON only when several values map
+            // or the value itself contains a comma (would split downstream).
+            if (mapped.Count == 0) return "";
+            if (mapped.Count == 1 && !mapped[0].Contains(','))
+                return mapped[0];
             return JsonSerializer.Serialize(mapped);
         }
 
