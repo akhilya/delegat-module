@@ -135,7 +135,7 @@ const collapsed = computed(() => !!props.data.collapsed);
               <Button
                 variant="ghost"
                 size="icon-xs"
-                class="nodrag size-[18px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                class="nodrag size-[20px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
                 :aria-label="t('marketplace.graph.removeInput')"
                 @mousedown.stop
                 @click="removeInput"
@@ -152,7 +152,7 @@ const collapsed = computed(() => !!props.data.collapsed);
               <Button
                 variant="ghost"
                 size="icon-xs"
-                class="nodrag size-[18px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
+                class="nodrag size-[20px] rounded-[var(--radius-xs)] border border-border p-0 text-muted-foreground"
                 :aria-label="t('marketplace.graph.addInput')"
                 @mousedown.stop
                 @click="addInput"

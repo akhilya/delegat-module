@@ -653,26 +653,26 @@ const pick = (desc) => {
 
 <style scoped>
 .vf-ctx {
-  width: 248px;
-  max-height: 360px;
+  width: 264px;
+  max-height: 380px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   background: var(--popover, var(--card));
-  border-radius: var(--radius-md);
-  box-shadow: none;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 16px color-mix(in oklch, var(--foreground) 8%, transparent);
   overflow: hidden;
 }
 .vf-ctx__list {
   overflow-y: auto;
-  padding: 4px;
+  padding: 6px;
 }
 .vf-ctx__group {
   gap: 5px;
   margin-top: 2px;
-  padding: 6px 8px 3px;
+  padding: 8px 10px 4px;
   border-radius: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -684,7 +684,7 @@ const pick = (desc) => {
 }
 .vf-ctx__item {
   gap: 8px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: normal;

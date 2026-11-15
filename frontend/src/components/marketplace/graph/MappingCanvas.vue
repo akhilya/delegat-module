@@ -3007,17 +3007,17 @@ async function importMappingFile(event) {
   opacity: 0.55;
 }
 
-/* Let a drag that starts over a wire pan the canvas: disable only the wide invisible interaction
-   path; the visible line keeps pointer events so double-click reroute still works. */
+/* The wide invisible interaction path stays clickable: wires get a fat hit zone.
+   Canvas panning still works on empty space and the minimap. */
 .vf-canvas .vue-flow__edge-interaction {
-  pointer-events: none;
+  stroke-width: 20;
 }
 
 /* `.vf-card.<mod>` (specificity 0,2,0) so these beat the base `.vf-card` rule that appears later. */
 .vf-card.vf-card--collapsed {
   min-width: 0;
-  max-width: 180px;
-  padding: 4px 12px;
+  max-width: 200px;
+  padding: 6px 14px;
   border-radius: 999px;
 }
 .vf-card--collapsed .vf-card__head {
@@ -3025,7 +3025,7 @@ async function importMappingFile(event) {
 }
 /* Collapsed multi/fixed-input ops keep height so their left input pins still spread out. */
 .vf-card--collapsed-multi {
-  min-height: 44px;
+  min-height: 48px;
   display: flex;
   align-items: center;
 }
@@ -3033,19 +3033,19 @@ async function importMappingFile(event) {
 /* Modifiers that expose operand params as override pins: a row per input handle. Metrics must
    match HEADER/ROW in ModifierNode.vue so the left pins line up with their rows. */
 .vf-card.vf-card--haspins {
-  min-width: 180px;
+  min-width: 200px;
   padding: 0;
 }
 .vf-card--haspins .vf-card__head {
-  height: 26px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 12px;
 }
 .vf-mod__pin-row {
   display: flex;
   align-items: center;
-  height: 18px;
-  padding: 0 10px 0 14px;
-  font-size: 11px;
+  height: 20px;
+  padding: 0 12px 0 16px;
+  font-size: 12px;
   color: var(--muted-foreground);
 }
 .vf-mod__pin-row--value {
@@ -3053,20 +3053,20 @@ async function importMappingFile(event) {
   font-weight: 500;
 }
 .vf-mod__body {
-  padding: 4px 10px 8px;
+  padding: 6px 12px 10px;
 }
 
 .vf-card {
   position: relative;
-  min-width: 150px;
-  max-width: 220px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
+  min-width: 170px;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--foreground);
-  box-shadow: none;
-  font-size: 12px;
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--foreground) 8%, transparent);
+  font-size: 13px;
 }
 .vf-card--selected {
   border-color: var(--primary);
@@ -3082,7 +3082,7 @@ async function importMappingFile(event) {
   gap: 6px;
 }
 .vf-card__kind {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -3094,14 +3094,14 @@ async function importMappingFile(event) {
 .vf-card__warn {
   flex-shrink: 0;
   margin-left: auto;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--warning);
 }
 .vf-card__title {
   margin-top: 3px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3119,27 +3119,27 @@ async function importMappingFile(event) {
 }
 .vf-card__title--sm {
   font-weight: 500;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted-foreground);
 }
 
 .vf-card__pin {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 5px;
+  gap: 6px;
+  margin-top: 6px;
 }
 .vf-card__pin--right {
   justify-content: flex-end;
 }
 .vf-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 9999px;
   display: inline-block;
 }
 .vf-pin-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted-foreground);
 }
 .vf-req {
@@ -3156,8 +3156,8 @@ async function importMappingFile(event) {
 
 /* Single "adapter fields" sink node - metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
-  min-width: 300px;
-  max-width: 420px;
+  min-width: 320px;
+  max-width: 440px;
   padding: 0;
 }
 
@@ -3165,17 +3165,17 @@ async function importMappingFile(event) {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
 }
 .vf-adapter__row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 10px;
-  font-size: 12px;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .vf-adapter__row:hover {
@@ -3207,7 +3207,7 @@ async function importMappingFile(event) {
 }
 .vf-adapter__unit {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   padding: 1px 5px;
   border-radius: var(--radius-xs);
@@ -3224,11 +3224,11 @@ async function importMappingFile(event) {
 }
 .vf-adapter__pill {
   flex-shrink: 0;
-  max-width: 110px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 9999px;
@@ -3255,8 +3255,8 @@ async function importMappingFile(event) {
 }
 .vf-adapter__dir {
   flex-shrink: 0;
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   opacity: 0.45;
   color: var(--muted-foreground);
 }
@@ -3272,23 +3272,30 @@ async function importMappingFile(event) {
   border: 1px solid color-mix(in oklch, var(--primary) 70%, transparent);
 }
 
-/* Vue Flow handle (pin) sizing */
+/* Vue Flow handle (pin) sizing — chunky enough to grab, with a hover affordance. */
 .vue-flow__handle {
-  width: 9px;
-  height: 9px;
+  width: 13px;
+  height: 13px;
   border: 2px solid var(--card);
   background: var(--muted-foreground);
+  transition:
+    box-shadow 0.12s ease,
+    background-color 0.12s ease;
+}
+.vue-flow__handle:hover {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 /* Default (static / floating) edges - plain wire, no animation. */
 .vf-canvas .vue-flow__edge-path {
   stroke: var(--muted-foreground);
-  stroke-width: 2.5;
-  opacity: 0.35;
+  stroke-width: 3;
+  opacity: 0.5;
 }
 .vf-canvas .vue-flow__edge.selected .vue-flow__edge-path {
   stroke: var(--primary);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 /* Debug overlay panel */
@@ -3372,9 +3379,9 @@ async function importMappingFile(event) {
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
-  width: 30px;
-  height: 30px;
-  padding: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
 }
 .vf-canvas .vue-flow__controls-button:last-child {
   border-bottom: none;
@@ -3383,10 +3390,10 @@ async function importMappingFile(event) {
   background: var(--muted);
 }
 .vf-canvas .vue-flow__controls-button svg {
-  width: 14px;
-  max-width: 14px;
-  height: 14px;
-  max-height: 14px;
+  width: 16px;
+  max-width: 16px;
+  height: 16px;
+  max-height: 16px;
   fill: none;
   stroke: currentColor;
 }

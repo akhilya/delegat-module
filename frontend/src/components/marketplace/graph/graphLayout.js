@@ -21,13 +21,13 @@ const SINK_LEAD = 72;
 
 const SINK_TYPES = new Set(["adapterFields", "adapterPriceFields"]);
 
-const ADAPTER_HEADER = 30;
-const ADAPTER_ROW = 24;
-const ADAPTER_WIDTH = 360;
+const ADAPTER_HEADER = 34;
+const ADAPTER_ROW = 28;
+const ADAPTER_WIDTH = 380;
 
-const CARD_HEADER = 26;
-const CARD_PIN_ROW = 18;
-const CARD_WIDTH = 180;
+const CARD_HEADER = 30;
+const CARD_PIN_ROW = 20;
+const CARD_WIDTH = 196;
 
 const MODIFIERS_WITH_PINS = new Set([
   "multiply",
@@ -73,7 +73,7 @@ export function estimateNodeHeight(node) {
     return ADAPTER_HEADER + (n + extra) * ADAPTER_ROW + groups + 6;
   }
 
-  if (node.data?.collapsed) return 44;
+  if (node.data?.collapsed) return 48;
 
   if (node.type === "modifier") {
     const modType = node.data?.modifierType;
@@ -90,12 +90,12 @@ export function estimateNodeHeight(node) {
 
   if (MULTI_INPUT_OPS.has(node.type)) {
     const count = Math.max(2, node.data?.inputCount || 2);
-    return 54 + count * 10 + (node.data?.previewValue != null ? 32 : 0);
+    return 58 + count * 10 + (node.data?.previewValue != null ? 36 : 0);
   }
 
   if (node.type === "reroute") return 18;
 
-  let h = 54;
+  let h = 58;
   if (node.data?.previewValue != null) h += 36;
   if (node.data?.label || node.data?.staticValue) h += 6;
   return h;
@@ -107,7 +107,7 @@ export function estimateNodeWidth(node) {
     return ADAPTER_WIDTH;
   }
   if (node.type === "reroute") return 16;
-  if (node.data?.collapsed) return 160;
+  if (node.data?.collapsed) return 176;
   return CARD_WIDTH;
 }
 

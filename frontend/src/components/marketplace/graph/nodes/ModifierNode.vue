@@ -57,8 +57,8 @@ const hasPins = computed(
 const paramColor = (t) => pinColor(t === "number" ? "number" : "string");
 const pinRef = (id) => `{{pin:${id}}}`;
 
-const HEADER = 26;
-const ROW = 18;
+const HEADER = 30;
+const ROW = 20;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
 const fieldPinRowOffset = computed(() => 1);

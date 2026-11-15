@@ -152,8 +152,8 @@ watch(rows, () => nextTick(() => updateNodeInternals([props.id])), {
   flush: "post",
 });
 
-const HEADER = 30;
-const ROW = 24;
+const HEADER = 34;
+const ROW = 28;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 
 function groupLabel(group) {
@@ -215,7 +215,7 @@ function groupLabel(group) {
           <Button
             v-if="row.header"
             variant="ghost"
-            class="nodrag h-6 w-full justify-start rounded-none px-2"
+            class="nodrag h-7 w-full justify-start rounded-none px-2"
             :aria-expanded="!collapsed.has(row.key)"
             @click.stop="toggleSection(row.key)"
           >

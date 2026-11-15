@@ -18,8 +18,8 @@ defineProps({
 
 <style scoped>
 .vf-reroute {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--muted-foreground);
   border: 2px solid var(--card);

@@ -203,8 +203,8 @@ function sectionLabel(key) {
 watch(rows, () => nextTick(() => updateNodeInternals([props.id])), {
   flush: "post",
 });
-const HEADER = 30;
-const ROW = 24;
+const HEADER = 34;
+const ROW = 28;
 const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
 </script>
 
@@ -258,7 +258,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
         <Button
           :variant="onlyUnconnected ? 'secondary' : 'ghost'"
           size="sm"
-          class="nodrag ml-auto h-6 px-1 text-xs"
+          class="nodrag ml-auto h-7 px-1.5 text-xs"
           :aria-pressed="onlyUnconnected"
           @click.stop="onlyUnconnected = !onlyUnconnected"
           >{{ t("marketplace.graph.unconnectedOnly") }}</Button
@@ -268,7 +268,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
       <div class="vf-adapter__list">
         <div
           v-if="!rows.length"
-          class="px-2 py-1 text-xs text-muted-foreground"
+          class="px-2 py-1.5 text-xs text-muted-foreground"
         >
           {{ t("marketplace.graph.allFieldsConnected") }}
         </div>
@@ -279,7 +279,7 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
           <Button
             v-if="row.header"
             variant="ghost"
-            class="nodrag h-6 w-full justify-start rounded-none px-2"
+            class="nodrag h-7 w-full justify-start rounded-none px-2"
             :aria-expanded="!collapsed.has(row.key)"
             @click.stop="toggleSection(row.key)"
           >

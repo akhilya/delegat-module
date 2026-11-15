@@ -11,7 +11,7 @@ export const EXTENDED_PRICE_KEYS = new Set([
 ]);
 
 /** Extra vertical space consumed by each visible group label in the price sink. */
-export const PRICE_FIELD_GROUP_HEADER_HEIGHT = 24;
+export const PRICE_FIELD_GROUP_HEADER_HEIGHT = 28;
 
 /** Count group headers rendered before the first field in each group run. */
 export function priceFieldGroupCount(fields) {

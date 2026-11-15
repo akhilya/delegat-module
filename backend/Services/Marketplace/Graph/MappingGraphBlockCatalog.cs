@@ -11,13 +11,13 @@ public static class MappingGraphBlockCatalog
 {
     public const int RankSep = 88;
     public const int NodeSep = 40;
-    public const int AdapterWidth = 360;
-    public const int AdapterHeader = 30;
-    public const int AdapterRow = 24;
-    public const int CardWidth = 180;
-    public const int CardHeader = 26;
-    public const int CardPinRow = 18;
-    public const int SourceHeight = 54;
+    public const int AdapterWidth = 380;
+    public const int AdapterHeader = 34;
+    public const int AdapterRow = 28;
+    public const int CardWidth = 196;
+    public const int CardHeader = 30;
+    public const int CardPinRow = 20;
+    public const int SourceHeight = 58;
     public const int RerouteSize = 16;
     public const string AddFieldHandle = "f:__add__";
 
@@ -152,7 +152,7 @@ public static class MappingGraphBlockCatalog
             type = o.Type,
             kind = "op",
             width = CardWidth,
-            height = MultiInputOps.Contains(o.Type) ? (object)"54 + max(2,inputCount)*10" : SourceHeight,
+            height = MultiInputOps.Contains(o.Type) ? (object)"58 + max(2,inputCount)*10" : SourceHeight,
             inputs = OpInputs(o.Inputs),
             outputs = new[] { new { id = "out", pinType = o.Output, side = "right" } },
             accepts = o.Accepts,
@@ -196,7 +196,7 @@ public static class MappingGraphBlockCatalog
         if (MultiInputOps.Contains(node.type ?? ""))
         {
             var count = Math.Max(2, node.data?.inputCount ?? 2);
-            return (CardWidth, 54 + count * 10);
+            return (CardWidth, 58 + count * 10);
         }
 
         if (node.type == "reroute") return (RerouteSize, 18);

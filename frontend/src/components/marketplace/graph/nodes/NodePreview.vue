@@ -79,7 +79,7 @@ watch(text, () => {
 }
 .vf-preview__body {
   font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--muted-foreground);
   white-space: pre-wrap;
