@@ -2268,6 +2268,7 @@
       "fieldsAddedCount": "Fields added: {count}",
       "schemaUpToDate": "Schema is up to date - no new fields",
       "graphSaved": "Graph saved",
+      "pasteSkipped": "Skipped {count} blocks on paste - their sources are unavailable in this cabinet",
       "invalidFileFormat": "Invalid format: expected an object with nodes and edges",
       "mappingExported": "Mapping exported",
       "mappingImported": "Mapping imported - click \"Save\"",

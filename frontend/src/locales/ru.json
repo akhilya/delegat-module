@@ -2268,6 +2268,7 @@
       "fieldsAddedCount": "Добавлено полей: {count}",
       "schemaUpToDate": "Схема актуальна - новых полей нет",
       "graphSaved": "Граф сохранён",
+      "pasteSkipped": "Пропущено блоков при вставке: {count} — их источники недоступны в этом кабинете",
       "invalidFileFormat": "Неверный формат: ожидается объект с nodes и edges",
       "mappingExported": "Маппинг экспортирован",
       "mappingImported": "Маппинг импортирован - нажмите «Сохранить»",

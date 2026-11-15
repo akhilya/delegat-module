@@ -92,7 +92,10 @@ import {
   sanitizeGraphEdges,
   mergeProductFieldSources,
   attributeValueType,
+  SOURCE_NODE_TYPES,
+  OP_NODE_TYPES,
 } from "./graphModel.js";
+import { MODIFIER_CATALOG } from "../modifierCatalog.js";
 import { layoutGraph, sinksOverlap } from "./graphLayout.js";
 import {
   localizeExternalFieldDescription,
@@ -1949,7 +1952,8 @@ function onKeydown(e) {
     } else if (e.code === "KeyC") {
       if (copySelection()) e.preventDefault();
     } else if (e.code === "KeyV") {
-      if (pasteClipboard()) e.preventDefault();
+      e.preventDefault();
+      pasteClipboard();
     } else if (e.code === "KeyD") {
       e.preventDefault();
       duplicateSelection();
@@ -2143,6 +2147,83 @@ function cleanData(d) {
 
 const clipboard = ref({ nodes: [], edges: [] });
 
+// Payload written to the system clipboard so copy/paste works across pages
+// and cabinets; the in-memory `clipboard` ref is the same-page fallback.
+const CLIPBOARD_KIND = "delegat-mapping-graph";
+
+const PASTE_NODE_TYPES = new Set([
+  ...SOURCE_NODE_TYPES,
+  ...OP_NODE_TYPES,
+  "modifier",
+  "reroute",
+]);
+
+/** Whether a copied node can live in this cabinet/category: its external
+   references (attributes, product fields, store files) must resolve here. */
+function clipboardNodeUsable(node) {
+  if (!node || !PASTE_NODE_TYPES.has(node.type)) return false;
+  const d = node.data || {};
+  const src = props.availableSources;
+  switch (node.type) {
+    case "attribute":
+      return (src.categoryAttributes || []).some((a) =>
+        attrIdEq(a.id ?? a.Id, d.attributeId),
+      );
+    case "storeAttribute":
+      return (src.storeAttributes || []).some((a) =>
+        attrIdEq(a.id ?? a.Id, d.attributeId),
+      );
+    case "productField":
+      return mergeProductFieldSources(src).some((f) => f.key === d.field);
+    case "storeFileUrl":
+    case "storeFileContent":
+      return (src.storeFiles || []).some(
+        (f) => String(f.id) === String(d.storeFileId),
+      );
+    case "modifier":
+      return !!MODIFIER_CATALOG[d.modifierType];
+    default:
+      return true;
+  }
+}
+
+/** Keeps usable nodes and edges between them; reports the dropped count. */
+function validateClipboard(clip) {
+  const nodes = [];
+  let dropped = 0;
+  for (const n of clip?.nodes || []) {
+    if (clipboardNodeUsable(n)) nodes.push(n);
+    else dropped += 1;
+  }
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges = (clip?.edges || []).filter(
+    (e) => e && ids.has(e.source) && ids.has(e.target),
+  );
+  return { nodes, edges, dropped };
+}
+
+function writeSystemClipboard(payload) {
+  try {
+    navigator.clipboard?.writeText(JSON.stringify(payload));
+  } catch {
+    // Clipboard API unavailable/denied - the in-memory snapshot still works.
+  }
+}
+
+async function readSystemClipboard() {
+  try {
+    const text = await navigator.clipboard?.readText();
+    if (!text) return null;
+    const parsed = JSON.parse(text);
+    if (parsed?.kind === CLIPBOARD_KIND && Array.isArray(parsed.nodes)) {
+      return parsed;
+    }
+  } catch {
+    // Unreadable or foreign clipboard contents - fall back to memory.
+  }
+  return null;
+}
+
 // Selected, copyable nodes - prefer Vue Flow's selection, fall back to the inspector's node.
 function currentSelection() {
   const fromVf = (getSelectedNodes?.value || []).filter(
@@ -2183,6 +2264,7 @@ function copySelection() {
         };
       }),
   };
+  writeSystemClipboard({ kind: CLIPBOARD_KIND, ...clipboard.value });
   return true;
 }
 
@@ -2224,8 +2306,19 @@ function spawnCopies(clip, offset) {
   return true;
 }
 
-function pasteClipboard() {
-  return spawnCopies(clipboard.value, { x: 40, y: 40 });
+async function pasteClipboard() {
+  const payload = (await readSystemClipboard()) || clipboard.value;
+  const {
+    nodes: okNodes,
+    edges: okEdges,
+    dropped,
+  } = validateClipboard(payload);
+  if (dropped > 0) {
+    displaySonnerError(
+      t("marketplace.canvas.pasteSkipped", { count: dropped }),
+    );
+  }
+  return spawnCopies({ nodes: okNodes, edges: okEdges }, { x: 40, y: 40 });
 }
 
 function duplicateSelection() {
@@ -2437,12 +2530,19 @@ async function importMappingFile(event) {
       props.priceFieldMappings,
     );
     const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
-    const importIds = new Set(importSafeNodes.map((n) => n.id));
+    // Cross-cabinet imports can reference attributes/fields that don't exist
+    // here: drop those nodes (sinks are structural and always kept).
+    const SINK = new Set(["adapterFields", "adapterPriceFields"]);
+    const usableNodes = importSafeNodes.filter(
+      (n) => SINK.has(n.type) || clipboardNodeUsable(n),
+    );
+    const droppedImport = importSafeNodes.length - usableNodes.length;
+    const importIds = new Set(usableNodes.map((n) => n.id));
     const { edges: importSafeEdges } = sanitizeGraphEdges(
       ensured.edges,
       importIds,
     );
-    setNodes(layoutGraph(importSafeNodes, importSafeEdges));
+    setNodes(layoutGraph(usableNodes, importSafeEdges));
     setEdges(importSafeEdges);
     await nextTick();
     const adNode = findNode(ADAPTER_NODE_ID);
@@ -2457,6 +2557,11 @@ async function importMappingFile(event) {
     dirty.value = true;
     schedulePreview();
     displaySonnerSuccess(t("marketplace.canvas.mappingImported"));
+    if (droppedImport > 0) {
+      displaySonnerError(
+        t("marketplace.canvas.pasteSkipped", { count: droppedImport }),
+      );
+    }
   } catch (e) {
     displaySonnerError(e);
   }
