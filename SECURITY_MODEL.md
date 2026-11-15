@@ -36,7 +36,7 @@ Sources: the code, `delegat-module-platform/docs/security-pass-p12.md`, `docs/pl
 | **Deployment** | `docker-compose*.yml`, Dockerfiles, nginx configs, `.github/workflows/**` in all repos |
 
 ## Entry points
-- **Instance, anonymous:** `JwtAuthController` login/refresh/passkey/TOTP/invitation flows; `StoreController` `GET /stores/` and `/stores/{id}` (`[AllowAnonymous]`); `SettingsController` public settings; `AgentController` `files/{id}/download` (ticket-based); `PublicMediaExportController`; `DocsController`.
+- **Instance, anonymous:** `JwtAuthController` login/refresh/passkey/TOTP/invitation flows; `SettingsController` public settings; `AgentController` `files/{id}/download` (ticket-based); `PublicMediaExportController`; `DocsController`.
 - **Instance, authenticated:** all other controllers, with permissions via `RequiresPermission` / `PermissionService` / `CabinetViewOnlyGuard`. High-risk ones: `PluginController` (DLL upload, `Permissions.PluginsManage`), DB dump (`DatabaseDumpService`), file upload/storage, Excel import, catalog scrape (`CatalogScrapeController`, SSRF surface, `UrlSafety`), AI agent tools (`AgentSqlGuard`, `SqlReadonlyService`, `CabinetRequestInvoker`, `McpToolGateway`, `PythonSandboxClient`), SignalR `OperationHub`.
 - **Instance Public API** `/api/v1/*`: API key bearer (`ApiKeyAuthenticationHandler`), store-scoped.
 - **CP, anonymous:** `/api/auth/register|login|login/totp|login/recovery`, passkey login, `/api/public/contact`, `/api/public/site-status`, `/api/public/plans`, `/api/billing/webhooks/{provider}`, `/api/sso/consume`.
