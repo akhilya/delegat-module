@@ -628,12 +628,13 @@ const groups = computed(() =>
 
 const empty = computed(() => groups.value.length === 0);
 
-// Collapsed groups (by key). A search query force-expands everything.
+// Collapsed groups (by key, persisted). Groups stay collapsible while
+// searching — filtered items show inside whatever is open.
 const COLLAPSED_KEY = "vfCtxCollapsed";
 const collapsed = ref(
   new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]")),
 );
-const isOpen = (g) => !!q.value || !collapsed.value.has(g.key);
+const isOpen = (g) => !collapsed.value.has(g.key);
 const toggle = (g) => {
   const next = new Set(collapsed.value);
   next.has(g.key) ? next.delete(g.key) : next.add(g.key);
