@@ -304,6 +304,55 @@ public static class GraphGenerator
     }
 
     /// <summary>
+    /// Drop bindings and source nodes that reference attributes deleted from the local
+    /// category (or store attributes deleted from the store). Runs when the graph is
+    /// loaded so a removed attribute does not leave a stale pill, node, or edge.
+    /// </summary>
+    public static string PruneStaleAttributeSources(
+        string? existingGraphJson,
+        IReadOnlyCollection<int> categoryAttributeIds,
+        IReadOnlyCollection<int> storeAttributeIds)
+    {
+        if (string.IsNullOrWhiteSpace(existingGraphJson))
+            return existingGraphJson ?? "";
+
+        MappingGraph? graph;
+        try { graph = JsonSerializer.Deserialize<MappingGraph>(existingGraphJson, ParseOpts); }
+        catch (JsonException) { return existingGraphJson; }
+        if (graph?.nodes == null) return existingGraphJson;
+
+        bool Stale(string? type, int? id) => type switch
+        {
+            "attribute" => !categoryAttributeIds.Contains(id ?? -1),
+            "storeAttribute" => !storeAttributeIds.Contains(id ?? -1),
+            _ => false,
+        };
+
+        foreach (var node in graph.nodes)
+        {
+            if (node.data?.fields == null) continue;
+            foreach (var f in node.data.fields)
+            {
+                if (f.source != null && Stale(f.source.type, f.source.attributeId))
+                    f.source = null;
+            }
+        }
+
+        var staleNodeIds = graph.nodes
+            .Where(n => Stale(n.type, n.data?.attributeId))
+            .Select(n => n.id)
+            .ToHashSet();
+        if (staleNodeIds.Count > 0)
+        {
+            graph.nodes.RemoveAll(n => n.id != null && staleNodeIds.Contains(n.id));
+            graph.edges?.RemoveAll(e =>
+                staleNodeIds.Contains(e.source) || staleNodeIds.Contains(e.target));
+        }
+
+        return JsonSerializer.Serialize(graph, SerializeOpts);
+    }
+
+    /// <summary>
     /// Append price-API fields added since the graph was generated.
     /// If the same keys still sit on adapterFields (legacy), migrate their bindings into the price node and remove the duplicates.
     /// </summary>

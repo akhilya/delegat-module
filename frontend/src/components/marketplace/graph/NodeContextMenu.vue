@@ -139,20 +139,24 @@ const sourceItems = computed(() => {
     if (match(label, ...aliases) && srcVisible(desc))
       out.push({ icon, label, desc });
   };
-  (s.productFields || []).forEach((f) =>
-    push(
-      Database,
-      localizeStandardSourceName(f.key, f.displayName || f.key),
-      {
-        group: "source",
-        kind: "productField",
-        payload: f,
-      },
-      "product",
-      f.key,
-      f.displayName,
-    ),
-  );
+  (s.productFields || [])
+    // The dedicated "Group name" source below covers the same value; offering
+    // it again as a productField would create a duplicate block.
+    .filter((f) => f.key !== "groupName")
+    .forEach((f) =>
+      push(
+        Database,
+        localizeStandardSourceName(f.key, f.displayName || f.key),
+        {
+          group: "source",
+          kind: "productField",
+          payload: f,
+        },
+        "product",
+        f.key,
+        f.displayName,
+      ),
+    );
   (s.stockFields || []).forEach((f) =>
     push(
       Database,

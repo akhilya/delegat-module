@@ -504,6 +504,19 @@ public class CategoryMappingController : ControllerBase
                         new Dictionary<string, int>(),
                         skipAutoMapping: false,
                         extendedPriceParameters: extendedPrice));
+                // Attributes deleted from the local category/store must not keep their bindings.
+                var liveCategoryAttributeIds = await _context.categoryAttributes
+                    .AsNoTracking()
+                    .Where(a => a.categoryId == mapping.localCategoryId)
+                    .Select(a => a.Id)
+                    .ToListAsync(ct);
+                var liveStoreAttributeIds = await _context.storeAttributes
+                    .AsNoTracking()
+                    .Where(a => a.storeId == connection.storeId)
+                    .Select(a => a.Id)
+                    .ToListAsync(ct);
+                graphJson = GraphGenerator.PruneStaleAttributeSources(
+                    graphJson, liveCategoryAttributeIds, liveStoreAttributeIds);
             }
             catch (Exception ex)
             {

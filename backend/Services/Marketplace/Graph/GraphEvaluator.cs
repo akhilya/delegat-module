@@ -322,6 +322,21 @@ public static class GraphEvaluator
                         pins[nodeId] = new PinValue(res);
                         break;
                     }
+                    case "min":
+                    case "max":
+                    {
+                        var inputs = AllInputs(incoming, pins, nodeId);
+                        decimal? res = null;
+                        foreach (var v in inputs)
+                        {
+                            if (!TryToDecimal(v, out var d)) continue;
+                            res = res == null
+                                ? d
+                                : node.type == "min" ? Math.Min(res.Value, d) : Math.Max(res.Value, d);
+                        }
+                        pins[nodeId] = new PinValue(res);
+                        break;
+                    }
                     case "contains":
                     {
                         var inputs = AllInputs(incoming, pins, nodeId);

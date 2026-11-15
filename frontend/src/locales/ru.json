@@ -2085,6 +2085,14 @@
           "inputLabels": ["число"],
           "params": {"operand": "Делитель"}
         },
+        "min": {
+          "label": "Минимум",
+          "params": {}
+        },
+        "max": {
+          "label": "Максимум",
+          "params": {}
+        },
         "contains": {
           "label": "Содержит",
           "inputLabels": [

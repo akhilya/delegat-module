@@ -2917,6 +2917,8 @@ async function importMappingFile(event) {
           <template #node-subtract="p"><OpNode v-bind="p" /></template>
           <template #node-multiply="p"><OpNode v-bind="p" /></template>
           <template #node-divide="p"><OpNode v-bind="p" /></template>
+          <template #node-min="p"><OpNode v-bind="p" /></template>
+          <template #node-max="p"><OpNode v-bind="p" /></template>
           <template #node-adapterFields="p"
             ><AdapterFieldsNode v-bind="p"
           /></template>

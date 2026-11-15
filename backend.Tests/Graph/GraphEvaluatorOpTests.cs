@@ -397,6 +397,27 @@ public class GraphEvaluatorOpTests
         Assert.False(result.Outputs.TryGetValue("out", out var v) && v != null);
     }
 
+    [Theory]
+    [InlineData("min", "10", "4", "7", "4")]
+    [InlineData("max", "10", "4", "7", "10")]
+    [InlineData("min", "3", "nope", "8", "3")]
+    public void MinMax_PicksNumericExtreme(string op, string a, string b, string c, string expected)
+    {
+        var result = new GraphEvalHarness()
+            .Static("a", a)
+            .Static("b", b)
+            .Static("c", c)
+            .Op("op", op)
+            .Edge("a", "op", "in-0")
+            .Edge("b", "op", "in-1")
+            .Edge("c", "op", "in-2")
+            .Field("out", "number")
+            .WireToField("op", "out")
+            .Eval();
+
+        GraphAssert.Output(result, "out", expected, "number");
+    }
+
     private static Delegat.Services.Marketplace.Graph.GraphEvalResult EvalLogic(
         string op,
         string a,

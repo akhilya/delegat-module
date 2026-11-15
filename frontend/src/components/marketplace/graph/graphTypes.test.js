@@ -75,7 +75,9 @@ describe("modifierOutputType", () => {
 
   it("uses catalog categories", () => {
     for (const [type, category] of Object.entries(MODIFIER_CATEGORIES)) {
-      if (["toText", "join", "template", "takeFirst", "forceType"].includes(type)) {
+      if (
+        ["toText", "join", "template", "takeFirst", "forceType"].includes(type)
+      ) {
         continue;
       }
       const out = modifierOutputType(type, "select");
@@ -115,6 +117,8 @@ describe("OP_SPECS", () => {
       "subtract",
       "multiply",
       "divide",
+      "min",
+      "max",
       "contains",
       "isEmpty",
       "isValid",
@@ -143,6 +147,8 @@ describe("OP_SPECS", () => {
       subtract: "number",
       multiply: "number",
       divide: "number",
+      min: "number",
+      max: "number",
       contains: "boolean",
       isEmpty: "boolean",
       isValid: "boolean",
@@ -157,6 +163,8 @@ describe("OP_SPECS", () => {
       subtract: ["number", "integer"],
       multiply: ["number", "integer"],
       divide: ["number", "integer"],
+      min: ["number", "integer"],
+      max: ["number", "integer"],
     };
     for (const [type, spec] of Object.entries(OP_SPECS)) {
       assert.equal(spec.output, output[type], type);

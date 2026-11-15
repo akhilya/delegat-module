@@ -600,4 +600,67 @@ public class GraphGeneratorSyncPreservesCollapsedTests
         // Existing fields get the schema-derived repeat marker refreshed on re-sync.
         Assert.Equal("weight", fields["31565"].GetProperty("repeatOf").GetString());
     }
+
+    [Fact]
+    public void PruneStaleAttributeSources_DropsDeletedAttributeBindings()
+    {
+        const string graph = """
+            {
+              "nodes": [
+                {
+                  "id": "src-deleted",
+                  "type": "attribute",
+                  "data": { "attributeId": 5, "label": "Deleted" }
+                },
+                {
+                  "id": "src-live",
+                  "type": "attribute",
+                  "data": { "attributeId": 9, "label": "Live" }
+                },
+                {
+                  "id": "adapter-fields",
+                  "type": "adapterFields",
+                  "data": {
+                    "fields": [
+                      {
+                        "fieldKey": "title",
+                        "source": { "type": "attribute", "attributeId": 5 }
+                      },
+                      {
+                        "fieldKey": "color",
+                        "source": { "type": "storeAttribute", "attributeId": 3 }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "edges": [
+                { "id": "e1", "source": "src-deleted", "target": "adapter-fields", "targetHandle": "f:title" },
+                { "id": "e2", "source": "src-live", "target": "adapter-fields", "targetHandle": "f:color" }
+              ]
+            }
+            """;
+
+        var result = GraphGenerator.PruneStaleAttributeSources(
+            graph,
+            categoryAttributeIds: [9],
+            storeAttributeIds: []);
+
+        using var doc = JsonDocument.Parse(result);
+        var nodes = doc.RootElement.GetProperty("nodes").EnumerateArray().ToList();
+        Assert.DoesNotContain(nodes, n => n.GetProperty("id").GetString() == "src-deleted");
+        Assert.Contains(nodes, n => n.GetProperty("id").GetString() == "src-live");
+
+        var fields = nodes
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+        Assert.False(fields["title"].TryGetProperty("source", out _));
+        Assert.False(fields["color"].TryGetProperty("source", out _));
+
+        var edges = doc.RootElement.GetProperty("edges").EnumerateArray()
+            .Select(e => e.GetProperty("id").GetString())
+            .ToList();
+        Assert.Equal(["e2"], edges);
+    }
 }

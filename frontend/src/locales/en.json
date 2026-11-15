@@ -2085,6 +2085,14 @@
           "inputLabels": ["number"],
           "params": {"operand": "Divisor"}
         },
+        "min": {
+          "label": "Min",
+          "params": {}
+        },
+        "max": {
+          "label": "Max",
+          "params": {}
+        },
         "contains": {
           "label": "Contains",
           "inputLabels": [

@@ -37,6 +37,7 @@ public static class MappingGraphBlockCatalog
     private static readonly HashSet<string> MultiInputOps =
     [
         "formatString", "join", "makeArray", "arrayAppend", "arrayPrepend",
+        "min", "max",
     ];
 
     private static readonly (string Type, object Inputs, string Output, string[]? Accepts)[] OpSpecs =
@@ -63,6 +64,8 @@ public static class MappingGraphBlockCatalog
         ("subtract", "single", "number", ["number", "integer"]),
         ("multiply", "single", "number", ["number", "integer"]),
         ("divide", "single", "number", ["number", "integer"]),
+        ("min", "multi", "number", ["number", "integer"]),
+        ("max", "multi", "number", ["number", "integer"]),
     ];
 
     /// <summary>JSON payload for GET graph / GET mapping-graph/blocks.</summary>
