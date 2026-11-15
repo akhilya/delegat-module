@@ -72,7 +72,7 @@ public class OzonOAuthController : ControllerBase
         // cookie is present — it proves the browser actually started the flow
         // here, and binds the completion to the store the user picked.
         var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-        Response.Cookies.Append(TxCookieName, $"{storeId.Value}.{nonce}", new CookieOptions
+        Response.Cookies.Append(TxCookieName, $"{storeId}.{nonce}", new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
@@ -83,7 +83,7 @@ public class OzonOAuthController : ControllerBase
 
         var url = $"{_platformLinkOptions.ControlPlaneUrl}/api/ozon/oauth/start" +
                   $"?instance={Uri.EscapeDataString(_platformLinkOptions.InstanceId)}" +
-                  $"&store={storeId.Value}";
+                  $"&store={storeId}";
 
         return Ok(new { url });
     }
@@ -124,14 +124,21 @@ public class OzonOAuthController : ControllerBase
         }
         Response.Cookies.Delete(TxCookieName, new CookieOptions { Path = TxCookiePath });
 
+        // The bound store must be the selected one — the permission handler
+        // checked membership against selected_store_id, so accepting a forged
+        // tx cookie pointing at another store would write credentials there.
+        // GetSelectedStoreIdAsync also re-verifies membership, closing the gap
+        // when selected_store_id itself is forged to a non-member store.
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
+        if (txStoreId is null || txStoreId.Value != selectedStoreId)
+            return Redirect("/adapter?ozonError=store_mismatch");
+
         var grant = await _platformLink.ClaimOzonGrantAsync(ticket, ct);
         if (grant is null || string.IsNullOrEmpty(grant.AccessToken))
             return Redirect("/adapter?ozonError=claim_failed");
 
-        var storeId = txStoreId
-            ?? await _currentUserService.GetSelectedStoreIdAsync()
-            ?? grant.StoreHint;
-        if (storeId is null || !await _db.stores.AnyAsync(s => s.Id == storeId.Value, ct))
+        var storeId = txStoreId.Value;
+        if (!await _db.stores.AnyAsync(s => s.Id == storeId, ct))
             return Redirect("/adapter?ozonError=store_not_found");
 
         var credentials = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -147,12 +154,12 @@ public class OzonOAuthController : ControllerBase
             ? enc.Encrypt(JsonSerializer.Serialize(credentials))
             : JsonSerializer.Serialize(credentials);
 
-        var connection = await FindOauthConnectionAsync(storeId.Value, grant.SellerId, ct);
+        var connection = await FindOauthConnectionAsync(storeId, grant.SellerId, ct);
         if (connection is null)
         {
             try
             {
-                await _quota.EnsureConnectionQuotaAsync(storeId.Value);
+                await _quota.EnsureConnectionQuotaAsync(storeId);
             }
             catch (ApiException)
             {
@@ -167,7 +174,7 @@ public class OzonOAuthController : ControllerBase
                 credentialsJson = credsJson,
                 settingsJson = null,
                 isActive = true,
-                storeId = storeId.Value,
+                storeId = storeId,
             });
             _db.marketplaceConnections.Add(connection);
         }
@@ -180,7 +187,7 @@ public class OzonOAuthController : ControllerBase
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation(
             "Ozon OAuth grant claimed for store {StoreId}, connection {ConnectionId}",
-            storeId.Value, connection.Id);
+            storeId, connection.Id);
 
         return Redirect($"/adapter/{connection.Id}?ozonConnected=1");
     }
