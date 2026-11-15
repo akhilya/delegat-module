@@ -66,7 +66,6 @@ public class MedusaPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker
         MarketplaceCapabilities.DeleteGroups |
         MarketplaceCapabilities.GetOrders |
         MarketplaceCapabilities.UpdateOrderStatus |
-        MarketplaceCapabilities.CustomFields |
         MarketplaceCapabilities.GetOrderLabels;
 
     public async Task<MarketplaceSandboxReadResponse> ReadAsync(

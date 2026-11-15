@@ -544,7 +544,7 @@ public class CategoryMappingController : ControllerBase
             },
             externalFields = includeSchema ? cardFields?.Select(MappingFieldSchema.ToDto) : null,
             priceFields = includeSchema ? priceFields?.Select(MappingFieldSchema.ToDto) : null,
-            allowCustomFields = adapter?.Capabilities.HasFlag(MarketplaceCapabilities.CustomFields) == true,
+            allowCustomFields = adapter != null && LocalCategoryAdapterFields.SupportsCustomFields(adapter.Key),
             blocks = MappingGraphBlockCatalog.Describe(),
         });
     }

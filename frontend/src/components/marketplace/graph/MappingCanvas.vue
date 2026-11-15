@@ -2240,7 +2240,7 @@ function currentSelection() {
 }
 
 // Snapshot the current selection (excluding the non-deletable adapter sink) + its internal edges.
-function copySelection() {
+function snapshotSelection() {
   const sel = currentSelection();
   if (!sel.length) return false;
   const ids = new Set(sel.map((n) => n.id));
@@ -2267,6 +2267,11 @@ function copySelection() {
         };
       }),
   };
+  return true;
+}
+
+function copySelection() {
+  if (!snapshotSelection()) return false;
   writeSystemClipboard({ kind: CLIPBOARD_KIND, ...clipboard.value });
   return true;
 }
@@ -2325,7 +2330,7 @@ async function pasteClipboard() {
 }
 
 function duplicateSelection() {
-  if (copySelection()) spawnCopies(clipboard.value, { x: 40, y: 40 });
+  if (snapshotSelection()) spawnCopies(clipboard.value, { x: 40, y: 40 });
 }
 
 let saveInFlight = null;
