@@ -301,6 +301,13 @@ function commitCustomName(field, raw) {
   });
 }
 
+// Render adapter fields in pages: adapters can carry hundreds of fields and
+// mounting every row (radios, tooltips, selects) at once freezes the panel.
+const ADAPTER_FIELD_PAGE = 60;
+const adapterFieldPage = ref(ADAPTER_FIELD_PAGE);
+watch([adapterFieldFilter, adapterGroupFilter], () => {
+  adapterFieldPage.value = ADAPTER_FIELD_PAGE;
+});
 const filteredAdapterFields = computed(() => {
   const q = adapterFieldFilter.value.trim().toLowerCase();
   const list = adapterFields.value;
@@ -316,6 +323,12 @@ const filteredAdapterFields = computed(() => {
     );
   });
 });
+const visibleAdapterFields = computed(() =>
+  filteredAdapterFields.value.slice(0, adapterFieldPage.value),
+);
+const hiddenAdapterFieldCount = computed(
+  () => filteredAdapterFields.value.length - adapterFieldPage.value,
+);
 
 const adapterSourceValue = (f) => {
   if (f.aliasOf) return `m:${f.aliasOf}`;
@@ -443,8 +456,13 @@ const arrayItems = computed(() => {
     .filter(Boolean);
 });
 const arrayDraft = ref("");
+// An empty list serializes as "" (never "[]"): DeserializeMultiselect returns
+// non-empty JSON only, so "[]" would survive as a truthy string literal.
 const emitArrayItems = (items) =>
-  setData({ staticValue: JSON.stringify(items), label: items.join(", ") });
+  setData({
+    staticValue: items.length ? JSON.stringify(items) : "",
+    label: items.join(", "),
+  });
 function arrayAdd() {
   const v = arrayDraft.value.trim();
   if (!v) return;
@@ -499,6 +517,7 @@ watch(
   () => props.node?.id,
   () => {
     arrayOptionFilter.value = "";
+    adapterFieldPage.value = ADAPTER_FIELD_PAGE;
   },
 );
 const filteredArrayOptions = computed(() => {
@@ -988,7 +1007,7 @@ function resolvePreview(fieldKey, raw) {
             </Select>
             <div class="space-y-3">
               <div
-                v-for="f in filteredAdapterFields"
+                v-for="f in visibleAdapterFields"
                 :key="f.fieldKey"
                 :data-fk="f.fieldKey"
                 :class="[
@@ -1134,6 +1153,20 @@ function resolvePreview(fieldKey, raw) {
               >
                 {{ t("marketplace.graph.inspector.fieldSearchEmpty") }}
               </p>
+              <Button
+                v-if="hiddenAdapterFieldCount > 0"
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-7 w-full text-xs text-muted-foreground"
+                @click="adapterFieldPage += ADAPTER_FIELD_PAGE"
+              >
+                {{
+                  t("marketplace.graph.inspector.showMoreFields", {
+                    count: hiddenAdapterFieldCount,
+                  })
+                }}
+              </Button>
             </div>
 
             <Button
