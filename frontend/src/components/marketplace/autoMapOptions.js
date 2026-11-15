@@ -28,9 +28,12 @@ const lev = (a, b) => {
   return prev[n];
 };
 
+// Match by label first; the raw value is dictionary-local (id "1" can mean
+// "Red" in one dictionary and "Blue" in another), so it only counts when the
+// option has no label of its own.
 const keys = (o) => {
-  const k = [norm(o?.label), norm(o?.value)].filter(Boolean);
-  return [...new Set(k)];
+  const k = norm(o?.label) || norm(o?.value);
+  return k ? [k] : [];
 };
 
 function bestMatch(source, targets) {
