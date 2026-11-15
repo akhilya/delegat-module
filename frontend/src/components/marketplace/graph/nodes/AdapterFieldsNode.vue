@@ -296,107 +296,126 @@ const topFor = (i) => `${HEADER + i * ROW + ROW / 2}px`;
             class="vf-adapter__row cursor-pointer"
             @click.stop="data.openField?.(row.field.fieldKey)"
           >
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <span class="vf-adapter__label">
-                  {{ fieldLabel(row.field)
-                  }}<span v-if="row.field.isRequired" class="vf-req"> *</span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent class="max-w-72 whitespace-pre-line">
-                {{ fieldTooltip(row.field) }}
-              </TooltipContent>
-            </Tooltip>
+            <span class="vf-adapter__info">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <span class="vf-adapter__label">
+                    {{ fieldLabel(row.field) }}
+                    <span v-if="row.field.isRequired" class="vf-req"> *</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent class="max-w-72 whitespace-pre-line">
+                  {{ fieldTooltip(row.field) }}
+                </TooltipContent>
+              </Tooltip>
+              <span v-if="row.field.unit" class="vf-adapter__unit">
+                {{ row.field.unit }}
+              </span>
+            </span>
 
-            <UnitMismatchNotice
-              v-if="row.field.source"
-              :warning="data.unitWarnings?.[row.field.fieldKey]"
-            />
+            <span class="vf-adapter__mid">
+              <Tooltip v-if="row.field.source">
+                <TooltipTrigger as-child>
+                  <component
+                    :is="
+                      analysis[row.field.fieldKey]?.importable
+                        ? ArrowLeftRight
+                        : ArrowLeft
+                    "
+                    :class="[
+                      'vf-adapter__dir',
+                      analysis[row.field.fieldKey]?.importable
+                        ? 'vf-adapter__dir--import'
+                        : 'vf-adapter__dir--export',
+                    ]"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{
+                    analysis[row.field.fieldKey]?.importable
+                      ? t("marketplace.graph.importExportTitle")
+                      : t("marketplace.graph.exportOnlyTitle")
+                  }}
+                </TooltipContent>
+              </Tooltip>
 
-            <Tooltip v-if="row.field.omit">
-              <TooltipTrigger as-child>
-                <span
-                  class="vf-adapter__pill vf-adapter__pill--omit"
-                  @click.stop="data.openField?.(row.field.fieldKey)"
-                  >{{ t("marketplace.graph.omitFieldShort") }}</span
-                >
-              </TooltipTrigger>
-              <TooltipContent>
-                {{ t("marketplace.graph.omitFieldTitle") }}
-              </TooltipContent>
-            </Tooltip>
+              <UnitMismatchNotice
+                v-if="row.field.source"
+                :warning="data.unitWarnings?.[row.field.fieldKey]"
+              />
 
-            <Tooltip v-if="row.field.repeatOf">
-              <TooltipTrigger as-child>
-                <span
-                  class="vf-adapter__pill vf-adapter__pill--alias"
-                  @click.stop="data.openField?.(row.field.fieldKey)"
-                >
-                  ≈ {{ aliasPrimaryLabel(row.field) }}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {{
-                  t("marketplace.graph.repeatOfTitle", {
-                    primary: aliasPrimaryLabel(row.field),
-                  })
-                }}
-              </TooltipContent>
-            </Tooltip>
+              <Tooltip v-if="analysis[row.field.fieldKey]?.fanOut">
+                <TooltipTrigger as-child>
+                  <AlertTriangle
+                    class="size-2.5 shrink-0 cursor-help text-amber-500"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ fanOutTitle(row.field) }}
+                </TooltipContent>
+              </Tooltip>
+            </span>
 
-            <Tooltip v-if="row.field.aliasOf">
-              <TooltipTrigger as-child>
-                <span
-                  class="vf-adapter__pill vf-adapter__pill--alias"
-                  @click.stop="data.openField?.(row.field.fieldKey)"
-                >
-                  = {{ aliasPrimaryLabel(row.field) }}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {{ aliasTitle(row.field) }}
-              </TooltipContent>
-            </Tooltip>
+            <span class="vf-adapter__pills">
+              <Tooltip v-if="row.field.omit">
+                <TooltipTrigger as-child>
+                  <span
+                    class="vf-adapter__pill vf-adapter__pill--omit"
+                    @click.stop="data.openField?.(row.field.fieldKey)"
+                    >{{ t("marketplace.graph.omitFieldShort") }}</span
+                  >
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.graph.omitFieldTitle") }}
+                </TooltipContent>
+              </Tooltip>
 
-            <component
-              v-if="row.field.source"
-              :is="
-                analysis[row.field.fieldKey]?.importable
-                  ? ArrowLeftRight
-                  : ArrowLeft
-              "
-              :class="[
-                'vf-adapter__dir',
-                analysis[row.field.fieldKey]?.importable
-                  ? 'vf-adapter__dir--import'
-                  : 'vf-adapter__dir--export',
-              ]"
-            />
+              <Tooltip v-if="row.field.repeatOf">
+                <TooltipTrigger as-child>
+                  <span
+                    class="vf-adapter__pill vf-adapter__pill--alias"
+                    @click.stop="data.openField?.(row.field.fieldKey)"
+                  >
+                    ≈ {{ aliasPrimaryLabel(row.field) }}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{
+                    t("marketplace.graph.repeatOfTitle", {
+                      primary: aliasPrimaryLabel(row.field),
+                    })
+                  }}
+                </TooltipContent>
+              </Tooltip>
 
-            <Tooltip v-if="analysis[row.field.fieldKey]?.fanOut">
-              <TooltipTrigger as-child>
-                <AlertTriangle
-                  class="size-2.5 shrink-0 cursor-help text-amber-500"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                {{ fanOutTitle(row.field) }}
-              </TooltipContent>
-            </Tooltip>
+              <Tooltip v-if="row.field.aliasOf">
+                <TooltipTrigger as-child>
+                  <span
+                    class="vf-adapter__pill vf-adapter__pill--alias"
+                    @click.stop="data.openField?.(row.field.fieldKey)"
+                  >
+                    = {{ aliasPrimaryLabel(row.field) }}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ aliasTitle(row.field) }}
+                </TooltipContent>
+              </Tooltip>
 
-            <Tooltip v-if="row.field.source">
-              <TooltipTrigger as-child>
-                <span
-                  class="vf-adapter__pill"
-                  :style="pillStyle(row.field.outputType)"
-                  @click.stop="data.openField?.(row.field.fieldKey)"
-                  >{{ boundLabel(row.field) }}</span
-                >
-              </TooltipTrigger>
-              <TooltipContent>
-                {{ sourceTitle(row.field) }}
-              </TooltipContent>
-            </Tooltip>
+              <Tooltip v-if="row.field.source">
+                <TooltipTrigger as-child>
+                  <span
+                    class="vf-adapter__pill"
+                    :style="pillStyle(row.field.outputType)"
+                    @click.stop="data.openField?.(row.field.fieldKey)"
+                    >{{ boundLabel(row.field) }}</span
+                  >
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ sourceTitle(row.field) }}
+                </TooltipContent>
+              </Tooltip>
+            </span>
           </div>
         </template>
         <Tooltip>

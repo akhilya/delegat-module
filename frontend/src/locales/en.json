@@ -1951,6 +1951,7 @@
       "removeInput": "Remove input",
       "addInput": "Add input",
       "exportOnlyTitle": "Export only",
+      "importExportTitle": "Export and import",
       "nodeKinds": {
         "attribute": "Category attribute",
         "storeAttribute": "Store attribute",

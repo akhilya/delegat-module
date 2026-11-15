@@ -153,7 +153,12 @@ const paramPinRowOffset = computed(
 
       <div v-if="!collapsed" :class="hasPins && 'vf-mod__body'">
         <div v-if="summary" class="vf-card__title vf-card__title--sm">
-          {{ summary }}
+          <span
+            v-if="data.modifierType === 'unitConversion'"
+            class="vf-mod__unit"
+            >{{ summary }}</span
+          >
+          <template v-else>{{ summary }}</template>
         </div>
         <div v-if="!hasPins" class="vf-card__pin vf-card__pin--right">
           <span class="vf-dot" :style="{ background: pinColor(outType) }" />

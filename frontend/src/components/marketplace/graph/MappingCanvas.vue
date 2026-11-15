@@ -3105,6 +3105,16 @@ async function importMappingFile(event) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.vf-mod__unit {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
 .vf-card__title--sm {
   font-weight: 500;
   font-size: 12px;
@@ -3172,6 +3182,36 @@ async function importMappingFile(event) {
 .vf-adapter__row--add {
   color: var(--muted-foreground);
   border-top: 1px dashed var(--border);
+}
+.vf-adapter__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vf-adapter__mid {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-inline: auto;
+}
+.vf-adapter__pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vf-adapter__unit {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  line-height: 1.5;
 }
 .vf-adapter__label {
   flex: 1;
