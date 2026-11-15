@@ -269,7 +269,7 @@ public static class GraphEvaluator
                         break;
                     case "and":
                     {
-                        var inputs = AllInputs(incoming, pins, nodeId);
+                        var inputs = ConnectedInputs(incoming, pins, nodeId);
                         pins[nodeId] = new PinValue(inputs.Count > 0 && inputs.All(IsTruthy));
                         break;
                     }
@@ -297,6 +297,21 @@ public static class GraphEvaluator
                         var hasA = TryToDecimal(inputs.Count > 0 ? inputs[0] : null, out var a);
                         var hasB = TryToDecimal(inputs.Count > 1 ? inputs[1] : null, out var b);
                         var res = hasA && hasB && (node.type == "greaterThan" ? a > b : a < b);
+                        pins[nodeId] = new PinValue(res);
+                        break;
+                    }
+                    case "min":
+                    case "max":
+                    {
+                        var inputs = AllInputs(incoming, pins, nodeId);
+                        decimal? res = null;
+                        foreach (var v in inputs)
+                        {
+                            if (!TryToDecimal(v, out var d)) continue;
+                            res = res == null
+                                ? d
+                                : node.type == "min" ? Math.Min(res.Value, d) : Math.Max(res.Value, d);
+                        }
                         pins[nodeId] = new PinValue(res);
                         break;
                     }
@@ -373,6 +388,29 @@ public static class GraphEvaluator
     }
 
     private static List<object?> AllInputs(Dictionary<string, List<GraphEdge>> incoming,
+        Dictionary<string, PinValue> pins, string nodeId)
+    {
+        var values = new List<object?>();
+        if (!incoming.TryGetValue(nodeId, out var edges))
+            return values;
+
+        // Preserve handle positions: a missing wire leaves its index empty instead of
+        // shifting later inputs (ifElse branches, formatString placeholders).
+        var byIndex = new List<object?>();
+        var occupied = new HashSet<int>();
+        foreach (var e in edges)
+        {
+            var index = HandleIndex(e.targetHandle);
+            while (byIndex.Count <= index) byIndex.Add(null);
+            var value = pins.TryGetValue(e.source, out var pv) ? pv.Value : null;
+            if (occupied.Add(index)) byIndex[index] = value;
+            else byIndex.Add(value); // second wire on the same pin: keep it at the tail
+        }
+        return byIndex;
+    }
+
+    /// <summary>Values of the node's wires in pin order, without gaps for unwired pins.</summary>
+    private static List<object?> ConnectedInputs(Dictionary<string, List<GraphEdge>> incoming,
         Dictionary<string, PinValue> pins, string nodeId)
     {
         var values = new List<object?>();

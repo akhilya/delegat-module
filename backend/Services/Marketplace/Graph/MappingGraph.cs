@@ -115,6 +115,8 @@ public class GraphNodeData
     public int? inputCount { get; set; }
     /// <summary>Element index for "arrayIndex".</summary>
     public int? index { get; set; }
+    /// <summary>Right-hand operand for the arithmetic ops (legacy graphs; arithmetic lives in modifiers).</summary>
+    public decimal? operand { get; set; }
 
     // Output node(s)
     /// <summary>Target marketplace field key for the legacy single-field "output" node.</summary>
@@ -180,6 +182,10 @@ public class AdapterField
     /// Export copies the primary's evaluated value into this key; import reverses only the primary.
     /// Alias fields have no input pin and own connections are ignored.</summary>
     public string? aliasOf { get; set; }
+    /// <summary>Semantic-duplicate marker: carries the same information as another field (by fieldKey)
+    /// but keeps its own source wiring and conversion. Visual-only dedup - collapsed under the hidden
+    /// group, still exported on its own.</summary>
+    public string? repeatOf { get; set; }
     /// <summary>When true the field is excluded from export outputs and import projections.
     /// Mutually exclusive with <see cref="source"/> / <see cref="aliasOf"/> and graph wires.</summary>
     public bool omit { get; set; }

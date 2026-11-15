@@ -56,7 +56,8 @@ public static class AttributeDuplicateMatcher
         ExternalField field,
         AttributeType fieldType,
         string? fieldUnitCode,
-        IEnumerable<CategoryAttribute> attributes)
+        IEnumerable<CategoryAttribute> attributes,
+        bool allowConvertibleUnits = false)
     {
         var importedName = AttributeImportSemantics.NormalizeName(field, fieldUnitCode);
         var fieldSemantics = SemanticMarkers(field.Name, field.Description, importedName);
@@ -65,7 +66,8 @@ public static class AttributeDuplicateMatcher
 
         return attributes
             .Where(attribute => attribute.type == fieldType
-                && AttributeUnits.AreSame(attribute.unitCode, fieldUnitCode)
+                && (AttributeUnits.AreSame(attribute.unitCode, fieldUnitCode)
+                    || (allowConvertibleUnits && AttributeUnits.TryGetConversion(attribute.unitCode, fieldUnitCode, out _)))
                 && SemanticMarkers(attribute.name, attribute.description).SetEquals(fieldSemantics))
             .Select(attribute => ScoreCandidate(
                 attribute,
@@ -85,7 +87,7 @@ public static class AttributeDuplicateMatcher
         string fieldDescription,
         string fieldKey)
     {
-        var nameScore = Similarity(importedName, attribute.name);
+        var nameScore = Similarity(importedName, AttributeImportNameNormalizer.Normalize(attribute.name, attribute.unitCode, attribute.description));
         var descriptionScore = Similarity(fieldDescription, attribute.description);
         var exactKey = string.Equals(
             fieldKey,

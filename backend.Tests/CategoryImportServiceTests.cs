@@ -11,6 +11,79 @@ namespace Delegat.Tests;
 public class CategoryImportServiceTests
 {
     [Fact]
+    public async Task Import_LeavesAmbiguousLegacyMatchesUnwired()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("colour", "Product color", true, "string")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var first = data.AddCategoryAttribute(category.Id, "Product color", key: "one");
+        var second = data.AddCategoryAttribute(category.Id, "Product color", key: "two");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            requireDuplicateDecisions: false);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.DoesNotContain($"\"attributeId\":{first.Id}", graph);
+        Assert.DoesNotContain($"\"attributeId\":{second.Id}", graph);
+        Assert.Equal(2, await db.categoryAttributes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Import_ReusesRenamedSimilarAttributeForLegacyJob()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("ext_width", "Ширина товара", true, "string")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(category.Id, "Ширина товара общая", key: "local_width");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            requireDuplicateDecisions: false);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, result.AttributesCreated);
+        Assert.Contains($"\"attributeId\":{existing.Id}", (await db.categoryMappings.SingleAsync()).graphJson);
+    }
+
+    [Fact]
+    public async Task Import_ReusesConvertibleUnitWithConversionInGraph()
+    {
+        var (svc, db, connection) = Create("leaf", [new ExternalField("mass", "Weight", true, "number", UnitCode: "g")]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var existing = data.AddCategoryAttribute(category.Id, "Вес", AttributeType.Number, key: "local_weight");
+        existing.unitCode = "kg";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions: [new CategoryImportAttributeDecision { fieldKey = "mass", action = "reuse", existingAttributeId = existing.Id }]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.Contains("unitConversion", graph);
+        Assert.Contains("\"fromUnit\":\"kg\"", graph);
+        Assert.Contains("\"toUnit\":\"g\"", graph);
+        Assert.Contains($"\"attributeId\":{existing.Id}", graph);
+    }
+
+    [Fact]
+    public async Task Import_DoesNotTreatDictionaryCharacteristicsAsProductFields()
+    {
+        var (svc, db, connection) = Create("leaf", [
+            new ExternalField("model", "Model", true, "select"),
+            new ExternalField("sku_color", "SKU color", true, "select"),
+            new ExternalField("descriptive_code", "Characteristic", true, "string")]);
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", "Products");
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(3, await db.categoryAttributes.CountAsync());
+        var graph = (await db.categoryMappings.SingleAsync()).graphJson!;
+        Assert.DoesNotContain("\"field\":\"sku\"", graph);
+        Assert.DoesNotContain("\"field\":\"description\"", graph);
+    }
+
+    [Fact]
     public async Task Import_ReusesNormalizedFileDuplicateWithoutMutatingDefinition()
     {
         var (svc, db, connection) = Create("leaf",
@@ -604,6 +677,114 @@ public class CategoryImportServiceTests
 
         Assert.Equal("name", fields["name"].GetProperty("source").GetProperty("field").GetString());
         Assert.Equal("name", fields["product_name"].GetProperty("aliasOf").GetString());
+    }
+
+    [Fact]
+    public async Task Import_AliasesFieldsBoundToSameCategoryAttribute()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("shade", "Shade", true, "string", SortOrder: 0),
+            new ExternalField("31565", "Shade", false, "string", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Shade", AttributeType.Text, key: "shade");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "shade", action = "reuse", existingAttributeId = attr.Id },
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // The named field keeps the binding; the numeric attribute id aliases it.
+        Assert.Equal(attr.Id, fields["shade"].GetProperty("source").GetProperty("attributeId").GetInt32());
+        Assert.Equal("shade", fields["31565"].GetProperty("aliasOf").GetString());
+        Assert.False(fields["31565"].TryGetProperty("source", out _));
+    }
+
+    [Fact]
+    public async Task Import_RepeatsFieldsBoundToSameAttributeWithDifferentUnits()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("weight", "Weight", true, "number", UnitCode: "kg", SortOrder: 0),
+            new ExternalField("31565", "Weight", false, "number", UnitCode: "g", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Weight", AttributeType.Number, key: "weight");
+        attr.unitCode = "kg";
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "weight", action = "reuse", existingAttributeId = attr.Id },
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // Different units need separate conversion: no alias merge, hidden as a repeat instead
+        // (the field keeps its own source-node chain with the g conversion).
+        Assert.Equal("weight", fields["31565"].GetProperty("repeatOf").GetString());
+        Assert.False(fields["31565"].TryGetProperty("aliasOf", out _));
+        Assert.Contains(
+            doc.RootElement.GetProperty("edges").EnumerateArray(),
+            e => e.GetProperty("targetHandle").GetString() == "f:31565");
+    }
+
+    [Fact]
+    public async Task Import_MarksAttributeFieldRepeatingNamedProductField()
+    {
+        var (svc, db, connection) = Create("leaf",
+        [
+            new ExternalField("name", "Name", true, "string", SortOrder: 0),
+            new ExternalField("31565", "Название", false, "string", SortOrder: 10),
+        ]);
+        var data = new TestDataBuilder(db);
+        var category = data.AddCategory(connection.storeId, "Existing");
+        var attr = data.AddCategoryAttribute(category.Id, "Название", AttributeType.Text, key: "name");
+        await db.SaveChangesAsync();
+
+        var result = await svc.ImportExternalCategoryAsync(connection, "leaf", localCategoryId: category.Id,
+            attributeDecisions:
+            [
+                new CategoryImportAttributeDecision { fieldKey = "31565", action = "reuse", existingAttributeId = attr.Id },
+            ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+
+        var mapping = await db.categoryMappings.SingleAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(mapping.graphJson!);
+        var fields = doc.RootElement.GetProperty("nodes").EnumerateArray()
+            .First(n => n.GetProperty("type").GetString() == "adapterFields")
+            .GetProperty("data").GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fieldKey").GetString()!);
+
+        // Visual-only dedup: 31565 keeps its own attribute binding but is flagged as a repeat.
+        Assert.Equal("name", fields["name"].GetProperty("source").GetProperty("field").GetString());
+        Assert.Equal("name", fields["31565"].GetProperty("repeatOf").GetString());
+        Assert.Equal(attr.Id, fields["31565"].GetProperty("source").GetProperty("attributeId").GetInt32());
     }
 
     [Fact]

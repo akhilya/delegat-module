@@ -1897,6 +1897,11 @@
       "productFilesByExtensionPrefix": "Files *.",
       "productFilesByExtensionLabel": "Product files by extension",
       "attributeFallback": "Attribute #{id}",
+      "allGroups": "All groups",
+      "otherFields": "Other fields",
+      "hiddenFields": "Hidden fields",
+      "unconnectedOnly": "Unconnected",
+      "allFieldsConnected": "All fields are connected",
       "adapterHeader": "Adapter fields",
       "addCustomField": "Add field",
       "addCustomFieldHint": "Drop a wire here or click to add a field for this mapping",
@@ -1908,6 +1913,7 @@
       "priceGroupValues": "Prices",
       "priceGroupStrategy": "Price strategy",
       "aliasMergedTitle": "Merged with «{primary}»: takes its value on export, ignored on import",
+      "repeatOfTitle": "Duplicates «{primary}»: hidden as a repeat - keeps its own wiring and value",
       "aliasMergedShortTitle": "Merged with «{primary}»",
       "omitFieldShort": "skip",
       "omitFieldTitle": "Not sent to the marketplace",
@@ -1945,6 +1951,7 @@
       "removeInput": "Remove input",
       "addInput": "Add input",
       "exportOnlyTitle": "Export only",
+      "importExportTitle": "Export and import",
       "nodeKinds": {
         "attribute": "Category attribute",
         "storeAttribute": "Store attribute",
@@ -2056,6 +2063,14 @@
             "A",
             "B"
           ],
+          "params": {}
+        },
+        "min": {
+          "label": "Min",
+          "params": {}
+        },
+        "max": {
+          "label": "Max",
           "params": {}
         },
         "contains": {
@@ -2233,6 +2248,7 @@
       "fieldsAddedCount": "Fields added: {count}",
       "schemaUpToDate": "Schema is up to date - no new fields",
       "graphSaved": "Graph saved",
+      "pasteSkipped": "Skipped {count} blocks on paste - their sources are unavailable in this cabinet",
       "invalidFileFormat": "Invalid format: expected an object with nodes and edges",
       "mappingExported": "Mapping exported",
       "mappingImported": "Mapping imported - click \"Save\"",

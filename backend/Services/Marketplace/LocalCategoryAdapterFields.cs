@@ -15,6 +15,14 @@ public static class LocalCategoryAdapterFields
     public static bool ShouldExposeLocalAttributes(string? adapterKey)
         => string.Equals(adapterKey, "medusa", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Store engines serialize arbitrary field keys, so mapping-local custom
+    /// fields can be exported. Marketplace adapters with a fixed remote schema
+    /// (Ozon, WB, Yandex, Avito) would silently drop them.
+    /// </summary>
+    public static bool SupportsCustomFields(string? adapterKey)
+        => adapterKey is "medusa" or "woocommerce" or "opencart";
+
     public static List<ExternalField> Merge(
         IReadOnlyCollection<ExternalField> adapterFields,
         IEnumerable<CategoryAttribute> attributes)

@@ -1897,6 +1897,11 @@
       "productFilesByExtensionPrefix": "Файлы *.",
       "productFilesByExtensionLabel": "Файлы товара по расширению",
       "attributeFallback": "Атрибут #{id}",
+      "allGroups": "Все группы",
+      "otherFields": "Другие поля",
+      "hiddenFields": "Скрытые поля",
+      "unconnectedOnly": "Без связи",
+      "allFieldsConnected": "Все поля связаны",
       "adapterHeader": "Поля адаптера",
       "addCustomField": "Добавить поле",
       "addCustomFieldHint": "Киньте провод сюда или нажмите, чтобы добавить поле для этого маппинга",
@@ -1908,6 +1913,7 @@
       "priceGroupValues": "Цены",
       "priceGroupStrategy": "Ценовая стратегия",
       "aliasMergedTitle": "Объединено с «{primary}»: при экспорте получает его значение, при импорте игнорируется",
+      "repeatOfTitle": "Дублирует «{primary}»: скрыто как повтор - проводка и значение свои",
       "aliasMergedShortTitle": "Объединено с «{primary}»",
       "omitFieldShort": "не отпр.",
       "omitFieldTitle": "Не отправляется на маркетплейс",
@@ -1945,6 +1951,7 @@
       "removeInput": "Убрать вход",
       "addInput": "Добавить вход",
       "exportOnlyTitle": "Только экспорт",
+      "importExportTitle": "Экспорт и импорт",
       "nodeKinds": {
         "attribute": "Атрибут категории",
         "storeAttribute": "Атрибут магазина",
@@ -2056,6 +2063,14 @@
             "A",
             "B"
           ],
+          "params": {}
+        },
+        "min": {
+          "label": "Минимум",
+          "params": {}
+        },
+        "max": {
+          "label": "Максимум",
           "params": {}
         },
         "contains": {
@@ -2233,6 +2248,7 @@
       "fieldsAddedCount": "Добавлено полей: {count}",
       "schemaUpToDate": "Схема актуальна - новых полей нет",
       "graphSaved": "Граф сохранён",
+      "pasteSkipped": "Пропущено блоков при вставке: {count} — их источники недоступны в этом кабинете",
       "invalidFileFormat": "Неверный формат: ожидается объект с nodes и edges",
       "mappingExported": "Маппинг экспортирован",
       "mappingImported": "Маппинг импортирован - нажмите «Сохранить»",

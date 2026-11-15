@@ -32,6 +32,14 @@ public sealed class FieldSpec
     /// Export copies the primary's value; import ignores the alias.
     /// </summary>
     public string? aliasOf { get; set; }
+    /// <summary>
+    /// Semantic-duplicate marker: the field carries the same information as another adapter field
+    /// (by <see cref="externalFieldKey"/>) but keeps its own source wiring and conversion.
+    /// Visual-only dedup - the field is collapsed under the hidden group, still exported on its own.
+    /// </summary>
+    public string? repeatOf { get; set; }
+    /// <summary>Key of the bound category/store attribute (for cross-type duplicate detection).</summary>
+    public string? sourceAttributeKey { get; set; }
 }
 
 /// <summary>
@@ -59,6 +67,11 @@ public static class GraphGenerator
         public bool? enabled { get; set; }
         public Dictionary<string, object>? @params { get; set; }
     }
+
+    // Spacing for nodes appended to an already-positioned graph (mirrors the frontend layout's
+    // 180px card width + 40px node gap per rank, ~64px card height + gap per row).
+    private const double AppendedColumnGap = 220;
+    private const double AppendedRowGap = 96;
 
     /// <summary>
     /// Every mapping must expose a grouping field ("mapping as a translation layer"):
@@ -165,6 +178,8 @@ public static class GraphGenerator
                 continue;
             }
 
+            field.repeatOf = fm.repeatOf;
+
             var mods = ParseActiveModifiers(fm.modifiersJson);
 
             if (mods.Count == 0)
@@ -237,6 +252,14 @@ public static class GraphGenerator
             .Where(f => !string.IsNullOrEmpty(f.fieldKey))
             .Select(f => f.fieldKey!));
 
+        // Newly appended nodes get positions only when the graph already stores a layout:
+        // the frontend auto-lays-out a fully position-less graph, but a mixed graph would
+        // leave the appended chain piled at the origin.
+        var positioned = graph.nodes.Where(n => n.position != null).ToList();
+        var hasSavedLayout = positioned.Count > 0;
+        var nextRowY = hasSavedLayout ? positioned.Max(n => n.position!.y) + AppendedRowGap : 0;
+        var leftColumnX = hasSavedLayout ? positioned.Min(n => n.position!.x) : 0;
+
         var incoming = AliasDuplicateProductFieldSources(
             specs.Where(f => f.isEnabled).ToList());
         foreach (var fm in incoming.OrderBy(f => f.sortOrder))
@@ -251,23 +274,79 @@ public static class GraphGenerator
                 existing.unit = fm.externalFieldUnit;
                 existing.unitCode = fm.externalFieldUnitCode;
                 existing.unitId = fm.externalFieldUnitId;
+                existing.group = fm.externalFieldGroup;
+                existing.description = fm.externalFieldDescription;
+                // repeatOf is schema-derived like group/description, so refresh it too;
+                // source/alias/omit stay the operator's state.
+                existing.repeatOf = fm.repeatOf;
                 continue;
             }
-            adapter.data.fields.Add(new AdapterField
-            {
-                fieldKey = fm.externalFieldKey,
-                unit = fm.externalFieldUnit,
-                unitCode = fm.externalFieldUnitCode,
-                unitId = fm.externalFieldUnitId,
-                label = fm.externalFieldName ?? fm.externalFieldKey,
-                outputType = fm.externalFieldType ?? "string",
-                isRequired = fm.isRequired,
-                aliasOf = fm.aliasOf,
-                source = string.IsNullOrEmpty(fm.aliasOf) && ParseActiveModifiers(fm.modifiersJson).Count == 0
-                    ? DirectBinding(fm)
-                    : null,
-            });
+            graph.edges ??= new List<GraphEdge>();
+            var nodeCountBefore = graph.nodes.Count;
+            var added = AppendSpecsToSink([fm], adapter.id ?? "adapter-fields", graph.nodes, graph.edges,
+                prefix => $"{prefix}-{Guid.NewGuid():N}");
+            adapter.data.fields.AddRange(added);
             have.Add(fm.externalFieldKey);
+
+            if (hasSavedLayout && graph.nodes.Count > nodeCountBefore)
+            {
+                var x = leftColumnX;
+                foreach (var appended in graph.nodes.Skip(nodeCountBefore))
+                {
+                    appended.position = new GraphPosition { x = x, y = nextRowY };
+                    x += AppendedColumnGap;
+                }
+                nextRowY += AppendedRowGap;
+            }
+        }
+
+        return JsonSerializer.Serialize(graph, SerializeOpts);
+    }
+
+    /// <summary>
+    /// Drop bindings and source nodes that reference attributes deleted from the local
+    /// category (or store attributes deleted from the store). Runs when the graph is
+    /// loaded so a removed attribute does not leave a stale pill, node, or edge.
+    /// </summary>
+    public static string PruneStaleAttributeSources(
+        string? existingGraphJson,
+        IReadOnlyCollection<int> categoryAttributeIds,
+        IReadOnlyCollection<int> storeAttributeIds)
+    {
+        if (string.IsNullOrWhiteSpace(existingGraphJson))
+            return existingGraphJson ?? "";
+
+        MappingGraph? graph;
+        try { graph = JsonSerializer.Deserialize<MappingGraph>(existingGraphJson, ParseOpts); }
+        catch (JsonException) { return existingGraphJson; }
+        if (graph?.nodes == null) return existingGraphJson;
+
+        bool Stale(string? type, int? id) => type switch
+        {
+            "attribute" => !categoryAttributeIds.Contains(id ?? -1),
+            "storeAttribute" => !storeAttributeIds.Contains(id ?? -1),
+            _ => false,
+        };
+
+        foreach (var node in graph.nodes)
+        {
+            if (node.data?.fields == null) continue;
+            foreach (var f in node.data.fields)
+            {
+                if (f.source != null && Stale(f.source.type, f.source.attributeId))
+                    f.source = null;
+            }
+        }
+
+        var staleNodeIds = graph.nodes
+            .Where(n => Stale(n.type, n.data?.attributeId))
+            .Select(n => n.id)
+            .ToHashSet();
+        if (staleNodeIds.Count > 0)
+        {
+            graph.nodes.RemoveAll(n => n.id != null && staleNodeIds.Contains(n.id));
+            graph.edges?.RemoveAll(e =>
+                staleNodeIds.Contains(e.source) || staleNodeIds.Contains(e.target));
         }
 
         return JsonSerializer.Serialize(graph, SerializeOpts);
@@ -365,6 +444,7 @@ public static class GraphGenerator
                 existingField.unitId = fm.externalFieldUnitId;
                 existingField.sortOrder = fm.sortOrder;
                 existingField.isRequired = fm.isRequired;
+                existingField.repeatOf = fm.repeatOf;
                 continue;
             }
 
@@ -381,6 +461,7 @@ public static class GraphGenerator
                 sortOrder = fm.sortOrder,
                 isRequired = fm.isRequired,
                 aliasOf = fm.aliasOf,
+                repeatOf = fm.repeatOf,
                 source = migratedSource ?? (string.IsNullOrEmpty(fm.aliasOf)
                     && ParseActiveModifiers(fm.modifiersJson).Count == 0
                     ? DirectBinding(fm)
@@ -434,43 +515,99 @@ public static class GraphGenerator
     /// </summary>
     internal static List<FieldSpec> AliasDuplicateProductFieldSources(List<FieldSpec> specs)
     {
-        var groups = specs
-            .Where(s =>
-                string.IsNullOrEmpty(s.aliasOf) &&
-                s.sourceType == FieldMappingSourceType.ProductField &&
-                !string.IsNullOrEmpty(s.sourceField))
-            .GroupBy(s => s.sourceField!, StringComparer.OrdinalIgnoreCase);
+        // Same binding target (product field, category/store attribute, or group name):
+        // keep one primary and merge the rest via aliasOf.
+        var bound = specs
+            .Where(s => string.IsNullOrEmpty(s.aliasOf) && BindingKey(s) != null)
+            .GroupBy(s => BindingKey(s)!, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var group in groups)
+        foreach (var group in bound)
         {
             var members = group.ToList();
             if (members.Count < 2)
                 continue;
 
             var primary = PickPrimaryProductField(members);
+            var primaryUnit = UnitKey(primary);
             foreach (var other in members)
             {
                 if (ReferenceEquals(other, primary))
                     continue;
+                if (UnitKey(other) != primaryUnit)
+                {
+                    // aliasOf would copy the primary's already-converted value - wrong units.
+                    // Keep the duplicate's own wiring+conversion, hide it visually instead.
+                    other.repeatOf ??= primary.externalFieldKey;
+                    continue;
+                }
                 other.aliasOf = primary.externalFieldKey;
                 other.sourceType = FieldMappingSourceType.Static;
                 other.sourceField = null;
                 other.sourceAttributeId = null;
+                other.sourceAttributeKey = null;
                 other.staticValue = null;
+            }
+        }
+
+        // Cross-type duplicates: an attribute-bound field whose bound attribute's key equals a
+        // product field another spec is bound to (e.g. named "weight" vs attribute keyed "weight").
+        // These keep their own source + conversion - marked repeatOf and hidden visually.
+        var productFieldPrimaries = specs
+            .Where(s =>
+                string.IsNullOrEmpty(s.aliasOf) &&
+                s.sourceType == FieldMappingSourceType.ProductField &&
+                !string.IsNullOrEmpty(s.sourceField))
+            .GroupBy(s => s.sourceField!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(m => IsNamedKey(m.externalFieldKey) ? 0 : 1)
+                    .ThenBy(m => m.sortOrder)
+                    .First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var s in specs)
+        {
+            if (!string.IsNullOrEmpty(s.aliasOf) || string.IsNullOrEmpty(s.sourceAttributeKey))
+                continue;
+            if (productFieldPrimaries.TryGetValue(s.sourceAttributeKey, out var primary) &&
+                !ReferenceEquals(s, primary))
+            {
+                s.repeatOf = primary.externalFieldKey;
             }
         }
 
         return specs;
     }
 
+    private static string? BindingKey(FieldSpec s) => s.sourceType switch
+    {
+        FieldMappingSourceType.ProductField when !string.IsNullOrEmpty(s.sourceField) =>
+            "pf:" + s.sourceField,
+        FieldMappingSourceType.CategoryAttribute when s.sourceAttributeId != null =>
+            "ca:" + s.sourceAttributeId,
+        FieldMappingSourceType.StoreAttribute when s.sourceAttributeId != null =>
+            "sa:" + s.sourceAttributeId,
+        FieldMappingSourceType.GroupName => "groupName",
+        _ => null,
+    };
+
+    private static string UnitKey(FieldSpec s) =>
+        s.externalFieldUnitCode ?? s.externalFieldUnitId ?? s.externalFieldUnit ?? "";
+
+    /// <summary>Named (non-numeric) adapter keys like <c>weight</c> are the canonical fields;
+    /// pure numeric keys are marketplace attribute ids.</summary>
+    private static bool IsNamedKey(string? key) =>
+        !string.IsNullOrEmpty(key) && key.Any(c => !char.IsDigit(c));
+
     private static FieldSpec PickPrimaryProductField(List<FieldSpec> members)
     {
         var target = members[0].sourceField ?? "";
         return members
-            .OrderByDescending(m =>
+            .OrderBy(m => IsNamedKey(m.externalFieldKey) ? 0 : 1)
+            .ThenByDescending(m =>
                 string.Equals(m.externalFieldKey, target, StringComparison.OrdinalIgnoreCase))
             .ThenBy(m => m.sortOrder)
-            .ThenBy(m => m.externalFieldKey.Length)
+            .ThenBy(m => m.externalFieldKey?.Length)
             .ThenBy(m => m.externalFieldKey, StringComparer.OrdinalIgnoreCase)
             .First();
     }

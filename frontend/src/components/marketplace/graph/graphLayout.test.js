@@ -126,7 +126,7 @@ describe("mapping graph layout", () => {
     };
     assert.equal(
       estimateNodeHeight(grouped),
-      estimateNodeHeight(ungrouped) + 36,
+      estimateNodeHeight(ungrouped) + 56,
     );
   });
 

@@ -365,6 +365,62 @@ public class GraphEvaluatorOpTests
         }
     }
 
+    [Theory]
+    [InlineData("min", "10", "4", "7", "4")]
+    [InlineData("max", "10", "4", "7", "10")]
+    [InlineData("min", "3", "nope", "8", "3")]
+    public void MinMax_PicksNumericExtreme(string op, string a, string b, string c, string expected)
+    {
+        var result = new GraphEvalHarness()
+            .Static("a", a)
+            .Static("b", b)
+            .Static("c", c)
+            .Op("op", op)
+            .Edge("a", "op", "in-0")
+            .Edge("b", "op", "in-1")
+            .Edge("c", "op", "in-2")
+            .Field("out", "number")
+            .WireToField("op", "out")
+            .Eval();
+
+        GraphAssert.Output(result, "out", expected, "number");
+    }
+
+    [Fact]
+    public void IfElse_GappedInputIndexKeepsBranchPositions()
+    {
+        // Wire only the condition (in-0) and the else-branch (in-2): the missing
+        // true-branch must stay empty instead of shifting the else value up.
+        var result = new GraphEvalHarness()
+            .Static("cond", "true")
+            .Static("alt", "else-value")
+            .Op("op", "ifElse")
+            .Edge("cond", "op", "in-0")
+            .Edge("alt", "op", "in-2")
+            .Field("out", "string")
+            .WireToField("op", "out")
+            .Eval();
+
+        Assert.False(result.Outputs.TryGetValue("out", out var v) && v != null);
+    }
+
+    [Fact]
+    public void And_GappedMiddlePinStillAnds()
+    {
+        // Wires on in-0 and in-2 with in-1 unwired: the gap must not count as a false operand.
+        var result = new GraphEvalHarness()
+            .Static("a", "1")
+            .Static("b", "yes")
+            .Op("op", "and")
+            .Edge("a", "op", "in-0")
+            .Edge("b", "op", "in-2")
+            .Field("out", "boolean")
+            .WireToField("op", "out")
+            .Eval();
+
+        GraphAssert.Output(result, "out", true, "boolean");
+    }
+
     private static Delegat.Services.Marketplace.Graph.GraphEvalResult EvalLogic(
         string op,
         string a,

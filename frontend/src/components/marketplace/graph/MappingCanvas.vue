@@ -92,7 +92,10 @@ import {
   sanitizeGraphEdges,
   mergeProductFieldSources,
   attributeValueType,
+  SOURCE_NODE_TYPES,
+  OP_NODE_TYPES,
 } from "./graphModel.js";
+import { MODIFIER_CATALOG } from "../modifierCatalog.js";
 import { layoutGraph, sinksOverlap } from "./graphLayout.js";
 import {
   localizeExternalFieldDescription,
@@ -200,6 +203,7 @@ const syncingFields = ref(false);
 const dirty = ref(false);
 // Content version of the stored graph this canvas was loaded from (conflict-safe save).
 let graphVersion = null;
+const allowCustomFields = ref(false);
 const previewing = ref(false);
 const selected = ref(null);
 const focusAdapterField = ref(null);
@@ -598,7 +602,7 @@ function refreshAnalysis(options = {}) {
     setFieldSource,
     setFieldMode,
     openField: openAdapterField,
-    addCustomField: addCustomAdapterField,
+    addCustomField: allowCustomFields.value ? addCustomAdapterField : undefined,
     unitWarnings: unitWarnings.directWarnings[ADAPTER_NODE_ID] || {},
   });
 
@@ -1097,6 +1101,14 @@ const adapterFieldsWithOptions = computed(() =>
       valueType: d.type === "multiselect" ? "array" : "string",
     })),
 );
+// Field whose input pin a wire drag started from - lets the node menu offer
+// that field's option values as ready-made standard-value blocks.
+const menuAdapterValueField = computed(() => {
+  const pc = pendingConnect.value;
+  if (!pc || pc.dir !== "target" || !pc.handleId?.startsWith("f:")) return null;
+  const key = pc.handleId.slice(2);
+  return adapterFieldsWithOptions.value.find((f) => f.fieldKey === key) || null;
+});
 
 function normalizeAiModelOption(m) {
   const id = m?.id ?? m?.Id;
@@ -1249,6 +1261,7 @@ onConnect((conn) => {
     next.target === ADAPTER_NODE_ID &&
     next.targetHandle === ADD_ADAPTER_FIELD_HANDLE
   ) {
+    if (!allowCustomFields.value) return;
     const created = addCustomAdapterField();
     if (!created) return;
     next = { ...next, targetHandle: `f:${created.fieldKey}` };
@@ -1654,6 +1667,7 @@ async function load(options = {}) {
       stepCtx,
     );
     graphVersion = data?.graphVersion ?? null;
+    allowCustomFields.value = data?.allowCustomFields === true;
 
     let graph;
     let migrated = false;
@@ -1895,9 +1909,12 @@ function isValidConnection(conn) {
   if (conn.targetHandle === "out") return false; // output→output
   const target = findNode(conn.target);
   if (
-    target?.type === "modifier" && target.data?.collapsed &&
-    (conn.targetHandle?.startsWith("p:") || conn.targetHandle?.startsWith("field:"))
-  ) return false;
+    target?.type === "modifier" &&
+    target.data?.collapsed &&
+    (conn.targetHandle?.startsWith("p:") ||
+      conn.targetHandle?.startsWith("field:"))
+  )
+    return false;
   return true;
 }
 
@@ -1938,7 +1955,8 @@ function onKeydown(e) {
     } else if (e.code === "KeyC") {
       if (copySelection()) e.preventDefault();
     } else if (e.code === "KeyV") {
-      if (pasteClipboard()) e.preventDefault();
+      e.preventDefault();
+      pasteClipboard();
     } else if (e.code === "KeyD") {
       e.preventDefault();
       duplicateSelection();
@@ -1989,8 +2007,9 @@ function onMenuAdd(desc) {
   if (desc.group === "source")
     node = createSourceNode(desc.kind, pos, desc.payload || {});
   else if (desc.group === "modifier")
-    node = createModifierNode(desc.modifierType, pos);
-  else if (desc.group === "op") node = createOpNode(desc.opType, pos);
+    node = createModifierNode(desc.modifierType, pos, desc.params);
+  else if (desc.group === "op")
+    node = createOpNode(desc.opType, pos, desc.params);
   if (node) {
     addNodes([node]);
     // If this menu was opened by dropping a wire on empty space, auto-wire it to the new block.
@@ -2131,6 +2150,83 @@ function cleanData(d) {
 
 const clipboard = ref({ nodes: [], edges: [] });
 
+// Payload written to the system clipboard so copy/paste works across pages
+// and cabinets; the in-memory `clipboard` ref is the same-page fallback.
+const CLIPBOARD_KIND = "delegat-mapping-graph";
+
+const PASTE_NODE_TYPES = new Set([
+  ...SOURCE_NODE_TYPES,
+  ...OP_NODE_TYPES,
+  "modifier",
+  "reroute",
+]);
+
+/** Whether a copied node can live in this cabinet/category: its external
+   references (attributes, product fields, store files) must resolve here. */
+function clipboardNodeUsable(node) {
+  if (!node || !PASTE_NODE_TYPES.has(node.type)) return false;
+  const d = node.data || {};
+  const src = props.availableSources;
+  switch (node.type) {
+    case "attribute":
+      return (src.categoryAttributes || []).some((a) =>
+        attrIdEq(a.id ?? a.Id, d.attributeId),
+      );
+    case "storeAttribute":
+      return (src.storeAttributes || []).some((a) =>
+        attrIdEq(a.id ?? a.Id, d.attributeId),
+      );
+    case "productField":
+      return mergeProductFieldSources(src).some((f) => f.key === d.field);
+    case "storeFileUrl":
+    case "storeFileContent":
+      return (src.storeFiles || []).some(
+        (f) => String(f.id) === String(d.storeFileId),
+      );
+    case "modifier":
+      return !!MODIFIER_CATALOG[d.modifierType];
+    default:
+      return true;
+  }
+}
+
+/** Keeps usable nodes and edges between them; reports the dropped count. */
+function validateClipboard(clip) {
+  const nodes = [];
+  let dropped = 0;
+  for (const n of clip?.nodes || []) {
+    if (clipboardNodeUsable(n)) nodes.push(n);
+    else dropped += 1;
+  }
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges = (clip?.edges || []).filter(
+    (e) => e && ids.has(e.source) && ids.has(e.target),
+  );
+  return { nodes, edges, dropped };
+}
+
+function writeSystemClipboard(payload) {
+  try {
+    navigator.clipboard?.writeText(JSON.stringify(payload));
+  } catch {
+    // Clipboard API unavailable/denied - the in-memory snapshot still works.
+  }
+}
+
+async function readSystemClipboard() {
+  try {
+    const text = await navigator.clipboard?.readText();
+    if (!text) return null;
+    const parsed = JSON.parse(text);
+    if (parsed?.kind === CLIPBOARD_KIND && Array.isArray(parsed.nodes)) {
+      return parsed;
+    }
+  } catch {
+    // Unreadable or foreign clipboard contents - fall back to memory.
+  }
+  return null;
+}
+
 // Selected, copyable nodes - prefer Vue Flow's selection, fall back to the inspector's node.
 function currentSelection() {
   const fromVf = (getSelectedNodes?.value || []).filter(
@@ -2144,7 +2240,7 @@ function currentSelection() {
 }
 
 // Snapshot the current selection (excluding the non-deletable adapter sink) + its internal edges.
-function copySelection() {
+function snapshotSelection() {
   const sel = currentSelection();
   if (!sel.length) return false;
   const ids = new Set(sel.map((n) => n.id));
@@ -2171,6 +2267,12 @@ function copySelection() {
         };
       }),
   };
+  return true;
+}
+
+function copySelection() {
+  if (!snapshotSelection()) return false;
+  writeSystemClipboard({ kind: CLIPBOARD_KIND, ...clipboard.value });
   return true;
 }
 
@@ -2212,12 +2314,23 @@ function spawnCopies(clip, offset) {
   return true;
 }
 
-function pasteClipboard() {
-  return spawnCopies(clipboard.value, { x: 40, y: 40 });
+async function pasteClipboard() {
+  const payload = (await readSystemClipboard()) || clipboard.value;
+  const {
+    nodes: okNodes,
+    edges: okEdges,
+    dropped,
+  } = validateClipboard(payload);
+  if (dropped > 0) {
+    displaySonnerError(
+      t("marketplace.canvas.pasteSkipped", { count: dropped }),
+    );
+  }
+  return spawnCopies({ nodes: okNodes, edges: okEdges }, { x: 40, y: 40 });
 }
 
 function duplicateSelection() {
-  if (copySelection()) spawnCopies(clipboard.value, { x: 40, y: 40 });
+  if (snapshotSelection()) spawnCopies(clipboard.value, { x: 40, y: 40 });
 }
 
 let saveInFlight = null;
@@ -2425,12 +2538,19 @@ async function importMappingFile(event) {
       props.priceFieldMappings,
     );
     const { nodes: importSafeNodes } = sanitizeGraphNodes(importedNodes);
-    const importIds = new Set(importSafeNodes.map((n) => n.id));
+    // Cross-cabinet imports can reference attributes/fields that don't exist
+    // here: drop those nodes (sinks are structural and always kept).
+    const SINK = new Set(["adapterFields", "adapterPriceFields"]);
+    const usableNodes = importSafeNodes.filter(
+      (n) => SINK.has(n.type) || clipboardNodeUsable(n),
+    );
+    const droppedImport = importSafeNodes.length - usableNodes.length;
+    const importIds = new Set(usableNodes.map((n) => n.id));
     const { edges: importSafeEdges } = sanitizeGraphEdges(
       ensured.edges,
       importIds,
     );
-    setNodes(layoutGraph(importSafeNodes, importSafeEdges));
+    setNodes(layoutGraph(usableNodes, importSafeEdges));
     setEdges(importSafeEdges);
     await nextTick();
     const adNode = findNode(ADAPTER_NODE_ID);
@@ -2445,6 +2565,11 @@ async function importMappingFile(event) {
     dirty.value = true;
     schedulePreview();
     displaySonnerSuccess(t("marketplace.canvas.mappingImported"));
+    if (droppedImport > 0) {
+      displaySonnerError(
+        t("marketplace.canvas.pasteSkipped", { count: droppedImport }),
+      );
+    }
   } catch (e) {
     displaySonnerError(e);
   }
@@ -2465,117 +2590,133 @@ async function importMappingFile(event) {
         class="relative min-w-0 h-full w-full"
         @contextmenu="onContextMenu"
       >
-        <div
-          class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
-        >
-          <ButtonGroup joined>
-            <Button
-              size="sm"
-              :disabled="saving || errorCount > 0"
-              :title="
-                dirty ? t('marketplace.canvas.unsavedChanges') : undefined
-              "
-              @click="save()"
-            >
-              <Spinner v-if="saving" />
-              <Save v-else class="size-4" />
-              {{ t("marketplace.canvas.save") }}
-              <span
-                v-if="dirty && !saving"
-                class="size-1.5 rounded-full bg-current opacity-80"
-                aria-hidden="true"
-              />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <Button
-                  size="sm"
-                  class="px-2"
-                  :aria-label="t('marketplace.canvas.actions')"
-                >
-                  <ChevronDown class="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" class="w-56">
-                <DropdownMenuItem @select="confirmAutoArrange">
-                  <LayoutGrid class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.autoArrange") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  :disabled="syncingFields"
-                  @select="syncAdapterFieldSchema"
-                >
-                  <Spinner v-if="syncingFields" class="size-4" />
-                  <RefreshCw v-else class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem @select="exportMappingFile">
-                  <Download class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.export") }}
-                </DropdownMenuItem>
-                <DropdownMenuItem @select="triggerImportFile">
-                  <Upload class="size-4" />
-                  {{ t("marketplace.fieldMappingPage.import") }}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </ButtonGroup>
-
+        <TooltipProvider :delay-duration="300">
           <div
-            class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
+            class="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-2"
           >
-            <SearchableSelect
-              class="h-8 w-full bg-card dark:bg-card"
-              content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
-              remote
-              :loading="previewProductsLoading"
-              :options="previewProducts"
-              :model-value="previewProductId ? String(previewProductId) : ''"
-              @update:modelValue="emit('select-preview', $event)"
-              @search="emit('search-preview', $event)"
-              :placeholder="t('marketplace.canvas.previewPlaceholder')"
-            />
-          </div>
+            <ButtonGroup joined>
+              <Tooltip :disabled="!dirty">
+                <TooltipTrigger as-child>
+                  <Button
+                    size="sm"
+                    :disabled="saving || errorCount > 0"
+                    @click="save()"
+                  >
+                    <Spinner v-if="saving" />
+                    <Save v-else class="size-4" />
+                    {{ t("marketplace.canvas.save") }}
+                    <span
+                      v-if="dirty && !saving"
+                      class="size-1.5 rounded-full bg-current opacity-80"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.unsavedChanges") }}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    size="sm"
+                    class="px-2"
+                    :aria-label="t('marketplace.canvas.actions')"
+                  >
+                    <ChevronDown class="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" class="w-56">
+                  <DropdownMenuItem @select="confirmAutoArrange">
+                    <LayoutGrid class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.autoArrange") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    :disabled="syncingFields"
+                    @select="syncAdapterFieldSchema"
+                  >
+                    <Spinner v-if="syncingFields" class="size-4" />
+                    <RefreshCw v-else class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.checkFieldsUpToDate") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem @select="exportMappingFile">
+                    <Download class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.export") }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @select="triggerImportFile">
+                    <Upload class="size-4" />
+                    {{ t("marketplace.fieldMappingPage.import") }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
 
-          <ButtonGroup v-if="previewProductId">
-            <Button size="sm" as-child>
-              <RouterLink
-                :to="`/products/${previewProductId}/edit`"
-                :title="t('marketplace.canvas.openPreviewProductTitle')"
-              >
-                <ExternalLink class="size-4" />
-                {{ t("marketplace.canvas.openPreviewProduct") }}
-              </RouterLink>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              @click="emit('clear-preview')"
-              :title="t('marketplace.canvas.resetPreviewTitle')"
+            <div
+              class="min-w-[20rem] w-[min(36rem,calc(100vw-22rem))] max-w-full"
             >
-              <EyeOff class="size-4" />
-              {{ t("marketplace.canvas.resetPreview") }}
-            </Button>
-          </ButtonGroup>
+              <SearchableSelect
+                class="h-8 w-full bg-card dark:bg-card"
+                content-class="w-[var(--reka-popover-trigger-width)] max-w-[min(40rem,calc(100vw-2rem))]"
+                remote
+                :loading="previewProductsLoading"
+                :options="previewProducts"
+                :model-value="previewProductId ? String(previewProductId) : ''"
+                @update:modelValue="emit('select-preview', $event)"
+                @search="emit('search-preview', $event)"
+                :placeholder="t('marketplace.canvas.previewPlaceholder')"
+              />
+            </div>
 
-          <span
-            v-if="previewing"
-            class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
-          >
-            <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
-          </span>
-          <input
-            ref="importFileInput"
-            type="file"
-            accept="application/json,.json"
-            class="hidden"
-            @change="importMappingFile"
-          />
-          <Badge v-if="errorCount" variant="destructive" class="gap-1">
-            <AlertTriangle class="size-3" /> {{ errorCount }}
-          </Badge>
-        </div>
+            <ButtonGroup v-if="previewProductId">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button size="sm" as-child>
+                    <RouterLink :to="`/products/${previewProductId}/edit`">
+                      <ExternalLink class="size-4" />
+                      {{ t("marketplace.canvas.openPreviewProduct") }}
+                    </RouterLink>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.openPreviewProductTitle") }}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    @click="emit('clear-preview')"
+                  >
+                    <EyeOff class="size-4" />
+                    {{ t("marketplace.canvas.resetPreview") }}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {{ t("marketplace.canvas.resetPreviewTitle") }}
+                </TooltipContent>
+              </Tooltip>
+            </ButtonGroup>
+
+            <span
+              v-if="previewing"
+              class="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+            >
+              <Spinner size="sm" /> {{ t("marketplace.canvas.previewing") }}
+            </span>
+            <input
+              ref="importFileInput"
+              type="file"
+              accept="application/json,.json"
+              class="hidden"
+              @change="importMappingFile"
+            />
+            <Badge v-if="errorCount" variant="destructive" class="gap-1">
+              <AlertTriangle class="size-3" /> {{ errorCount }}
+            </Badge>
+          </div>
+        </TooltipProvider>
 
         <div v-if="debugMode" class="vf-debug-panel">
           <div class="vf-debug-section">
@@ -2885,6 +3026,12 @@ async function importMappingFile(event) {
           <template #node-contains="p"><OpNode v-bind="p" /></template>
           <template #node-isEmpty="p"><OpNode v-bind="p" /></template>
           <template #node-isValid="p"><OpNode v-bind="p" /></template>
+          <template #node-add="p"><OpNode v-bind="p" /></template>
+          <template #node-subtract="p"><OpNode v-bind="p" /></template>
+          <template #node-multiply="p"><OpNode v-bind="p" /></template>
+          <template #node-divide="p"><OpNode v-bind="p" /></template>
+          <template #node-min="p"><OpNode v-bind="p" /></template>
+          <template #node-max="p"><OpNode v-bind="p" /></template>
           <template #node-adapterFields="p"
             ><AdapterFieldsNode v-bind="p"
           /></template>
@@ -2910,6 +3057,8 @@ async function importMappingFile(event) {
             :available-sources="availableSources"
             :filter-type="menu.connectType"
             :connect-dir="menu.connectDir"
+            :adapter-fields-with-options="adapterFieldsWithOptions"
+            :adapter-value-field="menuAdapterValueField"
             @add="onMenuAdd"
             @close="closeMenu"
           />
@@ -2945,6 +3094,7 @@ async function importMappingFile(event) {
           :adapter-fields-with-options="adapterFieldsWithOptions"
           :ai-model-options="aiModelOptions"
           :available-sources="availableSources"
+          :allow-custom-fields="allowCustomFields"
           :template-field-refs="templateFieldRefs"
           :focus-field-key="focusAdapterField"
           @update="onInspectorUpdate"
@@ -2971,17 +3121,17 @@ async function importMappingFile(event) {
   opacity: 0.55;
 }
 
-/* Let a drag that starts over a wire pan the canvas: disable only the wide invisible interaction
-   path; the visible line keeps pointer events so double-click reroute still works. */
+/* The wide invisible interaction path stays clickable: wires get a fat hit zone.
+   Canvas panning still works on empty space and the minimap. */
 .vf-canvas .vue-flow__edge-interaction {
-  pointer-events: none;
+  stroke-width: 20;
 }
 
 /* `.vf-card.<mod>` (specificity 0,2,0) so these beat the base `.vf-card` rule that appears later. */
 .vf-card.vf-card--collapsed {
   min-width: 0;
-  max-width: 180px;
-  padding: 4px 12px;
+  max-width: 200px;
+  padding: 6px 14px;
   border-radius: 999px;
 }
 .vf-card--collapsed .vf-card__head {
@@ -2989,7 +3139,7 @@ async function importMappingFile(event) {
 }
 /* Collapsed multi/fixed-input ops keep height so their left input pins still spread out. */
 .vf-card--collapsed-multi {
-  min-height: 44px;
+  min-height: 48px;
   display: flex;
   align-items: center;
 }
@@ -2997,19 +3147,19 @@ async function importMappingFile(event) {
 /* Modifiers that expose operand params as override pins: a row per input handle. Metrics must
    match HEADER/ROW in ModifierNode.vue so the left pins line up with their rows. */
 .vf-card.vf-card--haspins {
-  min-width: 180px;
+  min-width: 200px;
   padding: 0;
 }
 .vf-card--haspins .vf-card__head {
-  height: 26px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 12px;
 }
 .vf-mod__pin-row {
   display: flex;
   align-items: center;
-  height: 18px;
-  padding: 0 10px 0 14px;
-  font-size: 11px;
+  height: 20px;
+  padding: 0 12px 0 16px;
+  font-size: 12px;
   color: var(--muted-foreground);
 }
 .vf-mod__pin-row--value {
@@ -3017,20 +3167,20 @@ async function importMappingFile(event) {
   font-weight: 500;
 }
 .vf-mod__body {
-  padding: 4px 10px 8px;
+  padding: 6px 12px 10px;
 }
 
 .vf-card {
   position: relative;
-  min-width: 150px;
-  max-width: 220px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
+  min-width: 170px;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--foreground);
-  box-shadow: none;
-  font-size: 12px;
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--foreground) 8%, transparent);
+  font-size: 13px;
 }
 .vf-card--selected {
   border-color: var(--primary);
@@ -3046,7 +3196,7 @@ async function importMappingFile(event) {
   gap: 6px;
 }
 .vf-card__kind {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -3058,42 +3208,52 @@ async function importMappingFile(event) {
 .vf-card__warn {
   flex-shrink: 0;
   margin-left: auto;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--warning);
 }
 .vf-card__title {
   margin-top: 3px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.vf-mod__unit {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
 .vf-card__title--sm {
   font-weight: 500;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted-foreground);
 }
 
 .vf-card__pin {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 5px;
+  gap: 6px;
+  margin-top: 6px;
 }
 .vf-card__pin--right {
   justify-content: flex-end;
 }
 .vf-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 9999px;
   display: inline-block;
 }
 .vf-pin-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted-foreground);
 }
 .vf-req {
@@ -3107,24 +3267,11 @@ async function importMappingFile(event) {
   gap: 6px;
   margin-top: 6px;
 }
-.vf-iconbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  color: var(--muted-foreground);
-}
-.vf-iconbtn:hover {
-  background: var(--accent);
-}
 
 /* Single "adapter fields" sink node - metrics must match HEADER/ROW in AdapterFieldsNode.vue. */
 .vf-card--adapter {
-  min-width: 300px;
-  max-width: 420px;
+  min-width: 320px;
+  max-width: 440px;
   padding: 0;
 }
 
@@ -3132,39 +3279,55 @@ async function importMappingFile(event) {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
 }
 .vf-adapter__row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 10px;
-  font-size: 12px;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
 }
-.vf-adapter__group {
-  box-sizing: border-box;
-  height: 18px;
-  padding: 0 10px;
-  border-top: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 17px;
-  text-transform: uppercase;
-}
-.vf-adapter__group--first {
-  border-top: 0;
-}
+
 .vf-adapter__row:hover {
   background: var(--accent);
 }
 .vf-adapter__row--add {
   color: var(--muted-foreground);
   border-top: 1px dashed var(--border);
+}
+.vf-adapter__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vf-adapter__mid {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-inline: auto;
+}
+.vf-adapter__pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vf-adapter__unit {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  line-height: 1.5;
 }
 .vf-adapter__label {
   flex: 1;
@@ -3175,11 +3338,11 @@ async function importMappingFile(event) {
 }
 .vf-adapter__pill {
   flex-shrink: 0;
-  max-width: 110px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 9999px;
@@ -3206,8 +3369,8 @@ async function importMappingFile(event) {
 }
 .vf-adapter__dir {
   flex-shrink: 0;
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   opacity: 0.45;
   color: var(--muted-foreground);
 }
@@ -3223,23 +3386,30 @@ async function importMappingFile(event) {
   border: 1px solid color-mix(in oklch, var(--primary) 70%, transparent);
 }
 
-/* Vue Flow handle (pin) sizing */
+/* Vue Flow handle (pin) sizing — chunky enough to grab, with a hover affordance. */
 .vue-flow__handle {
-  width: 9px;
-  height: 9px;
+  width: 13px;
+  height: 13px;
   border: 2px solid var(--card);
   background: var(--muted-foreground);
+  transition:
+    box-shadow 0.12s ease,
+    background-color 0.12s ease;
+}
+.vue-flow__handle:hover {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 /* Default (static / floating) edges - plain wire, no animation. */
 .vf-canvas .vue-flow__edge-path {
   stroke: var(--muted-foreground);
-  stroke-width: 2.5;
-  opacity: 0.35;
+  stroke-width: 3;
+  opacity: 0.5;
 }
 .vf-canvas .vue-flow__edge.selected .vue-flow__edge-path {
   stroke: var(--primary);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 /* Debug overlay panel */
@@ -3323,9 +3493,9 @@ async function importMappingFile(event) {
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
-  width: 30px;
-  height: 30px;
-  padding: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
 }
 .vf-canvas .vue-flow__controls-button:last-child {
   border-bottom: none;
@@ -3334,10 +3504,10 @@ async function importMappingFile(event) {
   background: var(--muted);
 }
 .vf-canvas .vue-flow__controls-button svg {
-  width: 14px;
-  max-width: 14px;
-  height: 14px;
-  max-height: 14px;
+  width: 16px;
+  max-width: 16px;
+  height: 16px;
+  max-height: 16px;
   fill: none;
   stroke: currentColor;
 }

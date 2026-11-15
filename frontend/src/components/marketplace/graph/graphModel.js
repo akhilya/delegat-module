@@ -517,12 +517,12 @@ export function createSourceNode(kind, position, payload = {}) {
   }
 }
 
-export function createModifierNode(modifierType, position) {
+export function createModifierNode(modifierType, position, overrides) {
   const defaults = {};
   (MODIFIER_CATALOG[modifierType]?.params || []).forEach((p) => {
     defaults[p.key] = p.default;
   });
-  const data = { modifierType, params: defaults };
+  const data = { modifierType, params: { ...defaults, ...overrides } };
   if (modifierType === "llmGenerate") data.fieldPins = [];
   return {
     id: genId("mod"),
@@ -560,12 +560,13 @@ export function ensureModifierParamDefaults(nodes) {
   return nodes;
 }
 
-export function createOpNode(type, position) {
+export function createOpNode(type, position, overrides) {
   const spec = OP_SPECS[type];
   const data = {};
   (spec?.params || []).forEach((p) => {
     data[p.key] = p.default;
   });
+  Object.assign(data, overrides || {});
   if (spec?.inputs === "multi") data.inputCount = 2;
   return { id: genId(type), type, position, data };
 }
@@ -757,9 +758,12 @@ export function validateGraph(nodes, edges) {
       });
     }
 
-    if (n.type === "modifier" && ins.length > 0 &&
-        !ins.some((edge) => !edge.targetHandle || edge.targetHandle === "in") &&
-        ins.some((edge) => edge.targetHandle?.startsWith("p:"))) {
+    if (
+      n.type === "modifier" &&
+      ins.length > 0 &&
+      !ins.some((edge) => !edge.targetHandle || edge.targetHandle === "in") &&
+      ins.some((edge) => edge.targetHandle?.startsWith("p:"))
+    ) {
       issues.push({
         level: "warning",
         nodeId: n.id,

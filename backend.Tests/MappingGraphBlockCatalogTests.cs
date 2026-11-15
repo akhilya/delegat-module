@@ -29,8 +29,8 @@ public class MappingGraphBlockCatalogTests
             },
         };
         var (sw, sh) = MappingGraphBlockCatalog.Estimate(sink);
-        Assert.Equal(360, sw);
-        Assert.Equal(30 + 2 * 24 + 6, sh);
+        Assert.Equal(380, sw);
+        Assert.Equal(34 + 2 * 28 + 6, sh);
 
         var src = new GraphNode
         {
@@ -38,8 +38,8 @@ public class MappingGraphBlockCatalogTests
             data = new GraphNodeData { label = "Product group name" },
         };
         var (cw, ch) = MappingGraphBlockCatalog.Estimate(src);
-        Assert.Equal(180, cw);
-        Assert.Equal(60, ch);
+        Assert.Equal(196, cw);
+        Assert.Equal(64, ch);
     }
 
     [Fact]

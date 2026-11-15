@@ -185,6 +185,7 @@ public class CategoryImportService
         var existingAttributes = category.attributes?.ToList() ?? [];
         var duplicateCandidatesByFieldKey = new Dictionary<string, AttributeDuplicateCandidate[]>(StringComparer.Ordinal);
         var unitCodesByFieldKey = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var ambiguousFieldKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in fieldsForAttributes)
         {
             var unitCode = AttributeImportSemantics.ResolveType(field) == AttributeType.Number
@@ -195,7 +196,7 @@ public class CategoryImportService
                 field,
                 AttributeImportSemantics.ResolveType(field),
                 unitCode,
-                existingAttributes).ToArray();
+                existingAttributes, allowConvertibleUnits: true).ToArray();
             duplicateCandidatesByFieldKey[field.Key] = duplicateCandidates;
 
             decisionsByFieldKey.TryGetValue(field.Key, out var decision);
@@ -207,7 +208,14 @@ public class CategoryImportService
                         $"Choose whether to reuse, create, or skip an attribute for field '{field.Key}'");
                 }
 
-                // Preserve already-enqueued legacy imports from before the choice UI existed.
+                // Old queued imports cannot ask for a choice. Leave close candidates unwired.
+                if (duplicateCandidates.Length > 1 && duplicateCandidates[0].Score - duplicateCandidates[1].Score < 5)
+                {
+                    ambiguousFieldKeys.Add(field.Key);
+                    continue;
+                }
+
+                // Preserve unambiguous already-enqueued legacy imports from before the choice UI existed.
                 decision = new CategoryImportAttributeDecision
                 {
                     fieldKey = field.Key,
@@ -249,10 +257,12 @@ public class CategoryImportService
         // (excluding base product fields: sku, barcode, name, description, price, stock)
         int attributesCreated = 0;
         var pendingAttributes = new List<(ExternalField Field, CategoryAttribute Attribute, string SanitizedKey)>();
-        var skippedAttributeFieldKeys = new HashSet<string>(StringComparer.Ordinal);
+        var skippedAttributeFieldKeys = new HashSet<string>(ambiguousFieldKeys, StringComparer.Ordinal);
 
         foreach (var field in fieldsForAttributes.OrderBy(f => f.SortOrder))
         {
+            if (ambiguousFieldKeys.Contains(field.Key))
+                continue;
             var sanitizedKey = SanitizeKey(field.Key);
             var unitCode = unitCodesByFieldKey[field.Key];
             var importedName = AttributeImportSemantics.NormalizeName(field, unitCode);
@@ -397,11 +407,15 @@ public class CategoryImportService
                     unselectedAttributeFieldKeys.Contains(field.Key)
                     || skippedAttributeFieldKeys.Contains(field.Key)
                         ? (FieldMappingSourceType.Static, null, (int?)null)
-                        : DetermineAutoMapping(field, attributeMap);
+                        : FieldAutoMapping.Resolve(field, category.attributes?.ToList() ?? [],
+                            attributeMap.TryGetValue(field.Key, out var id) ? id : null);
+                var sourceAttribute = category.attributes?.FirstOrDefault(a => a.Id == sourceAttributeId);
                 return new FieldSpec
                 {
                     externalFieldKey = field.Key,
                     externalFieldName = field.Name,
+                    externalFieldGroup = field.Group,
+                    modifiersJson = FieldAutoMapping.Conversion(field, category.attributes?.FirstOrDefault(a => a.Id == sourceAttributeId)),
                     externalFieldType = field.Type,
                     externalFieldUnit = AttributeFieldConstraints.ResolveUnitLabel(field),
                     externalFieldUnitCode = AttributeFieldConstraints.ResolveUnitCode(field),
@@ -413,6 +427,7 @@ public class CategoryImportService
                     sourceType = sourceType,
                     sourceField = sourceField,
                     sourceAttributeId = sourceAttributeId,
+                    sourceAttributeKey = sourceAttribute?.key,
                 };
             })
             .ToList();
@@ -476,23 +491,28 @@ public class CategoryImportService
         var keyLower = field.Key.ToLowerInvariant();
         var nameLower = field.Name.ToLowerInvariant();
 
-        // Try to match against base product fields
-        if (IsSkuField(keyLower, nameLower))
+        // Dictionary and aspect characteristics must not be inferred as product fields.
+        // Grouping is a separate adapter capability and remains eligible below.
+        var characteristic = IsCharacteristicField(field);
+        var fieldType = MapExternalFieldType(field.Type);
+        var textCompatible = fieldType is AttributeType.Text or AttributeType.Barcode;
+        var numberCompatible = fieldType is AttributeType.Number or AttributeType.Text;
+        if (!characteristic && textCompatible && IsSkuField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "sku", null);
 
-        if (IsBarcodeField(field))
+        if (!characteristic && textCompatible && IsBarcodeField(field))
             return (FieldMappingSourceType.ProductField, "barcode", null);
 
-        if (IsNameField(keyLower, nameLower))
+        if (!characteristic && fieldType == AttributeType.Text && IsNameField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "name", null);
 
-        if (IsDescriptionField(keyLower, nameLower))
+        if (!characteristic && fieldType == AttributeType.Text && IsDescriptionField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "description", null);
 
-        if (IsPriceField(keyLower, nameLower))
+        if (!characteristic && numberCompatible && IsPriceField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "price", null);
 
-        if (IsStockField(keyLower, nameLower))
+        if (!characteristic && numberCompatible && IsStockField(keyLower, nameLower))
             return (FieldMappingSourceType.ProductField, "storageQuantity", null);
 
         // Product grouping fields are mapped to the group name
@@ -500,7 +520,11 @@ public class CategoryImportService
             return (FieldMappingSourceType.GroupName, null, null);
 
         // Image fields are mapped to the product's images
-        if (IsImageField(field.Key, field.Name))
+        // Image lists are emitted as multiselect by store adapters but are not dictionaries.
+        var imageList = field.Type.Equals("multiselect", StringComparison.OrdinalIgnoreCase)
+            && !field.IsAspect && field.Options is not { Count: > 0 }
+            && IsImageField(field.Key, "");
+        if ((!characteristic || imageList) && IsImageField(field.Key, field.Name))
             return (FieldMappingSourceType.ProductField, "images", null);
 
         // WB rejects this characteristic (HTTP 400) and reads packaging weight only
@@ -520,19 +544,12 @@ public class CategoryImportService
     /// Check whether a field is a base product field (SKU, barcode, name, description, price, stock, images, grouping).
     /// These fields don't need attribute creation - they are handled by product fields or special mappings.
     /// </summary>
-    internal static bool IsBaseOrSpecialField(ExternalField field)
-    {
-        var keyLower = field.Key.ToLowerInvariant();
-        var nameLower = field.Name.ToLowerInvariant();
-        return IsSkuField(keyLower, nameLower) ||
-               IsBarcodeField(field) ||
-               IsNameField(keyLower, nameLower) ||
-               IsDescriptionField(keyLower, nameLower) ||
-               IsPriceField(keyLower, nameLower) ||
-               IsStockField(keyLower, nameLower) ||
-               IsGroupingField(field.Key, field.Name) ||
-               IsImageField(field.Key, field.Name);
-    }
+    internal static bool IsBaseOrSpecialField(ExternalField field) =>
+        DetermineAutoMapping(field, new Dictionary<string, int>()).sourceType != FieldMappingSourceType.Static;
+
+    private static bool IsCharacteristicField(ExternalField field) =>
+        field.IsAspect || field.Options is { Count: > 0 } ||
+        field.Type.Trim().ToLowerInvariant() is "select" or "multiselect" or "enum" or "dictionary";
 
     /// <summary>
     /// Wildberries characteristic «Вес товара с упаковкой». Since 2025-03-31 the
@@ -570,60 +587,33 @@ public class CategoryImportService
 
     internal static bool IsBarcodeField(string key, string name)
     {
-        var exact = new[] { "barcode", "barcodes", "ean", "ean8", "ean13", "gtin", "upc" };
-        if (exact.Any(p => key == p || name == p))
-            return true;
-
-        var contains = new[]
-        {
-            "barcode",
-            "gtin",
-            "\u0448\u0442\u0440\u0438\u0445\u043a\u043e\u0434",
-            "\u0448\u0442\u0440\u0438\u0445-\u043a\u043e\u0434",
-        };
-        return contains.Any(p => key.Contains(p) || name.Contains(p));
+        return key is "barcode" or "barcodes" or "ean" or "ean8" or "ean13" or "gtin" or "upc"
+            || name is "barcode" or "barcodes" or "barcode (ean)" or "ean" or "ean8" or "ean13" or "gtin" or "upc"
+                or "\u0448\u0442\u0440\u0438\u0445\u043a\u043e\u0434" or "\u0448\u0442\u0440\u0438\u0445-\u043a\u043e\u0434";
     }
 
     internal static bool IsSkuField(string key, string name)
     {
-        // Ozon attribute 9024 = SKU/Article
-        if (key == "9024") return true;
-        if (key == "model" || name == "model") return true;
-
-        var patterns = new[] { "sku", "\u0430\u0440\u0442\u0438\u043a\u0443\u043b", "article", "vendor_code", "vendorcode" };
-        return patterns.Any(p => key.Contains(p) || name.Contains(p));
+        // Ozon 9024, Yandex offerId/vendorCode, and the standard adapter keys.
+        return key is "9024" or "sku" or "offerid" or "offer_id" or "vendor_code" or "vendorcode" or "seller_sku" or "article"
+            || name is "sku" or "article" or "\u0430\u0440\u0442\u0438\u043a\u0443\u043b" or "\u0430\u0440\u0442\u0438\u043a\u0443\u043b \u0442\u043e\u0432\u0430\u0440\u0430" or "vendor code";
     }
 
     internal static bool IsNameField(string key, string name)
     {
-        // Ozon attribute 4180 = Product name
-        if (key == "4180") return true;
-
-        // Use Contains for Russian patterns, but only exact ones - "product name", not just "name"
-        // (otherwise "Color name" 10097, "Group name" 22390, etc. would also match)
-        var exactPatterns = new[] { "name", "title" };
-        var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435\u0020\u0442\u043e\u0432\u0430\u0440\u0430", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
-        var compactKey = key.Replace("-", "", StringComparison.Ordinal);
-
-        return compactKey is "productname" or "itemname" ||
-               exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
-               containsPatterns.Any(p => name.Contains(p));
+        return key is "4180" or "name" or "title" or "product_name" or "productname" or "product-name" or "item_name" or "itemname"
+            || name is "name" or "title" or "product name" or "item name" or "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0442\u043e\u0432\u0430\u0440\u0430" or "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u0442\u043e\u0432\u0430\u0440\u0430" or "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435";
     }
 
     internal static bool IsDescriptionField(string key, string name)
     {
-        // Ozon attribute 4191 = Annotation (Description)
-        if (key == "4191") return true;
-
-        // "annotation" and "description" are the same thing
-        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "desc", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
-        return patterns.Any(p => key.Contains(p) || name.Contains(p));
+        return key is "4191" or "description" or "product_description" or "desc" or "annotation"
+            || name is "description" or "product description" or "desc" or "annotation" or "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435" or "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0442\u043e\u0432\u0430\u0440\u0430" or "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f";
     }
 
     internal static bool IsPriceField(string key, string name)
     {
-        var patterns = new[] { "price", "\u0446\u0435\u043d\u0430", "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c", "cost" };
-        return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
+        return key is "price" or "cost" || name is "price" or "cost" or "\u0446\u0435\u043d\u0430" or "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c";
     }
 
     internal static List<FieldSpec> BuildPriceFieldSpecs(
@@ -892,16 +882,10 @@ public class CategoryImportService
     {
         var keyLower = key.ToLowerInvariant();
         var nameLower = name.ToLowerInvariant();
-
-        // Standard image field keys
-        if (keyLower == "images" || keyLower == "primary_image" ||
-            keyLower == "image_url" || keyLower == "image_urls" ||
-            keyLower == "images360" || keyLower == "color_image")
-            return true;
-
-        // Name patterns for images
-        var patterns = new[] { "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d", "\u0444\u043e\u0442\u043e", "\u043a\u0430\u0440\u0442\u0438\u043d\u043a", "image", "photo", "picture" };
-        return patterns.Any(p => nameLower.Contains(p));
+        return keyLower is "images" or "image" or "pictures" or "picture" or "photos" or "photo"
+                or "primary_image" or "image_url" or "image_urls" or "images360" or "color_image"
+            || nameLower is "images" or "image" or "pictures" or "picture" or "photos" or "photo"
+                or "\u0444\u043e\u0442\u043e" or "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435" or "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f" or "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0442\u043e\u0432\u0430\u0440\u0430";
     }
 
     /// <summary>

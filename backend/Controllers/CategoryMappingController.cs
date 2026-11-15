@@ -504,6 +504,19 @@ public class CategoryMappingController : ControllerBase
                         new Dictionary<string, int>(),
                         skipAutoMapping: false,
                         extendedPriceParameters: extendedPrice));
+                // Attributes deleted from the local category/store must not keep their bindings.
+                var liveCategoryAttributeIds = await _context.categoryAttributes
+                    .AsNoTracking()
+                    .Where(a => a.categoryId == mapping.localCategoryId)
+                    .Select(a => a.Id)
+                    .ToListAsync(ct);
+                var liveStoreAttributeIds = await _context.storeAttributes
+                    .AsNoTracking()
+                    .Where(a => a.storeId == connection.storeId)
+                    .Select(a => a.Id)
+                    .ToListAsync(ct);
+                graphJson = GraphGenerator.PruneStaleAttributeSources(
+                    graphJson, liveCategoryAttributeIds, liveStoreAttributeIds);
             }
             catch (Exception ex)
             {
@@ -531,6 +544,7 @@ public class CategoryMappingController : ControllerBase
             },
             externalFields = includeSchema ? cardFields?.Select(MappingFieldSchema.ToDto) : null,
             priceFields = includeSchema ? priceFields?.Select(MappingFieldSchema.ToDto) : null,
+            allowCustomFields = adapter != null && LocalCategoryAdapterFields.SupportsCustomFields(adapter.Key),
             blocks = MappingGraphBlockCatalog.Describe(),
         });
     }
@@ -1127,7 +1141,7 @@ public class CategoryMappingController : ControllerBase
                         f,
                         importType,
                         unitCode,
-                        localAttributes).ToArray();
+                        localAttributes, allowConvertibleUnits: true).ToArray();
                 var attributeKey = CategoryImportService.SanitizeKey(f.Key);
                 var maxLength = isFile ? null : AttributeFieldConstraints.NormalizeMaxLength(f.MaxLength);
                 var (minValue, maxValue) = AttributeFieldConstraints.NormalizeRange(
@@ -1333,7 +1347,9 @@ public class CategoryMappingController : ControllerBase
         {
             var (sourceType, sourceField, sourceAttributeId) = skipAutoMapping
                 ? (FieldMappingSourceType.Static, (string?)null, (int?)null)
-                : DetermineAutoMapping(field, attributeMap);
+                : FieldAutoMapping.Resolve(field, categoryAttributes.ToList());
+            var sourceAttribute = categoryAttributes.FirstOrDefault(a => a.Id == sourceAttributeId);
+            var conversion = FieldAutoMapping.Conversion(field, sourceAttribute);
             return new FieldSpec
             {
                 externalFieldKey = field.Key,
@@ -1344,12 +1360,14 @@ public class CategoryMappingController : ControllerBase
                 externalFieldUnitId = field.UnitId,
                 externalFieldGroup = field.Group,
                 externalFieldDescription = field.Description,
+                modifiersJson = conversion,
                 isRequired = sourceType != FieldMappingSourceType.ProductField && field.IsRequired,
                 isEnabled = true,
                 sortOrder = sortOrder++,
                 sourceType = sourceType,
                 sourceField = sourceField,
                 sourceAttributeId = sourceAttributeId,
+                sourceAttributeKey = sourceAttribute?.key,
             };
         }).ToList();
 
@@ -1396,141 +1414,7 @@ public class CategoryMappingController : ControllerBase
 
     #endregion
 
-    #region Auto-mapping helpers
-
-    /// <summary>
-    /// Determine automatic mapping for a field
-    /// </summary>
-    private static (FieldMappingSourceType sourceType, string? sourceField, int? sourceAttributeId)
-        DetermineAutoMapping(Models.Marketplace.DTOs.ExternalField field, Dictionary<string, int> attributeMap)
-    {
-        var keyLower = field.Key.ToLowerInvariant();
-        var nameLower = field.Name.ToLowerInvariant();
-
-        // Try to match against basic product fields
-        if (IsSkuField(keyLower, nameLower))
-            return (FieldMappingSourceType.ProductField, "sku", null);
-
-        if (CategoryImportService.IsBarcodeField(field))
-            return (FieldMappingSourceType.ProductField, "barcode", null);
-
-        if (IsNameField(keyLower, nameLower))
-            return (FieldMappingSourceType.ProductField, "name", null);
-
-        if (IsDescriptionField(keyLower, nameLower))
-            return (FieldMappingSourceType.ProductField, "description", null);
-
-        if (IsPriceField(keyLower, nameLower))
-            return (FieldMappingSourceType.ProductField, "price", null);
-
-        if (IsStockField(keyLower, nameLower))
-            return (FieldMappingSourceType.ProductField, "storageQuantity", null);
-
-        // Map product-grouping fields to the group name
-        if (IsGroupingField(field.Key, field.Name))
-            return (FieldMappingSourceType.GroupName, null, null);
-
-        // Map image fields to the product's images
-        if (IsImageField(field.Key, field.Name))
-            return (FieldMappingSourceType.ProductField, "images", null);
-
-        // Try to match against local category attributes by key or name
-        foreach (var kvp in attributeMap)
-        {
-            if (kvp.Key.Equals(field.Key, StringComparison.OrdinalIgnoreCase) ||
-                kvp.Key.Equals(field.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return (FieldMappingSourceType.CategoryAttribute, null, kvp.Value);
-            }
-        }
-
-        // Default - static empty value
-        return (FieldMappingSourceType.Static, null, null);
-    }
-
-    private static bool IsSkuField(string key, string name)
-    {
-        // Ozon attribute 9024 = SKU/Article number
-        if (key == "9024") return true;
-        if (key == "model" || name == "model") return true;
-
-        // NB: patterns include Russian words because Ozon field keys/names are in Russian
-        var patterns = new[] { "sku", "\u0430\u0440\u0442\u0438\u043a\u0443\u043b", "article", "vendor_code", "vendorcode" };
-        return patterns.Any(p => key.Contains(p) || name.Contains(p));
-    }
-
-    private static bool IsNameField(string key, string name)
-    {
-        // Ozon attribute 4180 = Product name
-        if (key == "4180") return true;
-
-        // Use Contains for name so it matches Ozon's product-name field
-        var exactPatterns = new[] { "name", "title" };
-        var containsPatterns = new[] { "\u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435", "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435" };
-        var compactKey = key.Replace("-", "", StringComparison.Ordinal);
-
-        return compactKey is "productname" or "itemname" ||
-               exactPatterns.Any(p => key == p || name == p || key.StartsWith(p + "_") || key.EndsWith("_" + p)) ||
-               containsPatterns.Any(p => name.Contains(p));
-    }
-
-    private static bool IsDescriptionField(string key, string name)
-    {
-        // Ozon attribute 4191 = Annotation (Description)
-        if (key == "4191") return true;
-
-        var patterns = new[] { "description", "\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "desc", "\u0430\u043d\u043d\u043e\u0442\u0430\u0446\u0438\u044f", "annotation" };
-        return patterns.Any(p => key.Contains(p) || name.Contains(p));
-    }
-
-    private static bool IsPriceField(string key, string name)
-    {
-        var patterns = new[] { "price", "\u0446\u0435\u043d\u0430", "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c", "cost" };
-        return patterns.Any(p => key == p || name == p || key.StartsWith(p + "_"));
-    }
-
-    private static bool IsStockField(string key, string name)
-    {
-        var exactPatterns = new[] { "stock", "\u043e\u0441\u0442\u0430\u0442\u043e\u043a", "\u043e\u0441\u0442\u0430\u0442\u043a\u0438", "quantity", "count" };
-        if (exactPatterns.Any(p => key == p || name == p))
-            return true;
-
-        if (key.StartsWith("stock_") || key.EndsWith("_stock"))
-            return true;
-
-        return false;
-    }
-
-    private static bool IsGroupingField(string key, string name)
-    {
-        // Ozon field 9048 - "Model name (for merging into a single card)"
-        if (key == "9048") return true;
-
-        var nameLower = name.ToLowerInvariant();
-        return nameLower.Contains("\u0434\u043b\u044f \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u044f") ||
-               nameLower.Contains("\u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0432 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443") ||
-               nameLower.Contains("\u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u043a\u0430 \u0442\u043e\u0432\u0430\u0440\u043e\u0432");
-    }
-
-    /// <summary>
-    /// Checks whether a field is an image field.
-    /// Such fields should not create attributes - they are handled separately.
-    /// </summary>
-    private static bool IsImageField(string key, string name)
-    {
-        var keyLower = key.ToLowerInvariant();
-        var nameLower = name.ToLowerInvariant();
-
-        // Standard image field keys
-        if (keyLower == "images" || keyLower == "primary_image" ||
-            keyLower == "image_url" || keyLower == "image_urls" ||
-            keyLower == "images360" || keyLower == "color_image")
-            return true;
-
-        // Name patterns for image fields
-        var patterns = new[] { "\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d", "\u0444\u043e\u0442\u043e", "\u043a\u0430\u0440\u0442\u0438\u043d\u043a", "image", "photo", "picture" };
-        return patterns.Any(p => nameLower.Contains(p));
-    }
+    #region Mapping helpers
 
     private static string MapAttributeType(AttributeType type)
         => type switch

@@ -226,6 +226,22 @@ export const OP_SPECS = {
     accepts: ["number", "integer"],
     params: [],
   },
+  min: {
+    aliases: ["min", "minimum", "smallest", "минимум", "мин", "наименьшее"],
+    icon: "Binary",
+    inputs: "multi",
+    output: "number",
+    accepts: ["number", "integer"],
+    params: [],
+  },
+  max: {
+    aliases: ["max", "maximum", "largest", "максимум", "макс", "наибольшее"],
+    icon: "Binary",
+    inputs: "multi",
+    output: "number",
+    accepts: ["number", "integer"],
+    params: [],
+  },
   contains: {
     aliases: ["contains", "includes", "indexOf", "has", "search", "include"],
     icon: "Binary",

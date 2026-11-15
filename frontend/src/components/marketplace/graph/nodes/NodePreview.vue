@@ -1,6 +1,13 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { ChevronDown, ChevronUp } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { t } from "@/i18n";
 
 // Per-node preview chip. Long values (e.g. a product description) are clamped to a few lines
@@ -27,27 +34,40 @@ watch(text, () => {
 
 <template>
   <div v-if="text" class="vf-preview">
-    <div
-      ref="bodyEl"
-      :class="[
-        'vf-preview__body',
-        expanded ? 'nowheel' : 'vf-preview__body--clamp',
-      ]"
-      :title="text"
-      @wheel.stop
-    >
-      {{ text }}
-    </div>
-    <button
+    <TooltipProvider :delay-duration="300">
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <div
+            ref="bodyEl"
+            :class="[
+              'vf-preview__body',
+              expanded ? 'nowheel' : 'vf-preview__body--clamp',
+            ]"
+            @wheel.stop
+          >
+            {{ text }}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent class="max-w-72 whitespace-pre-wrap break-words">
+          {{ text }}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    <Button
       v-if="overflowing || expanded"
-      type="button"
-      class="vf-preview__toggle nodrag"
+      variant="link"
+      size="xs"
+      class="nodrag mt-[3px] h-auto gap-0.5 p-0 text-[10px] font-normal"
       @click.stop="expanded = !expanded"
       @mousedown.stop
     >
       <component :is="expanded ? ChevronUp : ChevronDown" class="size-3" />
-      {{ expanded ? t("marketplace.graph.previewLess") : t("marketplace.graph.previewMore") }}
-    </button>
+      {{
+        expanded
+          ? t("marketplace.graph.previewLess")
+          : t("marketplace.graph.previewMore")
+      }}
+    </Button>
   </div>
 </template>
 
@@ -59,7 +79,7 @@ watch(text, () => {
 }
 .vf-preview__body {
   font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--muted-foreground);
   white-space: pre-wrap;
@@ -75,17 +95,5 @@ watch(text, () => {
 .vf-preview__body:not(.vf-preview__body--clamp) {
   max-height: 160px;
   overflow-y: auto;
-}
-.vf-preview__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 3px;
-  font-size: 10px;
-  color: var(--primary);
-  cursor: pointer;
-}
-.vf-preview__toggle:hover {
-  text-decoration: underline;
 }
 </style>
