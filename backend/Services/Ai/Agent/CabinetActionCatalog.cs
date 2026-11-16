@@ -166,6 +166,9 @@ public sealed class CabinetActionCatalog
         new("POST", "/marketplace/connections/{id}/save-mapping-selections", true,
             "Assign each product to one category mapping on this connection. Body: { selections: [{ productId, categoryMappingId }] }. categoryMappingId must be one of that product’s availableMappings from resolve-mappings. Use when one local category exports to several marketplace categories. Does not edit the canvas and does not create a mapping.",
             "save-mapping-selections переназначить назначить маппинг товару categoryMappingId фигурки wildberries другая категория"),
+        new("POST", "/store-storage/files/from-text", true,
+            "Save small text that is already generated as one private store file (CSV/JSON/TXT up to 262144 UTF-8 bytes). Returns an authenticated downloadUrl to share in chat. Not for binary or large artifacts.",
+            "csv file файл файлы save сохранить storage хранилище download скачать generated сгенерированный text текст upload загрузить from-text store-storage"),
     ];
 
     private IReadOnlyList<ActionHit> Build()

@@ -88,6 +88,13 @@ public static class PlatformRequestPolicy
         Do not GET import-preview to link. Do not invent extra catalog-connect URLs
         or OpenAPI.
 
+        Store files: POST /store-storage/files/from-text saves small text that is already
+          available as one private file on the selected store (fileName + text, at most
+          262144 UTF-8 bytes; contentType is text/plain by default, or text/csv /
+          application/json; optional folderId). The response downloadUrl is an authenticated
+          link to share in chat. PUT /store-storage/files is multipart and file bytes are
+          binary downloads: neither is JSON-callable. Binary or large sandbox artifacts
+          cannot be uploaded through platform_request at all.
         Notes, folders, barcodes, operations, storage lists, and reference catalogs use the
         same /api paths as the cabinet. Prefer small pageSize.
         """;

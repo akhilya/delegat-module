@@ -58,6 +58,10 @@ The ticket is authenticated and bound to the issuing user, store, and file. Each
 
 The download ticket is **not single-use**: the same URL may be used for multiple full or single-range requests before its original expiry, provided the issuing user's access and the file/store checks still pass on each request. A download neither consumes the ticket nor extends its lifetime. Removing access can therefore block a later request even before expiry. This is separate from the 24-hour retention of staged chat attachments.
 
+### Saving generated text to store storage
+
+`platform_request` can save small text that is already available as one private store file: `POST /store-storage/files/from-text` with `{ fileName, text, contentType?, folderId? }`. `text` is limited to 262144 UTF-8 bytes; `contentType` is `text/plain` (default), `text/csv`, or `application/json`. The response carries `id`, `fileName`, `length`, and an authenticated `downloadUrl` (`/api/store-storage/files/{id}/download`) for the selected store — the assistant shares that link instead of repeating file content in its final answer. The write requires `files.manage` and a confirmed plan like every mutation. `PUT /store-storage/files` stays multipart-only and unreachable from `platform_request`; binary and large sandbox artifacts still have no upload path. This is a cabinet route, not `/api/v1` and not an Agent HTTP endpoint.
+
 ## Connected HTTP MCP trust policy
 
 Connected HTTP MCP is a separate outbound cabinet-chat integration, not an Operator MCP server. It is disabled unless `AI_CONNECTED_MCP_ENABLED=true`. When enabled, the instance also requires an exact allowlist in `AI_CONNECTED_MCP_TOOL_ALLOWLIST`, for example `2:search_docs;2:fetch_document;3:render_stl`. Each entry is `<Settings MCP server id>:<exact remote tools/list name>`; commas and semicolons separate entries. There are no wildcards. An empty or malformed allowlist exposes no connected tools, and the server checks it again when a call arrives (so hiding a tool from `tools/list` is not the only enforcement).

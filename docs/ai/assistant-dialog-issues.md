@@ -8,7 +8,7 @@ Each finding is labeled:
 - **VERIFIED** — confirmed by reading the code path cited.
 - **HYPOTHESIS** — mechanism inferred from code, not yet reproduced; needs a scripted repro before fixing.
 
-This document records problems only. It is the work plan for a follow-up fix PR; nothing here has been changed yet.
+This document is the work plan for the follow-up fixes; per-item status is tracked in §4 and in the file workstream (§7). The F1 bounded small-text upload is implemented in the same PR as this document update — not deployed; see §7. The analysis below otherwise records the session as observed.
 
 ## 1. Session summary
 
@@ -40,9 +40,11 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 
 **Consequence.** For the request class "generate a file and put it in storage", the agent is guaranteed to fail: it either invents a JSON route (what happened) or finds the real route and hits the multipart wall. This will recur on every similar request.
 
+**Status (update, historical baseline).** The absolute claim above describes the pre-F1 state. F1 (`POST /store-storage/files/from-text`, see §7) can persist small text already available to the model; it does not solve byte-exact sandbox artifact transfer and does not prove the original session is fixed. The multipart route is also explicitly described as not JSON-callable in the `platform_request` surface. D1 is therefore **partially** addressed: binary and large sandbox artifacts still have no upload path (F2, §7), so the defect is not closed.
+
 **Fix directions (pick one or combine):**
 
-- **(a) Add a real capability.** A JSON endpoint or dedicated agent tool (e.g. `save_store_file` / `POST /store-storage/files/from-content`) that accepts `{ name, contentType, contentBase64|text, folderId? }` and writes via `IStorageService` directly, bypassing multipart. This is the only option that actually solves the user task.
+- **(a) Add a real capability.** A JSON endpoint or dedicated agent tool (e.g. `save_store_file` / `POST /store-storage/files/from-content`) that accepts `{ name, contentType, contentBase64|text, folderId? }` and writes via `IStorageService` directly, bypassing multipart. This is the only option that actually solves the user task. **Implemented in this PR, not deployed**: F1 (`POST /store-storage/files/from-text`, plain text/CSV/JSON up to 262144 UTF-8 bytes); large or binary artifacts remain part of F2.
 - **(b) Signal unreachability.** Mark multipart/form-data actions in `CabinetActionCatalog` (detect via `IFormFile`/`IFormCollection` parameters or an explicit list) and append a note like "requires multipart — not callable via platform_request"; exclude them from `search_actions` results or rank them below JSON actions. Add a line to `SurfaceBody`: "file upload routes need multipart and cannot be called; use staged chat attachments for product files."
 - **(c) Prompt guard.** Instruct the model not to `propose_plan` steps it cannot execute through available tools, and to say plainly when a request is unsupported instead of improvising routes.
 
@@ -126,25 +128,25 @@ The defects above are mostly deterministic (a leaked JSON field, a wrong render 
 
 ### 3.1 Why the model invented a route
 
-- **Affordance contradiction with no resolution signal.** `search_actions` reported that `PUT /store-storage/files` exists; `platform_request` can only send JSON. Nothing in either surface says "exists but not callable by you". Faced with an impossible task, the model resolved the contradiction by confabulating a plausible JSON route (`POST /store-files` + `{name, mimeType, content}`). LLMs confabulate under constraint violation far more often than they report incapacity — this is expected behavior, not a bug in the weights.
+- **Affordance contradiction with no resolution signal.** `search_actions` reported that `PUT /store-storage/files` exists; `platform_request` can only send JSON. Nothing in either surface says "exists but not callable by you". Faced with that contradiction, the transcript shows an invented JSON route (`POST /store-files` + `{name, mimeType, content}`). Whether the model internally "resolved" the contradiction or merely sampled a plausible continuation is not observable from the trace — that framing is an unverified hypothesis, as is the generalization that LLMs confabulate under constraint violation more often than they report incapacity.
 - **Action hits carry no callability semantics.** `CabinetActionCatalog` notes are auto-generated from action/controller names (`"upload files store storage"`). The hit does not expose HTTP content type, whether the action consumes `IFormFile`/`IFormCollection`, or whether `platform_request` can express the call at all. "Route exists" and "I can call it" are indistinguishable to the model.
 - **No negative capability space.** `PlatformRequestPolicy.SurfaceBody` enumerates what `platform_request` *can* do; nothing enumerates what the assistant *cannot* do (multipart uploads, binary downloads, arbitrary storage writes). Models fill silent gaps with plausible guesses.
 
 ### 3.2 Why it kept working with the invented route
 
-- **Unstructured error feedback.** The invoker returned a bare 404 plus the generic title `"This path does not exist. Do not invent cabinet URLs."` — which is literally true but carries no error class. The model could not distinguish "I guessed the wrong path" from "the route exists but I called it wrong" from "the route needs a content type I cannot send". With no discriminating signal, the cheapest continuation is to stay consistent with the prior (invented) call — self-consistency bias: models almost never retract their own tool calls, they confabulate a narrative consistent with having acted ("the storage section does not exist").
+- **Unstructured error feedback.** The invoker returned a bare 404 plus the generic title `"This path does not exist. Do not invent cabinet URLs."` — which is literally true but carries no error class. The model could not distinguish "I guessed the wrong path" from "the route exists but I called it wrong" from "the route needs a content type I cannot send". With no discriminating signal it stayed consistent with the prior (invented) call. The proposed mechanism — a self-consistency bias under which models almost never retract their own tool calls — is an unverified hypothesis, not a measurement from this trace.
 - **Uncertainty → deferral.** "Скажи «повтори»" is the classic buck-passing failure mode: when unsure, a model minimizes risk by handing the next step to the user rather than attempting another unverifiable call.
 
 ### 3.3 What "reasoning" we actually control
 
-The provider-side chain-of-thought is opaque and not exposed to us; we see only tool calls and text. The reasoning surface we *do* control is the harness: system prompt, tool schemas/descriptions, tool-result payloads, error taxonomy, plan gates, and the review loop. Every confabulation above traces to a missing or ambiguous signal in that harness — not to a missing "reasoning" feature. The fix is therefore to make wrong behavior **impossible or self-correcting**, not to ask the model to try harder.
+The provider-side chain-of-thought was not exposed in this transcript — we saw only tool calls and text. Whether it is uniformly opaque across providers is unverified; what is verified is that the reasoning surface we *do* control is the harness: system prompt, tool schemas/descriptions, tool-result payloads, error taxonomy, plan gates, and the review loop. The missing/ambiguous harness signals are verified weaknesses, but their contribution to this model output remains a hypothesis. The fix is therefore to make *known-invalid* calls rejected or self-correcting in that harness — gates can block known invalid calls, not eliminate fabrication — not to ask the model to try harder.
 
 ### 3.4 Agent-layer work items (new, not covered by D1–D7)
 
 - **H1 — Structured tool-error taxonomy (P1).** `platform_request`/gateway failures should return machine-readable classes — `route_not_found`, `method_not_allowed`, `multipart_required`, `validation_failed`, `forbidden` — plus `hint` and `callableAlternatives[]`, instead of free text. The frontend must not render raw classes to users (ties to D7.2). This single change converts "404 + vibes" into an actionable correction signal.
 - **H2 — Pre-flight validation before invoke (P0/P1).** `AgentToolHost`/`AgentPlatformGateway` should check `method + path` against `CabinetActionCatalog`/`PlatformRequestPolicy` *before* dispatch: reject known-impossible combinations (multipart route via the JSON invoker, denied prefixes, wrong verb) with a corrective `tool_result` so the model gets a second chance **in the same turn** instead of a post-hoc 404. This is the strongest anti-confabulation lever: the invented call never reaches a controller.
 - **H3 — Explicit capability manifest (P1).** Prompt + `SurfaceBody` should state CAN/CANNOT plainly: JSON cabinet routes, python sandbox, connected MCP, staged attachments (user→product direction only), download tickets — and "creating store files from generated content: NOT SUPPORTED" until D1 option (a) ships. Negative space is as important as the route list.
-- **H4 — Plan feasibility gate (P1).** `propose_plan` validation should reject steps whose `platform_request` targets known-unusable routes (multipart/binary/wrong-verb), so a plan card never promises an impossible step. The observed plan 3 was confirmable and executable-shaped but guaranteed to fail — the gate exists for exactly this.
+- **H4 — Plan feasibility gate (P1).** `propose_plan` validation should reject steps whose `platform_request` targets known-unusable routes (multipart/binary/wrong-verb), so a plan card never promises a known-unexecutable step. The observed plan 3 was confirmable and executable-shaped but guaranteed to fail — the gate exists for exactly this.
 - **H5 — Review-loop diagnostics (P2).** Execution outcomes already return to the review model; add structured per-step `errorClass` and, where known, the verified cause ("previous path was not a real route; the real route `PUT /store-storage/files` requires multipart, which is unavailable"). Review should diagnose root cause, not narrate a guess.
 - **H6 — `search_actions` callability flags (P1).** Hits should carry `callableViaJson`, `contentType`, `binaryDownload` fields; scoring should penalize non-callable hits for write intent and the note should say so explicitly. Cheap, high-leverage: it fixes D1-discovery and D2 simultaneously.
 - **H7 — Anti-confabulation prompt rules + audit (P2).** Rules like "never invent paths; if `search_actions` returns no callable route, state the capability is missing" and "on failure, report the verified cause, not a plausible one". `AssistantInstructionAudit` already fails tests when prompt/tool contract drift — extend its fixtures with this session as a regression case, and add the session to `assistant-quality-evaluation.md`'s real-model fixture list.
@@ -152,18 +154,18 @@ The provider-side chain-of-thought is opaque and not exposed to us; we see only 
 
 ### 3.5 Why the fix plan weights contract/UI bugs first anyway
 
-Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and corrupt persisted data — they are fixed regardless of model behavior. The agent-layer items (H1–H8) constrain a probabilistic system: they raise the floor (impossible calls get rejected, errors become actionable) but cannot guarantee a particular answer. Both layers are needed; neither substitutes for the other.
+Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and corrupt persisted data — they are fixed regardless of model behavior. The agent-layer items (H1–H8) constrain a probabilistic system: they raise the floor (known-unusable calls get rejected, errors become actionable) but cannot guarantee a particular answer. Both layers are needed; neither substitutes for the other.
 
 ## 4. Prioritized fix plan
 
 | Pri | Item | Why first |
 |-----|------|-----------|
-| P0 | D1 — real save-to-storage capability **or** explicit unsupported-route signaling | Every "generate file → storage" request fails today; model improvises routes |
+| P0 | D1 — save-to-storage capability: **F1 small-text path DONE (§7)**; F2 binary/large artifact upload still open | Small generated text now succeeds; large/binary artifacts still fail and invite improvisation |
 | P0 | D3 — scope `PreserveServerPlan` by proposal identity | Corrupts persisted data and feeds D4 |
 | P0 | D4 — suppress plan card on `executionProposalId` messages; investigate `planExecStart` gap | Direct cause of "plan moved to the end"; also protects already-corrupted rows |
 | P1 | D2 — actionable error feedback + no-invented-routes rule | Cheap prompt/tooling fix, big recovery improvement |
 | P1 | D7.1 — neutral or route-aware 404 hint | One-line-ish fix, removes misleading guidance |
-| P1 | H2 — pre-flight route validation before `platform_request` invoke | Makes impossible calls self-correcting in-turn |
+| P1 | H2 — pre-flight route validation before `platform_request` invoke | Makes known-unusable calls self-correcting in-turn |
 | P1 | H6 — `callableViaJson`/content-type flags on `search_actions` hits | Fixes discovery + gives model callability semantics |
 | P1 | H3 — explicit CAN/CANNOT capability manifest | Closes the negative-space gap that invited confabulation |
 | P1 | H4 — plan feasibility gate rejects impossible steps | Plan card must not promise unexecutable calls |
@@ -191,3 +193,13 @@ Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and c
 - Whether the `run_python` sandbox preserves state between calls (would explain/justify the re-query) — check `SANDBOX_URL` worker semantics before designing the artifact-handoff fix.
 - Whether old corrupted rows need a cleanup migration/job or read-side filtering is enough (depends on D4 fix choice).
 - How to detect multipart/binary actions for H2/H6 — scan action parameters for `IFormFile`/`IFormCollection`/`IFormFile` collections vs. maintaining an explicit list; needs a catalog-level decision before implementing.
+
+## 7. File workstream (F1–F3) — status
+
+The "generate a file → save to storage → user downloads" request class is now a mandatory, separately tracked workstream. Downloads reuse existing mechanisms: `create_file_download_link` already issues 10-minute authenticated tickets for **product** files, store files already stream through the authenticated selected-store route `GET /api/store-storage/files/{id}/download`, and chat markdown renders that route as an ordinary link. Whether a deterministic chat download control or a typed store-file ticket (F3) is actually needed stays **open** — code inspection alone does not settle it; decide from real sessions.
+
+Scope note: this step implements **F1 only**. None of the harness workstreams (H1–H8) — including H1 error taxonomy and H2 pre-flight route validation — is implemented here.
+
+- **F1 — bounded small-text upload: implemented in this PR, unit-tested, not deployed.** `POST /store-storage/files/from-text` accepts `{ fileName, text, contentType?, folderId? }`, requires `files.manage` on the selected store, encodes `text` as UTF-8 with a strict 262144-byte cap (request envelope capped at 2 MiB), allows only `text/plain` (default), `text/csv`, `application/json`, enforces the store's file/storage quotas before upload, and persists one private `StoreFile` under the existing `{storeId}/store/{guid}/{name}` key convention — never public, no overwrite, no public link. The response is `{ id, fileName, contentType, length, folderId, downloadUrl }`; a failed row save deletes the uploaded object. `platform_request` treats it as a write (confirmed plan required), `search_actions` finds it via RU/EN aliases, and the canonical `AssistantWriteContract` sentence is embedded in the surface and audited by `AssistantInstructionAudit`. Coverage: unit tests only — **no live-model or real-catalog proof yet**.
+- **F2 — sandbox→HTTP streaming artifact upload: OPEN (P0).** For binary or large artifacts produced inside the `run_python` sandbox: a streaming HTTP upload (or presigned artifact handoff) that keeps model context metadata-only (id/name/size — never bytes), still under an explicit confirmed write authorization. The Python contract stays explicitly write-free — no Python-side storage bypass.
+- **F3 — typed store-file tickets + deterministic chat download control: OPEN (optional).** Product-file tickets are already store/user-checked but require the product file type; an equivalent typed private ticket for store files, independent of the currently selected store header, plus a deterministic chat download control if plain authenticated links prove insufficient.
