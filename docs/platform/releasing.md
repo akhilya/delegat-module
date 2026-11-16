@@ -16,6 +16,10 @@ User-facing history lives in root [`CHANGELOG.md`](../../CHANGELOG.md) ([Keep a 
 
 Do this in the **same PR/commit** as the code change whenever the change is user-visible or operationally important.
 
+### PR documentation checklist
+
+Keep the four acknowledgement lines from [the PR template](../../.github/pull_request_template.md) unchanged and mark each reviewed item `[x]`. CI checks their exact wording. Put explanations about updated files or why a change is not applicable in a separate paragraph below the checklist.
+
 ### On every release
 
 1. Choose the next SemVer in `VERSION` (major / minor / patch).
