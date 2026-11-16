@@ -11,6 +11,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
+- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in the matching user — the instance admin when the platform account email is not present locally — and redirects to the catalog. Standard `isActive` and lockout rules apply; failures land on the sign-in page with an error toast.
+
+- Ozon App Store OAuth connection flow: a "Connect via Ozon" button on the connection form starts the seller consent flow, `/marketplace/ozon/oauth/start` + `/marketplace/ozon/oauth/complete` endpoints redeem the Control Plane grant, and the adapter talks to the Ozon API with `Authorization: Bearer`. A hosted service rotates access/refresh token pairs through the Control Plane proxy before expiry and flags `oauthReconnectRequired` when Ozon revokes the grant; the manual Client-Id/Api-Key flow is unchanged.
+
 - The dictionary Mapping block offers an auto-match button that pairs source options with adapter options by normalized name (exact, unambiguous containment, or fuzzy match), never overwriting existing rows.
 - The List (array) static block edits values as chips — add with Enter, comma, or blur; remove per chip; values are stored as a JSON array so they may contain commas.
 - Improve marketplace field auto-mapping and group adapter fields in the mapping graph. Ambiguous duplicate attributes require a choice, and compatible units are converted automatically. Adapter fields that duplicate another field's binding are merged under the named field, and attribute fields repeating a product field are collapsed into a revealable hidden group in the mapping graph. The mapping block search covers dictionary options of adapter fields, prefilled arithmetic modifiers typed as sign-plus-number queries such as `/ 15` (reversible on import like other modifiers), plus multi-input minimum and maximum blocks. Loading a mapping drops bindings and nodes that reference deleted local or store attributes, and a removed wire no longer shifts the remaining inputs of indexed operation blocks such as if-else and format-string. The mapping canvas is restyled to the platform design code: larger rounded cards, bigger pins with a hover affordance, and wires with a wide click target. Copying blocks now works across mapping pages and cabinets via the system clipboard, and pasting or importing validates that referenced attributes, product fields, and store files exist in the target cabinet, skipping blocks that cannot resolve. The Add field affordance is now offered only for adapters that accept mapping-local custom fields (store engines with open-ended field schemas); fixed-schema marketplaces hide it.
@@ -469,12 +473,15 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Security
 
 - `GET /stores/` and `GET /stores/{id}` now require sign-in. They return only stores the caller is a member of (instance owners still see every store), and a store the caller does not belong to answers 404.
+- Live operation updates are delivered only for stores the signed-in user is an active member of. Previously, changing the selected-store cookie let any signed-in user receive another store's operation logs and progress.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
 - Update Vue I18n to 11.4.16 and pin MySqlConnector to 2.6.1 to address published dependency advisories.
+- Product and store-storage image thumbnails are sent with `Cache-Control: private`, so a shared cache or CDN in front of an instance cannot store them and serve them to other visitors.
 
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling
+- Pin `System.Formats.Cbor` to 9.0.24 (CVE-2026-118747) and `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.14 in tests — Fido2 and EFCore.Sqlite were resolving vulnerable transitives.
 
 ## [1.6.0] - 2026-08-18
 

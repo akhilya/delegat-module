@@ -199,3 +199,47 @@ public sealed class PlatformHostedAiConfigDto
     [JsonPropertyName("usageUnavailable")]
     public bool UsageUnavailable { get; set; }
 }
+
+public sealed class PlatformOzonGrantClaimDto
+{
+    [JsonPropertyName("accessToken")]
+    public string? AccessToken { get; set; }
+
+    [JsonPropertyName("refreshToken")]
+    public string? RefreshToken { get; set; }
+
+    [JsonPropertyName("accessTokenExpiresAt")]
+    public DateTimeOffset AccessTokenExpiresAt { get; set; }
+
+    [JsonPropertyName("sellerId")]
+    public string? SellerId { get; set; }
+
+    [JsonPropertyName("scope")]
+    public string? Scope { get; set; }
+
+    [JsonPropertyName("storeHint")]
+    public int? StoreHint { get; set; }
+}
+
+public sealed record PlatformOzonTokenDto(
+    [property: JsonPropertyName("accessToken")] string AccessToken,
+    [property: JsonPropertyName("refreshToken")] string? RefreshToken,
+    [property: JsonPropertyName("expiresIn")] int ExpiresIn);
+
+/// <summary>Result of the CP refresh proxy; Error carries Ozon's error code on failure.</summary>
+public sealed record PlatformOzonRefreshResult(
+    bool Success,
+    string? Error,
+    string? AccessToken,
+    string? RefreshToken,
+    int ExpiresIn);
+
+/// <summary>
+/// Identity the Control Plane hands back for a redeemed console SSO code:
+/// the platform account the cabinet sign-in should map to.
+/// </summary>
+public sealed class PlatformInstanceSsoDto
+{
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+}
