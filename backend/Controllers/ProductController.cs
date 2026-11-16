@@ -1178,6 +1178,8 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/import-preview")]
+    [RequestSizeLimit(ExcelProductService.MaxImportRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ExcelProductService.MaxImportRequestBytes)]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportPreview(IFormFile file)
     {
@@ -1187,6 +1189,8 @@ public class ProductController : ControllerBase
 
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest(code: "file_required");
+        if (file.Length > ExcelProductService.MaxImportUploadBytes)
+            throw ApiException.BadRequest("The spreadsheet is too large to import.", code: "excel_import_too_large");
 
         using var stream = file.OpenReadStream();
         var parsed = _excelService.ParseImportFile(stream);
@@ -1217,6 +1221,8 @@ public class ProductController : ControllerBase
     /// </summary>
     [HttpPost]
     [Route("/products/import-apply")]
+    [RequestSizeLimit(ExcelProductService.MaxImportRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ExcelProductService.MaxImportRequestBytes)]
     [RequiresPermission(Permissions.CatalogManage, requireStoreMembership: true)]
     public async Task<IActionResult> ImportApply(IFormFile file)
     {
@@ -1227,14 +1233,17 @@ public class ProductController : ControllerBase
 
         if (file == null || file.Length == 0)
             throw ApiException.BadRequest(code: "file_required");
+        if (file.Length > ExcelProductService.MaxImportUploadBytes)
+            throw ApiException.BadRequest("The spreadsheet is too large to import.", code: "excel_import_too_large");
+
+        ImportParseResult parsed;
+        using (var stream = file.OpenReadStream())
+            parsed = _excelService.ParseImportFile(stream);
 
         var operationId = Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
         await _operationLogger.StartAsync(operationId, storeId, userId, "excel-import",
             $"Import from Excel: {file.FileName}");
-
-        using var stream = file.OpenReadStream();
-        var parsed = _excelService.ParseImportFile(stream);
 
         await _operationLogger.LogAsync(operationId, storeId, "info", $"Rows found: {parsed.Rows.Count}");
 
