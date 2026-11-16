@@ -37,6 +37,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 - [OpenCart bridge](adapters/opencart.md)
 - [WooCommerce bridge](adapters/woocommerce.md)
 - [Avito adapter](adapters/avito.md) — experimental; listing import and price operations, no listing publication
+- [Adapter API drift audit (2026-11)](adapters/api-drift-audit-2026-11.md) — endpoint inventory vs current official docs
 
 ## AI assistant reference
 
