@@ -1,6 +1,9 @@
+using System.IO.Compression;
+using System.Xml;
 using ClosedXML.Excel;
 using Delegat.Controllers;
 using Delegat.Infrastructure.Data;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models;
 using Delegat.Models.Products;
 
@@ -8,6 +11,16 @@ namespace Delegat.Services;
 
 public class ExcelProductService
 {
+    public const long MaxImportUploadBytes = 20L * 1024 * 1024;
+    public const long MaxImportRequestBytes = MaxImportUploadBytes + 1024 * 1024;
+    public const int MaxImportArchiveEntries = 1_000;
+    public const long MaxImportExpandedBytes = 100L * 1024 * 1024;
+    public const int MaxImportXmlElements = 5_000_000;
+    public const int MaxImportCells = 1_000_000;
+    public const int MaxImportDataRows = 50_000;
+    public const int MaxImportColumns = 1_000;
+    private const int ImportHeaderRows = 2;
+
     private static string SafeExcelText(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -146,11 +159,35 @@ public class ExcelProductService
 
     public ImportParseResult ParseImportFile(Stream file)
     {
-        var wb = new XLWorkbook(file);
-        var ws = wb.Worksheet(1);
+        using var content = BufferImportUpload(file);
+        EnsureImportArchiveWithinLimits(content);
+        content.Position = 0;
+
+        XLWorkbook wb;
+        try
+        {
+            wb = new XLWorkbook(content);
+        }
+        catch (Exception ex) when (ex is not ApiException and not OutOfMemoryException)
+        {
+            throw ImportInvalid(ex);
+        }
+
+        using (wb)
+            return ParseImportWorkbook(wb);
+    }
+
+    private static ImportParseResult ParseImportWorkbook(XLWorkbook wb)
+    {
+        var ws = wb.Worksheets.FirstOrDefault();
+        if (ws == null)
+            return new ImportParseResult { Rows = new(), ColumnKeys = new() };
 
         var lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
         var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+        if (lastCol > MaxImportColumns || lastRow > MaxImportDataRows + ImportHeaderRows)
+            throw ImportTooLarge();
 
         if (lastCol == 0 || lastRow < 3)
             return new ImportParseResult { Rows = new(), ColumnKeys = new() };
@@ -192,6 +229,160 @@ public class ExcelProductService
         }
 
         return new ImportParseResult { Rows = rows, ColumnKeys = columnKeys };
+    }
+
+    private static MemoryStream BufferImportUpload(Stream file)
+    {
+        if (file.CanSeek && file.Length - file.Position > MaxImportUploadBytes)
+            throw ImportTooLarge();
+
+        var buffered = new MemoryStream();
+        var buffer = new byte[81920];
+        int read;
+        while ((read = file.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            if (buffered.Length + read > MaxImportUploadBytes)
+            {
+                buffered.Dispose();
+                throw ImportTooLarge();
+            }
+            buffered.Write(buffer, 0, read);
+        }
+        buffered.Position = 0;
+        return buffered;
+    }
+
+    /// <summary>
+    /// Inflates every archive entry through a byte budget before ClosedXML loads the workbook,
+    /// so a small upload cannot expand into an unbounded in-memory workbook (zip bomb).
+    /// Counts actual decompressed bytes rather than trusting declared entry sizes.
+    /// </summary>
+    private static void EnsureImportArchiveWithinLimits(Stream content)
+    {
+        content.Position = 0;
+        ZipArchive archive;
+        try
+        {
+            archive = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw ImportInvalid(ex);
+        }
+
+        using (archive)
+        {
+            if (archive.Entries.Count > MaxImportArchiveEntries)
+                throw ImportTooLarge();
+
+            long declaredBytes = 0;
+            foreach (var entry in archive.Entries)
+            {
+                if (entry.Length < 0 || entry.Length > MaxImportExpandedBytes - declaredBytes)
+                    throw ImportTooLarge();
+                declaredBytes += entry.Length;
+            }
+
+            var budget = new ImportExpansionBudget();
+            foreach (var entry in archive.Entries)
+            {
+                try
+                {
+                    using var raw = entry.Open();
+                    using var bounded = new BudgetedReadStream(raw, budget);
+                    if (entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                        || entry.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var isWorksheet = entry.FullName.StartsWith("xl/worksheets/", StringComparison.OrdinalIgnoreCase);
+                        CountImportXml(bounded, isWorksheet, budget);
+                    }
+                    else
+                    {
+                        bounded.CopyTo(Stream.Null);
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidDataException or XmlException)
+                {
+                    throw ImportInvalid(ex);
+                }
+            }
+        }
+    }
+
+    private static void CountImportXml(Stream xml, bool isWorksheet, ImportExpansionBudget budget)
+    {
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreComments = true,
+            IgnoreWhitespace = true,
+            CloseInput = false,
+        };
+        using var reader = XmlReader.Create(xml, settings);
+        while (reader.Read())
+        {
+            if (reader.NodeType != XmlNodeType.Element)
+                continue;
+            if (++budget.Elements > MaxImportXmlElements)
+                throw ImportTooLarge();
+            if (isWorksheet && reader.LocalName == "c" && ++budget.Cells > MaxImportCells)
+                throw ImportTooLarge();
+        }
+    }
+
+    private static ApiException ImportTooLarge() => ApiException.BadRequest(
+        $"The spreadsheet is too large to import (limits: {MaxImportUploadBytes / (1024 * 1024)} MB upload, " +
+        $"{MaxImportExpandedBytes / (1024 * 1024)} MB uncompressed, {MaxImportDataRows} rows, {MaxImportColumns} columns).",
+        code: "excel_import_too_large");
+
+    private static ApiException ImportInvalid(Exception inner) => new(
+        "The file is not a valid .xlsx workbook.",
+        StatusCodes.Status400BadRequest,
+        innerException: inner,
+        code: "excel_import_invalid");
+
+    private sealed class ImportExpansionBudget
+    {
+        public long ExpandedBytes;
+        public int Elements;
+        public int Cells;
+    }
+
+    private sealed class BudgetedReadStream(Stream inner, ImportExpansionBudget budget) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Track(inner.Read(buffer, offset, count));
+        public override int Read(Span<byte> buffer) => Track(inner.Read(buffer));
+
+        private int Track(int read)
+        {
+            budget.ExpandedBytes += read;
+            if (budget.ExpandedBytes > MaxImportExpandedBytes)
+                throw ImportTooLarge();
+            return read;
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                inner.Dispose();
+            base.Dispose(disposing);
+        }
     }
 
     public ImportChangeset BuildChangeset(ImportParseResult parsed, List<Product> currentProducts)
