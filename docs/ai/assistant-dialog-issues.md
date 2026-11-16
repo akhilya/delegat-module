@@ -18,11 +18,11 @@ User request (dbId 37): produce a CSV of all products whose names contain ≥15 
 |------|------|----------------|--------------------------|
 | 34 | user | "выведи таблицу товаров, в названии которых минимум 15 согласных и 6 гласных" | — |
 | 35 | assistant | proposal + execution of plan 1 (`run_python` count) merged into one row | `plan` (proposalId `6C4544…`), `planConfirmed`, `planExecuted`, `planExecStart: 0`, empty `content` |
-| 36 | assistant | review: full 75-row table printed into chat | **also carries `plan` + all plan flags + `executionProposalId`** |
+| 36 | assistant | review: full 75-row table printed into chat | **also carries `plan` + all plan flags + `executionProposalId`** (suspected copied state; see D3) |
 | 37 | user | "Сделай CSV и загрузи в хранилище" | — |
 | 38 | assistant | plan 2 exec merged: 4 search tools + `run_python` that re-scanned the catalog and printed the CSV | `plan`, `planExecStart: 4`, `affectedCount: 74` (actual 75) |
 | 39 | assistant | plan 3 proposal (from plan-2 review) + failed execution fused into one row | `platform_request` tool, `plan` (proposalId `FB0D00…`), `planConfirmed`, `planFailed`, **no `planExecStart`** |
-| 40 | assistant | review of the failure: "Файл не сохранился… Скажи «повтори»…" | **also carries `plan` + plan flags + `executionProposalId`** |
+| 40 | assistant | review of the failure: "Файл не сохранился… Скажи «повтори»…" | **also carries `plan` + plan flags + `executionProposalId`** (suspected copied state; see D3) |
 
 Net user-visible result: the CSV was generated but never delivered as a file; the upload failed on an invented route; the plan card appeared to "move to the end"; the same plan rendered twice.
 
@@ -62,7 +62,11 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 
 ### D3 — Plan state leaks into review/execution messages — P0
 
-**OBSERVED.** dbId 36 and dbId 40 (the post-execution **review** messages) each contain a full copy of the `plan` object **plus** `planConfirmed`, `planExecuted`, `planExecStart`, `planConfirmedBy`, `planConfirmedAtUtc`, `planConfirmationId` — alongside their own `executionProposalId`. A review message should carry only `executionProposalId` + text/timeline.
+**OBSERVED.** dbId 36 and dbId 40 (the post-execution **review** messages) each contain a full copy of the `plan` object **plus** `planConfirmed`, `planExecuted`, `planExecStart`, `planConfirmedBy`, `planConfirmedAtUtc`, `planConfirmationId` — alongside their own `executionProposalId`. On both rows the embedded plan carries the parent proposal's flag values (`planExecStart: 0`, same `planConfirmedAtUtc`). The earlier audit described matching parent-plan fields; this is a copied-state hypothesis requiring proposal-ID and authoritative message-ownership validation, not proof from marker co-presence.
+
+**Correction to an earlier claim.** "A review message should carry only `executionProposalId` + text/timeline" is **unsupported** and is retracted: a review that proposes a *new* plan legitimately carries both `executionProposalId` and `plan` (see counter-evidence below). The defect to investigate is unintended copying of parent state, not marker co-presence.
+
+**VERIFIED counter-evidence (marker co-presence is legitimate).** `executionProposalId` is the *parent execution* linkage (proposal A); `plan.proposalId` is the message's *own* proposal (B). `AiChatService` emits the review turn's `AssistantStart` with `executionProposalId = A` (`backend/Services/Ai/AiChatService.cs` ~line 845); when the model then proposes a correction, the subsequent `Plan` event mints a distinct B, and `AiSseTurnRecorder.FoldTurns` preserves **both** fields on the same persisted envelope (`backend/Services/Ai/AiSseTurnRecorder.cs`, `executionProposalId` + `plan`). `backend.Tests/Ai/AiChatAgentEvaluationTests.cs` `FailedPythonPlan_ReviewsRealErrorAndProposesCorrectionWithoutExecutingIt` (~lines 483–521) exercises exactly this flow: the review proposes B ≠ A, the turns persist, and B is later consumed — so `executionProposalId` + `plan` co-presence is **not** proof of a leak.
 
 **VERIFIED.** `AiSseTurnRecorder.FoldTurns` builds the persisted envelope and never writes `planConfirmed`/`planExecStart`/`planConfirmationId`; it writes `planExecuted`, `planFailed`, `turnStopped`, `executionProposalId`, `requestError` only (`backend/Services/Ai/AiSseTurnRecorder.cs`). The leaked flags can only come from two writers:
 
@@ -73,30 +77,33 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 
 **HYPOTHESIS (mechanism, needs repro).** The client sync path (`AiConversationController.SaveMessages`, `backend/Controllers/AiConversationController.cs` ~lines 132–284) matches incoming messages to existing rows by `dbId`, else by `role + content`, else rebases the final assistant message onto the last existing assistant row. Assistant rows produced by plan execution have **empty `content`** and review rows have distinct content, so content-matching is fragile exactly where plans live. A plausible sequence: the client's review message (content = final text, `executionProposalId`, no plan) failed to match a freshly persisted review row (live-turn persistence races client sync), fell into the final-assistant rebase branch or a content match onto a plan-bearing row, and `PreserveServerPlan` injected `stored.plan` + flags into it. The identical flag values on dbId 36/40 (`planExecStart: 0`, same `planConfirmedAtUtc`) match a byte-level copy from the plan row, which is the signature of `PreserveServerPlan`, not of `Fold`.
 
-**Why it matters beyond cosmetics.** The leaked `plan` makes the frontend render a second `AiPlanCard` on the answer message (see D4), and the leaked flags (`planExecuted`, `planFailed`) corrupt plan-state reconciliation in `frontend/src/lib/ai/planState.js` / `persist.js`.
+**Why it matters beyond cosmetics.** A *copied* parent plan on a review row makes the frontend render a second `AiPlanCard` on the answer message (see D4), and copied flags (`planExecuted`, `planFailed`) can corrupt plan-state reconciliation in `frontend/src/lib/ai/planState.js` / `persist.js`. By contrast, an own proposal B on a review row is legitimate and must stay visible and confirmable — the same rendering path must not treat it as a leak.
 
-**Fix directions.**
+**Design rules (agreed).**
 
-- Scope `PreserveServerPlan` by identity: transfer `plan` + flags only when `incoming.executionProposalId` is absent **and** (stored plan's `proposalId` equals incoming plan's `proposalId`, or the incoming message is the proposal row itself). Never copy `plan` into a message that carries `executionProposalId`.
-- Alternatively/additionally: treat `executionProposalId`-bearing messages as review rows in `SaveMessages` matching — match them by `executionProposalId` inside `toolCallsJson`, not by `role+content`.
-- Add a regression test that replays the exact race: live-turn `AppendAssistantAsync` for the review row vs. client `syncHistory` arriving before/after it, asserting the review row never gains `plan`.
+- `PreserveServerPlan` may preserve only *own-proposal* state: transfer `plan` + flags only when the stored plan's `proposalId` equals the incoming message's own `plan.proposalId` **and** the message identity is stable — or when the incoming message is the proposal row itself. The parent link must never overwrite B with A: a review carrying B must not inherit A's `planConfirmed`/`planExecuted`/`planFailed`/`planExecStart`.
+- A same-A duplication is only a **candidate** for suppression/normalization: apply it only when stable message identity plus authoritative proposal ownership establish the `plan` as a copy — never on marker presence alone or an unverified heuristic.
+- Rows with missing or ambiguous IDs are **retained and investigated**; no destructive blanket cleanup.
+- `executionProposalId` alone is not a unique join key (reused across snapshots/retries): `SaveMessages` must match review rows by stable message identity plus their own plan identity, not by `executionProposalId` or `role+content` alone.
+- A review that proposes no plan must never acquire an unrelated parent plan — enforced by the same identity checks, not by filtering `plan` off `executionProposalId` messages.
+- Regression tests (paired cases listed in §5) replay the exact race: live-turn `AppendAssistantAsync` for the review row vs. client `syncHistory` arriving before/after it — asserting the review never gains a *copied* plan while a legitimately proposed B survives.
 
 ### D4 — Plan card renders at the end / duplicated; `planExecStart` inconsistency — P0
 
 **OBSERVED.** The user saw the plan "move to the end by itself": a plan card appeared below/after content that should follow it, and the same plan rendered twice.
 
-**VERIFIED rendering rule.** `AiChatPanel.vue` renders `<AiPlanCard>` for any message where `planHasContent(msg)` is true (~lines 1060–1082). There is no exclusion for review messages. So any message carrying a leaked `plan` (D3) shows a full second plan card directly above the final answer — visually "the plan moved to the end".
+**VERIFIED rendering rule.** `AiChatPanel.vue` renders `<AiPlanCard>` for any message where `planHasContent(msg)` is true (~lines 1060–1082). There is no exclusion for review messages. So a review row carrying any `plan` — a copied parent plan (D3) *or* its own proposal B — renders a plan card directly above the final answer. For a copied plan that is visually "the plan moved to the end"; for B it is the legitimate, required rendering.
 
-**VERIFIED layout fallback.** `frontend/src/lib/ai/timeline.js` `executionView`/`splitPlanExecution` rely on `planExecStart` to separate proposal-process from execution-process. dbId 39 **lacks `planExecStart`** (unlike dbId 35 `=0` and dbId 38 `=4`), so `hasPlanExec` is false, `replyText` is suppressed by the `msg.plan → ""` branch, and the layout degenerates to `executionView(everything)`: order becomes process → reply → **plan card last** — i.e. a confirmation card rendered *after* the already-failed `platform_request` step. The persisted shape is inconsistent across the three plan rows.
+**VERIFIED layout fallback.** `frontend/src/lib/ai/timeline.js` `executionView`/`splitPlanExecution` rely on `planExecStart` to separate proposal-process from execution-process. dbId 39 **lacks `planExecStart`** (unlike dbId 35 `=0` and dbId 38 `=4`), so `hasPlanExec` is false, `replyText` is suppressed by the `msg.plan → ""` branch, and the layout degenerates to `executionView(everything)`: order becomes process → reply → **plan card last** — i.e. a confirmation card rendered *after* the already-failed `platform_request` step. Caveat: `planExecStart` marks execution start, so a *pending* proposal legitimately lacks it — the blanket rule "every plan-bearing row must have `planExecStart`" is retracted. What is suspicious on dbId 39 specifically is a row that *executed* (carries `planFailed`) yet lacks the marker.
 
 **HYPOTHESIS.** dbId 39's missing `planExecStart` is consistent with the row being last written through the `SaveMessages`/`PreserveServerPlan` path at a moment when the stored row had `planConfirmed` but not yet `planExecuted`/`planExecStart` (the flag copy removes keys the stored row lacks). This again points at D3's multi-writer race rather than `TryMergePlanExecution`, which always sets `planExecStart`.
 
 **Fix directions.**
 
-- Frontend: never render `AiPlanCard` when `msg.executionProposalId` is set (review message), regardless of a leaked `plan`. Defense in depth even after D3 is fixed, because old rows already contain the leak.
-- Frontend: in `planState.js`/`persist.js`, ignore `plan*` fields on messages carrying `executionProposalId` during reconcile/hydrate.
-- Backend: normalize — ensure every plan-bearing persisted row has `planExecStart` (or explicitly document its absence) regardless of which writer touched it last.
-- Data note: existing stored rows already contain leaked plans; decide whether a one-off cleanup is needed or whether read-side filtering suffices.
+- Frontend: suppress `AiPlanCard` only when the `plan` is established as a **copy** of the parent proposal — same `proposalId` as the parent execution's plan plus copied flag state **and** authoritative message ownership with a stable ID; all three conditions are required. A review whose `plan.proposalId` is its own new proposal B must still render B's card — B stays visible and confirmable. `executionProposalId` presence alone is not a suppression signal; blanket filtering on it is retracted as a fix direction.
+- Frontend `planState.js`/`persist.js`: reconcile/hydrate own-proposal state keyed by the message's own `plan.proposalId` + stable message identity; a distinct B must not inherit A's confirmed/executed/failed flags.
+- Backend: keep `planExecStart` semantics honest — it marks execution start and pending proposals legitimately lack it. The open question is only whether an *executed* row that lacks it (dbId 39) indicates a writer bug (§6).
+- Data note: retain existing rows; no destructive blanket cleanup. Rows *proven* to carry a copied parent plan (identity evidence, not heuristics) may be normalized read-side; ambiguous rows are investigated, not rewritten.
 
 ### D5 — `affectedCount` is model-supplied and wrong — P2
 
@@ -124,7 +131,7 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 
 ## 3. Agent harness — why the model confabulated, and what we actually control
 
-The defects above are mostly deterministic (a leaked JSON field, a wrong render branch). The deepest problem in this session is different: **the model invented `POST /store-files`, ignored the real route its own `search_actions` had returned, continued with the invented route after a 404, and ended by deferring to the user instead of diagnosing.** This section analyzes that layer separately, because "make the model smarter" is not an actionable fix — the actionable surface is the harness around it.
+The defects above are mostly deterministic (a copied `plan` field, a wrong render branch). The deepest problem in this session is different: **the model invented `POST /store-files`, ignored the real route its own `search_actions` had returned, continued with the invented route after a 404, and ended by deferring to the user instead of diagnosing.** This section analyzes that layer separately, because "make the model smarter" is not an actionable fix — the actionable surface is the harness around it.
 
 ### 3.1 Why the model invented a route
 
@@ -154,15 +161,15 @@ The provider-side chain-of-thought was not exposed in this transcript — we saw
 
 ### 3.5 Why the fix plan weights contract/UI bugs first anyway
 
-Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and corrupt persisted data — they are fixed regardless of model behavior. The agent-layer items (H1–H8) constrain a probabilistic system: they raise the floor (known-unusable calls get rejected, errors become actionable) but cannot guarantee a particular answer. Both layers are needed; neither substitutes for the other.
+Deterministic defects (D3 plan leak, D4 card placement) are more tractable than model behavior — though "corrupt persisted data" is still a strong hypothesis rather than a proven mechanism: the copied-plan signature on dbId 36/40 is consistent with `PreserveServerPlan`, but no ID-specific reproduction has run yet (§6). The agent-layer items (H1–H8) constrain a probabilistic system: they raise the floor (known-unusable calls get rejected, errors become actionable) but cannot guarantee a particular answer. Both layers are needed; neither substitutes for the other.
 
 ## 4. Prioritized fix plan
 
 | Pri | Item | Why first |
 |-----|------|-----------|
 | P0 | D1 — save-to-storage capability: **F1 small-text path DONE (§7)**; F2 binary/large artifact upload still open | Small generated text now succeeds; large/binary artifacts still fail and invite improvisation |
-| P0 | D3 — scope `PreserveServerPlan` by proposal identity | Corrupts persisted data and feeds D4 |
-| P0 | D4 — suppress plan card on `executionProposalId` messages; investigate `planExecStart` gap | Direct cause of "plan moved to the end"; also protects already-corrupted rows |
+| P0 | D3 — scope `PreserveServerPlan` by own-proposal + stable message identity; never overwrite a distinct B with parent A | Suspected persisted-data corruption (strong signature, ID-specific repro pending); feeds D4 |
+| P0 | D4 — suppress plan card only for proven-copied plans, not all `executionProposalId` rows; investigate `planExecStart` gap | Direct cause of "plan moved to the end"; protects suspect rows without hiding legitimate B proposals |
 | P1 | D2 — actionable error feedback + no-invented-routes rule | Cheap prompt/tooling fix, big recovery improvement |
 | P1 | D7.1 — neutral or route-aware 404 hint | One-line-ish fix, removes misleading guidance |
 | P1 | H2 — pre-flight route validation before `platform_request` invoke | Makes known-unusable calls self-correcting in-turn |
@@ -179,9 +186,9 @@ Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and c
 
 ## 5. Verification plan (for the fix PR)
 
-- **Backend unit/integration** (`backend.Tests/Ai/`): scripted cases for (a) `PreserveServerPlan` never copying `plan` into an `executionProposalId` message; (b) `SaveMessages` race — review row persisted by live hub before/after client sync, assert final row has no `plan`; (c) multipart route marked non-callable in `search_actions`/`SurfaceBody` if option (b) of D1 is chosen; (d) new save-file endpoint/tool contract tests if option (a) is chosen.
-- **Frontend unit**: `AiChatPanel`/`timeline`/`planState` cases — message with `executionProposalId` + leaked `plan` renders no plan card; `planExecStart`-less plan rows still lay out sanely.
-- **E2E intercepted** (`frontend/e2e/`): replay the plan→confirm→execute→review flow with a stubbed SSE, reload mid-turn, assert single plan card and correct order.
+- **Backend unit/integration** (`backend.Tests/Ai/`): the paired D3 regression cases — (a) a legitimate review proposing B ≠ A retains B through client sync and reload with B still confirmable — the existing `FailedPythonPlan_ReviewsRealErrorAndProposesCorrectionWithoutExecutingIt` covers persistence and consumption of B only; the client-sync/reload legs remain planned; (b) a review row proven to carry a copied parent plan A is normalized and not rendered twice; (c) a review with no new plan cannot inherit an unrelated parent plan through `PreserveServerPlan`; (d) two review rows sharing the same `executionProposalId` are not merged by A alone; (e) the `SaveMessages` race — review row persisted by live hub before/after client sync — never injects a copied plan. Plus (f) multipart route marked non-callable in `search_actions`/`SurfaceBody` if option (b) of D1 is chosen; (g) save-file endpoint contract tests for option (a) — F1 covered.
+- **Frontend unit**: `AiChatPanel`/`timeline`/`planState` cases — a message carrying a proven-copied parent plan renders no second card, while a review with its own plan B renders B's card; pending (`planExecStart`-less) proposal rows still lay out sanely.
+- **E2E intercepted** (`frontend/e2e/`): replay the plan→confirm→execute→review flow with a stubbed SSE, reload mid-turn, assert a copied plan is not rendered twice while a fresh B proposal stays confirmable.
 - **Agent harness** (`backend.Tests/Ai/`): scripted cases for pre-flight rejection of multipart-via-JSON calls (H2), `callableViaJson` flags on catalog hits (H6), plan-gate rejection of impossible steps (H4), and structured error classes reaching the review payload (H1/H5). Extend `AssistantInstructionAudit` fixtures per H7.
 - **Docs gate**: update `docs/architecture/ai-assistant.md` for any new tool/endpoint; CHANGELOG `Unreleased` entry for user-visible fixes.
 - If D1 option (a) adds an endpoint: check whether it belongs to the public `/api/v1` surface (likely not — cabinet-only) and keep `docs/api/` in sync only if it does.
@@ -190,8 +197,9 @@ Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and c
 
 - Exact `SaveMessages` branch that wrote the leaked plan into dbId 36/40 (content-match vs final-assistant rebase vs `nextUnpersistedIndex` walk). Needs a timed repro; the `PreserveServerPlan` signature (identical flag values copied from the plan row) strongly suggests it, but the matching path is unproven.
 - Whether dbId 39 was last written by `TryMergePlanExecution` or by the sync path — determines whether `planExecStart` absence is a merge bug or a sync bug.
+- Authoritative proposal-ownership signal: what persisted evidence distinguishes "plan owned by this row (B)" from "plan copied from the parent row (A)" when `proposalId` values collide or are missing — needed before any suppression or normalization rule can be safely applied.
 - Whether the `run_python` sandbox preserves state between calls (would explain/justify the re-query) — check `SANDBOX_URL` worker semantics before designing the artifact-handoff fix.
-- Whether old corrupted rows need a cleanup migration/job or read-side filtering is enough (depends on D4 fix choice).
+- Whether old rows carrying copied plans need normalization or read-side filtering is enough (depends on the D4 identity rule); ambiguous rows stay untouched per the no-blanket-cleanup rule.
 - How to detect multipart/binary actions for H2/H6 — scan action parameters for `IFormFile`/`IFormCollection`/`IFormFile` collections vs. maintaining an explicit list; needs a catalog-level decision before implementing.
 
 ## 7. File workstream (F1–F3) — status

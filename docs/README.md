@@ -43,6 +43,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 - [AI architecture](architecture/ai-system.md)
 - [AI maintenance and prompt/tool contract](architecture/ai-assistant.md)
 - [Assistant quality evaluation](ai/assistant-quality-evaluation.md) — offline fixtures, isolated live-model findings, and comparison gates
+- [Assistant dialog defect report and fix plan](ai/assistant-dialog-issues.md) — observed cabinet-chat failure analysis and workstreams (D*, H*, F1–F3)
 - [Assistant production rollout](ai/production-rollout.md) — release, instance-local embeddings, activation checks, and rollback
 - [AI-agent quality and efficiency audit](architecture/ai-agent-audit.md) — snapshot dated 2026-10-28; remaining work is listed in the document
 - [Authentication implementation notes](architecture/authentication.md)
