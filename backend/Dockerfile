@@ -57,7 +57,7 @@ RUN mkdir -p /app/plugins \
  && cp /plugins-out/medusa/Delegat.Marketplace.Medusa.dll /app/plugins/
 
 # Stage 2: Final image (Chromium for catalog scrape when unofficial HTTP is blocked)
-FROM mcr.microsoft.com/playwright/dotnet:v1.61.0-noble
+FROM mcr.microsoft.com/playwright/dotnet:v1.64.1-noble
 RUN apt-get update && apt-get install -y --no-install-recommends curl default-mysql-client && rm -rf /var/lib/apt/lists/*
 EXPOSE 5000
 WORKDIR /app
