@@ -120,7 +120,41 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 2. **System status text shown as assistant prose.** `AgentToolResult.FormatPlanOutcome` emits "Не удалось завершить шаги (0 из 1). Ошибка не доказывает, что изменений не было…" as a `Text` delta in the execution segment (`backend/Services/Ai/Agent/AgentToolResult.cs:185-229`, yielded from `AiChatService` ~line 820), and the raw model-facing error line "• This path does not exist…" lands in the visible reply. Users see internal contract text instead of a clean status.
 3. **Empty `content` on execution rows.** By design (data lives in `toolCallsJson`), but combined with D3/D4 it amplifies the "messages are split apart" impression. Consider a short human summary in `content` for exec rows.
 
-## 3. Prioritized fix plan
+## 3. Agent harness — why the model confabulated, and what we actually control
+
+The defects above are mostly deterministic (a leaked JSON field, a wrong render branch). The deepest problem in this session is different: **the model invented `POST /store-files`, ignored the real route its own `search_actions` had returned, continued with the invented route after a 404, and ended by deferring to the user instead of diagnosing.** This section analyzes that layer separately, because "make the model smarter" is not an actionable fix — the actionable surface is the harness around it.
+
+### 3.1 Why the model invented a route
+
+- **Affordance contradiction with no resolution signal.** `search_actions` reported that `PUT /store-storage/files` exists; `platform_request` can only send JSON. Nothing in either surface says "exists but not callable by you". Faced with an impossible task, the model resolved the contradiction by confabulating a plausible JSON route (`POST /store-files` + `{name, mimeType, content}`). LLMs confabulate under constraint violation far more often than they report incapacity — this is expected behavior, not a bug in the weights.
+- **Action hits carry no callability semantics.** `CabinetActionCatalog` notes are auto-generated from action/controller names (`"upload files store storage"`). The hit does not expose HTTP content type, whether the action consumes `IFormFile`/`IFormCollection`, or whether `platform_request` can express the call at all. "Route exists" and "I can call it" are indistinguishable to the model.
+- **No negative capability space.** `PlatformRequestPolicy.SurfaceBody` enumerates what `platform_request` *can* do; nothing enumerates what the assistant *cannot* do (multipart uploads, binary downloads, arbitrary storage writes). Models fill silent gaps with plausible guesses.
+
+### 3.2 Why it kept working with the invented route
+
+- **Unstructured error feedback.** The invoker returned a bare 404 plus the generic title `"This path does not exist. Do not invent cabinet URLs."` — which is literally true but carries no error class. The model could not distinguish "I guessed the wrong path" from "the route exists but I called it wrong" from "the route needs a content type I cannot send". With no discriminating signal, the cheapest continuation is to stay consistent with the prior (invented) call — self-consistency bias: models almost never retract their own tool calls, they confabulate a narrative consistent with having acted ("the storage section does not exist").
+- **Uncertainty → deferral.** "Скажи «повтори»" is the classic buck-passing failure mode: when unsure, a model minimizes risk by handing the next step to the user rather than attempting another unverifiable call.
+
+### 3.3 What "reasoning" we actually control
+
+The provider-side chain-of-thought is opaque and not exposed to us; we see only tool calls and text. The reasoning surface we *do* control is the harness: system prompt, tool schemas/descriptions, tool-result payloads, error taxonomy, plan gates, and the review loop. Every confabulation above traces to a missing or ambiguous signal in that harness — not to a missing "reasoning" feature. The fix is therefore to make wrong behavior **impossible or self-correcting**, not to ask the model to try harder.
+
+### 3.4 Agent-layer work items (new, not covered by D1–D7)
+
+- **H1 — Structured tool-error taxonomy (P1).** `platform_request`/gateway failures should return machine-readable classes — `route_not_found`, `method_not_allowed`, `multipart_required`, `validation_failed`, `forbidden` — plus `hint` and `callableAlternatives[]`, instead of free text. The frontend must not render raw classes to users (ties to D7.2). This single change converts "404 + vibes" into an actionable correction signal.
+- **H2 — Pre-flight validation before invoke (P0/P1).** `AgentToolHost`/`AgentPlatformGateway` should check `method + path` against `CabinetActionCatalog`/`PlatformRequestPolicy` *before* dispatch: reject known-impossible combinations (multipart route via the JSON invoker, denied prefixes, wrong verb) with a corrective `tool_result` so the model gets a second chance **in the same turn** instead of a post-hoc 404. This is the strongest anti-confabulation lever: the invented call never reaches a controller.
+- **H3 — Explicit capability manifest (P1).** Prompt + `SurfaceBody` should state CAN/CANNOT plainly: JSON cabinet routes, python sandbox, connected MCP, staged attachments (user→product direction only), download tickets — and "creating store files from generated content: NOT SUPPORTED" until D1 option (a) ships. Negative space is as important as the route list.
+- **H4 — Plan feasibility gate (P1).** `propose_plan` validation should reject steps whose `platform_request` targets known-unusable routes (multipart/binary/wrong-verb), so a plan card never promises an impossible step. The observed plan 3 was confirmable and executable-shaped but guaranteed to fail — the gate exists for exactly this.
+- **H5 — Review-loop diagnostics (P2).** Execution outcomes already return to the review model; add structured per-step `errorClass` and, where known, the verified cause ("previous path was not a real route; the real route `PUT /store-storage/files` requires multipart, which is unavailable"). Review should diagnose root cause, not narrate a guess.
+- **H6 — `search_actions` callability flags (P1).** Hits should carry `callableViaJson`, `contentType`, `binaryDownload` fields; scoring should penalize non-callable hits for write intent and the note should say so explicitly. Cheap, high-leverage: it fixes D1-discovery and D2 simultaneously.
+- **H7 — Anti-confabulation prompt rules + audit (P2).** Rules like "never invent paths; if `search_actions` returns no callable route, state the capability is missing" and "on failure, report the verified cause, not a plausible one". `AssistantInstructionAudit` already fails tests when prompt/tool contract drift — extend its fixtures with this session as a regression case, and add the session to `assistant-quality-evaluation.md`'s real-model fixture list.
+- **H8 — Reasoning visibility (P3, optional).** Some providers expose reasoning summaries; not required for the fixes above, but the offline eval protocol should capture full tool-call traces per run so confabulation patterns are measurable over time.
+
+### 3.5 Why the fix plan weights contract/UI bugs first anyway
+
+Deterministic defects (D3 plan leak, D4 card placement) have certain fixes and corrupt persisted data — they are fixed regardless of model behavior. The agent-layer items (H1–H8) constrain a probabilistic system: they raise the floor (impossible calls get rejected, errors become actionable) but cannot guarantee a particular answer. Both layers are needed; neither substitutes for the other.
+
+## 4. Prioritized fix plan
 
 | Pri | Item | Why first |
 |-----|------|-----------|
@@ -129,21 +163,31 @@ Net user-visible result: the CSV was generated but never delivered as a file; th
 | P0 | D4 — suppress plan card on `executionProposalId` messages; investigate `planExecStart` gap | Direct cause of "plan moved to the end"; also protects already-corrupted rows |
 | P1 | D2 — actionable error feedback + no-invented-routes rule | Cheap prompt/tooling fix, big recovery improvement |
 | P1 | D7.1 — neutral or route-aware 404 hint | One-line-ish fix, removes misleading guidance |
+| P1 | H2 — pre-flight route validation before `platform_request` invoke | Makes impossible calls self-correcting in-turn |
+| P1 | H6 — `callableViaJson`/content-type flags on `search_actions` hits | Fixes discovery + gives model callability semantics |
+| P1 | H3 — explicit CAN/CANNOT capability manifest | Closes the negative-space gap that invited confabulation |
+| P1 | H4 — plan feasibility gate rejects impossible steps | Plan card must not promise unexecutable calls |
+| P2 | H1 — structured tool-error taxonomy | Enables H5 and cleaner UX; depends on H2 design |
+| P2 | H5 — structured diagnostics into review loop | Improves post-failure diagnosis quality |
+| P2 | H7 — anti-confabulation prompt rules + audit fixtures | Prompt-level reinforcement; verify via instruction audit |
 | P2 | D5 — server-side/validated `affectedCount` | Wrong numbers on plan cards |
 | P2 | D6 — artifact handoff, dedupe table, bridging review text, tone | Quality polish; some items depend on D1 design |
 | P2 | D7.2/7.3 — clean status surface, exec-row summaries | UX polish |
+| P3 | H8 — reasoning-summary capture in eval harness | Optional; measurement, not a fix |
 
-## 4. Verification plan (for the fix PR)
+## 5. Verification plan (for the fix PR)
 
 - **Backend unit/integration** (`backend.Tests/Ai/`): scripted cases for (a) `PreserveServerPlan` never copying `plan` into an `executionProposalId` message; (b) `SaveMessages` race — review row persisted by live hub before/after client sync, assert final row has no `plan`; (c) multipart route marked non-callable in `search_actions`/`SurfaceBody` if option (b) of D1 is chosen; (d) new save-file endpoint/tool contract tests if option (a) is chosen.
 - **Frontend unit**: `AiChatPanel`/`timeline`/`planState` cases — message with `executionProposalId` + leaked `plan` renders no plan card; `planExecStart`-less plan rows still lay out sanely.
 - **E2E intercepted** (`frontend/e2e/`): replay the plan→confirm→execute→review flow with a stubbed SSE, reload mid-turn, assert single plan card and correct order.
+- **Agent harness** (`backend.Tests/Ai/`): scripted cases for pre-flight rejection of multipart-via-JSON calls (H2), `callableViaJson` flags on catalog hits (H6), plan-gate rejection of impossible steps (H4), and structured error classes reaching the review payload (H1/H5). Extend `AssistantInstructionAudit` fixtures per H7.
 - **Docs gate**: update `docs/architecture/ai-assistant.md` for any new tool/endpoint; CHANGELOG `Unreleased` entry for user-visible fixes.
 - If D1 option (a) adds an endpoint: check whether it belongs to the public `/api/v1` surface (likely not — cabinet-only) and keep `docs/api/` in sync only if it does.
 
-## 5. Open questions / needs reproduction
+## 6. Open questions / needs reproduction
 
 - Exact `SaveMessages` branch that wrote the leaked plan into dbId 36/40 (content-match vs final-assistant rebase vs `nextUnpersistedIndex` walk). Needs a timed repro; the `PreserveServerPlan` signature (identical flag values copied from the plan row) strongly suggests it, but the matching path is unproven.
 - Whether dbId 39 was last written by `TryMergePlanExecution` or by the sync path — determines whether `planExecStart` absence is a merge bug or a sync bug.
 - Whether the `run_python` sandbox preserves state between calls (would explain/justify the re-query) — check `SANDBOX_URL` worker semantics before designing the artifact-handoff fix.
 - Whether old corrupted rows need a cleanup migration/job or read-side filtering is enough (depends on D4 fix choice).
+- How to detect multipart/binary actions for H2/H6 — scan action parameters for `IFormFile`/`IFormCollection`/`IFormFile` collections vs. maintaining an explicit list; needs a catalog-level decision before implementing.
