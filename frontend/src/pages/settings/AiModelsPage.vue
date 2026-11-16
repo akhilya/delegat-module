@@ -21,16 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { confirm } from "@/composables/useConfirm";
 import {
   Select,
   SelectContent,
@@ -87,14 +78,6 @@ export default {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
     Select,
     SelectContent,
     SelectItem,
@@ -153,18 +136,6 @@ export default {
     const form = ref(defaultForm());
     const modelOptions = ref([]);
     const isDiscovering = ref(false);
-    const confirmDialog = ref({
-      open: false,
-      title: "",
-      message: "",
-      resolve: null,
-    });
-
-    function showConfirm(title, message) {
-      return new Promise((r) => {
-        confirmDialog.value = { open: true, title, message, resolve: r };
-      });
-    }
 
     async function discoverModels() {
       if (!form.value.apiUrl) {
@@ -381,16 +352,24 @@ export default {
 
     async function deleteModel(model) {
       if (model.isPlatformHosted) return;
-      const confirmed = await showConfirm(
-        t("pages.aiModelsPage.deleteModelTitle"),
-        t("pages.aiModelsPage.deleteModelDescription", { name: model.name }),
-      );
+      const confirmed = await confirm({
+        title: t("pages.aiModelsPage.deleteModelTitle"),
+        description: t("pages.aiModelsPage.deleteModelDescription", {
+          name: model.name,
+        }),
+      });
       if (!confirmed) return;
       await store.dispatch("aiModels/deleteAiModel", {
         id: model.id,
         onSuccess: () => {
           displaySonnerSuccess(t("pages.aiModelsPage.modelDeleted"));
           load();
+          store
+            .dispatch("aiModels/getPickerModels", {
+              force: true,
+              onError: () => {},
+            })
+            .catch(() => {});
         },
         onError: displaySonnerError,
       });
@@ -499,7 +478,6 @@ export default {
       isDiscovering,
       discoverModels,
       isAnthropic,
-      confirmDialog,
       FIELD_LIMITS,
     };
   },
@@ -552,12 +530,6 @@ export default {
                 isAnthropic(model.provider) ? "Anthropic" : "OpenAI-compatible"
               }}
               · {{ model.modelId }}
-            </p>
-            <p
-              v-if="model.isPlatformHosted"
-              class="mt-0.5 text-xs font-normal text-muted-foreground"
-            >
-              {{ $t("pages.aiModelsPage.platformManagedHint") }}
             </p>
             <template
               v-if="model.isDefault || model.isPlatformHosted"
@@ -652,14 +624,12 @@ export default {
               <TableRow v-for="model in models" :key="model.id">
                 <TableCell>
                   <Switch
-                    v-if="!model.isPlatformHosted"
                     :model-value="model.isEnabled"
+                    :disabled="model.isPlatformHosted"
+                    :aria-label="`${$t('common.status')}: ${model.isPlatformHosted ? $t('ai.platformModelName') : model.name}`"
                     class="scale-[0.8]"
                     @update:model-value="(v) => setModelEnabled(model, v)"
                   />
-                  <Badge v-else variant="outline">{{
-                    $t("pages.aiModelsPage.platformManaged")
-                  }}</Badge>
                 </TableCell>
                 <TableCell class="max-w-0">
                   <div class="truncate font-medium" :title="model.name">
@@ -707,12 +677,16 @@ export default {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <p
+                  <Badge
                     v-if="model.isPlatformHosted"
-                    class="text-xs text-muted-foreground"
+                    variant="secondary"
+                    class="max-w-full"
+                    :title="$t('pages.aiModelsPage.platformManaged')"
                   >
-                    {{ $t("pages.aiModelsPage.platformManagedHint") }}
-                  </p>
+                    <span class="truncate">{{
+                      $t("pages.aiModelsPage.platformManaged")
+                    }}</span>
+                  </Badge>
                   <div v-else class="flex items-center justify-end gap-1">
                     <Button
                       variant="ghost"
@@ -754,42 +728,6 @@ export default {
         </div>
       </DialogContent>
     </Dialog>
-
-    <AlertDialog
-      :open="confirmDialog.open"
-      @update:open="
-        (v) => {
-          if (!v) confirmDialog.resolve?.(false);
-          confirmDialog.open = v;
-        }
-      "
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
-          <AlertDialogDescription>{{
-            confirmDialog.message
-          }}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            @click="
-              confirmDialog.resolve(false);
-              confirmDialog.open = false;
-            "
-            >{{ $t("common.cancel") }}</AlertDialogCancel
-          >
-          <AlertDialogAction
-            variant="destructive"
-            @click="
-              confirmDialog.resolve(true);
-              confirmDialog.open = false;
-            "
-            >{{ $t("common.delete") }}</AlertDialogAction
-          >
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
 
     <Dialog v-model:open="isPersonalSettingsOpen">
       <DialogContent
