@@ -39,6 +39,10 @@ Regression coverage: `frontend/e2e/ai-plans.spec.ts` uses intercepted APIs only 
 
 ## Key files
 
+Platform-hosted usage is a compact percentage disclosure beside the composer model selector (`AiHostedUsage`), visible only for the selected platform model. Its popover shows a title, one organization-scope description, and the monthly usage percentage with a progress bar. Paused and exhausted states remain visible. The server computes a bounded percentage, rounded to one decimal, from confirmed usage without including in-flight reservations. Browser status responses contain only that percentage and availability flags, not raw token counts or period dates. The UI omits token quantities, accounting explanations, and reset-date helper text. The conversation and composer footer contain no standalone quota banner. Browser coverage lives in `frontend/e2e/ai-hosted-usage.spec.ts`.
+
+Administration shows the same usage component inline beneath the models list. `GET /ai/models` includes the virtual platform-hosted model and its `isPlatformHosted` marker, without a key mask for that row. Both the inset list and management table display it as provided by the platform; local edit, toggle, test, delete, and default-model controls apply only to stored models. `GET /ai/hosted-ai/admin` requires `settings.platform`, so viewing this quota does not require chat permissions or a selected store. The chat status endpoint retains its existing `ai.use` and store-membership policy.
+
 | File | Purpose |
 |------|---------|
 | `backend/Services/Ai/Prompts/AiPrompts.cs` | All prompts |

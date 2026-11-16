@@ -34,6 +34,7 @@ import AiChatForm from "./AiChatForm.vue";
 import OperationContextBubble from "./OperationContextBubble.vue";
 import AiChatAttachmentList from "./AiChatAttachmentList.vue";
 import AiChatEmpty from "./AiChatEmpty.vue";
+import AiHostedUsage from "./AiHostedUsage.vue";
 import FileDropOverlay from "@/components/FileDropOverlay.vue";
 import { emptyPromptScope, pickEmptyPromptKeys } from "@/lib/ai/emptyPrompts";
 import {
@@ -109,7 +110,7 @@ import { planHasContent } from "@/lib/ai/planSteps";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
-const { t, te, locale } = useI18n();
+const { t, te } = useI18n();
 const store = useStore();
 const { edgeOffset } = useCompanionSheets();
 const aiEdgeOffset = edgeOffset("ai");
@@ -216,20 +217,6 @@ const enabledModels = computed(() => {
   return src.filter((m) => m.isEnabled !== false && (m.id ?? m.Id) != null);
 });
 const hostedAiStatus = computed(() => store.state.aiModels?.hostedAiStatus);
-const showHostedAiUsage = computed(
-  () => hostedAiStatus.value?.configured && hostedAiStatus.value?.entitled,
-);
-const hostedAiUsageText = computed(() => {
-  const status = hostedAiStatus.value;
-  if (!status?.configured || !status?.entitled) return "";
-  if (status.usageUnavailable) return t("ai.hostedUsageUnavailable");
-  const used =
-    (Number(status.usedTokens) || 0) + (Number(status.reservedTokens) || 0);
-  return t("ai.hostedUsage", {
-    used: formatTokenCount(used),
-    quota: formatTokenCount(status.quotaTokens),
-  });
-});
 const hasEnabledModels = computed(() => enabledModels.value.length > 0);
 const canAddAttachments = computed(
   () =>
@@ -256,6 +243,13 @@ const effectiveModelId = computed(() => {
     ? String(defaultModel.value.id ?? defaultModel.value.Id)
     : "";
 });
+const selectedModelIsHosted = computed(() =>
+  enabledModels.value.some(
+    (model) =>
+      String(model.id ?? model.Id) === effectiveModelId.value &&
+      model.isPlatformHosted,
+  ),
+);
 
 watch([enabledModels, selectedModelId], () => {
   if (
@@ -660,12 +654,6 @@ watch(isLoading, (loading, wasLoading) => {
   if (wasLoading && !loading)
     store.dispatch("aiModels/getHostedAiStatus", { onError: () => {} });
 });
-
-function formatTokenCount(value) {
-  return new Intl.NumberFormat(locale.value).format(
-    Math.max(0, Number(value) || 0),
-  );
-}
 
 function onPanelWidth(w) {
   store.commit("aiChat/setPanelWidth", w);
@@ -1325,12 +1313,26 @@ function isLatestTurn(msg) {
                 </SelectContent>
               </Select>
               <span
+                v-else-if="enabledModels.length === 1"
+                class="max-w-[min(12rem,45vw)] truncate px-2 text-xs text-muted-foreground"
+              >
+                {{
+                  enabledModels[0].isPlatformHosted
+                    ? t("ai.platformModelName")
+                    : enabledModels[0].name
+                }}
+              </span>
+              <span
                 v-else-if="!enabledModels.length"
                 class="max-w-[min(12rem,45vw)] truncate px-2 text-xs text-muted-foreground select-none"
                 :title="t('ai.noModelsPlaceholder')"
               >
                 {{ t("ai.noEnabledModels") }}
               </span>
+              <AiHostedUsage
+                v-if="selectedModelIsHosted"
+                :status="hostedAiStatus"
+              />
             </div>
             <InputGroupButton
               v-if="isLoading"
@@ -1362,18 +1364,6 @@ function isLatestTurn(msg) {
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
-        <p
-          v-if="showHostedAiUsage"
-          class="px-1 text-[11px] leading-4 tabular-nums"
-          :class="
-            hostedAiStatus.usageUnavailable
-              ? 'text-warning-foreground'
-              : 'text-muted-foreground'
-          "
-          aria-live="polite"
-        >
-          {{ hostedAiUsageText }}
-        </p>
       </SheetFooter>
     </SheetContent>
   </Sheet>
