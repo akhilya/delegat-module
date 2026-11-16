@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
 
+[Collection("EnvVars")]
 public class StoreTextFileTests
 {
     private static StoreTextFileService NewService(DataContext db, IStorageService storage) =>

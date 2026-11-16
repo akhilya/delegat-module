@@ -1,6 +1,4 @@
-using System.Text;
 using Delegat.Infrastructure.Middleware;
-using Delegat.Infrastructure.Security;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
 using Microsoft.EntityFrameworkCore;
@@ -15,19 +13,12 @@ namespace Delegat.Services;
 public sealed class StoreTextFileService
 {
     /// <summary>Strict UTF-8 byte cap for one from-text file.</summary>
-    public const int MaxTextBytes = 256 * 1024; // 262144
+    public const int MaxTextBytes = TextFileContent.MaxTextBytes;
 
     /// <summary>Cap on the JSON request envelope (escaped text plus fields).</summary>
-    public const long MaxRequestBytes = 2 * 1024 * 1024;
+    public const long MaxRequestBytes = TextFileContent.MaxRequestBytes;
 
-    public const string DefaultContentType = "text/plain";
-
-    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "text/plain",
-        "text/csv",
-        "application/json",
-    };
+    public const string DefaultContentType = TextFileContent.DefaultContentType;
 
     private readonly DataContext _db;
     private readonly IStorageService _storage;
@@ -62,18 +53,7 @@ public sealed class StoreTextFileService
         int? folderId,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(fileName))
-            throw ApiException.BadRequest(code: "file_name_required");
-        if (text == null)
-            throw ApiException.BadRequest(code: "text_required");
-
-        var safeName = FileNameSafety.Sanitize(fileName);
-        var type = NormalizeContentType(contentType)
-            ?? throw ApiException.BadRequest(code: "content_type_not_allowed");
-
-        var bytes = Encoding.UTF8.GetBytes(text);
-        if (bytes.Length > MaxTextBytes)
-            throw ApiException.BadRequest(code: "text_too_large");
+        var content = TextFileContent.Create(fileName, contentType, text);
 
         if (folderId.HasValue)
         {
@@ -84,20 +64,20 @@ public sealed class StoreTextFileService
         }
 
         await _quota.EnsureFileQuotaAsync(storeId, 1);
-        await _quota.EnsureStorageQuotaAsync(storeId, bytes.Length);
+        await _quota.EnsureStorageQuotaAsync(storeId, content.Bytes.Length);
 
-        var path = $"{storeId}/store/{Guid.NewGuid():N}/{safeName}";
-        await using var stream = new MemoryStream(bytes, writable: false);
-        var uploaded = await _storage.UploadAsync(stream, path, bytes.Length, type, ct);
+        var path = $"{storeId}/store/{Guid.NewGuid():N}/{content.FileName}";
+        await using var stream = new MemoryStream(content.Bytes, writable: false);
+        var uploaded = await _storage.UploadAsync(stream, path, content.Bytes.Length, content.ContentType, ct);
         if (!uploaded)
             throw ApiException.InternalServerError(code: "file_upload_failed");
 
         var entity = new StoreFile
         {
             folderId = folderId,
-            displayName = safeName,
+            displayName = content.FileName,
         };
-        entity.Fill(path, userId, storeId, type, bytes.Length);
+        entity.Fill(path, userId, storeId, content.ContentType, content.Bytes.Length);
         _db.storeFiles.Add(entity);
         try
         {
@@ -118,19 +98,10 @@ public sealed class StoreTextFileService
 
         return new Result(
             entity.Id,
-            safeName,
-            type,
-            bytes.Length,
+            content.FileName,
+            content.ContentType,
+            content.Bytes.Length,
             folderId,
             $"/api/store-storage/files/{entity.Id}/download");
-    }
-
-    private static string? NormalizeContentType(string? contentType)
-    {
-        if (string.IsNullOrWhiteSpace(contentType))
-            return DefaultContentType;
-
-        var type = contentType.Split(';', 2)[0].Trim();
-        return AllowedContentTypes.Contains(type) ? type.ToLowerInvariant() : null;
     }
 }

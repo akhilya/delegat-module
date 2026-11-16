@@ -45,6 +45,9 @@ public static class AssistantWriteContract
     public const string StoreFileFromText =
         "Body { fileName, text, contentType?, folderId? }. Creates one private UTF-8 store file; text is limited to 262144 UTF-8 bytes. contentType is text/plain (default), text/csv, or application/json. Returns id, fileName, length, and an authenticated downloadUrl for the selected store. Requires files.manage and a confirmed write plan. Use only for small text already available; never invent an upload route or put binary/base64 content here. Large or sandbox-generated files need the separate planned HTTP artifact handoff.";
 
+    public const string ProductFileFromText =
+        "Body { fileName, text, contentType?, folderId? }. Creates one private UTF-8 file in the specified product's file storage, not store storage; text is limited to 262144 UTF-8 bytes. contentType is text/plain (default), text/csv, or application/json. folderId must belong to that product. Returns id, productId, fileName, length, and an authenticated downloadUrl. Requires files.manage and a confirmed write plan. Use only for small text already available; never put binary/base64 content here. Large or sandbox-generated files need the separate planned HTTP artifact handoff.";
+
     public static readonly Entry[] All =
     [
         new("POST", "graph/modifiers", GraphModifiers,
@@ -75,6 +78,9 @@ public static class AssistantWriteContract
             ["connectionId"],
             []),
         new("POST", "store-storage/files/from-text", StoreFileFromText,
+            ["fileName", "text", "contentType", "folderId"],
+            []),
+        new("POST", "files/from-text", ProductFileFromText,
             ["fileName", "text", "contentType", "folderId"],
             []),
     ];

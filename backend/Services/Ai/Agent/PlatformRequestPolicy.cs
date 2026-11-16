@@ -23,6 +23,10 @@ public static class PlatformRequestPolicy
           POST /productgroups/{id}/products { productIds }  DELETE /productgroups/{id}/products/{productId}
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
           GET /products/{id}/files  PUT /products/{id}/files is multipart (Agent HTTP, not JSON)
+          POST /products/{id}/files/from-text — small generated text into that product's files, not store storage.
+          Use the product route only for an identified product. Resolve ambiguous storage destinations
+          before proposing a write; never silently substitute store storage for product files.
+          Creating a product file does not attach it to gallery/characteristics or publish it.
           GET/POST /categories  GET/PATCH /categories/{id}
           GET/POST /categories/{id}/attributes  GET /categories/{id}/attributes/summary
           PATCH /categories/{id}/attributes/{attributeId}

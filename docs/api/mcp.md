@@ -58,9 +58,14 @@ The ticket is authenticated and bound to the issuing user, store, and file. Each
 
 The download ticket is **not single-use**: the same URL may be used for multiple full or single-range requests before its original expiry, provided the issuing user's access and the file/store checks still pass on each request. A download neither consumes the ticket nor extends its lifetime. Removing access can therefore block a later request even before expiry. This is separate from the 24-hour retention of staged chat attachments.
 
-### Saving generated text to store storage
+### Saving generated text to file storage
 
-`platform_request` can save small text that is already available as one private store file: `POST /store-storage/files/from-text` with `{ fileName, text, contentType?, folderId? }`. `text` is limited to 262144 UTF-8 bytes; `contentType` is `text/plain` (default), `text/csv`, or `application/json`. The response carries `id`, `fileName`, `length`, and an authenticated `downloadUrl` (`/api/store-storage/files/{id}/download`) for the selected store — the assistant shares that link instead of repeating file content in its final answer. The write requires `files.manage` and a confirmed plan like every mutation. `PUT /store-storage/files` stays multipart-only and unreachable from `platform_request`; binary and large sandbox artifacts still have no upload path. This is a cabinet route, not `/api/v1` and not an Agent HTTP endpoint.
+`platform_request` can save small text that is already available as one private file, into either storage destination — they are not interchangeable:
+
+- **Store storage:** `POST /store-storage/files/from-text` with `{ fileName, text, contentType?, folderId? }` creates one private `StoreFile` of the selected store; `folderId` must be a store folder. The response carries `id`, `fileName`, `length`, and an authenticated `downloadUrl` (`/api/store-storage/files/{id}/download`).
+- **Product file storage:** `POST /products/{productId}/files/from-text` with the same body creates one private file of that exact product (live, in the selected store); `folderId` must be a folder of that product. The response carries `id`, `productId`, `fileName`, `length`, and an authenticated `downloadUrl` (`/api/files/{id}/download`). Creating the file does not attach it to the gallery or characteristics and does not publish it.
+
+`text` is limited to 262144 UTF-8 bytes; `contentType` is `text/plain` (default), `text/csv`, or `application/json`. The assistant shares the returned link instead of repeating file content in its final answer. Either write requires `files.manage` and a confirmed plan like every mutation, and the destination must be resolved before proposing it — never silently substitute store storage for a named product. Multipart uploads stay multipart-only and unreachable from `platform_request` (`PUT /store-storage/files`, `PUT /products/{id}/files`); binary and large sandbox artifacts still have no upload path. These are cabinet routes, not `/api/v1` and not Agent HTTP endpoints.
 
 ## Connected HTTP MCP trust policy
 

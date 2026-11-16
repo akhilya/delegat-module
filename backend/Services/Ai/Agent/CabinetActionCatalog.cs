@@ -169,6 +169,9 @@ public sealed class CabinetActionCatalog
         new("POST", "/store-storage/files/from-text", true,
             "Save small text that is already generated as one private store file (CSV/JSON/TXT up to 262144 UTF-8 bytes). Returns an authenticated downloadUrl to share in chat. Not for binary or large artifacts.",
             "csv file файл файлы save сохранить storage хранилище download скачать generated сгенерированный text текст upload загрузить from-text store-storage"),
+        new("POST", "/products/{productId}/files/from-text", true,
+            "Save small text already generated as one private product file, not store storage (CSV/JSON/TXT up to 262144 UTF-8 bytes). folderId belongs to this product. Returns productId and an authenticated downloadUrl. Not for binary or large artifacts.",
+            "product товар товара карточка productId csv file файл файлы save сохранить generated сгенерированный text текст upload загрузить from-text download скачать"),
     ];
 
     private IReadOnlyList<ActionHit> Build()

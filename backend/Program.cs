@@ -298,6 +298,7 @@ builder.Services.AddScoped<IPlatformEntitlementsService, PlatformEntitlementsSer
 builder.Services.AddScoped<IOverageTrimService, OverageTrimService>();
 builder.Services.AddHostedService<OverageTrimHostedService>();
 builder.Services.AddScoped<StoreTextFileService>();
+builder.Services.AddScoped<ProductTextFileService>();
 builder.Services.AddScoped<StoreStorageController>();
 
 // Excel import/export

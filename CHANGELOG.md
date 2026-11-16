@@ -97,6 +97,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet assistant requires a standalone user-confirmed plan before running Python code or any connected MCP tool; direct calls are blocked server-side, and untrusted instructions in tool output or external metadata are treated as data.
 - Cabinet assistant no longer treats a nonzero Python exit code or timeout as a successful plan step; file-driven write plans require inspected attachment data and validated catalog matches.
 - Cabinet assistant can save small generated text to store storage: `POST /store-storage/files/from-text` accepts `{ fileName, text, contentType?, folderId? }` (UTF-8, at most 262144 bytes; plain text, CSV, or JSON) and returns an authenticated `downloadUrl` for the selected store. The write requires `files.manage` and, like every assistant mutation, a confirmed plan; binary and large artifacts remain unsupported.
+- Cabinet assistant can also save small generated text into a product's private files: `POST /products/{productId}/files/from-text` accepts the same bounded body and returns the file's authenticated `/api/files/{id}/download` link. The file stays private and is not attached to the gallery or characteristics; `files.manage` and a confirmed plan still apply.
 
 ### Changed
 
