@@ -14,6 +14,9 @@ import AdapterIcon from "@/components/marketplace/AdapterIcon.vue";
 import ExperimentalBadge from "@/components/marketplace/ExperimentalBadge.vue";
 import { isExperimentalAdapter } from "@/lib/adapterStage";
 import DocsHelpRow from "@/components/docs/DocsHelpRow.vue";
+import { Button } from "@/components/ui/button";
+import { mapActions } from "vuex";
+import { displaySonnerError, extractResponseData } from "@/store/sonnerHelper";
 import { getAdapterCredentialsDocsSlug } from "@/utils/docsUrl";
 import {
   FIELD_LIMITS,
@@ -45,6 +48,7 @@ export default {
     AdapterIcon,
     ExperimentalBadge,
     DocsHelpRow,
+    Button,
     Select,
     SelectContent,
     SelectItem,
@@ -68,6 +72,7 @@ export default {
       adapterKey: "",
       credentialValues: {},
       isActive: true,
+      ozonOauthStarting: false,
       FIELD_LIMITS,
     };
   },
@@ -110,6 +115,30 @@ export default {
   },
   methods: {
     isExperimentalAdapter,
+    ...mapActions(["startOzonOauth"]),
+    async startOzonOauthFlow() {
+      if (this.ozonOauthStarting) return;
+      this.ozonOauthStarting = true;
+      try {
+        await this.startOzonOauth({
+          onSuccess: (response) => {
+            const data = extractResponseData(response, {});
+            if (data?.url) {
+              window.location.href = data.url;
+            } else {
+              this.ozonOauthStarting = false;
+            }
+          },
+          onError: (error) => {
+            displaySonnerError(error);
+            this.ozonOauthStarting = false;
+          },
+        });
+      } catch (error) {
+        displaySonnerError(error);
+        this.ozonOauthStarting = false;
+      }
+    },
     onAdapterSelect(adapterKey) {
       this.adapterKey = adapterKey || "";
       this.credentialValues = {};
@@ -222,6 +251,21 @@ export default {
         {{ $t("marketplace.marketplacePage.adapterPickHint") }}
       </template>
     </SettingsFormField>
+
+    <div v-if="adapterKey === 'ozon'" class="space-y-2">
+      <Button
+        type="button"
+        variant="outline"
+        class="w-full"
+        :disabled="disabled || ozonOauthStarting"
+        @click="startOzonOauthFlow"
+      >
+        {{ $t("marketplace.marketplacePage.connectViaOzon") }}
+      </Button>
+      <p class="px-1 text-xs text-muted-foreground">
+        {{ $t("marketplace.marketplacePage.connectViaOzonHint") }}
+      </p>
+    </div>
 
     <template v-if="adapterKey && credentialFields.length > 0">
       <Separator v-if="!quiet" />

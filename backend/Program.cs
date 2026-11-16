@@ -284,6 +284,7 @@ builder.Services.AddScoped<IReferenceCatalogService, ReferenceCatalogService>();
 builder.Services.AddSingleton<IPlatformErrorReporter, PlatformErrorReporter>();
 builder.Services.AddHostedService<ReferenceCatalogSyncHostedService>();
 builder.Services.AddHostedService<PlatformHeartbeatHostedService>();
+builder.Services.AddHostedService<OzonOAuthRefreshHostedService>();
 
 // Marketplace Integration Services - Plugin System
 

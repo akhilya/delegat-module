@@ -32,7 +32,7 @@ public class ThumbnailController : ControllerBase
     [HttpGet]
     [Route("/files/{id}/thumbnail")]
     [DisableRateLimiting]
-    [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Any)]
+    [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Client)]
     public async Task<IActionResult> GetThumbnail(int id, [FromQuery] int w = 256, CancellationToken ct = default)
     {
         if (!ThumbnailService.IsAllowedWidth(w))
@@ -63,7 +63,7 @@ public class ThumbnailController : ControllerBase
         if (stream == null)
             throw ApiException.InternalServerError(code: "thumbnail_failed");
 
-        Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        Response.Headers["Cache-Control"] = "private, max-age=31536000, immutable";
         return File(stream, "image/webp");
     }
 }
