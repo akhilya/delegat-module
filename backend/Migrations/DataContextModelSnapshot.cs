@@ -2735,6 +2735,9 @@ namespace Delegat.Migrations
                     b.Property<DateTime>("expiresAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<int?>("replacedByTokenId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("revokedAt")
                         .HasColumnType("datetime(6)");
 

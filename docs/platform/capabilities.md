@@ -73,7 +73,7 @@
 
 ### Authentication & Security
 - JWT in HttpOnly, SameSite=Strict cookie
-- Refresh tokens stored in DB with rotation on use
+- Refresh tokens stored in DB with rotation on use and reuse detection ([authentication](../architecture/authentication.md#refresh-tokens))
 - ASP.NET Identity with account lockout (5 attempts, 15 min lockout)
 - **Roles + permissions:** Identity roles (`Owner`, `Operator`, `StoreManager`, `Viewer`) as templates; permission claims authorize endpoints via `[RequiresPermission]` policies. Store-scoped `orders.manage` covers live cabinet orders, packing labels, and shipments (Operator and Store manager). `marketplace.manage` stays connections, mappings, sync, prices, and promotions.
 - `User.isAdmin` is an **instance owner marker** only (break-glass / assign owner); API access is not granted by the flag alone
