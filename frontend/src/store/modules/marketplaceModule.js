@@ -27,6 +27,25 @@ export default {
         .catch((error) => onError(error));
     },
 
+    /**
+     * Starts the Ozon App Store OAuth flow.
+     * Resolves to `{ url }` — the Control Plane entry point the browser
+     * should be navigated to (window.location.href).
+     * @param {Object} ctx - Vuex action context.
+     * @param {Object} params - Action parameters.
+     * @param {Function} params.onSuccess - Callback on successful response.
+     * @param {Function} params.onError - Callback on error.
+     * @returns {Promise<void>}
+     */
+    async startOzonOauth(ctx, { onSuccess, onError }) {
+      try {
+        const response = await http.get(`/marketplace/ozon/oauth/start`);
+        onSuccess(response);
+      } catch (error) {
+        onError(error);
+      }
+    },
+
     // === Plugins ===
 
     /**
