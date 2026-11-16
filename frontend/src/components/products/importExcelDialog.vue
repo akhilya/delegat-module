@@ -295,6 +295,10 @@ import {
 import { Button } from "@/components/ui/button";
 import FieldChangesTable from "@/components/products/FieldChangesTable.vue";
 import { toast } from "vue-sonner";
+import { resolveApiErrorMessage } from "@/store/sonnerHelper";
+
+// Mirrors ExcelProductService.MaxImportUploadBytes; larger requests are cut off before the API can return its error code.
+const MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 const props = defineProps({
   modelValue: Boolean,
@@ -384,6 +388,10 @@ async function processFile(file) {
     uploadError.value = t("products.importExcelDialog.unsupportedFormat");
     return;
   }
+  if (file.size > MAX_IMPORT_UPLOAD_BYTES) {
+    uploadError.value = t("errors.excel_import_too_large");
+    return;
+  }
   uploadError.value = "";
   selectedFile.value = file;
   step.value = "processing";
@@ -395,9 +403,10 @@ async function processFile(file) {
       step.value = "preview";
     },
     onError: (error) => {
-      uploadError.value =
-        error.response?.data?.message ||
-        t("products.importExcelDialog.processError");
+      uploadError.value = resolveApiErrorMessage(
+        error.response?.data,
+        "products.importExcelDialog.processError",
+      );
       step.value = "upload";
     },
   });
@@ -423,9 +432,10 @@ async function handleApply() {
       }
     },
     onError: (error) => {
-      applyError.value =
-        error.response?.data?.message ||
-        t("products.importExcelDialog.applyError");
+      applyError.value = resolveApiErrorMessage(
+        error.response?.data,
+        "products.importExcelDialog.applyError",
+      );
       applyResult.value = null;
       step.value = "result";
     },
