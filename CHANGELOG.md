@@ -9,9 +9,14 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
+### Security
+
+- Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
+- Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.
+
 ### Added
 
-- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in the matching user — the instance admin when the platform account email is not present locally — and redirects to the catalog. Standard `isActive` and lockout rules apply; failures land on the sign-in page with an error toast.
+- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in only the matching active workspace user, and redirects to the catalog. Standard lockout rules apply; failures land on the sign-in page with an error toast.
 
 - Ozon App Store OAuth connection flow: a "Connect via Ozon" button on the connection form starts the seller consent flow, `/marketplace/ozon/oauth/start` + `/marketplace/ozon/oauth/complete` endpoints redeem the Control Plane grant, and the adapter talks to the Ozon API with `Authorization: Bearer`. A hosted service rotates access/refresh token pairs through the Control Plane proxy before expiry and flags `oauthReconnectRequired` when Ozon revokes the grant; the manual Client-Id/Api-Key flow is unchanged.
 

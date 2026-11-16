@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -71,7 +70,7 @@ public class OzonOAuthController : ControllerBase
         // Browser-bound transaction: Complete only accepts a ticket when this
         // cookie is present — it proves the browser actually started the flow
         // here, and binds the completion to the store the user picked.
-        var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        var nonce = OzonOAuthTransaction.CreateNonce();
         Response.Cookies.Append(TxCookieName, $"{storeId}.{nonce}", new CookieOptions
         {
             HttpOnly = true,
@@ -83,7 +82,8 @@ public class OzonOAuthController : ControllerBase
 
         var url = $"{_platformLinkOptions.ControlPlaneUrl}/api/ozon/oauth/start" +
                   $"?instance={Uri.EscapeDataString(_platformLinkOptions.InstanceId)}" +
-                  $"&store={storeId}";
+                  $"&store={storeId}" +
+                  $"&nonce={Uri.EscapeDataString(nonce)}";
 
         return Ok(new { url });
     }
@@ -98,6 +98,7 @@ public class OzonOAuthController : ControllerBase
     [RequiresPermission(Permissions.MarketplaceManage, requireStoreMembership: true)]
     public async Task<IActionResult> Complete(
         [FromQuery] string? ticket,
+        [FromQuery] string? nonce,
         [FromQuery] string? error,
         CancellationToken ct)
     {
@@ -118,7 +119,7 @@ public class OzonOAuthController : ControllerBase
         // A ticket is only redeemed in a browser that ran Start on this instance
         // (transaction cookie is Lax, so the top-level CP redirect keeps it).
         if (!Request.Cookies.TryGetValue(TxCookieName, out var tx)
-            || !TryParseTxStoreId(tx, out var txStoreId))
+            || !OzonOAuthTransaction.TryParseCookie(tx, nonce, out var txStoreId))
         {
             return Redirect("/adapter?ozonError=missing_oauth_transaction");
         }
@@ -130,14 +131,14 @@ public class OzonOAuthController : ControllerBase
         // GetSelectedStoreIdAsync also re-verifies membership, closing the gap
         // when selected_store_id itself is forged to a non-member store.
         var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync();
-        if (txStoreId is null || txStoreId.Value != selectedStoreId)
+        if (txStoreId != selectedStoreId)
             return Redirect("/adapter?ozonError=store_mismatch");
 
         var grant = await _platformLink.ClaimOzonGrantAsync(ticket, ct);
         if (grant is null || string.IsNullOrEmpty(grant.AccessToken))
             return Redirect("/adapter?ozonError=claim_failed");
 
-        var storeId = txStoreId.Value;
+        var storeId = txStoreId;
         if (!await _db.stores.AnyAsync(s => s.Id == storeId, ct))
             return Redirect("/adapter?ozonError=store_not_found");
 
@@ -226,19 +227,5 @@ public class OzonOAuthController : ControllerBase
         }
 
         return null;
-    }
-
-    /// <summary>Cookie value is <c>{storeId}.{nonce}</c>; store may be absent.</summary>
-    private static bool TryParseTxStoreId(string? value, out int? storeId)
-    {
-        storeId = null;
-        if (string.IsNullOrEmpty(value))
-            return false;
-        var dot = value.IndexOf('.');
-        if (dot <= 0 || dot == value.Length - 1)
-            return false;
-        if (int.TryParse(value[..dot], out var id))
-            storeId = id;
-        return true;
     }
 }
