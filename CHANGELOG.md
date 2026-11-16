@@ -9,11 +9,6 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ## [Unreleased]
 
-### Security
-
-- Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
-- Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.
-
 ### Added
 
 - Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in only the matching active workspace user, and redirects to the catalog. Standard lockout rules apply; failures land on the sign-in page with an error toast.
@@ -477,6 +472,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
+- Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.
 - Live operation updates are delivered only for stores the signed-in user is an active member of. Previously, changing the selected-store cookie let any signed-in user receive another store's operation logs and progress.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
 - Cabinet frontend uses axios 1.20.0, DOMPurify 3.4.16, and brace-expansion 1.1.21. Those are the versions that close the open dependency alerts.
