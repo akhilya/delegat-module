@@ -242,4 +242,11 @@ public sealed class PlatformInstanceSsoDto
 {
     [JsonPropertyName("email")]
     public string? Email { get; set; }
+
+    /// <summary>
+    /// Minting member's organization role on the Control Plane
+    /// ("owner"/"billing"/"tech"/"readonly"). Absent on older CP builds.
+    /// </summary>
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
 }

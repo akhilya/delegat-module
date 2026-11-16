@@ -65,9 +65,11 @@ public class JwtAuthController : ControllerBase
     /// Console SSO landing: the Control Plane "open cabinet" button bounces the
     /// browser here with a one-time code. The code is redeemed over Platform
     /// Link (HMAC instance auth, not the user's session); the returned account
-    /// email must map to an existing local user. Platform membership alone does
-    /// not grant workspace access. Normal auth rules (isActive, lockout) still
-    /// apply; this endpoint only issues the same token pair a password sign-in would.
+    /// email must map to an existing local user. When none matches, a console
+    /// org owner falls back to the cabinet administrator - equivalent to the
+    /// console's reset-admin capability, so no extra privilege is granted.
+    /// Normal auth rules (isActive, lockout) still apply; this endpoint only
+    /// issues the same token pair a password sign-in would.
     /// </summary>
     [HttpGet]
     [Route("/auth/platformSso")]
@@ -96,6 +98,8 @@ public class JwtAuthController : ControllerBase
             return Redirect("/signIn?ssoError=invalid_code");
 
         var user = await _userManager.FindByEmailAsync(identity.Email.Trim());
+        if (user is null && string.Equals(identity.Role, "owner", StringComparison.OrdinalIgnoreCase))
+            user = await _userManager.Users.FirstOrDefaultAsync(u => u.isAdmin && u.isActive, ct);
 
         if (user is null)
             return Redirect("/signIn?ssoError=user_not_found");

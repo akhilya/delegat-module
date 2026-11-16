@@ -11,7 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in only the matching active workspace user, and redirects to the catalog. Standard lockout rules apply; failures land on the sign-in page with an error toast.
+- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in only the matching active workspace user, and redirects to the catalog. A console org owner with no email-matched workspace user falls back to the cabinet administrator (the exchange response now carries the member's org role); other roles still require a matching workspace user. Standard lockout rules apply; failures land on the sign-in page with a per-reason localized error toast.
 
 - Ozon App Store OAuth connection flow: a "Connect via Ozon" button on the connection form starts the seller consent flow, `/marketplace/ozon/oauth/start` + `/marketplace/ozon/oauth/complete` endpoints redeem the Control Plane grant, and the adapter talks to the Ozon API with `Authorization: Bearer`. A hosted service rotates access/refresh token pairs through the Control Plane proxy before expiry and flags `oauthReconnectRequired` when Ozon revokes the grant; the manual Client-Id/Api-Key flow is unchanged.
 

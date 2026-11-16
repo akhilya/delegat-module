@@ -211,7 +211,17 @@ export default {
         return;
       }
       if (route.query.ssoError) {
-        displaySonnerError(t("auth.ssoFailed"));
+        const ssoErrorKeys = {
+          invalid_code: "auth.ssoInvalidCode",
+          code_expired: "auth.ssoInvalidCode",
+          code_used: "auth.ssoInvalidCode",
+          exchange_failed: "auth.ssoExchangeFailed",
+          user_not_found: "auth.ssoUserNotFound",
+          user_deactivated: "auth.ssoUserDeactivated",
+          account_locked: "auth.ssoAccountLocked",
+        };
+        const key = ssoErrorKeys[route.query.ssoError] ?? "auth.ssoFailed";
+        displaySonnerError(t(key));
         await router.replace({ query: {} });
         return;
       }
