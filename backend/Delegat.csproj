@@ -26,6 +26,8 @@
     <PackageReference Include="Fido2" Version="4.0.0" />
     <!-- Fido2.Models 4.0.0 pulls 9.0.0; CVE-2026-26127 is patched in 9.0.14+. -->
     <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.19" />
+    <!-- Fido2.Models pulls System.Formats.Cbor 9.0.x; CVE-2026-118747 (.NET DoS) is patched in 9.0.24+. -->
+    <PackageReference Include="System.Formats.Cbor" Version="9.0.24" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.20" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.17">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

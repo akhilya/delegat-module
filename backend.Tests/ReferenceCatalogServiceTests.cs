@@ -139,5 +139,17 @@ public class ReferenceCatalogServiceTests
         public Task<PlatformMarketplaceDocDto?> GetMarketplaceDocAsync(
             string adapter, string? query, CancellationToken ct = default) =>
             Task.FromResult<PlatformMarketplaceDocDto?>(null);
+
+        public Task<PlatformOzonGrantClaimDto?> ClaimOzonGrantAsync(
+            string ticket, CancellationToken ct = default) =>
+            Task.FromResult<PlatformOzonGrantClaimDto?>(null);
+
+        public Task<PlatformOzonRefreshResult> RefreshOzonTokenAsync(
+            string refreshToken, CancellationToken ct = default) =>
+            Task.FromResult(new PlatformOzonRefreshResult(false, "not_configured", null, null, 0));
+
+        public Task<PlatformInstanceSsoDto?> ExchangeInstanceSsoAsync(
+            string code, CancellationToken ct = default) =>
+            Task.FromResult<PlatformInstanceSsoDto?>(null);
     }
 }

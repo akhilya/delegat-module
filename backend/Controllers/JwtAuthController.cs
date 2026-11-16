@@ -62,6 +62,57 @@ public class JwtAuthController : ControllerBase
         _db = db;
     }
 
+    /// <summary>
+    /// Console SSO landing: the Control Plane "open cabinet" button bounces the
+    /// browser here with a one-time code. The code is redeemed over Platform
+    /// Link (HMAC instance auth, not the user's session); the returned account
+    /// email maps to a local user - the instance admin when none shares the
+    /// email. Normal auth rules (isActive, lockout) still apply; this endpoint
+    /// only issues the same token pair a password sign-in would.
+    /// </summary>
+    [HttpGet]
+    [Route("/auth/platformSso")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> GetPlatformSso(
+        [FromQuery] string? code,
+        CancellationToken ct)
+    {
+        var platformLink = _serviceProvider.GetService<Delegat.Services.PlatformLink.IPlatformLinkClient>();
+        if (platformLink is null || !platformLink.IsEnabled)
+            return Redirect("/signIn?ssoError=platform_link_disabled");
+        if (string.IsNullOrWhiteSpace(code))
+            return Redirect("/signIn?ssoError=code_required");
+
+        Delegat.Services.PlatformLink.PlatformInstanceSsoDto? identity;
+        try
+        {
+            identity = await platformLink.ExchangeInstanceSsoAsync(code.Trim(), ct);
+        }
+        catch
+        {
+            return Redirect("/signIn?ssoError=exchange_failed");
+        }
+        if (identity is null || string.IsNullOrWhiteSpace(identity.Email))
+            return Redirect("/signIn?ssoError=invalid_code");
+
+        var user = await _userManager.FindByEmailAsync(identity.Email.Trim());
+        user ??= await _userManager.Users.FirstOrDefaultAsync(u => u.isAdmin && u.isActive, ct);
+
+        if (user is null)
+            return Redirect("/signIn?ssoError=user_not_found");
+        if (!user.isActive)
+            return Redirect("/signIn?ssoError=user_deactivated");
+        if (await _userManager.IsLockedOutAsync(user))
+            return Redirect("/signIn?ssoError=account_locked");
+
+        await IssueTokens(user.Id, user.UserName ?? "", rememberMe: false);
+        if (user.selectedStoreId != null)
+            SetSelectedStoreCookie(user.selectedStoreId.Value);
+
+        return Redirect("/products");
+    }
+
     [HttpPost]
     [Route("/auth/signIn")]
     [AllowAnonymous]
