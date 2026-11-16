@@ -472,6 +472,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- `GET /stores/` and `GET /stores/{id}` now require sign-in. They return only stores the caller is a member of (instance owners still see every store), and a store the caller does not belong to answers 404.
 - Excel product import (`/products/import-preview`, `/products/import-apply`) rejects oversized workbooks before loading them: uploads are capped at 20 MB, decompressed content at 100 MB, archives at 1,000 entries, and sheets at 1,000,000 cells, 50,000 data rows and 1,000 columns. Crafted zip-bomb spreadsheets now return a 400 error instead of exhausting backend memory.
 - Live operation updates are delivered only for stores the signed-in user is an active member of. Previously, changing the selected-store cookie let any signed-in user receive another store's operation logs and progress.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.

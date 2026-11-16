@@ -38,14 +38,18 @@ public class StoreController : ControllerBase
         _brandingSettings = brandingSettings;
     }
 
+    /// <summary>Stores the caller is a member of; instance owners (isAdmin) see every store.</summary>
     [HttpGet]
     [Route("/stores/")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetAllStores(int startIndex = 0, int pageSize = 100)
     {
+        var user = await RequireActiveUserAsync();
+        var isAdmin = user.isAdmin;
+        var userId = user.Id;
+
         var storeRepo = _unitOfWork.Repository<Store>();
         var stores = await storeRepo.FindAllAsync(
-            s => true,
+            s => isAdmin || s.members.Any(m => m.Id == userId),
             q => q.Include(s => s.members)
         );
 
@@ -62,15 +66,17 @@ public class StoreController : ControllerBase
         });
     }
 
+    /// <summary>A store the caller is a member of; non-members get 404 so store ids are not disclosed.</summary>
     [HttpGet]
     [Route("/stores/{id}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetStoreById(int id)
     {
+        var user = await RequireActiveUserAsync();
+
         var storeRepo = _unitOfWork.Repository<Store>();
         var store = await storeRepo.GetByIdWithIncludesAsync(id, StoreIncludes);
 
-        if (store == null)
+        if (store == null || (!user.isAdmin && !store.members.Any(m => m.Id == user.Id)))
             throw ApiException.NotFound(code: "store_not_found");
 
         return Ok(store.MapToDTO(_serviceProvider));
@@ -524,6 +530,14 @@ public class StoreController : ControllerBase
     {
         public decimal? rateToBase { get; set; }
         public bool? isEnabled { get; set; }
+    }
+
+    private async Task<User> RequireActiveUserAsync()
+    {
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null || !user.isActive)
+            throw ApiException.Unauthorized(code: "user_not_found");
+        return user;
     }
 
     private async Task EnsureStoreExistsAsync(int id)
