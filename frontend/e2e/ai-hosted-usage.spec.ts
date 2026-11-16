@@ -15,6 +15,8 @@ async function openChat(
   options = { administration: false, hostedOnly: false, failUsageOnce: false },
 ) {
   let usageCalls = 0;
+  let localModelDeleted = options.hostedOnly;
+  const deletedIds: number[] = [];
   await page.addInitScript(() => {
     localStorage.setItem("delegat.locale", "ru");
     localStorage.setItem("mobile-warning-dismissed", "1");
@@ -69,11 +71,20 @@ async function openChat(
           isEnabled: true,
           isDefault: true,
         },
-        { id: 1, name: "My model", isPlatformHosted: false, isEnabled: true },
+        ...(!localModelDeleted
+          ? [
+              {
+                id: 1,
+                name: "My model",
+                isPlatformHosted: false,
+                isEnabled: true,
+              },
+            ]
+          : []),
       ];
     else if (path === "/ai/models")
       body = [
-        ...(!options.hostedOnly
+        ...(!localModelDeleted
           ? [
               {
                 id: 1,
@@ -98,7 +109,11 @@ async function openChat(
           apiUrl: "https://cp.test/platform/v1/ai/anthropic",
         },
       ];
-    else if (path === "/ai/hosted-ai/admin") {
+    else if (path === "/ai/models/1" && route.request().method() === "DELETE") {
+      deletedIds.push(1);
+      localModelDeleted = true;
+      body = {};
+    } else if (path === "/ai/hosted-ai/admin") {
       usageCalls++;
       if (options.failUsageOnce && usageCalls === 1) {
         await route.fulfill({
@@ -126,7 +141,96 @@ async function openChat(
         .globalProperties.$store;
       store.commit("aiChat/setOpen", true);
     });
+  return { deletedIds };
 }
+
+test("model deletion requires confirmation, keeps management open, and refreshes pickers", async ({
+  page,
+}) => {
+  const { deletedIds } = await openChat(
+    page,
+    {},
+    { administration: true, hostedOnly: false, failUsageOnce: false },
+  );
+  await page.getByRole("button", { name: "Управление моделями" }).click();
+  const management = page.getByRole("dialog", {
+    name: "Языковые модели",
+    exact: true,
+  });
+  const own = management.getByRole("row").filter({ hasText: "my-model" });
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Удалить модель?",
+    exact: true,
+  });
+
+  await own.getByRole("button", { name: "Удалить", exact: true }).click();
+  await expect(confirmation).toBeVisible();
+  await confirmation
+    .getByRole("button", { name: "Отмена", exact: true })
+    .click();
+  await expect(confirmation).not.toBeVisible();
+  expect(deletedIds).toEqual([]);
+  await expect(management).toBeVisible();
+  await expect(own).toBeVisible();
+
+  await own.getByRole("button", { name: "Удалить", exact: true }).click();
+  await confirmation
+    .getByRole("button", { name: "Удалить", exact: true })
+    .click();
+  await expect.poll(() => deletedIds.length).toBe(1);
+  await expect(management).toBeVisible();
+  await expect(own).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const store = (document.querySelector("#app") as any).__vue_app__.config
+          .globalProperties.$store;
+        return store.state.aiModels.pickerModels.some(
+          (model: any) => model.id === 1,
+        );
+      }),
+    )
+    .toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(
+    page
+      .locator('[data-slot="inset-group-item"]')
+      .filter({ hasText: "my-model" }),
+  ).toHaveCount(0);
+});
+
+test("model deletion supports Escape cancellation and keyboard confirmation", async ({
+  page,
+}) => {
+  const { deletedIds } = await openChat(
+    page,
+    {},
+    { administration: true, hostedOnly: false, failUsageOnce: false },
+  );
+  await page.getByRole("button", { name: "Управление моделями" }).click();
+  const management = page.getByRole("dialog", {
+    name: "Языковые модели",
+    exact: true,
+  });
+  const own = management.getByRole("row").filter({ hasText: "my-model" });
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Удалить модель?",
+    exact: true,
+  });
+  await own.getByRole("button", { name: "Удалить", exact: true }).click();
+  await expect(confirmation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).not.toBeVisible();
+  expect(deletedIds).toEqual([]);
+  await expect(management).toBeVisible();
+  await own.getByRole("button", { name: "Удалить", exact: true }).click();
+  await confirmation
+    .getByRole("button", { name: "Удалить", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => deletedIds.length).toBe(1);
+  await expect(management).toBeVisible();
+});
 
 test("usage stays in a disclosure beside the model, with keyboard dismissal", async ({
   page,
@@ -188,6 +292,19 @@ test("administration lists the provided model as read-only and shows monthly usa
     .locator('[data-slot="inset-group-item"]')
     .filter({ hasText: "deepseek-flash" });
   await expect(model.getByText("От платформы", { exact: true })).toBeVisible();
+  await expect(
+    model.getByText("Модель и лимиты задаются платформой."),
+  ).toHaveCount(0);
+  const ownSummary = page
+    .locator('[data-slot="inset-group-item"]')
+    .filter({ hasText: "my-model" });
+  const summaryBoxes = await Promise.all([
+    model.boundingBox(),
+    ownSummary.boundingBox(),
+  ]);
+  expect(
+    Math.abs(summaryBoxes[0]!.height - summaryBoxes[1]!.height),
+  ).toBeLessThanOrEqual(1);
   await model.click();
   await expect(
     page.getByRole("dialog", { name: "Изменить модель" }),
@@ -209,13 +326,33 @@ test("administration lists the provided model as read-only and shows monthly usa
   await expect(
     provided.getByText("От платформы", { exact: true }),
   ).toBeVisible();
-  await expect(provided.getByRole("switch")).toHaveCount(0);
+  await expect(provided.getByRole("switch")).toBeDisabled();
+  await expect(
+    provided
+      .getByRole("cell")
+      .first()
+      .getByText("От платформы", { exact: true }),
+  ).toHaveCount(0);
+  const providedBadge = provided.getByText("От платформы", { exact: true });
+  const actionCell = provided.getByRole("cell").last();
+  const [badgeBox, cellBox] = await Promise.all([
+    providedBadge.boundingBox(),
+    actionCell.boundingBox(),
+  ]);
+  expect(badgeBox!.x).toBeGreaterThanOrEqual(cellBox!.x);
+  expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(
+    cellBox!.x + cellBox!.width,
+  );
   await expect(provided.getByRole("button")).toHaveCount(0);
   const own = management.getByRole("row").filter({ hasText: "my-model" });
   await expect(own.getByRole("switch")).toBeVisible();
   await expect(
     own.getByRole("button", { name: "Редактировать", exact: true }),
   ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("ai-model-management.png"),
+    animations: "disabled",
+  });
   await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Персональные настройки", exact: true })

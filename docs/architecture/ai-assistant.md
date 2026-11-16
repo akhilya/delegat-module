@@ -43,6 +43,8 @@ Platform-hosted usage is a compact percentage disclosure beside the composer mod
 
 Administration shows the same usage component inline beneath the models list. `GET /ai/models` includes the virtual platform-hosted model and its `isPlatformHosted` marker, without a key mask for that row. Both the inset list and management table display it as provided by the platform; local edit, toggle, test, delete, and default-model controls apply only to stored models. `GET /ai/hosted-ai/admin` requires `settings.platform`, so viewing this quota does not require chat permissions or a selected store. The chat status endpoint retains its existing `ai.use` and store-membership policy.
 
+Model deletion uses the shared confirmation host, retains the management dialog on cancellation or confirmation, and refreshes cached pickers after success. The host captures activation before the close handler so both mouse and keyboard confirmation preserve the accepted result. Platform models use a disabled status switch and a trailing origin badge; no extra explanatory row changes the summary height.
+
 | File | Purpose |
 |------|---------|
 | `backend/Services/Ai/Prompts/AiPrompts.cs` | All prompts |

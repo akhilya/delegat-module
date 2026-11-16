@@ -4413,7 +4413,6 @@
       "addModel": "Добавить модель",
       "manageModelsButton": "Управление моделями",
       "platformManaged": "От платформы",
-      "platformManagedHint": "Модель и лимиты задаются платформой.",
       "hostedUsageLoadError": "Не удалось загрузить расход платформенного ИИ.",
       "hostedUsageRetry": "Загрузить расход",
       "modelsSectionTitle": "Языковые модели",

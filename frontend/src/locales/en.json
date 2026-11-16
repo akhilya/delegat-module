@@ -4413,7 +4413,6 @@
       "addModel": "Add model",
       "manageModelsButton": "Manage models",
       "platformManaged": "Provided by platform",
-      "platformManagedHint": "The model and allowance are managed by the platform.",
       "hostedUsageLoadError": "Could not load platform AI usage.",
       "hostedUsageRetry": "Load usage",
       "modelsSectionTitle": "Language models",

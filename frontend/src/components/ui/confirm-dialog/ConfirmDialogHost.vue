@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { confirmState, resolveConfirm } from "@/composables/useConfirm";
 
-/** Set before AlertDialogAction closes the root — update:open(false) must see it. */
+/** Capture activation before the close handler, for both pointer and keyboard clicks. */
 let pendingResult = false;
 
 function onOpenChange(open) {
@@ -49,16 +49,12 @@ function preventOutside(event) {
       </AlertDialogHeader>
       <AlertDialogFooter :layout="confirmState.saveLabel ? 'stack' : 'split'">
         <template v-if="confirmState.saveLabel">
-          <AlertDialogAction
-            @pointerdown="markResult('save')"
-            @click="markResult('save')"
-          >
+          <AlertDialogAction @click.capture="markResult('save')">
             {{ confirmState.saveLabel }}
           </AlertDialogAction>
           <AlertDialogAction
             :variant="confirmState.destructive ? 'destructive' : 'outline'"
-            @pointerdown="markResult(true)"
-            @click="markResult(true)"
+            @click.capture="markResult(true)"
           >
             {{ confirmState.confirmLabel }}
           </AlertDialogAction>
@@ -72,8 +68,7 @@ function preventOutside(event) {
           </AlertDialogCancel>
           <AlertDialogAction
             :variant="confirmState.destructive ? 'destructive' : 'default'"
-            @pointerdown="markResult(true)"
-            @click="markResult(true)"
+            @click.capture="markResult(true)"
           >
             {{ confirmState.confirmLabel }}
           </AlertDialogAction>
