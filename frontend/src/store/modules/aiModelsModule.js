@@ -78,8 +78,9 @@ export default {
       return await pickerInFlight;
     },
 
-    async getHostedAiStatus(ctx, { onSuccess, onError } = {}) {
-      return await useAxios("/ai/hosted-ai", { method: "GET", cache: false }, http, { immediate: true })
+    async getHostedAiStatus(ctx, { onSuccess, onError, forAdministration = false } = {}) {
+      const path = forAdministration ? "/ai/hosted-ai/admin" : "/ai/hosted-ai";
+      return await useAxios(path, { method: "GET", cache: false }, http, { immediate: true })
         .then((r) => {
           ctx.commit("setHostedAiStatus", r.data.value ?? null);
           onSuccess?.(r);
