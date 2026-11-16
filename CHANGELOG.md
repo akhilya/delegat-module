@@ -11,7 +11,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in the matching user — the instance admin when the platform account email is not present locally — and redirects to the catalog. Standard `isActive` and lockout rules apply; failures land on the sign-in page with an error toast.
+- Console SSO sign-in: `GET /api/auth/platformSso?code=…` redeems a one-time Control Plane code via Platform Link (`POST /platform/v1/sso/instance/exchange`), signs in only the matching active workspace user, and redirects to the catalog. Standard lockout rules apply; failures land on the sign-in page with an error toast.
 
 - Ozon App Store OAuth connection flow: a "Connect via Ozon" button on the connection form starts the seller consent flow, `/marketplace/ozon/oauth/start` + `/marketplace/ozon/oauth/complete` endpoints redeem the Control Plane grant, and the adapter talks to the Ozon API with `Authorization: Bearer`. A hosted service rotates access/refresh token pairs through the Control Plane proxy before expiry and flags `oauthReconnectRequired` when Ozon revokes the grant; the manual Client-Id/Api-Key flow is unchanged.
 
@@ -473,6 +473,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 ### Security
 
 - Downloads of user-supplied media URLs connect only to the public address that was checked, so a hostname that re-resolves to a private or cloud-metadata address (DNS rebinding) is refused. These downloads ignore system HTTP proxy settings.
+- Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
+- Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.
 - Excel product import (`/products/import-preview`, `/products/import-apply`) rejects oversized workbooks before loading them: uploads are capped at 20 MB, decompressed content at 100 MB, archives at 1,000 entries, and sheets at 1,000,000 cells, 50,000 data rows and 1,000 columns. Crafted zip-bomb spreadsheets now return a 400 error instead of exhausting backend memory.
 - Live operation updates are delivered only for stores the signed-in user is an active member of. Previously, changing the selected-store cookie let any signed-in user receive another store's operation logs and progress.
 - A catalog `where` is not sent to the database as SQL. Named templates expand to a fixed predicate, and any other text is accepted only as an allowlisted comparison. Statement separators, comments, and a predicate the server cannot apply are rejected. Values stay query parameters.
