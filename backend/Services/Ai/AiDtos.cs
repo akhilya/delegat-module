@@ -163,4 +163,6 @@ public static class SseEventType
     public const string Plan = "plan";
     public const string Error = "error";
     public const string Done = "done";
+    public const string MessageStart = "message_start";
+    public const string ExecutionStatus = "execution_status";
 }

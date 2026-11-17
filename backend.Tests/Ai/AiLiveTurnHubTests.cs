@@ -1,14 +1,18 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Delegat;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
 using Delegat.Tests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
 
+[Collection("AiPlanSigningKey")]
 public class AiLiveTurnHubTests
 {
     [Fact]
@@ -29,7 +33,7 @@ public class AiLiveTurnHubTests
     {
         using var hub = CreateHub(out var db);
         await SeedConfirmedPlan(db);
-        Assert.True(hub.TryStart("s", 1, 1, null, FailedPlanWithRecovery));
+        Assert.True(hub.TryStart("s", 1, 1, null, FailedPlanWithRecovery, "original"));
         await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
         var rows = db.aiConversationMessages.Where(m => m.role == "assistant").OrderBy(m => m.Id).ToList();
         Assert.Equal(2, rows.Count);
@@ -48,9 +52,9 @@ public class AiLiveTurnHubTests
     {
         using var hub = CreateHub(out var db);
         await SeedConfirmedPlan(db);
-        Assert.True(hub.TryStart("s", 1, 1, null, ReviewAfterCompletedPlan));
+        Assert.True(hub.TryStart("s", 1, 1, null, ReviewAfterCompletedPlan, "original"));
         var turn = hub.Find("s", 1, 1)!;
-        await WaitUntil(() => turn.SnapshotChunks().Count >= 3);
+        await WaitUntil(() => turn.SnapshotChunks().Any(c => c.Contains("Analyzing result")));
         Assert.True(hub.Stop("s", 1, 1));
         await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
         var rows = db.aiConversationMessages.Where(m => m.role == "assistant").OrderBy(m => m.Id).ToList();
@@ -67,20 +71,20 @@ public class AiLiveTurnHubTests
             new("", """{"_ui":"assistantTurn","plan":{"proposalId":"original","summary":"Calculate"},"planConfirmed":true,"tools":[],"timeline":[]}""", null), default);
     }
 
-    private static async IAsyncEnumerable<string> FailedPlanWithRecovery(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
+    private static async IAsyncEnumerable<AiTurnEvent> FailedPlanWithRecovery(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
     {
-        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { ok = false });
-        yield return AiSseTurnRecorder.Format(SseEventType.AssistantStart, new { executionProposalId = "original" });
-        yield return AiSseTurnRecorder.Format(SseEventType.Plan, new { proposalId = "replacement", summary = "Correct calculation", discardDraftText = true });
-        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { });
+        yield return AiTurnEvent.Create(SseEventType.Done, new { ok = false });
+        yield return AiTurnEvent.Create(SseEventType.AssistantStart, new { executionProposalId = "original" });
+        yield return AiTurnEvent.Create(SseEventType.Plan, new { proposalId = "replacement", summary = "Correct calculation", discardDraftText = true });
+        yield return AiTurnEvent.Create(SseEventType.Done, new { });
         await Task.CompletedTask;
     }
 
-    private static async IAsyncEnumerable<string> ReviewAfterCompletedPlan(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
+    private static async IAsyncEnumerable<AiTurnEvent> ReviewAfterCompletedPlan(IServiceProvider _, [EnumeratorCancellation] CancellationToken ct)
     {
-        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { ok = true });
-        yield return AiSseTurnRecorder.Format(SseEventType.AssistantStart, new { executionProposalId = "original" });
-        yield return AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "Analyzing result" });
+        yield return AiTurnEvent.Create(SseEventType.Done, new { ok = true });
+        yield return AiTurnEvent.Create(SseEventType.AssistantStart, new { executionProposalId = "original" });
+        yield return AiTurnEvent.Create(SseEventType.Text, new { delta = "Analyzing result" });
         await Task.Delay(Timeout.Infinite, ct);
     }
 
@@ -198,12 +202,12 @@ public class AiLiveTurnHubTests
     public async Task Subscribe_ReplaysThenTails()
     {
         var turn = new AiLiveTurn("s", 1, 1);
-        turn.Publish(AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "a" }));
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "a" }));
 
         var seen = new List<string>();
         var sub = Consume(turn, seen);
         await Task.Delay(30);
-        turn.Publish(AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "b" }));
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "b" }));
         turn.Complete();
         await sub;
 
@@ -251,8 +255,8 @@ public class AiLiveTurnHubTests
         await AiConversationTurnStore.AppendUserIfNeededAsync(db, "s", 1, 1, User("prepare"), CancellationToken.None);
         const string proposal = """{"_ui":"assistantTurn","plan":{"proposalId":"p1","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[{"type":"text","text":"Ready."}]}""";
         await AiConversationTurnStore.UpsertAssistantAsync(db, "s", 1, 1, new("Ready.", proposal, null), CancellationToken.None);
-        Assert.True(hub.TryStart("s", 1, 1, null, HangAfterText));
-        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Count > 0);
+        Assert.True(hub.TryStart("s", 1, 1, null, HangAfterText, "p1"));
+        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Any(c => c.Contains("partial")) == true);
         Assert.True(hub.Stop("s", 1, 1));
         await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
         var assistant = db.aiConversationMessages.Single(m => m.role == "assistant");
@@ -282,7 +286,7 @@ public class AiLiveTurnHubTests
     {
         using var hub = CreateHub(out var db);
         Assert.True(hub.TryStart("s", 1, 1, User("hello"), HangAfterText));
-        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Count > 0);
+        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Any(c => c.Contains("partial")) == true);
         Assert.True(hub.Stop("s", 1, 1));
         await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
 
@@ -312,7 +316,7 @@ public class AiLiveTurnHubTests
     {
         using var hub = CreateHub(out _);
         Assert.True(hub.TryStart("s", 1, 1, User("hello"), HangAfterText));
-        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Count > 0);
+        await WaitUntil(() => hub.Find("s", 1, 1)?.SnapshotChunks().Any(c => c.Contains("partial")) == true);
         var turn = hub.Find("s", 1, 1)!;
         using var subscription = new CancellationTokenSource();
         await using (var reader = turn.Subscribe(subscription.Token).GetAsyncEnumerator())
@@ -323,8 +327,15 @@ public class AiLiveTurnHubTests
         Assert.True(hub.IsGenerating("s", 1, 1));
         Assert.False(turn.StopRequested);
         await using var resumed = turn.Subscribe().GetAsyncEnumerator();
-        Assert.True(await resumed.MoveNextAsync());
-        Assert.Contains("partial", resumed.Current);
+        var sawPartial = false;
+        for (var i = 0; i < 8 && !sawPartial; i++)
+        {
+            var move = resumed.MoveNextAsync().AsTask();
+            if (!await move.WaitAsync(TimeSpan.FromSeconds(5)) || !await move)
+                break;
+            sawPartial |= resumed.Current.Contains("partial");
+        }
+        Assert.True(sawPartial);
         hub.Stop("s", 1, 1);
     }
 
@@ -488,13 +499,13 @@ public class AiLiveTurnHubTests
         await AiConversationTurnStore.AppendUserIfNeededAsync(
             db, "s", 1, 1, User("please"), CancellationToken.None);
         const string planJson =
-            """{"_ui":"assistantTurn","tools":[],"timeline":[{"type":"text","text":"Ready."}],"plan":{"summary":"Upload"}}""";
+            """{"_ui":"assistantTurn","tools":[],"timeline":[{"type":"text","text":"Ready."}],"plan":{"summary":"Upload","proposalId":"p1"},"planConfirmed":true}""";
         await AiConversationTurnStore.UpsertAssistantAsync(
             db, "s", 1, 1,
             new AiSseTurnSnapshot("Ready.", planJson, "m"),
             CancellationToken.None);
 
-        Assert.True(handle.TryStart("s", 1, 1, null, ImmediateDone));
+        Assert.True(handle.TryStart("s", 1, 1, null, ImmediateDone, "p1"));
         await WaitUntil(() => !handle.IsGenerating("s", 1, 1));
 
         var messages = db.aiConversationMessages.OrderBy(m => m.Id).ToList();
@@ -515,7 +526,7 @@ public class AiLiveTurnHubTests
         content = JsonSerializer.SerializeToElement(text),
     };
 
-    private static async IAsyncEnumerable<string> Hang(
+    private static async IAsyncEnumerable<AiTurnEvent> Hang(
         IServiceProvider _,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -523,21 +534,667 @@ public class AiLiveTurnHubTests
         yield break;
     }
 
-    private static async IAsyncEnumerable<string> HangAfterText(
+    private static async IAsyncEnumerable<AiTurnEvent> HangAfterText(
         IServiceProvider _,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        yield return AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "partial" });
+        yield return AiTurnEvent.Create(SseEventType.Text, new { delta = "partial" });
         await Task.Delay(Timeout.Infinite, ct);
     }
 
-    private static async IAsyncEnumerable<string> ImmediateDone(
+    private static async IAsyncEnumerable<AiTurnEvent> ImmediateDone(
         IServiceProvider _,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        yield return AiSseTurnRecorder.Format(SseEventType.Text, new { delta = "done-text" });
-        yield return AiSseTurnRecorder.Format(SseEventType.Done, new { modelName = "x", ok = true });
+        yield return AiTurnEvent.Create(SseEventType.Text, new { delta = "done-text" });
+        yield return AiTurnEvent.Create(SseEventType.Done, new { modelName = "x", ok = true });
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task HeldReservation_BlocksSecondReserve_WithoutConsumingPendingPlan()
+    {
+        // Admission reserves the session slot BEFORE the signed plan is
+        // consumed: a second reservation is refused while the pending token
+        // stays consumable, and a released reservation reopens the slot.
+        var originalKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+        Environment.SetEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray()));
+        try
+        {
+            using var hub = CreateHub(out var db);
+            var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+                db, "s", 1, 1, CancellationToken.None);
+            var steps = System.Text.Json.Nodes.JsonNode.Parse(
+                """[{"tool":"platform_request","description":"Update item","args":{"method":"PATCH","path":"/products/7","body":{"name":"new"}}}]""")!
+                .AsArray();
+            var createdAt = DateTime.UtcNow;
+            var expiresAt = createdAt.AddMinutes(15);
+            var stepsHash = AiConversationTurnStore.ComputeStepsHash(steps);
+            var (proposalToken, proposalNonce) = AiPlanProposalToken.Mint(
+                "s", 1, 1, stepsHash, expiresAt);
+            db.aiConversationMessages.Add(new AiConversationMessage
+            {
+                conversationId = conversation.Id,
+                role = "assistant",
+                content = "Review this plan",
+                toolCallsJson = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["_ui"] = "assistantTurn",
+                    ["tools"] = new System.Text.Json.Nodes.JsonArray(),
+                    ["timeline"] = new System.Text.Json.Nodes.JsonArray(),
+                    ["plan"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["proposalId"] = proposalToken,
+                        ["proposalNonce"] = proposalNonce,
+                        ["stepsHash"] = stepsHash,
+                        ["createdAtUtc"] = createdAt,
+                        ["expiresAtUtc"] = expiresAt,
+                        ["steps"] = steps.DeepClone(),
+                    },
+                }.ToJsonString(),
+                createdAt = createdAt,
+            });
+            await db.SaveChangesAsync();
+
+            var reserved = hub.Hub.TryReserve("s", 1, 1, proposalToken);
+            Assert.NotNull(reserved);
+            Assert.Equal(proposalToken, reserved.ExecutionProposalId);
+            // A second admission for the same session is refused while the
+            // reservation is held - and nothing has consumed the plan yet.
+            Assert.Null(hub.Hub.TryReserve("s", 1, 1, proposalToken));
+            var attempt = await AiConversationTurnStore.ConsumePendingPlanDetailedAsync(
+                db, "s", proposalToken, 1, 1, CancellationToken.None);
+            Assert.NotNull(attempt.Steps);
+
+            hub.Hub.ReleaseReservation(reserved);
+            Assert.True(hub.TryStart("s", 1, 1, User("retry"), Hang));
+            hub.Stop("s", 1, 1);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ENCRYPTION_KEY", originalKey);
+        }
+    }
+
+    [Fact]
+    public async Task StartReserved_Twice_LaunchesTheProducerOnce()
+    {
+        using var hub = CreateHub(out _);
+        var reserved = hub.Hub.TryReserve("s", 1, 1)!;
+        var launches = 0;
+        IAsyncEnumerable<AiTurnEvent> Producer(IServiceProvider sp, CancellationToken ct)
+        {
+            Interlocked.Increment(ref launches);
+            return Hang(sp, ct);
+        }
+        hub.Hub.StartReserved(reserved, User("hi"), Producer);
+        hub.Hub.StartReserved(reserved, User("hi"), Producer);
+        await WaitUntil(() => reserved.SnapshotChunks().Count > 0);
+        hub.Stop("s", 1, 1);
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        Assert.Equal(1, launches);
+    }
+
+    [Fact]
+    public async Task Publish_ConcurrentWritersAndComplete_DeliverEachEventOnceInOrder()
+    {
+        var turn = new AiLiveTurn("s", 1, 1);
+        turn.BindMessage("m1", 1, "chat");
+        var subscribers = Enumerable.Range(0, 3)
+            .Select(_ =>
+            {
+                var list = new List<string>();
+                return (list, task: Consume(turn, list));
+            })
+            .ToList();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writers = Enumerable.Range(0, 4)
+            .Select(w => Task.Run(async () =>
+            {
+                await gate.Task;
+                for (var i = 0; i < 25; i++)
+                    turn.Publish(AiTurnEvent.Create(
+                        SseEventType.Text, new { delta = $"w{w}-{i}" }));
+            }))
+            .ToList();
+        gate.SetResult();
+        await Task.WhenAll(writers);
+        turn.Complete();
+        await Task.WhenAll(subscribers.Select(s => s.task));
+
+        foreach (var (list, _) in subscribers)
+        {
+            Assert.Equal(100, list.Count);
+            var sequences = list.Select(line =>
+                JsonDocument.Parse(line["data: ".Length..].TrimEnd())
+                    .RootElement.GetProperty("sequence").GetInt64());
+            Assert.Equal(Enumerable.Range(1, 100).Select(i => (long)i), sequences);
+        }
+    }
+
+    [Fact]
+    public async Task Subscribe_RunCursor_TailsOnlyNewerEventsForTheSameRun()
+    {
+        var turn = new AiLiveTurn("s", 1, 1);
+        turn.BindMessage("m1", 1, "chat");
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "one" }));
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "two" }));
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "three" }));
+        turn.Complete();
+
+        var tail = new List<string>();
+        await foreach (var chunk in turn.Subscribe(default, turn.RunId, 2))
+            tail.Add(chunk);
+        Assert.Single(tail);
+        Assert.Contains("\"delta\":\"three\"", tail[0]);
+
+        var mismatched = new List<string>();
+        await foreach (var chunk in turn.Subscribe(default, "other-run", 2))
+            mismatched.Add(chunk);
+        Assert.Equal(3, mismatched.Count);
+
+        var outOfRange = new List<string>();
+        await foreach (var chunk in turn.Subscribe(default, turn.RunId, 99))
+            outOfRange.Add(chunk);
+        Assert.Equal(3, outOfRange.Count);
+    }
+
+    [Fact]
+    public void TryStop_AfterComplete_DoesNotRewriteTerminalOutcome()
+    {
+        var turn = new AiLiveTurn("s", 1, 1);
+        turn.BindMessage("m1", 1, "chat");
+        turn.Publish(AiTurnEvent.Create(SseEventType.Done, new { ok = true }));
+        turn.Complete();
+        Assert.False(turn.TryStop());
+        var last = turn.SnapshotEvents().Last();
+        Assert.Equal(SseEventType.Done, last.Type);
+        Assert.DoesNotContain(turn.SnapshotChunks(), c => c.Contains("\"stopped\""));
+    }
+
+    [Fact]
+    public async Task PersistAssistantTurn_RepeatedSameRun_IsIdempotent()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-1", "chat", null, null, CancellationToken.None);
+        var snapshot = AiSseTurnRecorder.FoldEvents([
+            new AiTurnEvent(SseEventType.Text, JsonSerializer.SerializeToElement(new { delta = "hello" }))
+            { RunId = "run-1", MessageId = binding.MessageId, Sequence = 1, Phase = "chat" },
+            new AiTurnEvent(SseEventType.Done, JsonSerializer.SerializeToElement(new { }))
+            { RunId = "run-1", MessageId = binding.MessageId, Sequence = 2, Phase = "chat" },
+        ]);
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "s", 1, 1, binding, snapshot, CancellationToken.None);
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "s", 1, 1, binding, snapshot, CancellationToken.None);
+        var row = db.aiConversationMessages.Single(m => m.role == "assistant");
+        Assert.Equal("hello", row.content);
+        using var json = JsonDocument.Parse(row.toolCallsJson!);
+        Assert.Single(
+            json.RootElement.GetProperty("timeline").EnumerateArray(),
+            i => i.GetProperty("type").GetString() == "text");
+    }
+
+    [Fact]
+    public async Task BeginExecution_BindsTheExactConfirmedProposal_NotTheLastAssistantRow()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        var planRow = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Ready.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-plan","plan":{"proposalId":"p1","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[{"type":"text","text":"Ready."}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        var laterRow = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "A later reply",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","tools":[],"timeline":[{"type":"text","text":"A later reply"}]}
+                """,
+            createdAt = DateTime.UtcNow.AddMilliseconds(1),
+        };
+        db.aiConversationMessages.AddRange(planRow, laterRow);
+        await db.SaveChangesAsync();
+
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-exec", "execution", "p1", null, CancellationToken.None);
+        Assert.Equal(planRow.Id, binding.DbId);
+        Assert.Equal("srv-plan", binding.MessageId);
+        var envelope = System.Text.Json.Nodes.JsonNode.Parse(planRow.toolCallsJson!)!;
+        Assert.Equal("srv-plan", envelope["planOwnerMessageId"]!.GetValue<string>());
+        Assert.Equal(1, envelope["planExecStart"]!.GetValue<int>());
+        Assert.Equal("running", envelope["messageState"]!.GetValue<string>());
+        // The unrelated later row is untouched.
+        Assert.Equal("A later reply", laterRow.content);
+    }
+
+    [Fact]
+    public async Task CanonicalExecutionRow_IsBoundBeforeTheFirstTurnEvent()
+    {
+        // The gated producer cannot yield until released: a committed
+        // execution-bound row while it is blocked proves binding precedes the
+        // first engine event. A second context on the same InMemory store
+        // avoids racing the producer's context.
+        var name = Guid.NewGuid().ToString();
+        await using var db = TestDbFactory.CreateDb(name);
+        await using var reader = TestDbFactory.CreateDb(name);
+        using var handle = CreateHub(db);
+        await SeedConfirmedPlan(db);
+        var gate = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async IAsyncEnumerable<AiTurnEvent> Gated(
+            IServiceProvider _,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            await gate.Task;
+            yield return AiTurnEvent.Create(SseEventType.Done, new { ok = true });
+        }
+
+        Assert.True(handle.TryStart("s", 1, 1, null, Gated, "original"));
+
+        await WaitUntil(() =>
+            reader.aiConversationMessages.Any(m =>
+                m.role == "assistant"
+                && m.toolCallsJson != null
+                && m.toolCallsJson.Contains("\"phase\":\"execution\"")));
+        var bound = reader.aiConversationMessages
+            .Single(m => m.toolCallsJson!.Contains("\"phase\":\"execution\""));
+        var envelope = JsonNode.Parse(bound.toolCallsJson!)!;
+        Assert.Equal("running", envelope["messageState"]!.GetValue<string>());
+        Assert.Equal(
+            envelope["messageId"]!.GetValue<string>(),
+            envelope["planOwnerMessageId"]!.GetValue<string>());
+        Assert.True(envelope["planExecStart"]!.GetValue<int>() >= 0);
+        // At most the binding marker exists: no producer event was emitted yet.
+        var events = handle.Find("s", 1, 1)!.SnapshotEvents();
+        Assert.True(events.Count <= 1);
+
+        gate.SetResult();
+        await WaitUntil(() => !handle.IsGenerating("s", 1, 1));
+        reader.ChangeTracker.Clear();
+        var done = JsonNode.Parse(
+            reader.aiConversationMessages.Single(m => m.Id == bound.Id).toolCallsJson!)!;
+        Assert.Equal("completed", done["messageState"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task BeginReview_PreservesParentLinkAndAssignsOwnIdentity()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        var parent = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Done.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-a","runId":"run-1","plan":{"proposalId":"A"},"planOwnerMessageId":"srv-a","planConfirmed":true,"planExecuted":true,"tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(parent);
+        await db.SaveChangesAsync();
+
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-2", "review", null, "A", CancellationToken.None);
+        Assert.NotEqual(parent.Id, binding.DbId);
+        Assert.NotEqual("srv-a", binding.MessageId);
+        var review = db.aiConversationMessages.Single(m => m.Id == binding.DbId);
+        var envelope = System.Text.Json.Nodes.JsonNode.Parse(review.toolCallsJson!)!;
+        Assert.Equal("A", envelope["executionProposalId"]!.GetValue<string>());
+        Assert.Equal(binding.MessageId, envelope["messageId"]!.GetValue<string>());
+        Assert.Equal("running", envelope["messageState"]!.GetValue<string>());
+        // The review's own identity is not the parent's plan ownership.
+        Assert.Null(envelope["planOwnerMessageId"]);
+        Assert.Null(envelope["plan"]);
+        var parentEnvelope = System.Text.Json.Nodes.JsonNode.Parse(parent.toolCallsJson!)!;
+        Assert.Equal("srv-a", parentEnvelope["messageId"]!.GetValue<string>());
+        Assert.True(parentEnvelope["planExecuted"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Subscribe_MissingRunCursor_ReplaysTheWholeCurrentRun()
+    {
+        // A cursor without its runId proves nothing: the full current run is
+        // replayed rather than silently truncating a foreign run.
+        var turn = new AiLiveTurn("s", 1, 1);
+        turn.BindMessage("m1", 1, "chat");
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "one" }));
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "two" }));
+        turn.Complete();
+
+        var chunks = new List<string>();
+        await foreach (var chunk in turn.Subscribe(default, null, 1))
+            chunks.Add(chunk);
+        Assert.Equal(2, chunks.Count);
+    }
+
+    [Fact]
+    public async Task Publish_RacingComplete_DeliversExactlyTheAcceptedPrefixInOrder()
+    {
+        var turn = new AiLiveTurn("s", 1, 1);
+        turn.BindMessage("m1", 1, "chat");
+        var subscribers = Enumerable.Range(0, 3)
+            .Select(_ =>
+            {
+                var list = new List<string>();
+                return (list, task: Consume(turn, list));
+            })
+            .ToList();
+        // At least one event lands before the barrier so every subscriber is
+        // guaranteed a nonempty prefix.
+        turn.Publish(AiTurnEvent.Create(SseEventType.Text, new { delta = "first" }));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writers = Enumerable.Range(0, 4)
+            .Select(w => Task.Run(async () =>
+            {
+                await gate.Task;
+                for (var i = 0; i < 25; i++)
+                    turn.Publish(AiTurnEvent.Create(
+                        SseEventType.Text, new { delta = $"w{w}-{i}" }));
+            }))
+            .ToList();
+        var completer = Task.Run(async () =>
+        {
+            await gate.Task;
+            turn.Complete();
+        });
+        gate.SetResult();
+        await Task.WhenAll(writers.Concat([completer]));
+        await Task.WhenAll(subscribers.Select(s => s.task));
+
+        // Whatever Publish accepted before Complete is delivered exactly once
+        // and in sequence - no subscriber can observe extra or reordered events.
+        var accepted = turn.SnapshotEvents();
+        foreach (var (list, _) in subscribers)
+        {
+            var sequences = list.Select(line =>
+                JsonDocument.Parse(line["data: ".Length..].TrimEnd())
+                    .RootElement.GetProperty("sequence").GetInt64());
+            Assert.Equal(accepted.Select(e => e.Sequence!.Value), sequences);
+        }
+    }
+
+    [Fact]
+    public async Task PersistExecution_PreservesPlanOwnershipAndReviewParent()
+    {
+        // Recovery B owns its own plan but keeps the review parent A: an
+        // execution merge must not drop either.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        var review = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Corrected.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-b","runId":"run-review","phase":"review","executionProposalId":"A","plan":{"proposalId":"B","summary":"Fix"},"planOwnerMessageId":"srv-b","planConfirmed":true,"planConfirmedBy":1,"planConfirmedAtUtc":"2026-01-01T00:00:00Z","planConfirmationId":"B","tools":[],"timeline":[{"type":"text","text":"Corrected."}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(review);
+        await db.SaveChangesAsync();
+
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-exec", "execution", "B", null, CancellationToken.None);
+        Assert.Equal(review.Id, binding.DbId);
+        var snapshot = AiSseTurnRecorder.FoldEvents([
+            new AiTurnEvent(SseEventType.Tool, JsonSerializer.SerializeToElement(
+                new { id = "t1", name = "platform_request", status = "done", summary = "ok" }))
+            { RunId = "run-exec", MessageId = "srv-b", Sequence = 1, Phase = "execution" },
+            new AiTurnEvent(SseEventType.ExecutionStatus, JsonSerializer.SerializeToElement(
+                new { status = "completed", succeeded = 1, total = 1, summary = "1 step completed." }))
+            { RunId = "run-exec", MessageId = "srv-b", Sequence = 2, Phase = "execution" },
+            new AiTurnEvent(SseEventType.Done, JsonSerializer.SerializeToElement(new { ok = true }))
+            { RunId = "run-exec", MessageId = "srv-b", Sequence = 3, Phase = "execution" },
+        ]);
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "s", 1, 1, binding, snapshot, CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var row = await db.aiConversationMessages.SingleAsync(m => m.Id == review.Id);
+        var envelope = JsonNode.Parse(row.toolCallsJson!)!;
+        Assert.Equal("srv-b", envelope["planOwnerMessageId"]!.GetValue<string>());
+        Assert.Equal("A", envelope["executionProposalId"]!.GetValue<string>());
+        Assert.Equal("srv-b", envelope["messageId"]!.GetValue<string>());
+        Assert.Equal("run-exec", envelope["runId"]!.GetValue<string>());
+        Assert.Equal(1, envelope["planExecStart"]!.GetValue<int>());
+        Assert.Equal(1, envelope["planConfirmedBy"]!.GetValue<int>());
+        Assert.True(envelope["planExecuted"]!.GetValue<bool>());
+        Assert.Equal("completed", envelope["messageState"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task PersistExecution_WithoutMergeablePlan_ThrowsInsteadOfRewriting()
+    {
+        // An execution binding whose row lost its plan must fail loudly rather
+        // than replace the signed envelope with a planless snapshot.
+        await using var db = TestDbFactory.CreateDb();
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-1", "chat", null, null, CancellationToken.None);
+        var execBinding = binding with { Phase = "execution" };
+        var snapshot = AiSseTurnRecorder.FoldEvents([
+            new AiTurnEvent(SseEventType.Text, JsonSerializer.SerializeToElement(new { delta = "x" }))
+            { RunId = "run-1", MessageId = binding.MessageId, Sequence = 1, Phase = "execution" },
+        ]);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AiConversationTurnStore.PersistAssistantTurnAsync(
+                db, "s", 1, 1, execBinding, snapshot, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PersistExecution_TerminalRow_IsNotReopenedByLaterSegmentSnapshot()
+    {
+        // A later segment snapshot carrying a higher sequence for the same run
+        // (e.g. a review-admission failure marker) must never reopen an already
+        // terminal execution row.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        var planRow = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Ready.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-a","plan":{"proposalId":"A","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[{"type":"text","text":"Ready."}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(planRow);
+        await db.SaveChangesAsync();
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-exec", "execution", "A", null, CancellationToken.None);
+        var terminal = AiSseTurnRecorder.FoldEvents([
+            new AiTurnEvent(SseEventType.Tool, JsonSerializer.SerializeToElement(
+                new { id = "t1", name = "platform_request", status = "done", summary = "ok" }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 1, Phase = "execution" },
+            new AiTurnEvent(SseEventType.Done, JsonSerializer.SerializeToElement(new { ok = true }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 2, Phase = "execution" },
+        ]);
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "s", 1, 1, binding, terminal, CancellationToken.None);
+
+        var errorTail = AiSseTurnRecorder.FoldEvents([
+            new AiTurnEvent(SseEventType.Tool, JsonSerializer.SerializeToElement(
+                new { id = "t1", name = "platform_request", status = "done", summary = "ok" }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 1, Phase = "execution" },
+            new AiTurnEvent(SseEventType.Done, JsonSerializer.SerializeToElement(new { ok = true }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 2, Phase = "execution" },
+            new AiTurnEvent(SseEventType.Error, JsonSerializer.SerializeToElement(
+                new { message = "interrupted", code = "internal_error" }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 7, Phase = "execution" },
+            new AiTurnEvent(SseEventType.Done, JsonSerializer.SerializeToElement(new { interrupted = true }))
+            { RunId = "run-exec", MessageId = "srv-a", Sequence = 8, Phase = "execution" },
+        ]);
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "s", 1, 1, binding, errorTail, CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var row = await db.aiConversationMessages.SingleAsync(m => m.Id == planRow.Id);
+        var envelope = JsonNode.Parse(row.toolCallsJson!)!;
+        Assert.Equal("completed", envelope["messageState"]!.GetValue<string>());
+        Assert.True(envelope["planExecuted"]!.GetValue<bool>());
+        Assert.Null(envelope["requestError"]);
+        // Tools are never appended twice by the reopened snapshot.
+        Assert.Single(envelope["tools"]!.AsArray());
+        Assert.Equal("t1", envelope["tools"]![0]!["id"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task BeginExecution_AmbiguousConfirmedTargets_ThrowsInsteadOfGuessing()
+    {
+        // Two confirmed unexecuted rows claiming the same proposal is corrupt
+        // state: refuse rather than silently pick the latest.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        foreach (var id in new[] { "srv-1", "srv-2" })
+        {
+            db.aiConversationMessages.Add(new AiConversationMessage
+            {
+                conversationId = conversation.Id,
+                role = "assistant",
+                content = "Ready.",
+                toolCallsJson = $$"""
+                    {"_ui":"assistantTurn","messageId":"{{id}}","plan":{"proposalId":"A","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[]}
+                    """,
+                createdAt = DateTime.UtcNow,
+            });
+        }
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AiConversationTurnStore.BeginAssistantTurnAsync(
+                db, "s", 1, 1, "run-exec", "execution", "A", null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task BeginExecution_IgnoresMalformedHistoricalPlans()
+    {
+        // An unrelated historical row with a malformed plan must not throw and
+        // must not become the execution target.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "s", 1, 1, CancellationToken.None);
+        db.aiConversationMessages.Add(new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "corrupt",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","plan":{"proposalId":42},"planConfirmed":"yes","tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        });
+        var target = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Ready.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","plan":{"proposalId":"A","summary":"Update"},"planConfirmed":true,"tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow.AddMilliseconds(1),
+        };
+        db.aiConversationMessages.Add(target);
+        await db.SaveChangesAsync();
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "s", 1, 1, "run-exec", "execution", "A", null, CancellationToken.None);
+        Assert.Equal(target.Id, binding.DbId);
+    }
+
+    [Fact]
+    public async Task ReviewBeginFailure_NeverWritesBackIntoTerminalExecution()
+    {
+        // Inject a failure at the review-row insert AFTER the completed
+        // execution was already persisted: the error tail must land on an
+        // ephemeral review identity, never reopen or rewrite A.
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .AddInterceptors(new FailOnReviewRowInsert())
+            .Options;
+        await using var db = new DataContext(options);
+        using var handle = CreateHub(db);
+        await SeedConfirmedPlan(db);
+        var advancedPastBoundary = false;
+        Assert.True(handle.TryStart("s", 1, 1, null, GuardedProducer, "original"));
+        await WaitUntil(() => !handle.IsGenerating("s", 1, 1));
+
+        var rows = db.aiConversationMessages
+            .Where(m => m.role == "assistant")
+            .OrderBy(m => m.Id)
+            .ToList();
+        // The failed review row was never inserted.
+        Assert.Single(rows);
+        var envelope = JsonNode.Parse(rows[0].toolCallsJson!)!;
+        Assert.Equal("completed", envelope["messageState"]!.GetValue<string>());
+        Assert.True(envelope["planExecuted"]!.GetValue<bool>());
+        Assert.Null(envelope["requestError"]);
+        var aMessageId = envelope["messageId"]!.GetValue<string>();
+
+        var events = handle.Find("s", 1, 1)!.SnapshotEvents();
+        var reviewStart = events.Last(e => e.Type == SseEventType.AssistantStart);
+        Assert.NotEqual(aMessageId, reviewStart.MessageId);
+        Assert.Equal("review", reviewStart.Phase);
+        Assert.Null(reviewStart.DbId);
+        // The error tail is stamped on the ephemeral review identity, not on A.
+        Assert.Equal(reviewStart.MessageId, events.Last(e => e.Type == SseEventType.Error).MessageId);
+        // A terminal review-admission failure stops the producer: no text or
+        // recovery plan can be emitted after the terminal error, and the
+        // producer is never advanced past the boundary.
+        var boundary = events.ToList().FindIndex(e => ReferenceEquals(e, reviewStart));
+        Assert.DoesNotContain(
+            events.Skip(boundary + 1),
+            e => e.Type is SseEventType.Text or SseEventType.Plan);
+        Assert.False(advancedPastBoundary);
+
+        async IAsyncEnumerable<AiTurnEvent> GuardedProducer(
+            IServiceProvider _,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            yield return AiTurnEvent.Create(SseEventType.Done, new { ok = true });
+            yield return AiTurnEvent.Create(
+                SseEventType.AssistantStart, new { executionProposalId = "original" });
+            // Reaching past the boundary means the consumer failed to stop.
+            advancedPastBoundary = true;
+            yield return AiTurnEvent.Create(SseEventType.Text, new { delta = "review text" });
+            yield return AiTurnEvent.Create(SseEventType.Plan,
+                new { proposalId = "postmortem", summary = "late recovery" });
+            yield return AiTurnEvent.Create(SseEventType.Done, new { });
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailOnReviewRowInsert : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            var injecting = eventData.Context!.ChangeTracker
+                .Entries<AiConversationMessage>()
+                .Any(e => e.State == EntityState.Added
+                    && e.Entity.toolCallsJson?.Contains("\"phase\":\"review\"") == true);
+            if (injecting)
+                throw new InvalidOperationException("injected review-begin failure");
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     private static async Task Consume(AiLiveTurn turn, List<string> seen)
@@ -546,9 +1203,8 @@ public class AiLiveTurnHubTests
             seen.Add(chunk);
     }
 
-    private static LiveHubHandle CreateHub(out DataContext db)
+    private static LiveHubHandle CreateHub(DataContext db)
     {
-        db = TestDbFactory.CreateDb();
         var services = new ServiceCollection();
         services.AddSingleton(db);
         var sp = services.BuildServiceProvider();
@@ -557,6 +1213,12 @@ public class AiLiveTurnHubTests
             NullLogger<AiLiveTurnHub>.Instance,
             TimeSpan.FromMilliseconds(50));
         return new LiveHubHandle(hub, sp);
+    }
+
+    private static LiveHubHandle CreateHub(out DataContext db)
+    {
+        db = TestDbFactory.CreateDb();
+        return CreateHub(db);
     }
 
     private static async Task WaitUntil(Func<bool> pred)
@@ -582,8 +1244,9 @@ public class AiLiveTurnHubTests
         public AiLiveTurnHub Hub { get; }
         public static implicit operator AiLiveTurnHub(LiveHubHandle h) => h.Hub;
         public bool TryStart(string s, int store, int user, ChatMessage? m,
-            Func<IServiceProvider, CancellationToken, IAsyncEnumerable<string>> p) =>
-            Hub.TryStart(s, store, user, m, p);
+            Func<IServiceProvider, CancellationToken, IAsyncEnumerable<AiTurnEvent>> p,
+            string? executionProposalId = null) =>
+            Hub.TryStart(s, store, user, m, p, executionProposalId);
         public bool Stop(string s, int store, int user) => Hub.Stop(s, store, user);
         public bool IsGenerating(string s, int store, int user) => Hub.IsGenerating(s, store, user);
         public AiLiveTurn? Find(string s, int store, int user) => Hub.Find(s, store, user);

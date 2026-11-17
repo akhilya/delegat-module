@@ -23,6 +23,10 @@ public static class PlatformRequestPolicy
           POST /productgroups/{id}/products { productIds }  DELETE /productgroups/{id}/products/{productId}
           POST /products/{id}/files { attachmentIds, folderId? } — staged chat files onto a product
           GET /products/{id}/files  PUT /products/{id}/files is multipart (Agent HTTP, not JSON)
+          POST /products/{id}/files/from-text — small generated text into that product's files, not store storage.
+          Use the product route only for an identified product. Resolve ambiguous storage destinations
+          before proposing a write; never silently substitute store storage for product files.
+          Creating a product file does not attach it to gallery/characteristics or publish it.
           GET/POST /categories  GET/PATCH /categories/{id}
           GET/POST /categories/{id}/attributes  GET /categories/{id}/attributes/summary
           PATCH /categories/{id}/attributes/{attributeId}
@@ -88,6 +92,13 @@ public static class PlatformRequestPolicy
         Do not GET import-preview to link. Do not invent extra catalog-connect URLs
         or OpenAPI.
 
+        Store files: POST /store-storage/files/from-text saves small text that is already
+          available as one private file on the selected store (fileName + text, at most
+          262144 UTF-8 bytes; contentType is text/plain by default, or text/csv /
+          application/json; optional folderId). The response downloadUrl is an authenticated
+          link to share in chat. PUT /store-storage/files is multipart and file bytes are
+          binary downloads: neither is JSON-callable. Binary or large sandbox artifacts
+          cannot be uploaded through platform_request at all.
         Notes, folders, barcodes, operations, storage lists, and reference catalogs use the
         same /api paths as the cabinet. Prefer small pageSize.
         """;

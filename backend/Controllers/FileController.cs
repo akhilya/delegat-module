@@ -28,6 +28,7 @@ public class FileController : ControllerBase
     private readonly ThumbnailService _thumbnailService;
     private readonly QuotaService _quotaService;
     private readonly DataContext _context;
+    private readonly ProductTextFileService _textFileService;
 
     public FileController(
         ICurrentUserService currentUserService,
@@ -36,7 +37,8 @@ public class FileController : ControllerBase
         IServiceProvider serviceProvider,
         ThumbnailService thumbnailService,
         QuotaService quotaService,
-        DataContext context)
+        DataContext context,
+        ProductTextFileService textFileService)
     {
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
@@ -45,6 +47,7 @@ public class FileController : ControllerBase
         _thumbnailService = thumbnailService;
         _quotaService = quotaService;
         _context = context;
+        _textFileService = textFileService;
     }
 
     public record BulkMoveRequest(int? targetFolderId, int[] fileIds, int[] folderIds);
@@ -228,6 +231,40 @@ public class FileController : ControllerBase
             totalCount = total,
             lastPage = startIndex + pageSize >= total,
         });
+    }
+
+    public record CreateFileFromTextRequest(string fileName, string? contentType, string text, int? folderId);
+
+    /// <summary>
+    /// Saves a small, already-available text payload as one private file of this
+    /// product. JSON alternative to the multipart upload for generated
+    /// CSV/JSON/TXT content; the file stays private, is not attached to the
+    /// gallery or characteristics, and downloads through the authenticated
+    /// <c>/files/{id}/download</c> route.
+    /// </summary>
+    /// <param name="productId">The product identifier.</param>
+    /// <param name="request">File name, optional MIME type, UTF-8 text, optional folder.</param>
+    /// <param name="ct">Cancels the write.</param>
+    /// <returns>The created file metadata with an authenticated download URL.</returns>
+    [HttpPost]
+    [Route("/products/{productId}/files/from-text")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
+    [RequestSizeLimit(ProductTextFileService.MaxRequestBytes)]
+    public async Task<IActionResult> CreateProductFileFromText(
+        int productId, [FromBody] CreateFileFromTextRequest request, CancellationToken ct)
+    {
+        var selectedStoreId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (selectedStoreId == null)
+            throw ApiException.BadRequest(code: "store_not_selected");
+
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null)
+            throw ApiException.Unauthorized();
+
+        var created = await _textFileService.CreateFromTextAsync(
+            selectedStoreId.Value, user.Id, productId,
+            request.fileName, request.contentType, request.text, request.folderId, ct);
+        return Ok(created);
     }
 
     /// <summary>

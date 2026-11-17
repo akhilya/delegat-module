@@ -1,8 +1,5 @@
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Mvc.ActionConstraints;
-using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Routing;
 
 namespace Delegat.Services.Ai.Agent;
 
@@ -23,16 +20,23 @@ public sealed class CabinetActionCatalog
         bool Write,
         string Note,
         string Keywords,
-        string Capabilities = "");
+        string Capabilities = "",
+        bool CallableViaJson = true,
+        string Transport = "json");
 
-    private readonly IActionDescriptorCollectionProvider? _actions;
+    private readonly CabinetCapabilityIndex _index;
     private readonly Lazy<IReadOnlyList<ActionHit>> _all;
 
-    public CabinetActionCatalog(IActionDescriptorCollectionProvider? actions = null)
+    public CabinetActionCatalog(
+        IActionDescriptorCollectionProvider? actions = null,
+        CabinetCapabilityIndex? index = null)
     {
-        _actions = actions;
+        _index = index ?? new CabinetCapabilityIndex(actions);
         _all = new Lazy<IReadOnlyList<ActionHit>>(Build, isThreadSafe: true);
     }
+
+    /// <summary>The shared capability index behind this catalog (preflight and plan gate).</summary>
+    internal CabinetCapabilityIndex Index => _index;
 
     public IReadOnlyList<ActionHit> Search(string? query, int limit = 8)
     {
@@ -166,65 +170,39 @@ public sealed class CabinetActionCatalog
         new("POST", "/marketplace/connections/{id}/save-mapping-selections", true,
             "Assign each product to one category mapping on this connection. Body: { selections: [{ productId, categoryMappingId }] }. categoryMappingId must be one of that product’s availableMappings from resolve-mappings. Use when one local category exports to several marketplace categories. Does not edit the canvas and does not create a mapping.",
             "save-mapping-selections переназначить назначить маппинг товару categoryMappingId фигурки wildberries другая категория"),
+        new("POST", "/store-storage/files/from-text", true,
+            "Save small text that is already generated as one private store file (CSV/JSON/TXT up to 262144 UTF-8 bytes). Returns an authenticated downloadUrl to share in chat. Not for binary or large artifacts.",
+            "csv file файл файлы save сохранить storage хранилище download скачать generated сгенерированный text текст upload загрузить from-text store-storage"),
+        new("POST", "/products/{productId}/files/from-text", true,
+            "Save small text already generated as one private product file, not store storage (CSV/JSON/TXT up to 262144 UTF-8 bytes). folderId belongs to this product. Returns productId and an authenticated downloadUrl. Not for binary or large artifacts.",
+            "product товар товара карточка productId csv file файл файлы save сохранить generated сгенерированный text текст upload загрузить from-text download скачать"),
     ];
 
     private IReadOnlyList<ActionHit> Build()
     {
         var list = new List<ActionHit>(Extras);
-        if (_actions == null)
-            return list;
-
-        foreach (var d in _actions.ActionDescriptors.Items.OfType<ControllerActionDescriptor>())
+        foreach (var capability in _index.MvcCapabilities)
         {
-            var ns = d.ControllerTypeInfo.Namespace ?? "";
-            if (ns.Contains("PublicApi", StringComparison.Ordinal))
+            if (!IsSearchableAction(capability.Method, capability.PathTemplate))
+                continue;
+            var path = CabinetCapabilityIndex.DisplayPath(capability.PathTemplate);
+            if (list.Any(h => h.Method.Equals(capability.Method, StringComparison.OrdinalIgnoreCase)
+                && PathsEqual(h.Path, capability.PathTemplate)))
                 continue;
 
-            var template = CombinedTemplate(d);
-            if (string.IsNullOrEmpty(template))
-                continue;
-
-            var httpMethods = d.ActionConstraints?
-                    .OfType<HttpMethodActionConstraint>()
-                    .SelectMany(c => c.HttpMethods)
-                    .ToList()
-                ?? [];
-            if (httpMethods.Count == 0)
-            {
-                httpMethods = d.EndpointMetadata?
-                    .OfType<HttpMethodMetadata>()
-                    .SelectMany(m => m.HttpMethods)
-                    .ToList() ?? [];
-            }
-
-            foreach (var method in httpMethods.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (!IsSearchableAction(method, template))
-                    continue;
-                var path = PlatformRequestPolicy.NormalizePath(template);
-                if (list.Any(h => h.Method.Equals(method, StringComparison.OrdinalIgnoreCase)
-                    && PathsEqual(h.Path, path)))
-                    continue;
-
-                var words = SplitName(d.ActionName) + " " + SplitName(d.ControllerName);
-                list.Add(new ActionHit(
-                    method.ToUpperInvariant(),
-                    path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase) ? path["/api".Length..] : path,
-                    PlatformRequestPolicy.IsMutating(method),
-                    words.Trim(),
-                    words));
-            }
+            var words = capability.SearchText;
+            list.Add(new ActionHit(
+                capability.Method,
+                path,
+                capability.Write,
+                words,
+                words,
+                "",
+                capability.JsonCallable,
+                capability.Transport));
         }
 
         return list;
-    }
-
-    private static string CombinedTemplate(ControllerActionDescriptor d)
-    {
-        var t = d.AttributeRouteInfo?.Template;
-        if (!string.IsNullOrEmpty(t))
-            return t.StartsWith('/') ? t : "/" + t;
-        return "";
     }
 
     private static bool PathsEqual(string a, string b)

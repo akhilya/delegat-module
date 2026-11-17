@@ -6,15 +6,20 @@ and Compose cgroup caps (0.50 CPU / 512 MiB, no extra swap).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import traceback
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import generated_outputs
 
 SECRET = os.environ.get("SANDBOX_SECRET") or ""
 MAX_BODY = 200_000
@@ -101,13 +106,13 @@ def run_job(body: dict) -> dict:
         _JOBS.release()
 
 
-def _run_job(body: dict) -> dict:
-    code = body.get("code") or body.get("script") or ""
-    if not isinstance(code, str) or not code.strip():
-        return {"exitCode": 2, "error": "code is required", "stdout": "", "stderr": ""}
-    if len(code) > 80_000:
-        return {"exitCode": 2, "error": "script too large", "stdout": "", "stderr": ""}
+class _CaptureError(Exception):
+    """A declared output failed capture validation; the whole batch fails."""
 
+
+def _job_env(body: dict, output_names: list[str] | None) -> dict[str, str] | None:
+    """Shared env for /run and /run-artifacts; None on invalid input."""
+    code = body.get("code") or body.get("script") or ""
     store_id = str(body.get("storeId") or body.get("store_id") or "")
     base_url = str(body.get("baseUrl") or body.get("base_url") or "")
     token = str(body.get("token") or "")
@@ -124,24 +129,212 @@ def _run_job(body: dict) -> dict:
     env["DELEGAT_TOKEN"] = token
     env["DELEGAT_STORE_ID"] = store_id
     env["DELEGAT_SHOPS"] = shops_json
+    if output_names is not None:
+        env["DELEGAT_OUTPUT_FILES"] = json.dumps(output_names)
     env["PYTHONPATH"] = APP_DIR + os.pathsep + env.get("PYTHONPATH", "")
     env.pop("SANDBOX_SECRET", None)
     env["SANDBOX_TIMEOUT_SEC"] = str(TIMEOUT_SEC)
     env["SANDBOX_AS_MB"] = str(_as_bytes() // (1024 * 1024))
     env["SANDBOX_CPU_THREADS"] = _cpu_threads()
+    return env
+
+
+def _write_job_script(tmp: str, code: str) -> str:
+    script_path = os.path.join(tmp, "job.py")
+    with open(script_path, "w", encoding="utf-8") as fh:
+        fh.write("import sandbox_limits\n")
+        fh.write("sandbox_limits.apply()\n")
+        fh.write("import json as _delegat_json, os as _delegat_os\n")
+        fh.write("shops = _delegat_json.loads(_delegat_os.environ.get('DELEGAT_SHOPS') or '[]')\n")
+        fh.write("from delegat_sdk import client\n")
+        fh.write(code)
+        if not code.endswith("\n"):
+            fh.write("\n")
+    return script_path
+
+
+def _bounded(stdout: str | None, stderr: str | None) -> tuple[str, str]:
+    return (stdout or "")[:MAX_OUTPUT], (stderr or "")[:MAX_OUTPUT]
+
+
+def _reap_group(proc: subprocess.Popen) -> None:
+    """Kill leftover process-group descendants even if the leader exited."""
+    if os.name != "posix":
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
+def _capture_output(
+    dir_fd, out_dir: str, spec: dict, zf: zipfile.ZipFile, entry: str, remaining: int
+) -> tuple[int, str]:
+    """Stream one declared basename into the ZIP entry; returns (length, sha256).
+
+    ``remaining`` is the unconsumed batch budget: the entry must fit within it
+    at fstat time and while streaming, so an oversized later file cannot spool
+    past the aggregate cap before being rejected. On POSIX the file is opened
+    relative to the pinned outputs-dir fd with O_NOFOLLOW|O_NONBLOCK so a child
+    cannot swap the name for a symlink/FIFO.
+    """
+    name = spec["fileName"]
+    if name == "job.py":
+        raise _CaptureError("reserved name")
+    try:
+        if dir_fd is not None and hasattr(os, "O_NOFOLLOW"):
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            fd = os.open(name, flags, dir_fd=dir_fd)
+        else:
+            fd = os.open(os.path.join(out_dir, name), os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    except FileNotFoundError:
+        raise _CaptureError(f"{name}: declared output missing")
+    except OSError:
+        # O_NOFOLLOW open on a symlink raises ELOOP; other OSErrors (e.g.
+        # device nodes) must also become a capture failure, not a 500.
+        raise _CaptureError(f"{name}: not a regular file")
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise _CaptureError(f"{name}: not a regular file")
+        if st.st_nlink != 1:
+            raise _CaptureError(f"{name}: hardlinked output")
+        limit = min(generated_outputs.MAX_FILE_BYTES, remaining)
+        if st.st_size > limit:
+            raise _CaptureError(f"{name}: output too large")
+        sha = hashlib.sha256()
+        total = 0
+        with zf.open(entry, mode="w", force_zip64=True) as dst:
+            while True:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise _CaptureError(f"{name}: output too large")
+                sha.update(chunk)
+                dst.write(chunk)
+        return total, sha.hexdigest()
+    finally:
+        os.close(fd)
+
+
+def run_job_artifacts(body: dict, outputs: list[dict]):
+    """Returns ("json", payload) or ("zip", tmp_file, length). Caller closes the file."""
+    if not _JOBS.acquire(blocking=False):
+        return "json", {"exitCode": 1, "error": "sandbox_busy", "stdout": "", "stderr": ""}
+    try:
+        return _run_job_artifacts(body, outputs)
+    finally:
+        _JOBS.release()
+
+
+def _run_job_artifacts(body: dict, outputs: list[dict]):
+    code = body.get("code") or body.get("script") or ""
+    if not isinstance(code, str) or not code.strip():
+        return "json", {"exitCode": 2, "error": "code is required", "stdout": "", "stderr": ""}
+    if len(code) > 80_000:
+        return "json", {"exitCode": 2, "error": "script too large", "stdout": "", "stderr": ""}
+    env = _job_env(body, [s["fileName"] for s in outputs])
+    posix = os.name == "posix"
+    with tempfile.TemporaryDirectory(prefix="delegat-job-") as tmp:
+        # Dedicated outputs directory exists before the child starts; on POSIX a
+        # dir fd is pinned so the child cannot replace the directory itself.
+        out_dir = os.path.join(tmp, "outputs")
+        os.mkdir(out_dir)
+        dir_fd = None
+        if posix and hasattr(os, "O_DIRECTORY"):
+            dir_fd = os.open(out_dir, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            script_path = _write_job_script(tmp, code)
+            proc = subprocess.Popen(
+                [sys.executable, script_path],
+                cwd=tmp,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=posix,
+            )
+            try:
+                stdout, stderr = proc.communicate(timeout=TIMEOUT_SEC)
+            except subprocess.TimeoutExpired:
+                _kill_job(proc)
+                try:
+                    stdout, stderr = proc.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    _kill_job(proc)
+                    stdout, stderr = "", ""
+                out, err = _bounded(stdout, stderr)
+                return "json", {
+                    "exitCode": 124,
+                    "stdout": out,
+                    "stderr": (err + "\ntimeout")[:MAX_OUTPUT],
+                    "error": "timeout",
+                }
+            _reap_group(proc)
+            out, err = _bounded(stdout, stderr)
+            if proc.returncode != 0:
+                return "json", {
+                    "exitCode": proc.returncode,
+                    "stdout": out,
+                    "stderr": err,
+                    "error": "nonzero_exit",
+                }
+            result_info = {"stdout": out, "stderr": err, "exitCode": 0, "error": None}
+            tmpzip = tempfile.TemporaryFile(prefix="delegat-artifacts-", suffix=".zip")
+            try:
+                metas: list[dict] = []
+                remaining = generated_outputs.MAX_BATCH_BYTES
+                with zipfile.ZipFile(tmpzip, "w", zipfile.ZIP_STORED) as zf:
+                    for index, spec in enumerate(outputs):
+                        length, sha = _capture_output(
+                            dir_fd, out_dir, spec, zf, f"outputs/{index}", remaining)
+                        remaining -= length
+                        metas.append({
+                            "index": index,
+                            "fileName": spec["fileName"],
+                            "contentType": spec["contentType"],
+                            "length": length,
+                            "sha256": sha,
+                        })
+                    manifest = {
+                        "protocol": generated_outputs.ARTIFACT_PROTOCOL,
+                        "result": result_info,
+                        "outputs": metas,
+                    }
+                    zf.writestr("manifest.json", json.dumps(manifest).encode("utf-8"))
+            except _CaptureError as exc:
+                tmpzip.close()
+                return "json", {
+                    "exitCode": 1,
+                    "error": f"output_capture_failed:{exc}",
+                    "stdout": out,
+                    "stderr": err,
+                }
+            except Exception:
+                tmpzip.close()
+                raise
+            length = os.fstat(tmpzip.fileno()).st_size
+            tmpzip.seek(0)
+            return "zip", tmpzip, length
+        finally:
+            if dir_fd is not None:
+                os.close(dir_fd)
+
+
+def _run_job(body: dict) -> dict:
+    code = body.get("code") or body.get("script") or ""
+    if not isinstance(code, str) or not code.strip():
+        return {"exitCode": 2, "error": "code is required", "stdout": "", "stderr": ""}
+    if len(code) > 80_000:
+        return {"exitCode": 2, "error": "script too large", "stdout": "", "stderr": ""}
+
+    env = _job_env(body, None)
 
     posix = os.name == "posix"
     with tempfile.TemporaryDirectory(prefix="delegat-job-") as tmp:
-        script_path = os.path.join(tmp, "job.py")
-        with open(script_path, "w", encoding="utf-8") as fh:
-            fh.write("import sandbox_limits\n")
-            fh.write("sandbox_limits.apply()\n")
-            fh.write("import json as _delegat_json, os as _delegat_os\n")
-            fh.write("shops = _delegat_json.loads(_delegat_os.environ.get('DELEGAT_SHOPS') or '[]')\n")
-            fh.write("from delegat_sdk import client\n")
-            fh.write(code)
-            if not code.endswith("\n"):
-                fh.write("\n")
+        script_path = _write_job_script(tmp, code)
         proc = subprocess.Popen(
             [sys.executable, script_path],
             cwd=tmp,
@@ -202,19 +395,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path in ("/health", "/"):
-            _json(self, 200, {"ok": True})
+            _json(self, 200, {"ok": True, "artifactProtocol": generated_outputs.ARTIFACT_PROTOCOL})
             return
         self.send_error(404)
 
-    def do_POST(self) -> None:
-        if self.path != "/run":
-            self.send_error(404)
-            return
-        if SECRET:
-            got = self.headers.get("X-Sandbox-Secret") or ""
-            if got != SECRET:
-                _json(self, 403, {"exitCode": 1, "error": "forbidden", "stdout": "", "stderr": ""})
-                return
+    def _read_body(self):
+        """Returns (body_bytes, error_code) - error_code None on success."""
         try:
             length = int(self.headers.get("Content-Length") or "0")
         except ValueError:
@@ -223,13 +409,28 @@ class Handler(BaseHTTPRequestHandler):
         if "chunked" in te:
             raw = _read_chunked(self.rfile, MAX_BODY)
             if raw is None:
-                _json(self, 413, {"exitCode": 1, "error": "invalid body", "stdout": "", "stderr": ""})
-                return
-        elif length <= 0 or length > MAX_BODY:
-            _json(self, 413, {"exitCode": 1, "error": "invalid body", "stdout": "", "stderr": ""})
+                return None, 413
+            return raw, None
+        if length <= 0 or length > MAX_BODY:
+            return None, 413
+        return self.rfile.read(length), None
+
+    def do_POST(self) -> None:
+        if self.path == "/run-artifacts":
+            self._post_artifacts()
             return
-        else:
-            raw = self.rfile.read(length)
+        if self.path != "/run":
+            self.send_error(404)
+            return
+        if SECRET:
+            got = self.headers.get("X-Sandbox-Secret") or ""
+            if got != SECRET:
+                _json(self, 403, {"exitCode": 1, "error": "forbidden", "stdout": "", "stderr": ""})
+                return
+        raw, err_code = self._read_body()
+        if err_code is not None:
+            _json(self, err_code, {"exitCode": 1, "error": "invalid body", "stdout": "", "stderr": ""})
+            return
         try:
             body = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -246,6 +447,59 @@ class Handler(BaseHTTPRequestHandler):
             }
         code = 429 if result.get("error") == "sandbox_busy" else 200
         _json(self, code, result)
+
+    def _post_artifacts(self) -> None:
+        # Fails closed: capture requires an explicitly configured secret, even
+        # when plain /run would accept unauthenticated requests.
+        if not SECRET or (self.headers.get("X-Sandbox-Secret") or "") != SECRET:
+            _json(self, 403, {"exitCode": 1, "error": "forbidden", "stdout": "", "stderr": ""})
+            return
+        raw, err_code = self._read_body()
+        if err_code is not None:
+            _json(self, err_code, {"exitCode": 1, "error": "invalid body", "stdout": "", "stderr": ""})
+            return
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            _json(self, 400, {"exitCode": 1, "error": "invalid json", "stdout": "", "stderr": ""})
+            return
+        if not isinstance(body, dict) or body.get("artifactProtocol") != generated_outputs.ARTIFACT_PROTOCOL:
+            _json(self, 400, {"exitCode": 2, "error": "invalid artifact protocol", "stdout": "", "stderr": ""})
+            return
+        outputs = generated_outputs.parse_outputs(body)
+        if outputs is None:
+            _json(self, 400, {"exitCode": 2, "error": "invalid outputs declaration", "stdout": "", "stderr": ""})
+            return
+        try:
+            result = run_job_artifacts(body, outputs)
+        except Exception:
+            # Never leak str(exc), tracebacks or filesystem paths to the API.
+            _json(self, 200, {
+                "exitCode": 1,
+                "error": "ai_artifact_capture_failed",
+                "stdout": "",
+                "stderr": "",
+            })
+            return
+        kind = result[0]
+        if kind == "json":
+            payload = result[1]
+            code = 429 if payload.get("error") == "sandbox_busy" else 200
+            _json(self, code, payload)
+            return
+        _, fh, length = result
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(length))
+            self.end_headers()
+            while True:
+                chunk = fh.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        finally:
+            fh.close()
 
 
 def main() -> None:

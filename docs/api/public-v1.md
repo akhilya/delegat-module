@@ -111,6 +111,8 @@ Default `page=1`. List endpoints cap `pageSize` (typically 200).
 | 503 | `PUBLIC_API_DISABLED` | Instance Public API toggle is off |
 | 503 | `API_USAGE_DISABLED` | Plan does not include Public API (`API_USAGE_ENABLED=false`) |
 
+Storage and file quotas (`MAX_STORAGE_GB`, `MAX_FILES`) are store-wide and also cover the AI assistant's generated-artifact pipeline: staged artifacts consume storage bytes only (they hold no file slot), while a `started` import receipt reserves bytes plus one file slot until it completes. Confirmed imports may therefore fail `409` while the store is at quota. These artifacts have no public-v1 endpoint; the note exists so `409` quota responses elsewhere are not surprising.
+
 ### Async marketplace operations
 
 Sync starters return **202 Accepted**:

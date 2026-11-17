@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Auth;
-using Delegat.Models;
 
 namespace Delegat.Services.Ai.Agent;
 
@@ -51,41 +50,29 @@ public sealed class AgentSessionResolver
             ?? await _currentUser.GetSelectedStoreIdAsync(ct)
             ?? throw new InvalidOperationException("store_required");
 
-        var user = await _currentUser.GetUserAsync(ct)
-            ?? throw new UnauthorizedAccessException("unauthorized");
-        return await ResolveForUserAsync(user, userId, storeId, ct);
+        return await ResolveForUserAsync(userId, storeId, ct);
     }
 
     public async Task<AgentSession> ResolveForUserAsync(int userId, int storeId, CancellationToken ct)
     {
-        var user = await _db.Users
-            .Include(candidate => candidate.memberships)
-            .FirstOrDefaultAsync(candidate => candidate.Id == userId && candidate.isActive, ct);
-        return await ResolveForUserAsync(user, userId, storeId, ct);
-    }
-
-    private async Task<AgentSession> ResolveForUserAsync(User? user, int userId, int storeId, CancellationToken ct)
-    {
-        if (user == null || user.Id != userId || !user.isActive)
+        // Authorization must read current database facts, not tracked navigation state.
+        var actor = await _db.Users.AsNoTracking()
+            .Where(candidate => candidate.Id == userId && candidate.isActive)
+            .Select(candidate => new
+            {
+                candidate.isAdmin,
+                IsMember = candidate.memberships.Any(store => store.Id == storeId),
+            })
+            .SingleOrDefaultAsync(ct);
+        if (actor == null)
             throw new UnauthorizedAccessException("unauthorized");
-
-        var member = user.isAdmin || (user.memberships?.Any(s => s.Id == storeId) ?? false);
-        if (!member)
-        {
-            member = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-                .AnyAsync(_db.stores.Where(s => s.Id == storeId && s.members.Any(m => m.Id == userId && m.isActive)), ct);
-        }
-
-        if (!member)
+        if (!actor.isAdmin && !actor.IsMember)
             throw new UnauthorizedAccessException("access_denied_store");
-
         var perms = new HashSet<string>(
             await _permissions.GetEffectivePermissionsAsync(userId, ct),
             StringComparer.OrdinalIgnoreCase);
-
         if (!AgentAccess.CanUseAgent(perms))
             throw new UnauthorizedAccessException("ai.use required");
-
         return new AgentSession { UserId = userId, StoreId = storeId, Permissions = perms };
     }
 

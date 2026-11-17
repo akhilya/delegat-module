@@ -7,7 +7,7 @@ RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin sandbox \
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
-COPY server.py delegat_sdk.py sandbox_limits.py /app/
+COPY server.py delegat_sdk.py sandbox_limits.py generated_outputs.py /app/
 
 USER sandbox
 ENV PYTHONUNBUFFERED=1 \

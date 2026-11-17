@@ -38,6 +38,10 @@ backend/.vs/
 backend.Tests/bin/
 backend.Tests/obj/
 backend.Tests/.vs/
+backend.AiRuntime.Tests/bin/
+backend.AiRuntime.Tests/obj/
+backend.AiRuntime.Tests/.vs/
+backend.AiRuntime.Tests/TestResults/
 sdk/**/bin/
 sdk/**/obj/
 sdk/**/.vs/

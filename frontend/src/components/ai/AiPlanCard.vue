@@ -24,6 +24,12 @@ import {
   summarizePlanOperations,
 } from "@/lib/ai/planOperations";
 import { toolResultFailed } from "@/lib/ai/persist";
+import {
+  declaredGeneratedOutputs,
+  generatedFileDownloads,
+  generatedTemporaryDownloads,
+} from "@/lib/ai/generatedFiles";
+import AiGeneratedFileDownload from "./AiGeneratedFileDownload.vue";
 
 const props = defineProps({
   plan: { type: Object, required: true },
@@ -39,7 +45,7 @@ const props = defineProps({
   ready: { type: Boolean, default: true },
 });
 defineEmits(["confirm", "cancel"]);
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const store = useStore();
 const expanded = ref(false);
 const expandedDescriptions = ref({});
@@ -57,6 +63,56 @@ const visibleSteps = computed(() =>
 const operationIds = computed(() => operationIdsFromToolCalls(props.toolCalls));
 const operationSummary = computed(() =>
   summarizePlanOperations(operationIds.value, operationStatuses.value),
+);
+
+// Server-verified import detail minted at proposal time; the client renders it
+// verbatim and never reconstructs artifact metadata from step text.
+const generatedImports = computed(() =>
+  Array.isArray(props.plan?.generatedFileImports)
+    ? props.plan.generatedFileImports
+    : [],
+);
+
+const numberFormat = computed(() => new Intl.NumberFormat(locale.value));
+const generatedTargetLabel = (imp) =>
+  imp.destination === "product"
+    ? t("ai.generatedFileProduct", { id: imp.productId })
+    : t("ai.generatedFileStore", { id: imp.storeId });
+const generatedFolderLabel = (imp) =>
+  imp.folderId
+    ? t("ai.generatedFileFolder", { id: imp.folderId })
+    : t("ai.generatedFileRoot");
+const generatedExpiryLabel = (imp) => {
+  const at = new Date(imp.expiresAtUtc);
+  return Number.isNaN(at.getTime())
+    ? ""
+    : t("ai.generatedFileExpires", { time: at.toLocaleString(locale.value) });
+};
+
+// A verified completed import exposes a saved-file download; the staging
+// TTL covers only the source artifact, not the imported file.
+const generatedDownloads = computed(() =>
+  generatedFileDownloads(props.plan, props.toolCalls, {
+    confirmed: props.confirmed,
+  }),
+);
+
+// Declared run_python outputs are previewed before confirmation; only a
+// completed, fully verified capture promotes the temporary download control.
+const declaredOutputs = computed(() => declaredGeneratedOutputs(props.plan));
+const declaredOutputNames = computed(() =>
+  declaredOutputs.value.map((spec) => spec.fileName).join(", "),
+);
+const temporaryDownloads = computed(() =>
+  generatedTemporaryDownloads(props.plan, props.toolCalls, {
+    confirmed: props.confirmed,
+  }),
+);
+const downloadForStep = (step) =>
+  generatedDownloads.value.find((file) => file.step === step);
+const downloadContextKey = computed(
+  () =>
+    `${props.plan.proposalId}:${store.state.aiChat.sessionId}:${store.state.appKey}`,
 );
 
 async function pollOperations(generation, ids, signal) {
@@ -214,6 +270,106 @@ const warning = computed(() =>
       >
         {{ t("ai.planAffected") }} {{ plan.affectedCount }}
       </p>
+    </div>
+
+    <div
+      v-if="
+        declaredOutputs.length &&
+        (!confirmed || temporaryDownloads.length) &&
+        !cancelled
+      "
+      class="mx-3 border-t border-border/70 py-1"
+      data-testid="ai-temporary-outputs"
+    >
+      <div v-if="!temporaryDownloads.length" class="min-w-0 py-1.5 text-xs">
+        <span class="font-medium text-foreground">{{
+          t("ai.generatedTemporaryPreview")
+        }}</span>
+        <p class="mt-1 break-words text-sm leading-snug">
+          {{ declaredOutputNames }}
+        </p>
+        <p class="mt-1 text-muted-foreground">
+          {{ t("ai.generatedTemporaryNotice") }}
+        </p>
+      </div>
+      <div
+        v-for="tmp in temporaryDownloads"
+        :key="`temporary-${tmp.artifactId}`"
+        class="min-w-0 py-1.5 text-xs"
+        data-testid="ai-temporary-file"
+      >
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5"
+        >
+          <span class="font-medium text-foreground">{{
+            t("ai.generatedTemporaryTitle")
+          }}</span>
+          <span class="tabular-nums text-muted-foreground">{{
+            t("ai.generatedFileBytes", {
+              count: numberFormat.format(tmp.length ?? 0),
+            })
+          }}</span>
+        </div>
+        <p class="mt-1 break-words text-sm leading-snug">{{ tmp.fileName }}</p>
+        <p
+          class="mt-1 select-all break-all font-mono text-[11px] leading-snug text-muted-foreground"
+        >
+          {{ t("ai.generatedFileHash") }}: {{ tmp.sha256 }}
+        </p>
+        <AiGeneratedFileDownload
+          :file="tmp"
+          :context-key="downloadContextKey"
+        />
+      </div>
+    </div>
+
+    <div
+      v-if="generatedImports.length"
+      class="mx-3 border-t border-border/70 py-1"
+      data-testid="ai-generated-file-approval"
+    >
+      <div
+        v-for="imp in generatedImports"
+        :key="`generated-import-${imp.step}`"
+        class="min-w-0 py-1.5 text-xs"
+      >
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5"
+        >
+          <span class="font-medium text-foreground">{{
+            t(
+              downloadForStep(imp.step)
+                ? "ai.generatedFileSaved"
+                : "ai.generatedFileImportTitle",
+            )
+          }}</span>
+          <span class="tabular-nums text-muted-foreground">{{
+            t("ai.generatedFileBytes", {
+              count: numberFormat.format(imp.length ?? 0),
+            })
+          }}</span>
+        </div>
+        <p class="mt-1 break-words text-sm leading-snug">{{ imp.fileName }}</p>
+        <p class="mt-1 break-words text-muted-foreground">
+          {{ generatedTargetLabel(imp) }} · {{ generatedFolderLabel(imp)
+          }}<template
+            v-if="!downloadForStep(imp.step) && generatedExpiryLabel(imp)"
+          >
+            · {{ generatedExpiryLabel(imp) }}</template
+          >
+        </p>
+        <p
+          v-if="imp.sha256"
+          class="mt-1 select-all break-all font-mono text-[11px] leading-snug text-muted-foreground"
+        >
+          {{ t("ai.generatedFileHash") }}: {{ imp.sha256 }}
+        </p>
+        <AiGeneratedFileDownload
+          v-if="downloadForStep(imp.step)"
+          :file="downloadForStep(imp.step)"
+          :context-key="downloadContextKey"
+        />
+      </div>
     </div>
 
     <ol v-if="steps.length" class="mx-3 border-t border-border/70 py-1">

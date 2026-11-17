@@ -115,6 +115,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<AiSandboxRun> aiSandboxRuns { get; set; }
     public DbSet<AiAgentAudit> aiAgentAudits { get; set; }
     public DbSet<AiChatAttachment> aiChatAttachments { get; set; }
+    public DbSet<AiGeneratedArtifact> aiGeneratedArtifacts { get; set; }
+    public DbSet<AiGeneratedArtifactImport> aiGeneratedArtifactImports { get; set; }
     public DbSet<AiMcpServer> aiMcpServers { get; set; }
     public DbSet<AiMemory> aiMemories { get; set; }
 
@@ -632,6 +634,12 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             .HasIndex(a => new { a.storeId, a.createdAt });
         builder.Entity<AiChatAttachment>()
             .HasIndex(a => new { a.storeId, a.userId, a.sessionId });
+        builder.Entity<AiGeneratedArtifact>()
+            .HasIndex(a => new { a.storeId, a.userId, a.expiresAtUtc });
+        builder.Entity<AiGeneratedArtifactImport>()
+            .HasIndex(i => new { i.storeId, i.userId, i.state });
+        builder.Entity<AiGeneratedArtifactImport>()
+            .HasIndex(i => i.artifactId);
         builder.Entity<AiMcpServer>()
             .HasIndex(s => s.isEnabled);
         builder.Entity<AiMemory>()

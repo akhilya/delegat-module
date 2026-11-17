@@ -1,5 +1,6 @@
 import { hydrateTimeline, timelineFromLegacy } from "./timeline.js";
 import { attachmentMetaList } from "./attachments.js";
+import { normalizeCopiedPlans } from "./turnIdentity.js";
 
 /** Model-facing control messages — always English (system prompts are English). */
 export const AI_CONFIRM_PLAN = "Confirmed, proceed";
@@ -145,6 +146,34 @@ export function parsePersistedMessageMeta(toolCallsJson) {
           ? parsed.planExecStart
           : undefined,
         formReplies: readFormReplies(parsed.formReplies),
+        messageId:
+          typeof parsed.messageId === "string" && parsed.messageId
+            ? parsed.messageId
+            : undefined,
+        runId:
+          typeof parsed.runId === "string" && parsed.runId
+            ? parsed.runId
+            : undefined,
+        phase:
+          typeof parsed.phase === "string" && parsed.phase
+            ? parsed.phase
+            : undefined,
+        lastEventSequence: Number.isSafeInteger(parsed.lastEventSequence)
+          ? parsed.lastEventSequence
+          : undefined,
+        planOwnerMessageId:
+          typeof parsed.planOwnerMessageId === "string" &&
+          parsed.planOwnerMessageId
+            ? parsed.planOwnerMessageId
+            : undefined,
+        messageState:
+          typeof parsed.messageState === "string" && parsed.messageState
+            ? parsed.messageState
+            : undefined,
+        executionOutcome:
+          parsed.executionOutcome && typeof parsed.executionOutcome === "object"
+            ? parsed.executionOutcome
+            : undefined,
       };
     }
     if (Array.isArray(parsed)) {
@@ -186,11 +215,20 @@ export function mapStoredMessage(m) {
     requestError,
     formReply,
     formReplies,
+    messageId,
+    runId,
+    phase,
+    lastEventSequence,
+    planOwnerMessageId,
+    messageState,
+    executionOutcome,
   } = parsePersistedMessageMeta(m.toolCallsJson);
   const content = m.content || "";
+  // A structured executionOutcome keeps its summary in content/history only:
+  // it must not re-materialize as assistant timeline prose.
   const timeline = storedTimeline?.length
     ? storedTimeline
-    : timelineFromLegacy(content, toolCalls);
+    : timelineFromLegacy(executionOutcome ? "" : content, toolCalls);
   return {
     id: m.dbId,
     dbId: m.dbId,
@@ -213,7 +251,18 @@ export function mapStoredMessage(m) {
     formReply: formReply || null,
     formReplies: formReplies || {},
     apiBlocks: [],
-    done: m.role === "assistant",
+    // Canonical rows report their lifecycle; legacy rows keep the old default.
+    done:
+      messageState !== undefined
+        ? messageState !== "running"
+        : m.role === "assistant",
+    messageId,
+    runId,
+    phase,
+    lastEventSequence,
+    planOwnerMessageId,
+    messageState,
+    executionOutcome,
     feedbackRating: m.feedbackRating ?? null,
   };
 }
@@ -250,6 +299,8 @@ export function serializeToolCallsJson(m) {
     m.plan ||
     m.requestError ||
     hasFormReplies ||
+    m.messageId ||
+    m.executionOutcome ||
     m.timeline?.some((item) => item.type === "tool")
   ) {
     return JSON.stringify({
@@ -273,6 +324,15 @@ export function serializeToolCallsJson(m) {
         : undefined,
       requestError: m.requestError || undefined,
       ...(hasFormReplies ? { formReplies } : {}),
+      messageId: m.messageId || undefined,
+      runId: m.runId || undefined,
+      phase: m.phase || undefined,
+      lastEventSequence: Number.isSafeInteger(m.lastEventSequence)
+        ? m.lastEventSequence
+        : undefined,
+      planOwnerMessageId: m.planOwnerMessageId || undefined,
+      messageState: m.messageState || undefined,
+      executionOutcome: m.executionOutcome || undefined,
     });
   }
   if (tools.length) {
@@ -374,7 +434,9 @@ export function foldPlanTurns(messages) {
 
 export function hydrateConversation(rows) {
   return applyFormReplies(
-    foldPlanTurns(applyPlanDecisions((rows || []).map(mapStoredMessage))),
+    foldPlanTurns(
+      applyPlanDecisions(normalizeCopiedPlans((rows || []).map(mapStoredMessage))),
+    ),
   );
 }
 

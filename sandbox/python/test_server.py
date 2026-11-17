@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import unittest
 
@@ -74,7 +75,14 @@ class SandboxLimitTests(unittest.TestCase):
             server._JOBS.release()
 
     def test_limits_apply_does_not_raise(self):
-        sandbox_limits.apply()
+        # apply() sets RLIMIT_NPROC/AS on the caller — run it in a child so the
+        # test process does not lose the ability to fork for later tests.
+        out = subprocess.run(
+            [sys.executable, "-c", "import sandbox_limits; sandbox_limits.apply()"],
+            capture_output=True,
+            timeout=15,
+        )
+        self.assertEqual(out.returncode, 0, out.stderr)
 
 
 if __name__ == "__main__":

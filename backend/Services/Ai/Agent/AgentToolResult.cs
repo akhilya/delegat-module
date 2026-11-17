@@ -33,17 +33,14 @@ public static class AgentToolResult
             return json;
 
         var important = ExtractImportantFields(json);
+        // Verified generated-artifact handles survive truncation verbatim beside
+        // the root execution verdict; no other structural fields are promoted.
+        var artifacts = ExtractArtifactHandles(json);
         var previewLength = Math.Min(json.Length, MaxModelResultChars);
         while (true)
         {
             var preview = json[..SafePrefixLength(json, previewLength)];
-            var result = JsonSerializer.Serialize(new
-            {
-                truncated = true,
-                originalLength = json.Length,
-                important,
-                preview,
-            }, JsonOpts);
+            var result = SerializeEnvelope(json.Length, important, artifacts, preview);
             if (result.Length <= MaxModelResultChars)
                 return result;
 
@@ -51,16 +48,145 @@ public static class AgentToolResult
             var nextLength = previewLength - Math.Max(256, excess);
             previewLength = nextLength >= previewLength ? previewLength / 2 : Math.Max(0, nextLength);
             if (previewLength == 0)
+                return SerializeEnvelope(json.Length, important, artifacts, "");
+        }
+    }
+
+    private static string SerializeEnvelope(
+        int originalLength,
+        Dictionary<string, object?> important,
+        IReadOnlyList<GeneratedArtifactMetadata> artifacts,
+        string preview)
+    {
+        // The artifacts field is only emitted when validated handles exist, so
+        // non-artifact truncation keeps its historical shape byte for byte.
+        if (artifacts.Count == 0)
+            return JsonSerializer.Serialize(new
             {
-                return JsonSerializer.Serialize(new
-                {
-                    truncated = true,
-                    originalLength = json.Length,
-                    important,
-                    preview = "",
-                }, JsonOpts);
+                truncated = true,
+                originalLength,
+                important,
+                preview,
+            }, JsonOpts);
+        var envelope = new Dictionary<string, object?>
+        {
+            ["truncated"] = true,
+            ["originalLength"] = originalLength,
+            ["important"] = important,
+            ["artifacts"] = artifacts,
+        };
+        // Keep the root execution verdict beside promoted handles for SSE/history;
+        // never infer a success from artifacts or from a nested text preview.
+        string[] verdictFields =
+            ["exitCode", "error", "errorClass", "outcomeUnknown", "isError", "status"];
+        foreach (var field in verdictFields)
+            if (important.TryGetValue(field, out var value))
+                envelope[field] = value;
+        envelope["preview"] = preview;
+        return JsonSerializer.Serialize(envelope, JsonOpts);
+    }
+
+    /// <summary>
+    /// Collects up to <see cref="GeneratedFileContract.MaxOutputs"/> verified
+    /// handles from the app-owned envelopes only: root <c>artifacts</c>, a prior
+    /// envelope's <c>important.artifacts</c>, and each <c>result</c> element of a
+    /// plan-outcomes array (which may itself be a truncated envelope). Raw text
+    /// fields are never parsed and no other object fields are promoted.
+    /// </summary>
+    private static List<GeneratedArtifactMetadata> ExtractArtifactHandles(string json)
+    {
+        var handles = new List<GeneratedArtifactMetadata>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            CollectArtifactHandles(doc.RootElement, handles, seen);
+        }
+        catch (JsonException)
+        {
+            // Invalid JSON still truncates to the plain envelope.
+        }
+        return handles;
+    }
+
+    private static void CollectArtifactHandles(
+        JsonElement node, List<GeneratedArtifactMetadata> handles, HashSet<string> seen)
+    {
+        if (handles.Count >= GeneratedFileContract.MaxOutputs)
+            return;
+        if (node.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var element in node.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.Object
+                    && element.TryGetProperty("result", out var result))
+                    CollectArtifactHandles(result, handles, seen);
+            }
+            return;
+        }
+        if (node.ValueKind != JsonValueKind.Object)
+            return;
+        if (node.TryGetProperty("artifacts", out var artifacts)
+            && artifacts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in artifacts.EnumerateArray())
+            {
+                if (handles.Count >= GeneratedFileContract.MaxOutputs)
+                    break;
+                var meta = TryReadArtifactMetadata(item);
+                if (meta != null && seen.Add(meta.ArtifactId))
+                    handles.Add(meta);
             }
         }
+        if (node.TryGetProperty("important", out var important)
+            && important.ValueKind == JsonValueKind.Object)
+            CollectArtifactHandles(important, handles, seen);
+        // Serialized AgentToolResult wraps its payload in a `data` object.
+        if (node.TryGetProperty("data", out var data)
+            && data.ValueKind == JsonValueKind.Object)
+            CollectArtifactHandles(data, handles, seen);
+    }
+
+    private static GeneratedArtifactMetadata? TryReadArtifactMetadata(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty("artifactId", out var idElement)
+            || idElement.ValueKind != JsonValueKind.String
+            || !GeneratedFileContract.IsValidArtifactId(idElement.GetString())
+            || !element.TryGetProperty("fileName", out var nameElement)
+            || nameElement.ValueKind != JsonValueKind.String
+            || !GeneratedFileContract.IsValidOutputFileName(nameElement.GetString())
+            || !element.TryGetProperty("contentType", out var typeElement)
+            || typeElement.ValueKind != JsonValueKind.String
+            || !GeneratedFileContract.TryNormalizeContentType(typeElement.GetString(), out var contentType)
+            || !element.TryGetProperty("length", out var lengthElement)
+            || lengthElement.ValueKind != JsonValueKind.Number
+            || !lengthElement.TryGetInt64(out var length)
+            || length < 0 || length > GeneratedFileContract.MaxFileBytes
+            || !element.TryGetProperty("sha256", out var shaElement)
+            || shaElement.ValueKind != JsonValueKind.String
+            || !GeneratedFileContract.IsValidSha256(shaElement.GetString())
+            || !element.TryGetProperty("expiresAtUtc", out var expiryElement)
+            || expiryElement.ValueKind != JsonValueKind.String
+            || !GeneratedFileContract.TryParseInstant(expiryElement.GetString(), out var expiry))
+            return null;
+        // Optional canonical download URL: when present it must be the exact
+        // server route for this artifact id - a foreign or malformed URL
+        // rejects the whole handle rather than passing a substituted link.
+        string? downloadUrl = null;
+        if (element.TryGetProperty("downloadUrl", out var urlElement)
+            && urlElement.ValueKind != JsonValueKind.Null)
+        {
+            if (urlElement.ValueKind != JsonValueKind.String
+                || urlElement.GetString()
+                    != GeneratedFileContract.TemporaryDownloadUrl(idElement.GetString()!))
+                return null;
+            downloadUrl = urlElement.GetString();
+        }
+        return new GeneratedArtifactMetadata(
+            idElement.GetString()!, nameElement.GetString()!, contentType, length,
+            shaElement.GetString()!, GeneratedFileContract.TruncateToMicroseconds(expiry),
+            downloadUrl);
     }
 
     private static Dictionary<string, object?> ExtractImportantFields(string json)
@@ -72,7 +198,7 @@ public static class AgentToolResult
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 return fields;
 
-            string[] names = ["error", "status", "code", "exitCode", "title", "message", "id", "fileName", "operationId", "totalCount", "totalRows", "totalCharacters", "nextStartRow", "nextStartColumn", "nextStartOffset", "hasMore", "truncated", "isError"];
+            string[] names = ["error", "errorClass", "status", "code", "exitCode", "title", "message", "id", "fileName", "operationId", "totalCount", "totalRows", "totalCharacters", "nextStartRow", "nextStartColumn", "nextStartOffset", "hasMore", "truncated", "isError", "outcomeUnknown", "retryable"];
             foreach (var name in names)
             {
                 var pascalName = char.ToUpperInvariant(name[0]) + name[1..];
@@ -197,11 +323,12 @@ public static class AgentToolResult
                     ? $"Шаги плана запущены: {succeeded} из {total}; фоновых операций поставлено в очередь: {queued}. Фактическое завершение отслеживается отдельно."
                     : $"Plan steps started: {succeeded} of {total}; background operations queued: {queued}. Their completion is tracked separately.";
             return ru
-                ? $"Готово: выполнены все шаги ({succeeded} из {total})."
-                : $"All steps finished ({succeeded} of {total}).";
+                ? $"Шаги плана выполнены: {succeeded} из {total}. Результат задачи ещё требует проверки."
+                : $"Plan steps completed: {succeeded} of {total}. The task result still needs verification.";
         }
 
-        var list = string.Join("\n", errors.Select(e => "• " + e));
+        // Human status text never embeds raw tool diagnostics - those stay in the
+        // structured tool results and the review payload.
         var queuedNote = queued > 0
             ? (ru ? $" Фоновых операций поставлено в очередь: {queued}." : $" Background operations queued: {queued}.")
             : "";
@@ -209,8 +336,8 @@ public static class AgentToolResult
         if (succeeded == 0 && queued == 0)
         {
             return ru
-                ? $"Не удалось завершить шаги ({succeeded} из {total}). Ошибка не доказывает, что изменений не было; проверьте результат перед повторным запуском.{queuedNote}\n{list}"
-                : $"No steps completed successfully ({succeeded} of {total}). A failure does not prove that nothing changed; check the outcome before retrying.{queuedNote}\n{list}";
+                ? $"Не удалось завершить шаги ({succeeded} из {total}). Ошибка не доказывает, что изменений не было; проверьте результат перед повторным запуском.{queuedNote}"
+                : $"No steps completed successfully ({succeeded} of {total}). A failure does not prove that nothing changed; check the outcome before retrying.{queuedNote}";
         }
 
         if (queued > 0)
@@ -219,12 +346,12 @@ public static class AgentToolResult
                 ? (ru ? " Часть синхронных шагов уже применена." : " Some synchronous steps were applied.")
                 : "";
             return ru
-                ? $"Не все шаги выполнены ({succeeded} из {total} выполнено или поставлено в очередь).{appliedNote}{queuedNote}\n{list}"
-                : $"Not all steps completed ({succeeded} of {total} completed or queued).{appliedNote}{queuedNote}\n{list}";
+                ? $"Не все шаги выполнены ({succeeded} из {total} выполнено или поставлено в очередь).{appliedNote}{queuedNote}"
+                : $"Not all steps completed ({succeeded} of {total} completed or queued).{appliedNote}{queuedNote}";
         }
 
         return ru
-            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.{queuedNote}\n{list}"
-            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.{queuedNote}\n{list}";
+            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.{queuedNote}"
+            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.{queuedNote}";
     }
 }

@@ -29,6 +29,7 @@ public class CabinetRequestInvokerResponseTests
         if (tooLarge)
         {
             Assert.Equal("response_too_large", json.RootElement.GetProperty("error").GetString());
+            Assert.Equal("limit", json.RootElement.GetProperty("errorClass").GetString());
             Assert.Equal(CabinetRequestInvoker.MaxResponseBytes, json.RootElement.GetProperty("limitBytes").GetInt32());
             Assert.Equal("json", json.RootElement.GetProperty("format").GetString());
         }
@@ -58,6 +59,7 @@ public class CabinetRequestInvokerResponseTests
 
         Assert.Equal(1, attemptedWrites);
         Assert.Equal("binary_response_requires_download", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("transport_mismatch", json.RootElement.GetProperty("errorClass").GetString());
         Assert.Contains("create_file_download_link", json.RootElement.GetProperty("hint").GetString());
         Assert.Contains("before buffering", summary, StringComparison.OrdinalIgnoreCase);
     }

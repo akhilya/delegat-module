@@ -74,7 +74,7 @@ public class AiController : ControllerBase
 
         _liveTurns.TryStart(
             sessionId, storeId.Value, userId.Value, lastUser,
-            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatAsync(
+            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatEventsAsync(
                 messages, storeId.Value, userId.Value, modelId, pageContext, sessionId, locale, token));
 
         var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
@@ -138,10 +138,57 @@ public class AiController : ControllerBase
         await _storage.StreamToAsync(row.storageKey, Response.Body, ct);
     }
 
+    // GET /api/ai/chat/generated-files/{artifactId}/download — temporary download
+    // of a staged generated output by its owning user (24h after capture).
+    // Read-only: no permanent file, receipt or TTL change; Range/HEAD are not
+    // part of the contract and full bytes are always sent.
+    [HttpGet("chat/generated-files/{artifactId}/download")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    public async Task DownloadGeneratedFile(
+        string artifactId,
+        [FromServices] GeneratedArtifactService artifacts,
+        CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.Pragma = "no-cache";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        EnsureAiEnabled();
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            throw ApiException.Unauthorized();
+
+        try
+        {
+            var file = await artifacts.OpenDownloadAsync(
+                artifactId, storeId.Value, userId.Value, ct);
+            await using var stream = file.Stream;
+            StorageDownloadHttp.Prepare(
+                Response, file.ContentType, file.FileName, inline: false, file.Length);
+            await stream.CopyToAsync(Response.Body, ct);
+        }
+        catch (GeneratedArtifactException ex)
+        {
+            var status = ex.Code switch
+            {
+                "forbidden" => StatusCodes.Status403Forbidden,
+                "ai_artifact_expired" => StatusCodes.Status410Gone,
+                "ai_artifact_not_found" => StatusCodes.Status404NotFound,
+                "ai_artifact_mismatch" => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status503ServiceUnavailable,
+            };
+            throw new ApiException("Generated file is unavailable.", status, code: ex.Code);
+        }
+    }
+
     // GET /api/ai/chat/stream?sessionId= — replay + tail a live turn after reload
     [HttpGet("chat/stream")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
-    public async Task<IActionResult> ChatStream([FromQuery] string sessionId, CancellationToken ct)
+    public async Task<IActionResult> ChatStream(
+        [FromQuery] string sessionId,
+        CancellationToken ct,
+        [FromQuery] string? runId = null,
+        [FromQuery] long afterSequence = 0)
     {
         EnsureAiEnabled();
         var userId = _currentUserService.GetUserId();
@@ -156,7 +203,7 @@ public class AiController : ControllerBase
             return NotFound();
 
         PrepareSseHeaders();
-        await WriteSseAsync(turn.Subscribe(ct), ct);
+        await WriteSseAsync(turn.Subscribe(ct, runId, afterSequence), ct);
         return new EmptyResult();
     }
 
@@ -176,24 +223,45 @@ public class AiController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.ProposalId))
             return BadRequest("proposalId required");
 
-        var attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
-            request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+        // Reserve the session slot BEFORE consuming the confirmation token: a busy
+        // session must reject here with the pending plan still consumable.
+        var reservation = _liveTurns.TryReserve(
+            request.SessionId, storeId.Value, userId.Value, request.ProposalId);
+        if (reservation == null)
+            throw ApiException.Conflict(
+                "Plan confirmation was rejected",
+                new { reason = "turn_running" },
+                code: "plan_not_pending_or_mismatched");
+
+        PlanConfirmationAttempt attempt;
+        try
+        {
+            attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
+                request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+        }
+        catch
+        {
+            _liveTurns.ReleaseReservation(reservation);
+            throw;
+        }
         if (attempt.Steps is not { } steps)
+        {
+            _liveTurns.ReleaseReservation(reservation);
             throw ApiException.Conflict(
                 "Plan confirmation was rejected",
                 new { reason = attempt.RejectionReason ?? "unknown" },
                 code: "plan_not_pending_or_mismatched");
+        }
 
         var sessionId = request.SessionId;
         var locale = Request.Headers["X-UI-Locale"].ToString();
-        _liveTurns.TryStart(
-            sessionId, storeId.Value, userId.Value, userMessage: null,
+        // Generation runs on the hub CTS, independent of this HTTP request.
+        _liveTurns.StartReserved(
+            reservation, userMessage: null,
             (sp, token) => sp.GetRequiredService<AiChatService>()
-                .ExecutePlanStreamAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
+                .ExecutePlanEventsAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
 
-        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
-        if (turn == null)
-            return NotFound();
+        var turn = reservation;
 
         PrepareSseHeaders();
         await WriteSseAsync(turn.Subscribe(ct), ct);

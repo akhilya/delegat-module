@@ -63,7 +63,8 @@ public sealed class ProductFileDeleteTests
             new ServiceCollection().BuildServiceProvider(),
             new ThumbnailService(storage, NullLogger<ThumbnailService>.Instance),
             new QuotaService(unitOfWork, db),
-            db)
+            db,
+            new ProductTextFileService(db, storage, new QuotaService(unitOfWork, db)))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

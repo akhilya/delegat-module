@@ -11,10 +11,19 @@ public static class AiServiceCollectionExtensions
     {
         services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<IAiApiClient>(sp => sp.GetRequiredService<AiApiClient>());
+        // IChatClient adapter for the Ai:AgentRuntime=maf engine; shares AiApiClient's
+        // endpoint/credential/proxy/hosted-signer construction.
+        services.AddTransient<IAiRuntimeClientFactory>(sp => sp.GetRequiredService<AiApiClient>());
         services.AddTransient<PlatformLinkHostedAiSigningHandler>();
         services.AddHttpClient("platform-link-hosted-ai", c => c.Timeout = TimeSpan.FromMinutes(5))
             .AddHttpMessageHandler<PlatformLinkHostedAiSigningHandler>();
-        services.AddHttpClient(nameof(PythonSandboxClient), c => c.Timeout = TimeSpan.FromMinutes(2));
+        // No redirects: the sandbox address is an explicit trusted candidate;
+        // a redirect would silently retarget script execution.
+        services.AddHttpClient(nameof(PythonSandboxClient), c => c.Timeout = TimeSpan.FromMinutes(2))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+            });
         services.AddHttpClient<MarketplaceCredentialBroker>(c => c.Timeout = TimeSpan.FromSeconds(20))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
@@ -28,6 +37,9 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AiModelConfigService>();
         services.AddSingleton<AiLiveTurnHub>();
         services.AddScoped<AiChatService>();
+        // Microsoft Agent Framework engine; inert unless Ai:AgentRuntime=maf for the run.
+        services.AddScoped<Agent.Maf.MafChatEngine>();
+        services.AddSingleton<CabinetCapabilityIndex>();
         services.AddSingleton<CabinetActionCatalog>();
         services.AddScoped<CatalogSearchService>();
         services.AddScoped<SqlReadonlyService>();
@@ -48,11 +60,13 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AgentFileDownloadService>();
         services.AddScoped<ChatAttachmentReadService>();
         services.AddScoped<PythonSandboxClient>();
+        services.AddScoped<GeneratedArtifactService>();
         services.AddScoped<AgentToolHost>();
         services.AddScoped<AgentSessionResolver>();
         services.AddHostedService<KnowledgeIndexHostedService>();
         services.AddHostedService<KnowledgeEmbeddingHostedService>();
         services.AddHostedService<ChatAttachmentCleanupHostedService>();
+        services.AddHostedService<GeneratedArtifactCleanupHostedService>();
         services.AddScoped<MappingIntelligenceService>();
         services.AddScoped<AiOperationService>();
         services.AddScoped<GenerativeMappingService>();

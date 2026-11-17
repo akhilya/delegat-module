@@ -223,19 +223,48 @@ public class AgentToolResultTests
     }
 
     [Fact]
-    public void InterpretResponse_404_DoesNotAssumeCatalogConnect()
+    public void InterpretResponse_404_IsResourceNotFoundWithoutRouteHints()
     {
-        var json = """{"title":"Not Found","status":404}""";
+        var json = """{"title":"Product not found","status":404}""";
         var (result, summary) = CabinetRequestInvoker.InterpretResponse(404, Encoding.UTF8.GetBytes(json));
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal("not_found", doc.RootElement.GetProperty("error").GetString());
-        var hint = doc.RootElement.GetProperty("hint").GetString();
-        Assert.Contains("TOOLS", hint, StringComparison.Ordinal);
-        Assert.Contains("mappings/{mappingId}/graph", hint, StringComparison.Ordinal);
-        Assert.Contains("do not invent", hint, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("does not exist", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("resource_not_found", doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("hint").ValueKind);
+        // A resource 404 keeps the response's own title and never prescribes routes.
+        Assert.Equal("Product not found", summary);
+        var serialized = JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("do not invent", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mappings/{mappingId}/graph", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("Request failed (404)", summary, StringComparison.Ordinal);
         Assert.True(AgentToolResult.IsFailure(result, summary));
+    }
+
+    [Fact]
+    public void InterpretResponse_404_WithoutBodyTitle_UsesNeutralNotFound()
+    {
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(404, Encoding.UTF8.GetBytes("{}"));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("not_found", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal("resource_not_found", doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.Equal("Not found", doc.RootElement.GetProperty("title").GetString());
+        Assert.Equal("Not found", summary);
+    }
+
+    [Theory]
+    [InlineData(401, "forbidden")]
+    [InlineData(403, "forbidden")]
+    [InlineData(409, "conflict")]
+    [InlineData(429, "quota")]
+    [InlineData(500, "upstream_error")]
+    [InlineData(503, "upstream_error")]
+    public void InterpretResponse_MapsHttpStatusToErrorClass(int status, string errorClass)
+    {
+        var json = """{"title":"failed","status":400}""";
+        var (result, _) = CabinetRequestInvoker.InterpretResponse(status, Encoding.UTF8.GetBytes(json));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(errorClass, doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.True(AgentToolResult.IsFailure(result, ""));
     }
 
     [Fact]
@@ -257,9 +286,11 @@ public class AgentToolResultTests
         var json = """
             {"title":"One or more validation errors occurred.","status":400,"errors":{"$.attributeValues[1].value":["The JSON value could not be converted to System.String. Path: $.attributeValues[1].value | LineNumber: 0 | BytePositionInLine: 12."]}}
             """;
-        var (_, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
         Assert.Contains("Characteristic values must be text", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("One or more validation errors occurred", summary, StringComparison.Ordinal);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("validation_failed", doc.RootElement.GetProperty("errorClass").GetString());
     }
 
     [Fact]
@@ -269,6 +300,8 @@ public class AgentToolResultTests
         var (result, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal("validation_failed", doc.RootElement.GetProperty("error").GetString());
+        // Without a flattened errors object the class is a generic bad request.
+        Assert.Equal("bad_request", doc.RootElement.GetProperty("errorClass").GetString());
         Assert.Equal(400, doc.RootElement.GetProperty("status").GetInt32());
         Assert.True(AgentToolResult.IsFailure(result, summary));
         Assert.DoesNotContain("Plan executed", AgentToolResult.FormatPlanOutcome(0, 1, [summary], "en"), StringComparison.Ordinal);
@@ -350,5 +383,393 @@ public class AgentToolResultTests
         var en = AgentToolResult.FormatPlanOutcome(1, 2, ["HTTP 400"], "en", queued: 1);
         Assert.Contains("background operations queued", en, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Some steps were applied", en, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TruncateForModel_OversizedCaptureResult_PreservesArtifactHandles()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24);
+        var expiryText = expiry.ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var artifacts = Enumerable.Range(0, 4).Select(i => new
+        {
+            artifactId = new string((char)('a' + i), 32),
+            fileName = $"очень-длинное-имя-файла-отчёта-{i}-подробный-итоговый.csv",
+            contentType = "text/csv",
+            length = 10 + i,
+            sha256 = new string((char)('a' + i), 64),
+            expiresAtUtc = expiryText,
+        }).ToArray();
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new { stdout = new string('x', 80_000), artifacts },
+            summary = "done",
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = doc.RootElement.GetProperty("artifacts");
+        Assert.Equal(4, kept.GetArrayLength());
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.Equal(artifacts[i].artifactId, kept[i].GetProperty("artifactId").GetString());
+            Assert.Equal(artifacts[i].fileName, kept[i].GetProperty("fileName").GetString());
+            Assert.Equal(artifacts[i].sha256, kept[i].GetProperty("sha256").GetString());
+            Assert.Equal(artifacts[i].length, kept[i].GetProperty("length").GetInt64());
+        }
+    }
+
+    [Fact]
+    public void TruncateForModel_OutcomesArray_PreservesHandlesFromEnvelopeResult()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var handle = new
+        {
+            artifactId = "f".PadRight(32, 'f'),
+            fileName = "отчёт.csv",
+            contentType = "text/csv",
+            length = 4,
+            sha256 = "b".PadRight(64, 'b'),
+            expiresAtUtc = expiry,
+        };
+        var inner = JsonSerializer.Serialize(new
+        {
+            truncated = true,
+            originalLength = 90_000,
+            important = new { exitCode = 0 },
+            artifacts = new[] { handle },
+            preview = new string('y', 1_000),
+        });
+        var outcomes = JsonSerializer.Serialize(new object[]
+        {
+            new { step = 1, tool = "run_python", ok = true,
+                  result = JsonDocument.Parse(inner).RootElement.Clone() },
+            new { step = 2, tool = "run_python", ok = true,
+                  result = new { stdout = new string('z', 80_000) } },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(outcomes);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = Assert.Single(doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(handle.artifactId, kept.GetProperty("artifactId").GetString());
+        Assert.Equal(handle.sha256, kept.GetProperty("sha256").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_MalformedOrSmuggledArtifacts_AreNotPromoted()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new
+            {
+                stdout = new string('x', 80_000) +
+                    "{\"artifacts\":[{\"artifactId\":\"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"}]}",
+                artifacts = new object[]
+                {
+                    new { artifactId = "not-hex!", fileName = "r.csv", contentType = "text/csv",
+                          length = 1, sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry },
+                    new { artifactId = "c".PadRight(32, 'c'), fileName = "../evil.csv",
+                          contentType = "text/csv", length = 1,
+                          sha256 = "d".PadRight(64, 'd'), expiresAtUtc = expiry },
+                },
+                preview = new { artifacts = new[] { new { artifactId = "e".PadRight(32, 'e') } } },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        using var doc = JsonDocument.Parse(truncated);
+        // Invalid ids, traversal names, and JSON smuggled inside text fields are
+        // never promoted to the trusted artifacts field.
+        Assert.False(doc.RootElement.TryGetProperty("artifacts", out var promoted)
+            && promoted.GetArrayLength() > 0);
+        if (doc.RootElement.TryGetProperty("artifacts", out var any))
+            Assert.DoesNotContain("evil.csv", any.ToString());
+    }
+
+    [Fact]
+    public void TruncateForModel_OversizedCaptureResult_PreservesTemporaryDownloadUrl()
+    {
+        var id = "a".PadRight(32, 'a');
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var url = $"/api/ai/chat/generated-files/{id}/download";
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new
+            {
+                stdout = new string('x', 80_000),
+                artifacts = new[]
+                {
+                    new
+                    {
+                        artifactId = id, fileName = "r.csv",
+                        contentType = "text/csv", length = 10,
+                        sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                        downloadUrl = url,
+                    },
+                },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = Assert.Single(doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(id, kept.GetProperty("artifactId").GetString());
+        Assert.Equal(url, kept.GetProperty("downloadUrl").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_OutcomesEnvelopeResult_PreservesDownloadUrl()
+    {
+        // Handles nested inside a truncated outcome envelope keep their URL
+        // through the second promotion level as well.
+        var id = "f".PadRight(32, 'f');
+        var url = $"/api/ai/chat/generated-files/{id}/download";
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var inner = JsonSerializer.Serialize(new
+        {
+            truncated = true,
+            originalLength = 90_000,
+            artifacts = new[]
+            {
+                new
+                {
+                    artifactId = id, fileName = "отчёт.csv",
+                    contentType = "text/csv", length = 4,
+                    sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                    downloadUrl = url,
+                },
+            },
+            preview = new string('y', 1_000),
+        });
+        var outcomes = JsonSerializer.Serialize(new object[]
+        {
+            new
+            {
+                step = 1, tool = "run_python", ok = true,
+                result = JsonDocument.Parse(inner).RootElement.Clone(),
+            },
+            new { step = 2, tool = "run_python", ok = true,
+                  result = new { stdout = new string('z', 80_000) } },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(outcomes);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = Assert.Single(doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(url, kept.GetProperty("downloadUrl").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_ForeignOrMalformedDownloadUrl_DropsOnlyThatHandle()
+    {
+        var validId = "a".PadRight(32, 'a');
+        var foreignId = "c".PadRight(32, 'c');
+        var suffixedId = "d".PadRight(32, 'd');
+        var legacyId = "e".PadRight(32, 'e');
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var sha = "b".PadRight(64, 'b');
+        object Meta(string id, string name, string? url) => url == null
+            ? new { artifactId = id, fileName = name, contentType = "text/csv",
+                    length = 1, sha256 = sha, expiresAtUtc = expiry }
+            : new { artifactId = id, fileName = name, contentType = "text/csv",
+                    length = 1, sha256 = sha, expiresAtUtc = expiry,
+                    downloadUrl = url };
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new
+            {
+                stdout = new string('x', 80_000),
+                artifacts = new object[]
+                {
+                    // Canonical URL survives.
+                    Meta(validId, "ok.csv",
+                        $"/api/ai/chat/generated-files/{validId}/download"),
+                    // Foreign host and suffixed route are rejected wholesale;
+                    // the handle itself is not promoted with a fake URL.
+                    Meta(foreignId, "foreign.csv", "https://evil.example/x"),
+                    Meta(suffixedId, "suffixed.csv",
+                        $"/api/ai/chat/generated-files/{suffixedId}/download?x=1"),
+                    // Old handles without any URL remain usable (import only).
+                    Meta(legacyId, "old.csv", null),
+                },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = doc.RootElement.GetProperty("artifacts").EnumerateArray().ToList();
+        Assert.Equal(2, kept.Count);
+        Assert.Equal(validId, kept[0].GetProperty("artifactId").GetString());
+        Assert.Equal(
+            $"/api/ai/chat/generated-files/{validId}/download",
+            kept[0].GetProperty("downloadUrl").GetString());
+        Assert.Equal(legacyId, kept[1].GetProperty("artifactId").GetString());
+        Assert.False(kept[1].TryGetProperty("downloadUrl", out var old)
+            && old.ValueKind == JsonValueKind.String);
+    }
+
+    [Fact]
+    public void TruncateForModel_RootCaptureResult_PromotesVerdictBesideArtifacts()
+    {
+        var id = "a".PadRight(32, 'a');
+        var url = $"/api/ai/chat/generated-files/{id}/download";
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        // The real run_python result: verdict and handles live at the root.
+        var payload = JsonSerializer.Serialize(new
+        {
+            exitCode = 0,
+            error = (string?)null,
+            stdout = new string('x', 80_000),
+            artifacts = new[]
+            {
+                new
+                {
+                    artifactId = id, fileName = "r.csv",
+                    contentType = "text/csv", length = 10,
+                    sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                    downloadUrl = url,
+                },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        Assert.Equal(0, doc.RootElement.GetProperty("exitCode").GetInt32());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("error").ValueKind);
+        var kept = Assert.Single(
+            doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(url, kept.GetProperty("downloadUrl").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_EnvelopeResult_KeepsRootVerdictThroughSecondPass()
+    {
+        var id = "a".PadRight(32, 'a');
+        var url = $"/api/ai/chat/generated-files/{id}/download";
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var firstPass = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(new
+        {
+            exitCode = 0,
+            error = (string?)null,
+            stdout = new string('x', 80_000),
+            artifacts = new[]
+            {
+                new
+                {
+                    artifactId = id, fileName = "r.csv",
+                    contentType = "text/csv", length = 10,
+                    sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                    downloadUrl = url,
+                },
+            },
+        }));
+
+        // An oversized re-serialization of that envelope must keep the root
+        // verdict - the cabinet never digs it out of important or preview.
+        var rewrapped = JsonSerializer.Serialize(new
+        {
+            truncated = true,
+            originalLength = 90_000,
+            important = new { exitCode = 0, error = (string?)null },
+            artifacts = JsonDocument.Parse(firstPass).RootElement
+                .GetProperty("artifacts").Clone(),
+            exitCode = 0,
+            error = (string?)null,
+            preview = new string('y', 80_000),
+        });
+        var retruncated = AgentToolResult.TruncateForModel(rewrapped);
+        Assert.True(retruncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(retruncated);
+        Assert.Equal(0, doc.RootElement.GetProperty("exitCode").GetInt32());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("error").ValueKind);
+        var kept = Assert.Single(
+            doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(url, kept.GetProperty("downloadUrl").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_FailedCaptureResult_KeepsContradictoryMarkersAtRoot()
+    {
+        var id = "c".PadRight(32, 'c');
+        var url = $"/api/ai/chat/generated-files/{id}/download";
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        // A failed run that still carries artifact rows must not truncate into
+        // an apparently successful result.
+        var payload = JsonSerializer.Serialize(new
+        {
+            exitCode = 1,
+            error = "division by zero",
+            errorClass = "runtime_error",
+            outcomeUnknown = true,
+            isError = true,
+            status = "failed",
+            stdout = new string('x', 80_000),
+            artifacts = new[]
+            {
+                new
+                {
+                    artifactId = id, fileName = "r.csv",
+                    contentType = "text/csv", length = 10,
+                    sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                    downloadUrl = url,
+                },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        Assert.Equal(1, doc.RootElement.GetProperty("exitCode").GetInt32());
+        Assert.Equal("division by zero", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal("runtime_error",
+            doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.True(doc.RootElement.GetProperty("outcomeUnknown").GetBoolean());
+        Assert.True(doc.RootElement.GetProperty("isError").GetBoolean());
+        Assert.Equal("failed", doc.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_WrappedResult_DoesNotFabricateRootVerdict()
+    {
+        var id = "a".PadRight(32, 'a');
+        var expiry = DateTime.UtcNow.AddHours(24)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        // exitCode nested under data is not promoted: only the real root
+        // verdict may sit beside the promoted handles.
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new
+            {
+                exitCode = 0,
+                error = (string?)null,
+                stdout = new string('x', 80_000),
+                artifacts = new[]
+                {
+                    new
+                    {
+                        artifactId = id, fileName = "r.csv",
+                        contentType = "text/csv", length = 10,
+                        sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry,
+                        downloadUrl = $"/api/ai/chat/generated-files/{id}/download",
+                    },
+                },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        using var doc = JsonDocument.Parse(truncated);
+        Assert.False(doc.RootElement.TryGetProperty("exitCode", out _));
+        Assert.Single(doc.RootElement.GetProperty("artifacts").EnumerateArray());
     }
 }

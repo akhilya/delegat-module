@@ -26,6 +26,7 @@ public class StoreStorageController : ControllerBase
     private readonly QuotaService _quotaService;
     private readonly IServiceProvider _serviceProvider;
     private readonly FolderJobService _folderJobService;
+    private readonly StoreTextFileService _textFileService;
 
     public StoreStorageController(
         ICurrentUserService currentUserService,
@@ -34,7 +35,8 @@ public class StoreStorageController : ControllerBase
         ThumbnailService thumbnailService,
         QuotaService quotaService,
         IServiceProvider serviceProvider,
-        FolderJobService folderJobService)
+        FolderJobService folderJobService,
+        StoreTextFileService textFileService)
     {
         _currentUserService = currentUserService;
         _storageService = storageService;
@@ -43,6 +45,7 @@ public class StoreStorageController : ControllerBase
         _quotaService = quotaService;
         _serviceProvider = serviceProvider;
         _folderJobService = folderJobService;
+        _textFileService = textFileService;
     }
 
     private async Task<int> GetSelectedStoreId(CancellationToken ct = default)
@@ -171,6 +174,30 @@ public class StoreStorageController : ControllerBase
 
         await _context.SaveChangesAsync(ct);
         return Ok(fileEntities.Select(f => f.MapToDTO(_serviceProvider)));
+    }
+
+    public record CreateFileFromTextRequest(string fileName, string? contentType, string text, int? folderId);
+
+    /// <summary>
+    /// Saves a small, already-available text payload as one private store file.
+    /// JSON alternative to the multipart upload for generated CSV/JSON/TXT content;
+    /// the file is private and reachable through the authenticated download route.
+    /// </summary>
+    [HttpPost]
+    [Route("/store-storage/files/from-text")]
+    [RequiresPermission(Permissions.FilesManage, requireStoreMembership: true)]
+    [RequestSizeLimit(StoreTextFileService.MaxRequestBytes)]
+    public async Task<IActionResult> CreateFileFromText(
+        [FromBody] CreateFileFromTextRequest request, CancellationToken ct)
+    {
+        var storeId = await GetSelectedStoreId(ct);
+        var user = await _currentUserService.GetUserAsync();
+        if (user == null)
+            throw ApiException.Unauthorized();
+
+        var created = await _textFileService.CreateFromTextAsync(
+            storeId, user.Id, request.fileName, request.contentType, request.text, request.folderId, ct);
+        return Ok(created);
     }
 
     [HttpGet]

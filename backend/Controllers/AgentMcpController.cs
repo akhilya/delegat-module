@@ -115,7 +115,15 @@ public class AgentMcpController : ControllerBase
                 q = Uri.UnescapeDataString(q[2..]);
             var hits = _actions.Search(q);
             var json = JsonSerializer.Serialize(
-                hits.Select(h => new { method = h.Method, path = h.Path, write = h.Write, note = h.Note }),
+                hits.Select(h => new
+                {
+                    method = h.Method,
+                    path = h.Path,
+                    write = h.Write,
+                    note = h.Note,
+                    callableViaJson = h.CallableViaJson,
+                    transport = h.CallableViaJson ? null : h.Transport,
+                }),
                 JsonOpts);
             return new { contents = new[] { new { uri, mimeType = "application/json", text = json } } };
         }

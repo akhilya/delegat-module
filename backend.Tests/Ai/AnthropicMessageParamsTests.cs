@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests.Ai;
 
+[Collection("EnvVars")]
 public class AnthropicMessageParamsTests
 {
     [Fact]
