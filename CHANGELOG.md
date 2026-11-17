@@ -99,7 +99,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
-- Platform AI usage is shown as a compact percentage beside the selected chat model and in administration, without raw token counts or accounting details. The administration model lists now include the platform-provided model as read-only.
+- Platform AI usage is shown as a compact percentage beside the selected chat model and in administration, without raw token counts or accounting details. The administration model lists now include the platform-provided model as read-only. The usage panel shares the inset section frame used throughout administration.
 
 - The mapping editor opens with one graph request that also returns mapping details and the marketplace field schema. Card and price field schemas are cached for an hour, so opening a mapping no longer calls the marketplace API twice. **Update fields** still reads the live schema. Previewing on a product loads it with split, untracked queries.
 

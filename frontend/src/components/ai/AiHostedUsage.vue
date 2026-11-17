@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
+import { InsetGroup } from "@/components/ui/inset-group";
 
 const props = defineProps({
   status: { type: Object, default: null },
@@ -90,9 +91,9 @@ const label = computed(() =>
       </Button>
     </PopoverTrigger>
     <component
-      :is="inline ? 'div' : PopoverContent"
+      :is="inline ? InsetGroup : PopoverContent"
       v-bind="inline ? {} : { side: 'top', align: 'start' }"
-      :class="inline ? 'space-y-3 rounded-lg border p-4' : 'w-72 space-y-3'"
+      :class="inline ? 'gap-3 p-4' : 'w-72 space-y-3'"
       :style="inline ? undefined : { backgroundColor: 'var(--popover)' }"
     >
       <div class="space-y-1">
