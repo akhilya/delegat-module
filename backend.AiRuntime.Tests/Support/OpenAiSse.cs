@@ -81,6 +81,12 @@ internal static class OpenAiSse
 
         """;
 
+    /// <summary>One valid text chunk, then the stream stalls (used with a hanging content).</summary>
+    public const string PartialPrefix = """
+        data: {"id":"chatcmpl-m1-cx","object":"chat.completion.chunk","created":1730000000,"model":"gpt-m1-test","choices":[{"index":0,"delta":{"role":"assistant","content":"Thinking"},"finish_reason":null}]}
+
+        """;
+
     /// <summary>Malformed: an event whose data payload is not valid JSON, then EOF.</summary>
     public const string MalformedResponse = "data: {\"id\":\"chatcmpl-m1-bad\",\"choices\":[{\"index\":0,\"delta\":\n\n";
 

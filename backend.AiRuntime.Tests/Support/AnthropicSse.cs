@@ -100,6 +100,16 @@ internal static class AnthropicSse
 
         """;
 
+    /// <summary>Valid opening events, then the stream stalls (used with a hanging content).</summary>
+    public const string PartialPrefix = """
+        event: message_start
+        data: {"type":"message_start","message":{"id":"msg_m1_cx","type":"message","role":"assistant","model":"claude-m1-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":11,"output_tokens":1}}}
+
+        event: content_block_start
+        data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+        """;
+
     /// <summary>Malformed: an event whose data payload is truncated mid-JSON, then EOF.</summary>
     public const string MalformedResponse = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_m1_bad\",\"content\":[\n\n";
 

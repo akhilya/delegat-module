@@ -164,6 +164,26 @@ public class OpenAiRuntimeTests
     }
 
     [Fact]
+    public async Task Cancellation_MidStreamRead_ObservesCancellation_NoInvocation()
+    {
+        // Headers + one valid chunk arrive promptly, then the body stalls: cancellation
+        // must interrupt the SDK inside the SSE read, not only before headers.
+        var http = new ScriptedHttpMessageHandler();
+        http.EnqueueHangingMidStream(OpenAiSse.PartialPrefix, TimeSpan.FromSeconds(60));
+        var harness = TestAgentHarness.ForOpenAi(http);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var ex = await Record.ExceptionAsync(
+            () => TestAgentHarness.CollectAsync(harness.Agent, "hi", cts.Token));
+
+        _output.WriteLine($"mid-stream cancellation surfaced as: {ex?.GetType().FullName}: {ex?.Message}");
+        Assert.IsAssignableFrom<OperationCanceledException>(ex);
+        Assert.Equal(1, http.RequestCount);
+        Assert.Equal(0, harness.Tools.ProposePlanInvocations);
+        Assert.Equal(0, harness.Tools.SiblingInvocations);
+    }
+
+    [Fact]
     public async Task MalformedStream_SurfacesDeterministicError_NoHang_NoHalfInvocation()
     {
         var http = new ScriptedHttpMessageHandler();
@@ -175,7 +195,10 @@ public class OpenAiRuntimeTests
             () => TestAgentHarness.CollectAsync(harness.Agent, "hi", cts.Token));
 
         _output.WriteLine($"malformed stream surfaced as: {ex?.GetType().FullName}: {ex?.Message}");
-        Assert.NotNull(ex); // a deterministic error is surfaced; no silent hang
+        // Parse error, not a stall: JsonReaderException is internal, so assert its
+        // public base JsonException and explicitly reject a cancellation outcome.
+        Assert.IsAssignableFrom<System.Text.Json.JsonException>(ex);
+        Assert.IsNotAssignableFrom<OperationCanceledException>(ex);
         Assert.Equal(0, harness.Tools.ProposePlanInvocations);
         Assert.Equal(0, harness.Tools.SiblingInvocations);
     }

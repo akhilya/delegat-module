@@ -135,6 +135,26 @@ public class AnthropicRuntimeTests
     }
 
     [Fact]
+    public async Task Cancellation_MidStreamRead_ObservesCancellation_NoInvocation()
+    {
+        // Headers + valid opening events arrive promptly, then the body stalls:
+        // cancellation must interrupt the SDK inside the SSE read, not only at headers.
+        var http = new ScriptedHttpMessageHandler();
+        http.EnqueueHangingMidStream(AnthropicSse.PartialPrefix, TimeSpan.FromSeconds(60));
+        var harness = TestAgentHarness.ForAnthropic(http);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var ex = await Record.ExceptionAsync(
+            () => TestAgentHarness.CollectAsync(harness.Agent, "hi", cts.Token));
+
+        _output.WriteLine($"mid-stream cancellation surfaced as: {ex?.GetType().FullName}: {ex?.Message}");
+        Assert.IsAssignableFrom<OperationCanceledException>(ex);
+        Assert.Equal(1, http.RequestCount);
+        Assert.Equal(0, harness.Tools.ProposePlanInvocations);
+        Assert.Equal(0, harness.Tools.SiblingInvocations);
+    }
+
+    [Fact]
     public async Task MalformedStream_SurfacesDeterministicError_NoHang_NoHalfInvocation()
     {
         var http = new ScriptedHttpMessageHandler();
@@ -146,7 +166,8 @@ public class AnthropicRuntimeTests
             () => TestAgentHarness.CollectAsync(harness.Agent, "hi", cts.Token));
 
         _output.WriteLine($"malformed stream surfaced as: {ex?.GetType().FullName}: {ex?.Message}");
-        Assert.NotNull(ex);
+        // Exact parse-error type: a stall-until-timeout cannot satisfy this assertion.
+        Assert.IsType<Anthropic.Exceptions.AnthropicInvalidDataException>(ex);
         Assert.Equal(0, harness.Tools.ProposePlanInvocations);
         Assert.Equal(0, harness.Tools.SiblingInvocations);
     }
