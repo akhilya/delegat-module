@@ -36,6 +36,8 @@ async function fixture(
     staleHistory?: boolean;
     review?: "success" | "recovery" | "disconnect";
     generatedImports?: Array<Record<string, unknown>>;
+    importPlan?: Record<string, unknown>;
+    importResult?: Record<string, unknown>;
   } = {},
 ) {
   page.on("pageerror", (error) =>
@@ -54,6 +56,10 @@ async function fixture(
   let operationStatus = "running";
   let cancelled = false;
   const unexpectedWrites: string[] = [];
+  const fixturePlan: any = options.importPlan ?? plan;
+  let downloadGets = 0;
+  let downloadResponder: (route: any) => Promise<void> = async (route) =>
+    route.fulfill({ status: 404, json: { code: "file_not_found" } });
   const executionTools = () =>
     accepted
       ? [
@@ -68,22 +74,23 @@ async function fixture(
             : []),
           {
             id: "exec-1",
-            name: "platform_request",
-            input: JSON.stringify(plan.steps[0].args),
+            name: fixturePlan.steps[0].tool,
+            input: JSON.stringify(fixturePlan.steps[0].args),
             summary: ["failed", "partial"].includes(outcome)
               ? "HTTP 400"
               : "Accepted",
             result:
-              outcome === "queued"
+              options.importResult ??
+              (outcome === "queued"
                 ? { operationId: "op-plan", status: "pending" }
                 : ["failed", "partial"].includes(outcome)
                   ? { code: "bad_request", status: 400 }
-                  : { success: true },
+                  : { success: true }),
           },
         ]
       : [];
   const reviewPlan = {
-    ...plan,
+    ...fixturePlan,
     proposalId: "corrected-proposal",
     summary: "Исправленный расчёт",
     discardDraftText: true,
@@ -110,8 +117,8 @@ async function fixture(
         toolCallsJson: JSON.stringify({
           _ui: "assistantTurn",
           plan: options.generatedImports
-            ? { ...plan, generatedFileImports: options.generatedImports }
-            : plan,
+            ? { ...fixturePlan, generatedFileImports: options.generatedImports }
+            : fixturePlan,
           planConfirmed: accepted,
           planExecuted: accepted && outcome !== "disconnect",
           planFailed: accepted && ["failed", "partial"].includes(outcome),
@@ -227,11 +234,12 @@ async function fixture(
       }
       accepted = true;
       const result =
-        outcome === "queued"
+        options.importResult ??
+        (outcome === "queued"
           ? { operationId: "op-plan", status: "pending" }
           : ["failed", "partial"].includes(outcome)
             ? { code: "bad_request", status: 400 }
-            : { success: true };
+            : { success: true });
       await route.fulfill({
         contentType: "text/event-stream",
         body:
@@ -251,13 +259,13 @@ async function fixture(
             : "") +
           sse("tool", {
             id: "exec-1",
-            name: "platform_request",
+            name: fixturePlan.steps[0].tool,
             status: "running",
-            input: JSON.stringify(plan.steps[0].args),
+            input: JSON.stringify(fixturePlan.steps[0].args),
           }) +
           sse("tool", {
             id: "exec-1",
-            name: "platform_request",
+            name: fixturePlan.steps[0].tool,
             status: "done",
             result: JSON.stringify(result),
             summary: outcome === "failed" ? "HTTP 400" : "Accepted",
@@ -285,6 +293,13 @@ async function fixture(
     } else if (path === "/ai/chat/stream") {
       await route.fulfill({ status: 404, json: {} });
       return;
+    } else if (
+      /^\/store-storage\/files\/\d+\/download$/.test(path) ||
+      /^\/files\/\d+\/download$/.test(path)
+    ) {
+      downloadGets++;
+      await downloadResponder(route);
+      return;
     } else if (path === "/settings/branding") body = {};
     else if (request.method() !== "GET")
       unexpectedWrites.push(`${request.method()} ${path}`);
@@ -309,6 +324,10 @@ async function fixture(
   return {
     executions: () => executions,
     reads: () => conversationReads,
+    downloadGets: () => downloadGets,
+    setDownload: (responder: (route: any) => Promise<void>) => {
+      downloadResponder = responder;
+    },
     unexpectedWrites,
     setOperation: (status: string) => {
       operationStatus = status;
@@ -1374,4 +1393,418 @@ test("generated-file approval metadata survives reload", async ({ page }) => {
   await expect(approval).toContainText("Файлы товара №7");
   await expect(approval).toContainText("Корневая папка");
   await expect(approval).toContainText(sha);
+});
+
+// ---- F3: saved generated-file download control ----
+
+const CSV_BYTES = Buffer.from("name,qty\nWidget,3\n", "utf8");
+const ART_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+const SHA256 = "b".repeat(64);
+
+function generatedImport(destination: "store" | "product") {
+  const productId = destination === "product" ? 9 : null;
+  const fileId = 42;
+  const downloadUrl =
+    destination === "store"
+      ? `/api/store-storage/files/${fileId}/download`
+      : `/api/files/${fileId}/download`;
+  const args = {
+    artifactId: ART_ID,
+    sha256: SHA256,
+    length: CSV_BYTES.length,
+    expiresAtUtc: "2030-01-01T00:00:00Z",
+    destination,
+    productId,
+    folderId: null,
+  };
+  const importPlan = {
+    proposalId,
+    summary: "Сохранить созданный файл",
+    steps: [
+      {
+        tool: "import_generated_file",
+        description: "Сохранить r.csv",
+        args,
+      },
+    ],
+    generatedFileImports: [
+      {
+        step: 0,
+        artifactId: ART_ID,
+        fileName: "r.csv",
+        length: CSV_BYTES.length,
+        sha256: SHA256,
+        expiresAtUtc: args.expiresAtUtc,
+        destination,
+        storeId: 1,
+        productId,
+        folderId: null,
+      },
+    ],
+  };
+  const importResult = {
+    destination,
+    fileId,
+    productId,
+    folderId: null,
+    fileName: "r.csv",
+    contentType: "text/csv",
+    length: CSV_BYTES.length,
+    sha256: SHA256,
+    downloadUrl,
+    idempotent: false,
+    writtenCount: 1,
+  };
+  return { importPlan, importResult };
+}
+
+const okDownload =
+  () => async (route: any) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/csv",
+      headers: {
+        "Content-Disposition": 'attachment; filename="r.csv"',
+      },
+      body: CSV_BYTES,
+    });
+
+const errorDownload =
+  (status: number) => async (route: any) =>
+    route.fulfill({
+      status,
+      json: {
+        code: "file_not_found",
+        message: "SENSITIVE DOWNLOAD DIAGNOSTIC",
+      },
+    });
+
+async function downloadBytes(dl: any): Promise<Buffer> {
+  const stream = await dl.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
+const downloadButton = (page: Page) =>
+  page.getByTestId("ai-generated-file-download").getByRole("button");
+
+async function confirmAndSeeDownload(page: Page) {
+  await expect(downloadButton(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(downloadButton(page)).toHaveCount(1);
+  await expect(
+    page.getByTestId("ai-generated-file-approval").first(),
+  ).toContainText("Файл сохранён");
+  await expect(
+    page.getByTestId("ai-generated-file-approval").first(),
+  ).not.toContainText("Доступен до");
+}
+
+async function shot(page: Page, name: string) {
+  await page.screenshot({ path: `artifacts/f3-screenshots/${name}.png` });
+}
+
+for (const destination of ["store", "product"] as const) {
+  for (const viewport of [
+    { width: 1280, height: 800, tag: "desktop" },
+    { width: 390, height: 844, tag: "mobile" },
+  ]) {
+    test(`generated-file download saves and re-downloads - ${destination} (${viewport.tag})`, async ({
+      page,
+    }) => {
+      const { importPlan, importResult } = generatedImport(destination);
+      const state = await fixture(page, "success", {
+        importPlan,
+        importResult,
+      });
+      state.setDownload(okDownload());
+      await page.setViewportSize(viewport);
+      if (destination === "store" && viewport.tag === "desktop") {
+        await page.evaluate(() => {
+          const w = window as any;
+          w.__f3ou = { created: 0, revoked: 0 };
+          const oc = URL.createObjectURL.bind(URL);
+          const orv = URL.revokeObjectURL.bind(URL);
+          URL.createObjectURL = (b: any) => {
+            w.__f3ou.created++;
+            return oc(b);
+          };
+          URL.revokeObjectURL = (u: any) => {
+            w.__f3ou.revoked++;
+            return orv(u);
+          };
+        });
+      }
+      await confirmAndSeeDownload(page);
+      await shot(page, `${destination}-${viewport.tag}-saved`);
+
+      const [dl] = await Promise.all([
+        page.waitForEvent("download"),
+        downloadButton(page).press("Enter"),
+      ]);
+      expect(dl.suggestedFilename()).toBe("r.csv");
+      expect(await downloadBytes(dl)).toEqual(CSV_BYTES);
+      // The native disabled state during the GET drops keyboard focus;
+      // finishing the request must restore it to the re-enabled button.
+      await expect(downloadButton(page)).toBeFocused();
+      expect(state.executions()).toBe(1);
+      expect(state.unexpectedWrites).toEqual([]);
+      if (destination === "store" && viewport.tag === "desktop") {
+        // The object URL is created once and revoked by its 1s timer —
+        // nothing outstanding once the timer runs.
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const o = (window as any).__f3ou;
+              return o.created - o.revoked;
+            }),
+          )
+          .toBe(0);
+      }
+
+      await reloadPlan(page);
+      await expect(downloadButton(page)).toHaveCount(1);
+      const [dl2] = await Promise.all([
+        page.waitForEvent("download"),
+        downloadButton(page).click(),
+      ]);
+      expect(dl2.suggestedFilename()).toBe("r.csv");
+      expect(await downloadBytes(dl2)).toEqual(CSV_BYTES);
+      expect(state.executions()).toBe(1);
+      const overflow = await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      await shot(page, `${destination}-${viewport.tag}-reloaded`);
+    });
+  }
+}
+
+test("generated-file download never attaches to a pending recovery proposal", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedImport("store");
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+    review: "recovery",
+  });
+  state.setDownload(okDownload());
+  await confirmAndSeeDownload(page);
+  const cards = page.getByTestId("ai-plan");
+  await expect(cards).toHaveCount(2);
+  // A (executed import) owns the control; pending proposal B does not.
+  const cardA = cards.first();
+  const cardB = cards.nth(1);
+  await expect(cardA.getByTestId("ai-generated-file-download")).toHaveCount(1);
+  await expect(cardB.getByTestId("ai-generated-file-download")).toHaveCount(0);
+});
+
+test("generated-file download shows localized alerts on 404/403 and retries cleanly", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedImport("store");
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  await confirmAndSeeDownload(page);
+
+  state.setDownload(errorDownload(404));
+  await downloadButton(page).press("Enter");
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText(
+    "Сохранённый файл больше недоступен",
+  );
+  await expect(alert).not.toContainText("SENSITIVE DOWNLOAD DIAGNOSTIC");
+  // Keyboard focus dropped by the disabled state is restored on re-enable.
+  await expect(downloadButton(page)).toBeFocused();
+  // Same localized alert at mobile width, no horizontal overflow.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, "store-mobile-404-alert");
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await shot(page, "store-desktop-404-alert");
+
+  // 403 with a held response: the user moves to the composer while the
+  // button is busy — finishing the request must not steal focus back.
+  let release403: () => void = () => {};
+  const gate403 = new Promise<void>((r) => (release403 = r));
+  state.setDownload(async (route: any) => {
+    await gate403;
+    await errorDownload(403)(route);
+  });
+  await downloadButton(page).press("Enter");
+  await expect(downloadButton(page)).toBeDisabled();
+  const composer = page.getByPlaceholder("Введите запрос...");
+  await composer.click();
+  await expect(composer).toBeFocused();
+  release403();
+  await expect(alert).toContainText("Нет доступа к скачиванию");
+  await expect(alert).not.toContainText("file_not_found");
+  await expect(alert).not.toContainText("SENSITIVE DOWNLOAD DIAGNOSTIC");
+  await expect(composer).toBeFocused();
+
+  state.setDownload(okDownload());
+  const [dl] = await Promise.all([
+    page.waitForEvent("download"),
+    downloadButton(page).click(),
+  ]);
+  expect(await downloadBytes(dl)).toEqual(CSV_BYTES);
+  expect(state.downloadGets()).toBe(3);
+  // The executed plan stays executed; no re-import, no writes.
+  await expect(page.getByText("Готово", { exact: true })).toBeVisible();
+  expect(state.executions()).toBe(1);
+  expect(state.unexpectedWrites).toEqual([]);
+});
+
+test("generated-file download rejects a wrong-length 200 body", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedImport("store");
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  await confirmAndSeeDownload(page);
+  state.setDownload(async (route: any) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<html>oops</html>",
+    }),
+  );
+  const noDownload = page.waitForEvent("download", { timeout: 1500 });
+  await downloadButton(page).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Не удалось скачать файл полностью",
+  );
+  await expect(noDownload).rejects.toThrow();
+  expect(state.downloadGets()).toBe(1);
+});
+
+test("generated-file download aborts a late response on conversation switch", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedImport("store");
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  await confirmAndSeeDownload(page);
+
+  // Register the download counter BEFORE the request starts so a late
+  // download can never escape the assertion.
+  let downloadEvents = 0;
+  page.on("download", () => downloadEvents++);
+  // Wrap fetch only for the saved download URL: observe the supplied
+  // AbortSignal but forward without it, simulating a transport that
+  // ignores cancellation. Track object URL creation the same way.
+  await page.evaluate((downloadPath) => {
+    const w = window as any;
+    w.__f3late = { aborted: false, settled: false, createdUrls: 0 };
+    const origFetch = window.fetch.bind(window);
+    const origCreate = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (b: any) => {
+      w.__f3late.createdUrls++;
+      return origCreate(b);
+    };
+    window.fetch = ((input: any, init: any) => {
+      const url = typeof input === "string" ? input : input?.url;
+      if (typeof url === "string" && url.includes(downloadPath)) {
+        const { signal, ...rest } = init ?? {};
+        signal?.addEventListener(
+          "abort",
+          () => {
+            w.__f3late.aborted = true;
+          },
+          { once: true },
+        );
+        return origFetch(input, rest).then((r: any) => {
+          w.__f3late.settled = true;
+          return r;
+        });
+      }
+      return origFetch(input, init);
+    }) as typeof fetch;
+  }, "/store-storage/files/42/download");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  state.setDownload(async (route: any) => {
+    await gate;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/csv",
+      body: CSV_BYTES,
+    });
+  });
+  const clickDone = downloadButton(page).click();
+  await expect(downloadButton(page)).toBeDisabled();
+  await expect.poll(() => state.downloadGets()).toBe(1);
+  // Reduced-motion: the busy spinner carries no rotation animation.
+  await expect(downloadButton(page).locator("svg").first()).toHaveCSS(
+    "animation-name",
+    "none",
+  );
+  // A repeated click on the disabled control issues no second GET.
+  await downloadButton(page).evaluate((el) =>
+    (el as HTMLButtonElement).click(),
+  );
+  await page.waitForTimeout(100);
+  expect(state.downloadGets()).toBe(1);
+
+  // Switching conversation unmounts the child; reset() aborts the GET.
+  await page.evaluate(async () => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store;
+    await store.dispatch("aiChat/startNewConversation");
+  });
+  await page.waitForFunction(() => (window as any).__f3late.aborted);
+  // The signal-stripped transport still resolves; the component must
+  // ignore the late response — no download, no object URL, no alert.
+  release();
+  await page.waitForFunction(() => (window as any).__f3late.settled);
+  await clickDone;
+  await page.waitForTimeout(100);
+  expect(downloadEvents).toBe(0);
+  expect(
+    await page.evaluate(() => (window as any).__f3late.createdUrls),
+  ).toBe(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+});
+
+test("generated-file download absent for forged URL result", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedImport("store");
+  await fixture(page, "success", {
+    importPlan,
+    importResult: { ...importResult, downloadUrl: "https://evil.example/x" },
+  });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+  await reloadPlan(page);
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+});
+
+test("generated-file download absent for a failed import", async ({
+  page,
+}) => {
+  const { importPlan } = generatedImport("store");
+  await fixture(page, "failed", { importPlan });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+  await reloadPlan(page);
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
 });

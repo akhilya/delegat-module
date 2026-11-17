@@ -24,6 +24,8 @@ import {
   summarizePlanOperations,
 } from "@/lib/ai/planOperations";
 import { toolResultFailed } from "@/lib/ai/persist";
+import { generatedFileDownloads } from "@/lib/ai/generatedFiles";
+import AiGeneratedFileDownload from "./AiGeneratedFileDownload.vue";
 
 const props = defineProps({
   plan: { type: Object, required: true },
@@ -82,6 +84,20 @@ const generatedExpiryLabel = (imp) => {
     ? ""
     : t("ai.generatedFileExpires", { time: at.toLocaleString(locale.value) });
 };
+
+// A verified completed import exposes a saved-file download; the staging
+// TTL covers only the source artifact, not the imported file.
+const generatedDownloads = computed(() =>
+  generatedFileDownloads(props.plan, props.toolCalls, {
+    confirmed: props.confirmed,
+  }),
+);
+const downloadForStep = (step) =>
+  generatedDownloads.value.find((file) => file.step === step);
+const downloadContextKey = computed(
+  () =>
+    `${props.plan.proposalId}:${store.state.aiChat.sessionId}:${store.state.appKey}`,
+);
 
 async function pollOperations(generation, ids, signal) {
   await Promise.all(
@@ -250,9 +266,15 @@ const warning = computed(() =>
         :key="`generated-import-${imp.step}`"
         class="min-w-0 py-1.5 text-xs"
       >
-        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5"
+        >
           <span class="font-medium text-foreground">{{
-            t("ai.generatedFileImportTitle")
+            t(
+              downloadForStep(imp.step)
+                ? "ai.generatedFileSaved"
+                : "ai.generatedFileImportTitle",
+            )
           }}</span>
           <span class="tabular-nums text-muted-foreground">{{
             t("ai.generatedFileBytes", {
@@ -262,8 +284,9 @@ const warning = computed(() =>
         </div>
         <p class="mt-1 break-words text-sm leading-snug">{{ imp.fileName }}</p>
         <p class="mt-1 break-words text-muted-foreground">
-          {{ generatedTargetLabel(imp) }} · {{ generatedFolderLabel(imp) }}<template
-            v-if="generatedExpiryLabel(imp)"
+          {{ generatedTargetLabel(imp) }} · {{ generatedFolderLabel(imp)
+          }}<template
+            v-if="!downloadForStep(imp.step) && generatedExpiryLabel(imp)"
           >
             · {{ generatedExpiryLabel(imp) }}</template
           >
@@ -274,6 +297,11 @@ const warning = computed(() =>
         >
           {{ t("ai.generatedFileHash") }}: {{ imp.sha256 }}
         </p>
+        <AiGeneratedFileDownload
+          v-if="downloadForStep(imp.step)"
+          :file="downloadForStep(imp.step)"
+          :context-key="downloadContextKey"
+        />
       </div>
     </div>
 
