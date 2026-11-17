@@ -988,6 +988,72 @@ public class GeneratedArtifactServiceTests
             key => Assert.StartsWith(GeneratedArtifactService.StoragePrefix, key));
     }
 
+    [Theory]
+    [InlineData("store")]
+    [InlineData("product")]
+    public async Task Import_MembershipRevokedMidUpload_StaleNavIgnored(string destination)
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using (db)
+        {
+            var data = new TestDataBuilder(db);
+            var user = data.AddUser();
+            var store = data.AddStore(members: user);
+            var product = destination == "product" ? data.AddProduct(store.Id) : null;
+            await data.SaveAsync();
+
+            // The requesting context deliberately tracks a stale memberships
+            // navigation; revocation in another context must still deny.
+            var stale = await db.Users
+                .Include(u => u.memberships)
+                .SingleAsync(u => u.Id == user.Id);
+            Assert.Contains(stale.memberships, s => s.Id == store.Id);
+
+            var storage = new MemoryStorage();
+            var svc = NewService(db, storage,
+                permissions: new StaticPermissions(Permissions.AiUse, Permissions.FilesManage));
+            var metas = await svc.StageCapturedAsync(store.Id, user.Id, 1,
+                [Out("r.csv", "text/csv", [12])], default);
+
+            var dsn = TestDbFactory.SqliteDsn(db);
+            storage.BeforeDestinationUpload = async () =>
+            {
+                await using var other = TestDbFactory.CreateSqliteContext(dsn);
+                var storeOther = await other.stores
+                    .Include(s => s.members)
+                    .SingleAsync(s => s.Id == store.Id);
+                storeOther.members.Remove(storeOther.members.Single(m => m.Id == user.Id));
+                await other.SaveChangesAsync();
+            };
+
+            var request = ImportRequest(metas[0], destination, productId: product?.Id);
+            var ex = await Assert.ThrowsAsync<GeneratedArtifactException>(
+                () => svc.ImportAsync(request, store.Id, user.Id, default));
+            Assert.Equal("forbidden", ex.Code);
+
+            // The tracker still believes in the membership — the denial came
+            // from fresh database facts. The uploaded destination object was
+            // cleaned and the new claim released; nothing was persisted.
+            Assert.Contains(stale.memberships, s => s.Id == store.Id);
+            Assert.Equal(1, storage.DestinationUploadCount);
+            Assert.Empty(await db.aiGeneratedArtifactImports.ToListAsync());
+            Assert.Empty(await db.storeFiles.ToListAsync());
+            Assert.Empty(await db.files.ToListAsync());
+            Assert.All(storage.StoredObjects.Keys,
+                key => Assert.StartsWith(GeneratedArtifactService.StoragePrefix, key));
+
+            await db.SaveChangesAsync(CancellationToken.None);
+            await using var third = TestDbFactory.CreateSqliteContext(dsn);
+            Assert.Empty(await third.storeFiles.ToListAsync());
+            Assert.Empty(await third.files.ToListAsync());
+            Assert.Empty(await third.aiGeneratedArtifactImports.ToListAsync());
+            Assert.False(await third.Users
+                .Where(candidate => candidate.Id == user.Id)
+                .AnyAsync(candidate => candidate.memberships.Any(s => s.Id == store.Id)));
+        }
+    }
+
     [Fact]
     public async Task Import_Sqlite_CancelAtReceiptCompletedSave_UnknownRetainsFenceAndBlob()
     {

@@ -498,6 +498,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Pin `Microsoft.Bcl.Memory` to 9.0.19 (CVE-2026-26127). Fido2 4.0 was pulling the vulnerable 9.0.0 transitive.
 - Python sandbox cannot pin the host: Compose caps it at half a CPU and 512 MiB RAM (no extra swap). Jobs run one at a time, numpy/BLAS stays single-threaded, and each job has a memory/CPU-time ceiling
 - Pin `System.Formats.Cbor` to 9.0.24 (CVE-2026-118747) and `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.14 in tests — Fido2 and EFCore.Sqlite were resolving vulnerable transitives.
+- AI assistant authorization now reads fresh database facts on every check instead of a cached user record: a revoked store membership, demoted admin, or deactivated account is denied at the next assistant call — including the generated-file import recheck — even while the request still holds stale data. The Python sandbox scratch space grows to 192 MiB (inside its existing 512 MiB cap) so a full 64 MiB output batch plus its verified archive fits in the deployed container, and generated output names must now fit both the 180 UTF-16 and 255 UTF-8 byte limits with malformed Unicode rejected rather than renamed.
 
 ## [1.6.0] - 2026-08-18
 

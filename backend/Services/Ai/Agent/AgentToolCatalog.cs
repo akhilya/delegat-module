@@ -77,13 +77,13 @@ public static class AgentToolCatalog
                 runPython.input_schema.properties!["outputs"] = new AiToolProperty
                 {
                     type = "array",
-                    description = "Optional declared outputs: up to four files. fileName is a strict basename, contentType a single media type (default application/octet-stream); no paths.",
+                    description = "Optional declared outputs: up to four files. fileName is a strict basename (at most 180 UTF-16 code units and 255 UTF-8 bytes), contentType a single media type (default application/octet-stream); no paths.",
                     items = new AiToolProperty
                     {
                         type = "object",
                         properties = new Dictionary<string, AiToolProperty>
                         {
-                            ["fileName"] = Str("Strict basename of the declared output"),
+                            ["fileName"] = Str("Strict basename of the declared output; at most 180 UTF-16 code units and 255 UTF-8 bytes"),
                             ["contentType"] = Str("Single media type; default application/octet-stream"),
                         },
                         required = ["fileName"],

@@ -10,6 +10,7 @@ import urllib.request
 import zipfile
 from http.server import ThreadingHTTPServer
 from threading import Thread
+from unittest import mock
 
 import generated_outputs
 import server
@@ -37,6 +38,30 @@ class ParseOutputsTests(unittest.TestCase):
         ]
         for body in bad:
             self.assertIsNone(generated_outputs.parse_outputs(body), body)
+
+    def test_utf8_name_boundaries(self):
+        emoji = "\U0001F600"  # 4 UTF-8 bytes, 2 UTF-16 code units
+        cases = [
+            ("a" * 180, True),
+            ("a" * 181, False),
+            ("Ж" * 125 + ".csv", True),    # 254 UTF-8 bytes
+            ("Ж" * 125 + "a.csv", True),   # 255 UTF-8 bytes
+            ("Ж" * 126 + ".csv", False),   # 256 UTF-8 bytes
+            ("Ж" * 130 + ".csv", False),   # 264 UTF-8 bytes
+            (emoji * 62 + "abc.csv", True),    # 248+7 = 255 UTF-8 bytes
+            (emoji * 62 + "abcX.csv", False),  # 256
+            ("a" * 155 + emoji * 25, False),   # 255 bytes but 205 UTF-16 units
+            ("lone\ud800surrogate", False),
+            ("a\x85b.csv", False),  # C1 control
+        ]
+        for name, valid in cases:
+            with self.subTest(name=name[:20]):
+                self.assertIs(generated_outputs.valid_output_name(name), valid)
+
+    def test_parse_outputs_rejects_utf8_oversized_names(self):
+        for name in ("Ж" * 126 + ".csv", "Ж" * 130 + ".csv"):
+            body = {"outputs": [{"fileName": name, "contentType": "text/csv"}]}
+            self.assertIsNone(generated_outputs.parse_outputs(body), name[:10])
 
     def test_accepts_and_normalizes(self):
         specs = generated_outputs.parse_outputs(
@@ -123,6 +148,32 @@ class RunArtifactsJobTests(unittest.TestCase):
         )
         self.assertEqual(kind, "json")
         self.assertEqual(payload["exitCode"], 3)
+
+    def test_utf8_boundary_name_round_trip(self):
+        # Exactly 255 UTF-8 bytes (130 UTF-16 units): accepted verbatim, and the
+        # child writes/capture round-trips bytes + hash with the name unchanged.
+        name = "Ж" * 125 + "a.csv"
+        code = (
+            f"p = client.output_path({name!r})\n"
+            "with open(p, 'wb') as f: f.write(b'z' * 7)\n"
+        )
+        kind, fh, length = server._run_job_artifacts(
+            {"code": code},
+            [{"fileName": name, "contentType": "application/octet-stream"}],
+        )
+        self.assertEqual(kind, "zip")
+        try:
+            fh.seek(0)
+            zf = zipfile.ZipFile(fh)
+            manifest = json.loads(zf.read("manifest.json"))
+            self.assertEqual(manifest["outputs"][0]["fileName"], name)
+            self.assertEqual(manifest["outputs"][0]["length"], 7)
+            self.assertEqual(
+                manifest["outputs"][0]["sha256"],
+                hashlib.sha256(b"z" * 7).hexdigest())
+            self.assertEqual(zf.read("outputs/0"), b"z" * 7)
+        finally:
+            fh.close()
 
     def test_missing_declared_output_is_capture_failure(self):
         kind, payload = server._run_job_artifacts(
@@ -268,6 +319,16 @@ class RunArtifactsHttpTests(unittest.TestCase):
         manifest = json.loads(zf.read("manifest.json"))
         self.assertEqual(manifest["result"]["exitCode"], 0)
         self.assertEqual(zf.read("outputs/0"), b"ok")
+
+    def test_oversized_declared_name_spawns_no_child(self):
+        body = self._body()
+        body["outputs"] = [
+            {"fileName": "Ж" * 126 + ".csv", "contentType": "text/csv"}]
+        with mock.patch.object(server.subprocess, "Popen") as popen:
+            resp, err = self._post(body, secret="test-secret")
+        self.assertIsNone(resp)
+        self.assertEqual(err.code, 400)
+        popen.assert_not_called()
 
     def test_health_advertises_protocol(self):
         resp = urllib.request.urlopen(

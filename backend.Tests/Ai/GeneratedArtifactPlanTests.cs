@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Delegat;
 using Delegat.Infrastructure.Auth;
@@ -405,6 +406,114 @@ public class GeneratedArtifactPlanTests
         Assert.NotNull(validation.Rejection);
         Assert.Contains("ai_artifact_import_unknown", validation.Rejection, StringComparison.Ordinal);
         Assert.Contains("\"outcomeUnknown\":true", validation.Rejection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OutputFileName_Utf8Boundaries_Enforced()
+    {
+        const string emoji = "\U0001F600"; // 4 UTF-8 bytes, 2 UTF-16 code units
+        var cases = new (string Name, bool Valid)[]
+        {
+            (new string('a', 180), true),
+            (new string('a', 181), false),
+            (new string('Ж', 125) + ".csv", true),   // 254 UTF-8 bytes
+            (new string('Ж', 125) + "a.csv", true),  // 255 UTF-8 bytes
+            (new string('Ж', 126) + ".csv", false),  // 256 UTF-8 bytes
+            (new string('Ж', 130) + ".csv", false),  // 264 UTF-8 bytes
+            (string.Concat(Enumerable.Repeat(emoji, 62)) + "abc.csv", true),   // 248+7 = 255
+            (string.Concat(Enumerable.Repeat(emoji, 62)) + "abcX.csv", false), // 256
+            (new string('a', 155) + string.Concat(Enumerable.Repeat(emoji, 25)), false), // 255 B but 205 UTF-16 units
+            ("lone\uD800surrogate", false),
+            ("a\u0085b.csv", false), // C1 control
+        };
+        foreach (var (name, valid) in cases)
+        {
+            Assert.True(
+                GeneratedFileContract.IsValidOutputFileName(name) == valid,
+                $"expected {(valid ? "valid" : "invalid")} for byteLength={Encoding.UTF8.GetByteCount(name)}");
+        }
+    }
+
+    [Theory]
+    [InlineData("""{"outputs":[{"fileName":"\uD800.csv"}]}""")]
+    [InlineData("""{"outputs":[{"fileName":"\uDC00.csv"}]}""")]
+    [InlineData("""{"outputs":[{"fileName":"a.csv","contentType":"text/\uD800"}]}""")]
+    [InlineData("""{"outputs":[{"\uD800":"a.csv"}]}""")]
+    public void ParseOutputs_UnmatchedJsonSurrogate_Rejected(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        Assert.False(GeneratedFileContract.TryParseOutputs(document.RootElement, out var outputs));
+        Assert.Null(outputs);
+    }
+
+    [Fact]
+    public async Task ValidatePlan_UnmatchedJsonSurrogate_InvalidRequest()
+    {
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
+        var prevUrl = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevSecret = Environment.GetEnvironmentVariable("SANDBOX_SECRET");
+        try
+        {
+            Environment.SetEnvironmentVariable("AI_ENABLED", "true");
+            Environment.SetEnvironmentVariable("SANDBOX_URL", "http://sandbox:8080");
+            Environment.SetEnvironmentVariable("SANDBOX_SECRET", "s3cret");
+            await using var db = TestDbFactory.CreateDb();
+            var data = new TestDataBuilder(db);
+            var user = data.AddUser();
+            var store = data.AddStore(members: user);
+            await data.SaveAsync();
+            var host = Host(db, new MemoryStorage(), Artifacts(db, new MemoryStorage()));
+            var validation = await host.ValidatePlanAsync(
+                new[] { Step("run_python", """{"code":"print(1)","outputs":[{"fileName":"\uD800.csv"}]}""") },
+                store.Id, user.Id, default);
+            Assert.NotNull(validation.Rejection);
+            Assert.Contains("ai_artifact_invalid_request", validation.Rejection, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
+            Environment.SetEnvironmentVariable("SANDBOX_URL", prevUrl);
+            Environment.SetEnvironmentVariable("SANDBOX_SECRET", prevSecret);
+        }
+    }
+
+    [Theory]
+    [InlineData(126)]
+    [InlineData(130)]
+    public async Task ValidatePlan_OutputsNameBeyondUtf8Cap_Rejected(int cyrillicCount)
+    {
+        var prevAi = Environment.GetEnvironmentVariable("AI_ENABLED");
+        var prevUrl = Environment.GetEnvironmentVariable("SANDBOX_URL");
+        var prevSecret = Environment.GetEnvironmentVariable("SANDBOX_SECRET");
+        try
+        {
+            Environment.SetEnvironmentVariable("AI_ENABLED", "true");
+            Environment.SetEnvironmentVariable("SANDBOX_URL", "http://sandbox:8080");
+            Environment.SetEnvironmentVariable("SANDBOX_SECRET", "s3cret");
+            await using var db = TestDbFactory.CreateDb();
+            var data = new TestDataBuilder(db);
+            var user = data.AddUser();
+            var store = data.AddStore(members: user);
+            await data.SaveAsync();
+            var host = Host(db, new MemoryStorage(), Artifacts(db, new MemoryStorage()));
+            var name = new string('Ж', cyrillicCount) + ".csv"; // 256/264 UTF-8 bytes
+            var args = JsonSerializer.Serialize(new
+            {
+                code = "1",
+                outputs = new[] { new { fileName = name, contentType = "text/csv" } },
+            });
+
+            var validation = await host.ValidatePlanAsync(
+                new[] { Step("run_python", args) }, store.Id, user.Id, default);
+            Assert.NotNull(validation.Rejection);
+            Assert.Contains("ai_artifact_invalid_request", validation.Rejection, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AI_ENABLED", prevAi);
+            Environment.SetEnvironmentVariable("SANDBOX_URL", prevUrl);
+            Environment.SetEnvironmentVariable("SANDBOX_SECRET", prevSecret);
+        }
     }
 
     private sealed class MemoryStorage : IStorageService

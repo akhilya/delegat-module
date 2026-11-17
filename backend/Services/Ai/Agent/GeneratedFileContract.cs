@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -97,6 +98,7 @@ public static class GeneratedFileContract
     public const string PythonToolName = "run_python";
 
     public const int MaxFileNameChars = 180;
+    public const int MaxFileNameUtf8Bytes = 255;
     public const int MaxContentTypeChars = 200;
     public const string DefaultContentType = "application/octet-stream";
 
@@ -104,6 +106,7 @@ public static class GeneratedFileContract
     private static readonly Regex Sha256Rx = new("^[0-9a-f]{64}$", RegexOptions.Compiled);
     private static readonly Regex MediaTypeRx = new(
         @"^[a-zA-Z0-9!#$&^_.+\-]+/[a-zA-Z0-9!#$&^_.+\-]+$", RegexOptions.Compiled);
+    private static readonly Encoding OutputNameEncoding = new UTF8Encoding(false, true);
 
     public static string NewArtifactId() =>
         Guid.NewGuid().ToString("N");
@@ -113,9 +116,11 @@ public static class GeneratedFileContract
         new(utc.Ticks - utc.Ticks % 10, DateTimeKind.Utc);
 
     /// <summary>
-    /// Strict output basename: no separators, no control characters, no dot-only
-    /// segments, no surrounding whitespace. Filenames are never sanitized - an
-    /// invalid name is a rejection, not a rewrite.
+    /// Strict output basename: at most <see cref="MaxFileNameChars"/> UTF-16 code
+    /// units and <see cref="MaxFileNameUtf8Bytes"/> UTF-8 bytes, no separators, no
+    /// control characters, no dot-only segments, no surrounding whitespace, no
+    /// malformed Unicode. Filenames are never sanitized - an invalid name is a
+    /// rejection, not a rewrite.
     /// </summary>
     public static bool IsValidOutputFileName(string? name)
     {
@@ -127,6 +132,15 @@ public static class GeneratedFileContract
         {
             if (char.IsControl(ch) || ch is '/' or '\\')
                 return false;
+        }
+        try
+        {
+            if (OutputNameEncoding.GetByteCount(name) > MaxFileNameUtf8Bytes)
+                return false;
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
         }
         return true;
     }
@@ -157,6 +171,20 @@ public static class GeneratedFileContract
     /// more than <see cref="MaxOutputs"/> entries.
     /// </summary>
     public static bool TryParseOutputs(JsonElement args, out IReadOnlyList<GeneratedOutputSpec>? outputs)
+    {
+        try
+        {
+            return TryParseOutputsCore(args, out outputs);
+        }
+        catch (InvalidOperationException)
+        {
+            // JSON unescaping can reject an unmatched UTF-16 surrogate before validation.
+            outputs = null;
+            return false;
+        }
+    }
+
+    private static bool TryParseOutputsCore(JsonElement args, out IReadOnlyList<GeneratedOutputSpec>? outputs)
     {
         outputs = null;
         if (args.ValueKind != JsonValueKind.Object

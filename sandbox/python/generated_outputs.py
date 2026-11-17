@@ -16,6 +16,7 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_BATCH_BYTES = 64 * 1024 * 1024
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_FILE_NAME_CHARS = 180
+MAX_FILE_NAME_UTF8_BYTES = 255
 MAX_CONTENT_TYPE_CHARS = 200
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 ARTIFACT_PROTOCOL = 1
@@ -24,14 +25,19 @@ _MEDIA_TYPE_RX = re.compile(r"^[a-zA-Z0-9!#$&^_.+\-]+/[a-zA-Z0-9!#$&^_.+\-]+$")
 
 
 def valid_output_name(name) -> bool:
-    """Strict basename: no separators, no control chars, no dot segments, no
-    surrounding whitespace, at most 180 chars. Never sanitized - only rejected."""
-    if not isinstance(name, str) or not name or len(name) > MAX_FILE_NAME_CHARS:
+    """Strict basename, at most 180 UTF-16 units and 255 UTF-8 bytes; never rewritten."""
+    if not isinstance(name, str) or not name:
         return False
-    if name != name.strip() or name in (".", ".."):
+    try:
+        if (len(name.encode('utf-16-le')) // 2 > MAX_FILE_NAME_CHARS
+                or len(name.encode('utf-8')) > MAX_FILE_NAME_UTF8_BYTES):
+            return False
+    except UnicodeEncodeError:
+        return False
+    if name != name.strip() or name in ('.', '..'):
         return False
     for ch in name:
-        if ord(ch) < 0x20 or ord(ch) == 0x7F or ch in "/\\":
+        if ord(ch) < 0x20 or 0x7F <= ord(ch) <= 0x9F or ch in '/\\':
             return False
     return True
 
