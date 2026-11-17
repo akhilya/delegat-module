@@ -382,10 +382,11 @@ public class AiChatService
                             continue;
                         }
 
-                        var feasibilityReason = _toolHost.Capabilities.PlanStepRejection(planInput.Steps);
-                        if (feasibilityReason != null)
+                        var planValidation = await _toolHost.ValidatePlanAsync(
+                            planInput.Steps, storeId, userId, ct);
+                        if (planValidation.Rejection != null)
                         {
-                            toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = feasibilityReason });
+                            toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = planValidation.Rejection });
                             continue;
                         }
 
@@ -416,7 +417,8 @@ public class AiChatService
                             summary = planInput.Summary,
                             steps = planInput.Steps,
                             affectedCount = planInput.AffectedCount,
-                            isDestructive = planInput.IsDestructive
+                            isDestructive = planInput.IsDestructive,
+                            generatedFileImports = planValidation.GeneratedFileImports
                         });
                         sawPlan = true;
                         toolResults.Add(new
@@ -619,7 +621,7 @@ public class AiChatService
                 messages.Insert(0, new AiMessage { role = "user", content = inject });
         }
 
-        var allTools = AgentToolCatalog.Build();
+        var allTools = AgentToolCatalog.Build(includeGeneratedArtifacts: true);
         allTools.AddRange(extraMcp);
         var tools = planResultReview
             ? allTools.Where(t => t.name == AgentChatTurnGate.ProposePlanTool).ToList()
@@ -848,7 +850,36 @@ public class AiChatService
         var followup = string.IsNullOrEmpty(sessionId) ? null
             : await LoadPlanFollowupAsync(sessionId, proposalId, storeId, userId, ct);
         var outcomes = new List<object>();
-        var forbidden = new HashSet<string> { "propose_plan" };
+        var forbidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "propose_plan" };
+        // Generation and import are separate signed plans; if a caller bypassed
+        // proposal validation, refuse both tools rather than fuse them at runtime.
+        var stepTools = steps
+            .Select(s => (s.Tool ?? "").StartsWith("functions.", StringComparison.OrdinalIgnoreCase)
+                ? s.Tool!["functions.".Length..]
+                : s.Tool ?? "")
+            .ToList();
+        if (stepTools.Contains("run_python", StringComparer.OrdinalIgnoreCase)
+            && stepTools.Contains(GeneratedFileContract.ImportToolName, StringComparer.OrdinalIgnoreCase))
+        {
+            forbidden.Add("run_python");
+            forbidden.Add(GeneratedFileContract.ImportToolName);
+        }
+        // An output-bearing run_python must be the whole plan. If a caller
+        // bypassed proposal validation, forbid every step before any runs - the
+        // captured handles would not survive a multi-step outcome truncation.
+        var hasOutputCapture = steps.Any(s =>
+        {
+            var name = s.Tool ?? "";
+            if (name.StartsWith("functions.", StringComparison.OrdinalIgnoreCase))
+                name = name["functions.".Length..];
+            return name.Equals(GeneratedFileContract.PythonToolName, StringComparison.OrdinalIgnoreCase)
+                   && s.Args.HasValue
+                   && (!GeneratedFileContract.TryParseOutputs(s.Args.Value, out var stepOutputs)
+                       || stepOutputs != null);
+        });
+        if (hasOutputCapture && steps.Count != 1)
+            foreach (var name in stepTools)
+                forbidden.Add(name);
         var ok = 0;
         var queued = 0;
         var cancelled = false;
@@ -883,7 +914,8 @@ public class AiChatService
                 try
                 {
                     var (result, s) = await _toolHost.DispatchAsync(
-                        tool, argsJson, storeId, userId, ct, allowConnectedMcp: true);
+                        tool, argsJson, storeId, userId, ct,
+                        allowConnectedMcp: true, allowGeneratedArtifacts: true);
                     summary = s;
                     failed = AgentToolResult.IsFailure(result, s);
                     if (!failed && AgentToolResult.IsQueuedJob(result))

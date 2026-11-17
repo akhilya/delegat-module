@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Delegat;
 using Delegat.Infrastructure.Storage;
 using Delegat.Infrastructure.Security;
@@ -10,6 +11,7 @@ using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -687,6 +689,203 @@ public class AiChatAgentEvaluationTests
         Assert.Single(chunks, c => c.Contains("\"type\":\"text\"", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task GeneratedFilePlan_CapturesStagesImportsAcrossConfirmedReviews()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var stdout = new string('x', 30000); // force truncation: the handle must survive
+        var csv = Encoding.UTF8.GetBytes("a,b\n1,2\n");
+        var python = new ArtifactPythonHttp([("отчёт.csv", "text/csv", csv)], stdout);
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                OutputsPlan("artifact-generate"),
+                (Func<CapturedRequest, IReadOnlyList<AiStreamEvent>>)(
+                    req => ImportPlanFromReview(req, "artifact-import")),
+                Text("Report ready."),
+            ], python, artifacts: true);
+        const string sessionId = "artifact-e2e";
+
+        var (proposalId, steps) = await PrepareConfirmedPlanAsync(fixture, sessionId);
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            steps, fixture.StoreId, fixture.UserId, proposalId,
+            sessionId: sessionId, locale: "en"));
+
+        Assert.Equal(1, python.Posts);
+        var turns = AiSseTurnRecorder.FoldTurns(chunks);
+        Assert.Equal(2, turns.Count);
+        Assert.True(turns[1].ToolCallsJson != null && turns[1].ToolCallsJson!.Contains("proposalId"),
+            "review payload: " + turns[1].ToolCallsJson
+            + (fixture.Client.Requests.Count > 2
+                ? " | tool result: " + fixture.Client.Requests[2].Messages.Last().Content
+                : ""));
+        using var reviewDoc = JsonDocument.Parse(turns[1].ToolCallsJson!);
+        var plan = reviewDoc.RootElement.GetProperty("plan");
+        var secondProposal = plan.GetProperty("proposalId").GetString()!;
+        Assert.NotEqual(proposalId, secondProposal);
+        var approval = Assert.Single(plan.GetProperty("generatedFileImports").EnumerateArray());
+        var artifactId = approval.GetProperty("artifactId").GetString()!;
+        var row = await fixture.Db.aiGeneratedArtifacts.SingleAsync();
+        Assert.Equal(artifactId, row.Id);
+        Assert.Equal("ready", row.state);
+        // The review model received the exact server-issued handle despite the
+        // oversized stdout pushing the capture result through the truncation envelope.
+        Assert.Contains(artifactId, fixture.Client.Requests[1].Messages.Last().Content,
+            StringComparison.Ordinal);
+
+        // Persist the review turn, then prove a signed mutation is rejected.
+        await AiConversationTurnStore.UpsertAssistantAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, turns[0], default);
+        await AiConversationTurnStore.AppendAssistantAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, turns[1], default);
+        var stored = await fixture.Db.aiConversationMessages
+            .OrderByDescending(m => m.Id).FirstAsync();
+        var originalJson = stored.toolCallsJson!;
+        var node = JsonNode.Parse(originalJson)!;
+        node["plan"]!["steps"]![0]!["args"]!["destination"] = "product";
+        node["plan"]!["steps"]![0]!["args"]!["productId"] = 1;
+        stored.toolCallsJson = node.ToJsonString();
+        await fixture.Db.SaveChangesAsync();
+        Assert.Null(await fixture.Chat.ConsumeConfirmedPlanAsync(
+            sessionId, secondProposal, fixture.StoreId, fixture.UserId, default));
+        stored.toolCallsJson = originalJson;
+        await fixture.Db.SaveChangesAsync();
+
+        var importSteps = await fixture.Chat.ConsumeConfirmedPlanAsync(
+            sessionId, secondProposal, fixture.StoreId, fixture.UserId, default);
+        Assert.NotNull(importSteps);
+        await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            importSteps!.ToList(), fixture.StoreId, fixture.UserId, secondProposal,
+            sessionId: sessionId, locale: "en"));
+
+        var file = await fixture.Db.storeFiles.SingleAsync();
+        Assert.Equal("отчёт.csv", file.displayName);
+        var receipt = await fixture.Db.aiGeneratedArtifactImports.SingleAsync();
+        Assert.Equal("completed", receipt.state);
+        Assert.Equal(file.Id, receipt.fileId);
+    }
+
+    [Fact]
+    public async Task OutputPlan_MultiStep_IsRefusedByExecutorBeforeAnyDispatch()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var python = new ArtifactPythonHttp([("r.csv", "text/csv", [1, 2])]);
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [Text("refused review.")], python, artifacts: true);
+
+        var steps = new List<PlanStepInput>
+        {
+            new()
+            {
+                Tool = "run_python",
+                Args = JsonSerializer.SerializeToElement(new
+                {
+                    code = "print('x')",
+                    outputs = new[] { new { fileName = "r.csv", contentType = "text/csv" } },
+                }),
+            },
+            new()
+            {
+                Tool = "import_generated_file",
+                Args = JsonSerializer.SerializeToElement(new { artifactId = "x" }),
+            },
+        };
+        await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            steps, fixture.StoreId, fixture.UserId, "p-multi", default));
+
+        Assert.Equal(0, python.Posts); // the capture never reached the sandbox
+    }
+
+    private static IReadOnlyList<AiStreamEvent> OutputsPlan(string id) => ToolCall("propose_plan",
+        JsonSerializer.Serialize(new
+        {
+            summary = "Generate the report file",
+            steps = new[]
+            {
+                new
+                {
+                    tool = "run_python",
+                    description = "Write the report CSV",
+                    args = new
+                    {
+                        code = "print('x')",
+                        outputs = new[] { new { fileName = "отчёт.csv", contentType = "text/csv" } },
+                    },
+                },
+            },
+        }), id);
+
+    /// <summary>Quotes the exact handle the review request carried: the import plan
+    /// is only valid when it references the server-issued artifact identity.</summary>
+    private static IReadOnlyList<AiStreamEvent> ImportPlanFromReview(CapturedRequest review, string id)
+    {
+        var content = review.Messages.Last().Content;
+        // The outcome payload is nested inside several JSON string layers: peel
+        // every level of quote escaping before matching the handle fields.
+        for (var i = 0; i < 5; i++)
+        {
+            var next = content
+                .Replace("\\\\\\u0022", "\"", StringComparison.Ordinal)
+                .Replace("\\\\\\\"", "\"", StringComparison.Ordinal)
+                .Replace("\\u0022", "\"", StringComparison.Ordinal)
+                .Replace("\\\"", "\"", StringComparison.Ordinal)
+                .Replace("\u0022", "\"", StringComparison.Ordinal);
+            if (next == content) break;
+            content = next;
+        }
+        var artifactIndex = content.IndexOf("artifactId", StringComparison.Ordinal);
+        if (artifactIndex < 0)
+            throw new InvalidOperationException(
+                "No 'artifactId' in review request: " + content[..Math.Min(400, content.Length)]);
+        // The proposal's own expiresAtUtc precedes the handle: only fields at or
+        // after the first artifactId belong to the server-issued artifact.
+        var handleContent = content[artifactIndex..];
+        string Str(string name) =>
+            System.Text.RegularExpressions.Regex
+                .Match(handleContent, $"\"{name}\"\\s*:\\s*\"([^\"]*)\"")
+                is { Success: true } match
+                ? match.Groups[1].Value
+                : throw new InvalidOperationException(
+                    $"No '{name}' in review request: {handleContent[..Math.Min(400, handleContent.Length)]}");
+        var artifactId = Str("artifactId");
+        var sha256 = Str("sha256");
+        var length = long.Parse(
+            System.Text.RegularExpressions.Regex.Match(handleContent, "\"length\"\\s*:\\s*(\\d+)")
+                .Groups[1].Value);
+        var expiresAtUtc = DateTime.Parse(
+            Str("expiresAtUtc"), null,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+        return ToolCall("propose_plan", JsonSerializer.Serialize(new
+        {
+            summary = "Save the generated report",
+            steps = new[]
+            {
+                new
+                {
+                    tool = "import_generated_file",
+                    description = "Save the report into store files",
+                    args = new
+                    {
+                        artifactId,
+                        sha256,
+                        length,
+                        expiresAtUtc,
+                        destination = "store",
+                        productId = (int?)null,
+                        folderId = (int?)null,
+                    },
+                },
+            },
+        }), id);
+    }
+
     private static IReadOnlyList<AiStreamEvent> PythonPlan(string code, string id) => ToolCall("propose_plan",
         JsonSerializer.Serialize(new { summary = "Calculate matching products", steps = new[] {
             new { tool = "run_python", description = "Compute matching product names and counts", args = new { code } },
@@ -712,6 +911,14 @@ public class AiChatAgentEvaluationTests
         public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            // The client probes /health before the single POST; the probe is not a run.
+            if (request.RequestUri?.AbsolutePath == "/health")
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"ok":true}""", Encoding.UTF8, "application/json"),
+                });
+            }
             Calls++;
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
@@ -817,8 +1024,8 @@ public class AiChatAgentEvaluationTests
         string? attachmentSessionId,
         string? attachmentFileName,
         byte[]? attachmentBytes,
-        IReadOnlyList<AiStreamEvent>[] responses, IHttpClientFactory? pythonHttp = null,
-        CabinetCapabilityIndex? capabilities = null)
+        object[] responses, IHttpClientFactory? pythonHttp = null,
+        CabinetCapabilityIndex? capabilities = null, bool artifacts = false)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -860,10 +1067,22 @@ public class AiChatAgentEvaluationTests
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var quota = new QuotaService(uow, db);
         var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
-        IStorageService storage = attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+        IStorageService storage = artifacts
+            ? new MemoryStorage()
+            : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+        GeneratedArtifactService? artifactService = artifacts
+            ? new GeneratedArtifactService(
+                db,
+                storage,
+                quota,
+                new AgentSessionResolver(
+                    new FakeCurrentUserService(), new GrantAllPermissions(), db,
+                    new HttpContextAccessor()),
+                NullLogger<GeneratedArtifactService>.Instance)
+            : null;
         var python = new PythonSandboxClient(
             db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
-            new HttpContextAccessor(), new FakeJwt());
+            new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
         var toolHost = new AgentToolHost(
             new CatalogSearchService(db),
             new SqlReadonlyService(db),
@@ -875,7 +1094,8 @@ public class AiChatAgentEvaluationTests
             NullLogger<AgentToolHost>.Instance,
             mcp,
             actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
-            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage));
+            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
+            artifacts: artifactService);
         var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
         var modelService = new AiModelConfigService(
             db,
@@ -997,10 +1217,10 @@ public class AiChatAgentEvaluationTests
         IReadOnlyList<CapturedMessage> Messages,
         IReadOnlyList<string> ToolNames);
 
-    private sealed class ScriptedAiStreamingClient(params IReadOnlyList<AiStreamEvent>[] responses)
+    private sealed class ScriptedAiStreamingClient(params object[] responses)
         : IAiApiClient
     {
-        private readonly Queue<IReadOnlyList<AiStreamEvent>> _responses = new(responses);
+        private readonly Queue<object> _responses = new(responses);
         public List<CapturedRequest> Requests { get; } = [];
 
         public Task<AiResponse> SendAsync(AiModelConfig model, AiRequest request, CancellationToken ct) =>
@@ -1020,7 +1240,16 @@ public class AiChatAgentEvaluationTests
                     m.role, JsonSerializer.Serialize(m.content))).ToList(),
                 request.tools?.Select(t => t.name).ToList() ?? []));
 
-            foreach (var responseEvent in _responses.Dequeue())
+            var events = _responses.Dequeue() switch
+            {
+                IReadOnlyList<AiStreamEvent> batch => batch,
+                // Request-dependent scripting: the review must quote the
+                // server-issued artifactId it actually received.
+                Func<CapturedRequest, IReadOnlyList<AiStreamEvent>> factory => factory(Requests[^1]),
+                var other => throw new InvalidOperationException(
+                    $"Unsupported scripted item {other?.GetType().Name}."),
+            };
+            foreach (var responseEvent in events)
             {
                 ct.ThrowIfCancellationRequested();
                 yield return responseEvent;

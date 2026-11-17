@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Delegat.Infrastructure.Auth;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Ai;
 using Delegat.Services.Docs;
 
@@ -28,6 +29,7 @@ public sealed class AgentToolHost
     private readonly IPublicDocsClient? _publicDocs;
     private readonly AgentFileDownloadService? _fileDownloads;
     private readonly ChatAttachmentReadService? _chatAttachments;
+    private readonly GeneratedArtifactService? _artifacts;
 
     public AgentToolHost(
         CatalogSearchService catalog,
@@ -43,7 +45,8 @@ public sealed class AgentToolHost
         CabinetActionCatalog? actions = null,
         AiMemoryService? memory = null,
         AgentFileDownloadService? fileDownloads = null,
-        ChatAttachmentReadService? chatAttachments = null)
+        ChatAttachmentReadService? chatAttachments = null,
+        GeneratedArtifactService? artifacts = null)
     {
         _catalog = catalog;
         _sql = sql;
@@ -59,6 +62,7 @@ public sealed class AgentToolHost
         _actions = actions ?? new CabinetActionCatalog();
         _fileDownloads = fileDownloads;
         _chatAttachments = chatAttachments;
+        _artifacts = artifacts;
     }
 
     /// <summary>Capability index shared with discovery and the gateway preflight.</summary>
@@ -72,7 +76,8 @@ public sealed class AgentToolHost
         CancellationToken ct,
         bool allowConnectedMcp = false,
         bool allowChatAttachments = false,
-        string? chatSessionId = null)
+        string? chatSessionId = null,
+        bool allowGeneratedArtifacts = false)
     {
         var perms = new HashSet<string>(
             await _permissions.GetEffectivePermissionsAsync(userId, ct),
@@ -115,7 +120,10 @@ public sealed class AgentToolHost
                     "search_catalog" => await SearchCatalogAsync(inputJson, storeId, ct),
                     "search_actions" => SearchActions(inputJson),
                     "sql_readonly" => await SqlAsync(inputJson, storeId, perms, ct),
-                    "run_python" => await PythonAsync(inputJson, storeId, userId, perms, ct),
+                    "run_python" => await PythonAsync(
+                        inputJson, storeId, userId, perms, allowGeneratedArtifacts, ct),
+                    GeneratedFileContract.ImportToolName => await ImportGeneratedFileAsync(
+                        inputJson, storeId, userId, perms, allowGeneratedArtifacts, ct),
                     "platform_request" => await PlatformAsync(inputJson, storeId, userId, perms, ct),
                     "create_file_download_link" => await CreateFileDownloadLinkAsync(inputJson, storeId, userId, ct),
                     "navigate_to" => NavigateTo(inputJson),
@@ -259,14 +267,164 @@ public sealed class AgentToolHost
     }
 
     private async Task<(object, string)> PythonAsync(
-        string json, int storeId, int userId, IReadOnlySet<string> perms, CancellationToken ct)
+        string json, int storeId, int userId, IReadOnlySet<string> perms,
+        bool allowGeneratedArtifacts, CancellationToken ct)
     {
         if (!AgentAccess.CanRunPython(perms))
             return (new { error = "python_forbidden" }, "Python is not allowed for this account");
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
         var script = doc.RootElement.TryGetProperty("code", out var c) ? c.GetString()
             ?? (doc.RootElement.TryGetProperty("script", out var s) ? s.GetString() : "") : "";
-        return await _python.RunAsync(storeId, userId, script ?? "", ct);
+        if (!GeneratedFileContract.TryParseOutputs(doc.RootElement, out var outputs))
+            return (GeneratedFileContract.ErrorResult("ai_artifact_invalid_request"),
+                "Invalid outputs declaration");
+        if (outputs != null && (!allowGeneratedArtifacts || _artifacts == null))
+            return (GeneratedFileContract.ErrorResult("confirmed_plan_required"),
+                "Declared outputs are captured only inside a confirmed plan");
+        return await _python.RunAsync(storeId, userId, script ?? "", outputs, ct);
+    }
+
+    /// <summary>
+    /// Chat-only: only the deterministic plan executor may dispatch this tool, so the
+    /// signed-confirmation flag is a host boundary the model/MCP/Python cannot cross.
+    /// </summary>
+    private async Task<(object, string)> ImportGeneratedFileAsync(
+        string json, int storeId, int userId, IReadOnlySet<string> perms,
+        bool allowGeneratedArtifacts, CancellationToken ct)
+    {
+        if (!allowGeneratedArtifacts || _artifacts == null)
+            return (GeneratedFileContract.ErrorResult("confirmed_plan_required"),
+                "Generated file import runs only inside a confirmed plan");
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        if (!GeneratedFileContract.TryParseImportRequest(doc.RootElement, out var request)
+            || request == null)
+            return (GeneratedFileContract.ErrorResult("ai_artifact_invalid_request"),
+                "Invalid import request");
+        if (!AgentAccess.CanMutate(perms, Permissions.FilesManage))
+            return (GeneratedFileContract.ErrorResult("forbidden"), "forbidden");
+        try
+        {
+            var imported = await _artifacts.ImportAsync(request, storeId, userId, ct);
+            return (imported, imported.Idempotent
+                ? $"Generated file {imported.FileName} already imported"
+                : $"Imported generated file {imported.FileName}");
+        }
+        catch (GeneratedArtifactException ex)
+        {
+            return (GeneratedFileContract.ErrorResult(ex), ex.Code);
+        }
+        catch (ApiException ex)
+        {
+            return (GeneratedFileContract.ErrorResult(ex.Code ?? "conflict"), ex.Code ?? "conflict");
+        }
+    }
+
+    /// <summary>
+    /// Shared proposal-time validation for both engines: the existing capability
+    /// check, generated-output shape/scope checks, generation+import separation,
+    /// and real-artifact import validation. Rejection is a serialized safe error
+    /// object (or the existing rejection text), never model-authored prose.
+    /// </summary>
+    internal async Task<GeneratedPlanValidation> ValidatePlanAsync(
+        IReadOnlyList<JsonElement> steps, int storeId, int userId, CancellationToken ct)
+    {
+        var rejection = Capabilities.PlanStepRejection(steps);
+        if (rejection != null)
+            return new GeneratedPlanValidation(rejection, []);
+
+        var hasPython = false;
+        var hasOutputCapture = false;
+        var importSteps = new List<(int Index, GeneratedFileImportRequest Request)>();
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (!TryReadStep(steps[i], out var tool, out var args) || tool == null)
+                continue;
+            if (string.Equals(tool, GeneratedFileContract.PythonToolName, StringComparison.OrdinalIgnoreCase))
+            {
+                hasPython = true;
+                if (!GeneratedFileContract.TryParseOutputs(args, out var outputs))
+                    return Reject("ai_artifact_invalid_request");
+                if (outputs != null)
+                {
+                    if (!PythonSandboxClient.ArtifactCaptureConfigured())
+                        return Reject("ai_artifact_capture_not_configured");
+                    if (_artifacts == null)
+                        return Reject("ai_artifact_capture_not_configured");
+                    // Preflight before the plan is minted: a capture the actor
+                    // cannot stage must not run the script at execution time.
+                    try
+                    {
+                        await _artifacts.ValidateCaptureAsync(storeId, userId, ct);
+                    }
+                    catch (GeneratedArtifactException ex)
+                    {
+                        return new GeneratedPlanValidation(
+                            JsonSerializer.Serialize(GeneratedFileContract.ErrorResult(ex)), []);
+                    }
+                    hasOutputCapture = true;
+                }
+            }
+            else if (string.Equals(tool, GeneratedFileContract.ImportToolName, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!GeneratedFileContract.TryParseImportRequest(args, out var request)
+                    || request == null)
+                    return Reject("ai_artifact_invalid_request");
+                importSteps.Add((i, request));
+            }
+        }
+
+        // Generation and import are separate signed plans, even when the model
+        // invents an artifact id it has not produced yet.
+        if (hasPython && importSteps.Count > 0)
+            return Reject("ai_artifact_invalid_request");
+        // An output-bearing Python proposal is standalone so the review stays
+        // bounded: captured handles plus a single step result fit the model
+        // budget; a multi-step batch would truncate them away.
+        if (hasOutputCapture && steps.Count != 1)
+            return Reject("ai_artifact_invalid_request");
+
+        var approvals = new List<GeneratedFileImportApproval>();
+        foreach (var (index, request) in importSteps)
+        {
+            if (_artifacts == null)
+                return Reject("ai_artifact_capture_not_configured");
+            try
+            {
+                approvals.Add(await _artifacts.ValidateImportAsync(
+                    request, storeId, userId, index, ct));
+            }
+            catch (GeneratedArtifactException ex)
+            {
+                // Preserve outcomeUnknown: a started fence must read as unknown,
+                // never as a misleading request/quota rejection.
+                return new GeneratedPlanValidation(
+                    JsonSerializer.Serialize(GeneratedFileContract.ErrorResult(ex)), []);
+            }
+            catch (ApiException ex)
+            {
+                return Reject(ex.Code ?? "conflict");
+            }
+        }
+        return new GeneratedPlanValidation(null, approvals);
+
+        GeneratedPlanValidation Reject(string code) => new(
+            JsonSerializer.Serialize(GeneratedFileContract.ErrorResult(code)), []);
+    }
+
+    private static bool TryReadStep(JsonElement step, out string? tool, out JsonElement args)
+    {
+        tool = null;
+        args = default;
+        if (step.ValueKind != JsonValueKind.Object
+            || !step.TryGetProperty("tool", out var toolEl)
+            || toolEl.ValueKind != JsonValueKind.String)
+            return false;
+        tool = toolEl.GetString();
+        if (tool?.StartsWith("functions.", StringComparison.OrdinalIgnoreCase) == true)
+            tool = tool["functions.".Length..];
+        if (step.TryGetProperty("args", out var argsEl))
+            args = argsEl;
+        return true;
     }
 
     private async Task<(object, string)> PlatformAsync(

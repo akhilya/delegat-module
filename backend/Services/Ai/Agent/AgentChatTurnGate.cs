@@ -98,6 +98,7 @@ public static class AgentChatTurnGate
     public static bool RequiresPlanConfirmation(string? toolName, string? inputJson)
     {
         if (string.Equals(toolName, "run_python", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolName, GeneratedFileContract.ImportToolName, StringComparison.OrdinalIgnoreCase)
             || McpToolNames.TryParse(toolName, out _, out _))
             return true;
 

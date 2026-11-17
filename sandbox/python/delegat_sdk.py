@@ -136,6 +136,21 @@ class DelegatClient:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Agent HTTP {exc.code}: {detail}") from exc
 
+    def output_path(self, file_name: str) -> str:
+        """Relative write path for one file declared in this run's outputs.
+
+        The path is relative to the job working directory (``outputs/<name>``),
+        never a physical server path. An undeclared or invalid name raises
+        ValueError.
+        """
+        import generated_outputs
+
+        if not generated_outputs.valid_output_name(file_name):
+            raise ValueError("file_name must be a declared output basename")
+        if file_name not in generated_outputs.declared_output_names():
+            raise ValueError("file_name is not declared in this run's outputs")
+        return "outputs/" + file_name
+
     def search_knowledge(self, query: str, limit: int = 8):
         from urllib.parse import quote
 

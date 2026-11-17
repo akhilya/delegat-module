@@ -35,6 +35,7 @@ async function fixture(
   options: {
     staleHistory?: boolean;
     review?: "success" | "recovery" | "disconnect";
+    generatedImports?: Array<Record<string, unknown>>;
   } = {},
 ) {
   page.on("pageerror", (error) =>
@@ -108,7 +109,9 @@ async function fixture(
         content: accepted ? "Шаги плана завершены." : "Подготовил план.",
         toolCallsJson: JSON.stringify({
           _ui: "assistantTurn",
-          plan,
+          plan: options.generatedImports
+            ? { ...plan, generatedFileImports: options.generatedImports }
+            : plan,
           planConfirmed: accepted,
           planExecuted: accepted && outcome !== "disconnect",
           planFailed: accepted && ["failed", "partial"].includes(outcome),
@@ -1289,4 +1292,86 @@ test("canonical attach bridges the executed/review persistence gap", async ({
   // The attach alone must never trigger another execute request.
   expect(state.executions()).toBe(0);
   expect(state.unexpectedWrites).toEqual([]);
+});
+
+for (const width of [1280, 390]) {
+  test(`generated-file approval shows server metadata, no overflow at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const sha = "a".repeat(64);
+    const state = await fixture(page, "success", {
+      generatedImports: [
+        {
+          step: 0,
+          artifactId: "0123456789abcdef0123456789abcdef",
+          fileName:
+            "отчёт-по-продажам-за-очень-длинный-период-2026.csv",
+          length: 1048576,
+          sha256: sha,
+          expiresAtUtc: "2026-12-31T23:59:00Z",
+          destination: "store",
+          storeId: 1,
+          productId: null,
+          folderId: 3,
+        },
+      ],
+    });
+    const approval = page.getByTestId("ai-generated-file-approval");
+    await expect(approval).toBeVisible();
+    await expect(approval).toContainText("Сохранение созданного файла");
+    await expect(approval).toContainText(
+      "отчёт-по-продажам-за-очень-длинный-период-2026.csv",
+    );
+    await expect(approval).toContainText("Хранилище магазина №1");
+    await expect(approval).toContainText("Папка №3");
+    await expect(approval).toContainText("Доступен до");
+    await expect(approval).toContainText(sha);
+    // Full hash and long Cyrillic filename wrap inside the viewport.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+
+    // Keyboard confirmation executes the exact signed plan once.
+    await page.getByRole("button", { name: "Выполнить", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => state.executions(), { timeout: 5000 })
+      .toBe(1);
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toHaveCount(0);
+    await expect(approval).toBeVisible();
+    expect(state.unexpectedWrites).toEqual([]);
+  });
+}
+
+test("generated-file approval metadata survives reload", async ({ page }) => {
+  const sha = "b".repeat(64);
+  await fixture(page, "success", {
+    generatedImports: [
+      {
+        step: 0,
+        artifactId: "fedcba9876543210fedcba9876543210",
+        fileName: "report.csv",
+        length: 2048,
+        sha256: sha,
+        expiresAtUtc: "2026-12-31T23:59:00Z",
+        destination: "product",
+        storeId: 1,
+        productId: 7,
+        folderId: null,
+      },
+    ],
+  });
+  await reloadPlan(page);
+  const approval = page.getByTestId("ai-generated-file-approval");
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText("report.csv");
+  await expect(approval).toContainText("Файлы товара №7");
+  await expect(approval).toContainText("Корневая папка");
+  await expect(approval).toContainText(sha);
 });

@@ -384,4 +384,108 @@ public class AgentToolResultTests
         Assert.Contains("background operations queued", en, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Some steps were applied", en, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TruncateForModel_OversizedCaptureResult_PreservesArtifactHandles()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24);
+        var expiryText = expiry.ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var artifacts = Enumerable.Range(0, 4).Select(i => new
+        {
+            artifactId = new string((char)('a' + i), 32),
+            fileName = $"очень-длинное-имя-файла-отчёта-{i}-подробный-итоговый.csv",
+            contentType = "text/csv",
+            length = 10 + i,
+            sha256 = new string((char)('a' + i), 64),
+            expiresAtUtc = expiryText,
+        }).ToArray();
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new { stdout = new string('x', 80_000), artifacts },
+            summary = "done",
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = doc.RootElement.GetProperty("artifacts");
+        Assert.Equal(4, kept.GetArrayLength());
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.Equal(artifacts[i].artifactId, kept[i].GetProperty("artifactId").GetString());
+            Assert.Equal(artifacts[i].fileName, kept[i].GetProperty("fileName").GetString());
+            Assert.Equal(artifacts[i].sha256, kept[i].GetProperty("sha256").GetString());
+            Assert.Equal(artifacts[i].length, kept[i].GetProperty("length").GetInt64());
+        }
+    }
+
+    [Fact]
+    public void TruncateForModel_OutcomesArray_PreservesHandlesFromEnvelopeResult()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var handle = new
+        {
+            artifactId = "f".PadRight(32, 'f'),
+            fileName = "отчёт.csv",
+            contentType = "text/csv",
+            length = 4,
+            sha256 = "b".PadRight(64, 'b'),
+            expiresAtUtc = expiry,
+        };
+        var inner = JsonSerializer.Serialize(new
+        {
+            truncated = true,
+            originalLength = 90_000,
+            important = new { exitCode = 0 },
+            artifacts = new[] { handle },
+            preview = new string('y', 1_000),
+        });
+        var outcomes = JsonSerializer.Serialize(new object[]
+        {
+            new { step = 1, tool = "run_python", ok = true,
+                  result = JsonDocument.Parse(inner).RootElement.Clone() },
+            new { step = 2, tool = "run_python", ok = true,
+                  result = new { stdout = new string('z', 80_000) } },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(outcomes);
+        Assert.True(truncated.Length <= AgentToolResult.MaxModelResultChars);
+        using var doc = JsonDocument.Parse(truncated);
+        var kept = Assert.Single(doc.RootElement.GetProperty("artifacts").EnumerateArray());
+        Assert.Equal(handle.artifactId, kept.GetProperty("artifactId").GetString());
+        Assert.Equal(handle.sha256, kept.GetProperty("sha256").GetString());
+    }
+
+    [Fact]
+    public void TruncateForModel_MalformedOrSmuggledArtifacts_AreNotPromoted()
+    {
+        var expiry = DateTime.UtcNow.AddHours(24).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'");
+        var payload = JsonSerializer.Serialize(new
+        {
+            data = new
+            {
+                stdout = new string('x', 80_000) +
+                    "{\"artifacts\":[{\"artifactId\":\"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"}]}",
+                artifacts = new object[]
+                {
+                    new { artifactId = "not-hex!", fileName = "r.csv", contentType = "text/csv",
+                          length = 1, sha256 = "b".PadRight(64, 'b'), expiresAtUtc = expiry },
+                    new { artifactId = "c".PadRight(32, 'c'), fileName = "../evil.csv",
+                          contentType = "text/csv", length = 1,
+                          sha256 = "d".PadRight(64, 'd'), expiresAtUtc = expiry },
+                },
+                preview = new { artifacts = new[] { new { artifactId = "e".PadRight(32, 'e') } } },
+            },
+        });
+
+        var truncated = AgentToolResult.TruncateForModel(payload);
+        using var doc = JsonDocument.Parse(truncated);
+        // Invalid ids, traversal names, and JSON smuggled inside text fields are
+        // never promoted to the trusted artifacts field.
+        Assert.False(doc.RootElement.TryGetProperty("artifacts", out var promoted)
+            && promoted.GetArrayLength() > 0);
+        if (doc.RootElement.TryGetProperty("artifacts", out var any))
+            Assert.DoesNotContain("evil.csv", any.ToString());
+    }
 }

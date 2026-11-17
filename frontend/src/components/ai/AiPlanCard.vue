@@ -39,7 +39,7 @@ const props = defineProps({
   ready: { type: Boolean, default: true },
 });
 defineEmits(["confirm", "cancel"]);
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const store = useStore();
 const expanded = ref(false);
 const expandedDescriptions = ref({});
@@ -58,6 +58,30 @@ const operationIds = computed(() => operationIdsFromToolCalls(props.toolCalls));
 const operationSummary = computed(() =>
   summarizePlanOperations(operationIds.value, operationStatuses.value),
 );
+
+// Server-verified import detail minted at proposal time; the client renders it
+// verbatim and never reconstructs artifact metadata from step text.
+const generatedImports = computed(() =>
+  Array.isArray(props.plan?.generatedFileImports)
+    ? props.plan.generatedFileImports
+    : [],
+);
+
+const numberFormat = computed(() => new Intl.NumberFormat(locale.value));
+const generatedTargetLabel = (imp) =>
+  imp.destination === "product"
+    ? t("ai.generatedFileProduct", { id: imp.productId })
+    : t("ai.generatedFileStore", { id: imp.storeId });
+const generatedFolderLabel = (imp) =>
+  imp.folderId
+    ? t("ai.generatedFileFolder", { id: imp.folderId })
+    : t("ai.generatedFileRoot");
+const generatedExpiryLabel = (imp) => {
+  const at = new Date(imp.expiresAtUtc);
+  return Number.isNaN(at.getTime())
+    ? ""
+    : t("ai.generatedFileExpires", { time: at.toLocaleString(locale.value) });
+};
 
 async function pollOperations(generation, ids, signal) {
   await Promise.all(
@@ -214,6 +238,43 @@ const warning = computed(() =>
       >
         {{ t("ai.planAffected") }} {{ plan.affectedCount }}
       </p>
+    </div>
+
+    <div
+      v-if="generatedImports.length"
+      class="mx-3 border-t border-border/70 py-1"
+      data-testid="ai-generated-file-approval"
+    >
+      <div
+        v-for="imp in generatedImports"
+        :key="`generated-import-${imp.step}`"
+        class="min-w-0 py-1.5 text-xs"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+          <span class="font-medium text-foreground">{{
+            t("ai.generatedFileImportTitle")
+          }}</span>
+          <span class="tabular-nums text-muted-foreground">{{
+            t("ai.generatedFileBytes", {
+              count: numberFormat.format(imp.length ?? 0),
+            })
+          }}</span>
+        </div>
+        <p class="mt-1 break-words text-sm leading-snug">{{ imp.fileName }}</p>
+        <p class="mt-1 break-words text-muted-foreground">
+          {{ generatedTargetLabel(imp) }} · {{ generatedFolderLabel(imp) }}<template
+            v-if="generatedExpiryLabel(imp)"
+          >
+            · {{ generatedExpiryLabel(imp) }}</template
+          >
+        </p>
+        <p
+          v-if="imp.sha256"
+          class="mt-1 select-all break-all font-mono text-[11px] leading-snug text-muted-foreground"
+        >
+          {{ t("ai.generatedFileHash") }}: {{ imp.sha256 }}
+        </p>
+      </div>
     </div>
 
     <ol v-if="steps.length" class="mx-3 border-t border-border/70 py-1">

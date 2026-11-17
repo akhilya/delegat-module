@@ -136,28 +136,29 @@ internal sealed class MafProposePlanAdapter(
     public override string Description => tool.description ?? "";
     public override JsonElement JsonSchema => AiApiClient.ToolSchemaElement(tool.input_schema);
 
-    protected override ValueTask<object?> InvokeCoreAsync(
+    protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         var argsJson = MafToolAdapterShared.SerializeArguments(arguments);
 
         if (state.SawPlan)
-            return ValueTask.FromResult<object?>(AgentChatTurnGate.AdditionalPlanDeferred);
+            return AgentChatTurnGate.AdditionalPlanDeferred;
 
         if (state.DeferPlanForAttachmentRead)
-            return ValueTask.FromResult<object?>(AgentChatTurnGate.AttachmentDeferralPlanText);
+            return AgentChatTurnGate.AttachmentDeferralPlanText;
 
         var planInput = ProposePlanReader.Read(argsJson);
         if (!planInput.HasContent)
-            return ValueTask.FromResult<object?>(AgentChatTurnGate.InvalidPlanText);
+            return AgentChatTurnGate.InvalidPlanText;
 
-        var feasibilityReason = state.ToolHost.Capabilities.PlanStepRejection(planInput.Steps);
-        if (feasibilityReason != null)
-            return ValueTask.FromResult<object?>(feasibilityReason);
+        var validation = await state.ToolHost.ValidatePlanAsync(
+            planInput.Steps, state.StoreId, state.UserId, cancellationToken);
+        if (validation.Rejection != null)
+            return validation.Rejection;
 
         var efficiencyReason = AgentPlanEfficiencyGuard.RejectionReason(planInput.Steps);
         if (efficiencyReason != null)
-            return ValueTask.FromResult<object?>(efficiencyReason);
+            return efficiencyReason;
 
         var planCreatedAt = DateTime.UtcNow;
         var serializedSteps = JsonSerializer.Serialize(planInput.Steps, MafToolAdapterShared.JsonOpts);
@@ -179,9 +180,10 @@ internal sealed class MafProposePlanAdapter(
             summary = planInput.Summary,
             steps = planInput.Steps,
             affectedCount = planInput.AffectedCount,
-            isDestructive = planInput.IsDestructive
+            isDestructive = planInput.IsDestructive,
+            generatedFileImports = validation.GeneratedFileImports
         }));
         state.SawPlan = true;
-        return ValueTask.FromResult<object?>(AgentChatTurnGate.PlanPresentedWaitingText);
+        return AgentChatTurnGate.PlanPresentedWaitingText;
     }
 }

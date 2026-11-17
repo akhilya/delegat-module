@@ -191,6 +191,118 @@ namespace Delegat.Migrations
                     b.ToTable("aiConversationMessages");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Ai.AiGeneratedArtifact", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("contentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("createdAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("expiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("fileName")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("varchar(180)");
+
+                    b.Property<long>("length")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("sandboxRunId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("state")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("storageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("storeId", "userId", "expiresAtUtc");
+
+                    b.ToTable("aiGeneratedArtifacts");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiGeneratedArtifactImport", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("artifactId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("createdAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("destination")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("destinationKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int?>("fileId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("folderId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("length")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("productId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("state")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("artifactId");
+
+                    b.HasIndex("storeId", "userId", "state");
+
+                    b.ToTable("aiGeneratedArtifactImports");
+                });
+
             modelBuilder.Entity("Delegat.Models.Ai.AiKnowledgeChunk", b =>
                 {
                     b.Property<int>("Id")

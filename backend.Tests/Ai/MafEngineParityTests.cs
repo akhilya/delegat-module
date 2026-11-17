@@ -12,6 +12,7 @@ using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Agent.Maf;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -549,6 +550,161 @@ public class MafEngineParityTests
         Assert.Contains("OutputTokens=7", telemetry, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GeneratedFilePlan_MafRuntime_CapturesStagesImportsAcrossConfirmedReviews()
+    {
+        using var key = SigningKey();
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var stdout = new string('x', 30000); // force truncation: the handle must survive
+        var csv = Encoding.UTF8.GetBytes("a,b\n1,2\n");
+        var python = new ArtifactPythonHttp([("отчёт.csv", "text/csv", csv)], stdout);
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                ToolCall("propose_plan", JsonSerializer.Serialize(new
+                {
+                    summary = "Generate the report file",
+                    steps = new[]
+                    {
+                        new
+                        {
+                            tool = "run_python",
+                            description = "Write the report CSV",
+                            args = new
+                            {
+                                code = "print('x')",
+                                outputs = new[] { new { fileName = "отчёт.csv", contentType = "text/csv" } },
+                            },
+                        },
+                    },
+                }), "artifact-generate"),
+                (Func<CapturedRequest, ChatResponse>)(req => ToolCall("propose_plan",
+                    JsonSerializer.Serialize(new
+                    {
+                        summary = "Save the generated report",
+                        steps = new[]
+                        {
+                            new
+                            {
+                                tool = "import_generated_file",
+                                description = "Save the report into store files",
+                                args = ImportArgsFromReview(req),
+                            },
+                        },
+                    }), "artifact-import")),
+            ], artifacts: true, pythonHttp: python);
+        const string sessionId = "maf-artifact-e2e";
+        var user = UserMessage("Generate report.");
+
+        var initial = await Collect(fixture.Chat.StreamChatAsync(
+            [user], fixture.StoreId, fixture.UserId, sessionId: sessionId, locale: "en"));
+        var snapshot = AiSseTurnRecorder.Fold(initial);
+        using var firstDoc = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var proposalId = firstDoc.RootElement.GetProperty("plan").GetProperty("proposalId").GetString()!;
+        await AiConversationTurnStore.AppendUserIfNeededAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, user, default);
+        await AiConversationTurnStore.UpsertAssistantAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, snapshot, default);
+        var steps = await fixture.Chat.ConsumeConfirmedPlanAsync(
+            sessionId, proposalId, fixture.StoreId, fixture.UserId, default);
+        Assert.NotNull(steps);
+
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            steps!.ToList(), fixture.StoreId, fixture.UserId, proposalId,
+            sessionId: sessionId, locale: "en"));
+
+        Assert.Equal(1, python.Posts);
+        var turns = AiSseTurnRecorder.FoldTurns(chunks);
+        Assert.Equal(2, turns.Count);
+        Assert.True(turns[1].ToolCallsJson != null && turns[1].ToolCallsJson!.Contains("proposalId"),
+            "review payload: " + turns[1].ToolCallsJson);
+        using var reviewDoc = JsonDocument.Parse(turns[1].ToolCallsJson!);
+        var plan = reviewDoc.RootElement.GetProperty("plan");
+        var secondProposal = plan.GetProperty("proposalId").GetString()!;
+        Assert.NotEqual(proposalId, secondProposal);
+        var approval = Assert.Single(plan.GetProperty("generatedFileImports").EnumerateArray());
+        var artifactId = approval.GetProperty("artifactId").GetString()!;
+        var row = await fixture.Db.aiGeneratedArtifacts.SingleAsync();
+        Assert.Equal(artifactId, row.Id);
+        Assert.Equal("ready", row.state);
+        Assert.Contains(artifactId, fixture.Client.Requests[1].Messages.Last().Content,
+            StringComparison.Ordinal);
+
+        await AiConversationTurnStore.UpsertAssistantAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, turns[0], default);
+        await AiConversationTurnStore.AppendAssistantAsync(
+            fixture.Db, sessionId, fixture.StoreId, fixture.UserId, turns[1], default);
+        var stored = await fixture.Db.aiConversationMessages
+            .OrderByDescending(m => m.Id).FirstAsync();
+        var originalJson = stored.toolCallsJson!;
+        var node = System.Text.Json.Nodes.JsonNode.Parse(originalJson)!;
+        node["plan"]!["steps"]![0]!["args"]!["sha256"] = new string('0', 64);
+        stored.toolCallsJson = node.ToJsonString();
+        await fixture.Db.SaveChangesAsync();
+        Assert.Null(await fixture.Chat.ConsumeConfirmedPlanAsync(
+            sessionId, secondProposal, fixture.StoreId, fixture.UserId, default));
+        stored.toolCallsJson = originalJson;
+        await fixture.Db.SaveChangesAsync();
+
+        var importSteps = await fixture.Chat.ConsumeConfirmedPlanAsync(
+            sessionId, secondProposal, fixture.StoreId, fixture.UserId, default);
+        Assert.NotNull(importSteps);
+        await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            importSteps!.ToList(), fixture.StoreId, fixture.UserId, secondProposal,
+            sessionId: sessionId, locale: "en"));
+
+        var file = await fixture.Db.storeFiles.SingleAsync();
+        Assert.Equal("отчёт.csv", file.displayName);
+        var receipt = await fixture.Db.aiGeneratedArtifactImports.SingleAsync();
+        Assert.Equal("completed", receipt.state);
+        Assert.Equal(file.Id, receipt.fileId);
+    }
+
+    /// <summary>Extracts the exact server-issued handle fields from the review
+    /// request so the scripted import plan quotes real artifact identity.</summary>
+    private static object ImportArgsFromReview(CapturedRequest review)
+    {
+        var content = review.Messages.Last().Content;
+        for (var i = 0; i < 5; i++)
+        {
+            var next = content
+                .Replace("\\\\\\u0022", "\"", StringComparison.Ordinal)
+                .Replace("\\\\\\\"", "\"", StringComparison.Ordinal)
+                .Replace("\\u0022", "\"", StringComparison.Ordinal)
+                .Replace("\\\"", "\"", StringComparison.Ordinal);
+            if (next == content) break;
+            content = next;
+        }
+        var artifactIndex = content.IndexOf("artifactId", StringComparison.Ordinal);
+        if (artifactIndex < 0)
+            throw new InvalidOperationException(
+                "No 'artifactId' in review request: " + content[..Math.Min(400, content.Length)]);
+        var handleContent = content[artifactIndex..];
+        string Str(string name) =>
+            System.Text.RegularExpressions.Regex
+                .Match(handleContent, $"\"{name}\"\\s*:\\s*\"([^\"]*)\"")
+                is { Success: true } match
+                ? match.Groups[1].Value
+                : throw new InvalidOperationException(
+                    $"No '{name}' in review request: {handleContent[..Math.Min(400, handleContent.Length)]}");
+        return new
+        {
+            artifactId = Str("artifactId"),
+            sha256 = Str("sha256"),
+            length = long.Parse(
+                System.Text.RegularExpressions.Regex
+                    .Match(handleContent, "\"length\"\\s*:\\s*(\\d+)")
+                    .Groups[1].Value),
+            expiresAtUtc = DateTime.Parse(
+                Str("expiresAtUtc"), null,
+                System.Globalization.DateTimeStyles.RoundtripKind),
+            destination = "store",
+            productId = (int?)null,
+            folderId = (int?)null,
+        };
+    }
+
     private static string LastToolResult(CapturedRequest request) =>
         request.Messages.Last(m => m.Role == "tool").Content;
 
@@ -573,7 +729,9 @@ public class MafEngineParityTests
         byte[]? attachmentBytes,
         object[] responses,
         ScriptedAiStreamingClient? legacyClient = null,
-        string runtime = "maf")
+        string runtime = "maf",
+        bool artifacts = false,
+        IHttpClientFactory? pythonHttp = null)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -615,10 +773,22 @@ public class MafEngineParityTests
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var quota = new QuotaService(uow, db);
         var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
-        IStorageService storage = attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+        IStorageService storage = artifacts
+            ? new MemoryStorage()
+            : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+        GeneratedArtifactService? artifactService = artifacts
+            ? new GeneratedArtifactService(
+                db,
+                storage,
+                quota,
+                new AgentSessionResolver(
+                    new FakeCurrentUserService(), new GrantAllPermissions(), db,
+                    new HttpContextAccessor()),
+                NullLogger<GeneratedArtifactService>.Instance)
+            : null;
         var python = new PythonSandboxClient(
-            db, new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
-            new HttpContextAccessor(), new FakeJwt());
+            db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
+            new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
         var toolHost = new AgentToolHost(
             new CatalogSearchService(db),
             new SqlReadonlyService(db),
@@ -629,7 +799,8 @@ public class MafEngineParityTests
             db,
             NullLogger<AgentToolHost>.Instance,
             mcp,
-            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage));
+            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
+            artifacts: artifactService);
         var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
         var modelService = new AiModelConfigService(
             db,
@@ -750,6 +921,7 @@ public class MafEngineParityTests
             {
                 Exception error => throw error,
                 ChatResponse response => response,
+                Func<CapturedRequest, ChatResponse> factory => factory(Requests[^1]),
                 var other => throw new InvalidOperationException(
                     $"Unsupported scripted item {other?.GetType().Name}."),
             };

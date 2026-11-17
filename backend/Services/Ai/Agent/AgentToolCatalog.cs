@@ -1,10 +1,16 @@
+using System.Text.Json;
 using Delegat.Services.Ai;
 
 namespace Delegat.Services.Ai.Agent;
 
 public static class AgentToolCatalog
 {
-    public static List<AiTool> Build()
+    /// <summary>
+    /// <paramref name="includeGeneratedArtifacts"/> is the cabinet-chat surface only:
+    /// external MCP/Agent callers build the default catalog and never see the
+    /// chat-confirmed import tool.
+    /// </summary>
+    public static List<AiTool> Build(bool includeGeneratedArtifacts = false)
     {
         List<AiTool> tools =
         [
@@ -58,10 +64,37 @@ public static class AgentToolCatalog
         ];
         if (PythonSandboxClient.IsConfigured())
         {
-            tools.Add(Prop("run_python",
-                "Run Python in the instance sandbox. Every run_python call must be a step in a standalone propose_plan and waits for user confirmation; never call it directly in the chat loop because code can make side-effecting requests. The visible plan description must state what the code will do. For broker-enabled Marketplace connections, use only declared `broker` capabilities: `client.shop_request` when `get=true`, or discover named read-only POST operations with `client.shop_operations` and call `client.shop_read` when `operations=true`; do not make direct seller HTTP calls for those connections. Only connections marked `access=legacy` retain the old host/auth descriptor. Read `client.marketplace_doc` before choosing seller-specific paths. Do not print credentials, fetch documentation URLs yourself, or write to seller APIs from Python. Cabinet requests use Agent HTTP, never a database URL.",
-                Req(["code"]), ("code", Str("Python source. " + PythonSdkContract.Instructions))));
+            var capture = includeGeneratedArtifacts
+                          && PythonSandboxClient.ArtifactCaptureConfigured();
+            var runPython = Prop("run_python",
+                "Run Python in the instance sandbox. Every run_python call must be a step in a standalone propose_plan and waits for user confirmation; never call it directly in the chat loop because code can make side-effecting requests. The visible plan description must state what the code will do. For broker-enabled Marketplace connections, use only declared `broker` capabilities: `client.shop_request` when `get=true`, or discover named read-only POST operations with `client.shop_operations` and call `client.shop_read` when `operations=true`; do not make direct seller HTTP calls for those connections. Only connections marked `access=legacy` retain the old host/auth descriptor. Read `client.marketplace_doc` before choosing seller-specific paths. Do not print credentials, fetch documentation URLs yourself, or write to seller APIs from Python. Cabinet requests use Agent HTTP, never a database URL."
+                + (capture
+                    ? " Optional outputs declares up to four files as {fileName, contentType}; write each using client.output_path(fileName). The file is captured once and only artifact metadata returns. Saving it requires a later separate import_generated_file plan with the returned exact artifact metadata and destination. Never print file bytes/base64 or rerun the computation just to save its output."
+                    : ""),
+                Req(["code"]), ("code", Str("Python source. " + PythonSdkContract.Instructions)));
+            if (capture)
+            {
+                runPython.input_schema.properties!["outputs"] = new AiToolProperty
+                {
+                    type = "array",
+                    description = "Optional declared outputs: up to four files. fileName is a strict basename, contentType a single media type (default application/octet-stream); no paths.",
+                    items = new AiToolProperty
+                    {
+                        type = "object",
+                        properties = new Dictionary<string, AiToolProperty>
+                        {
+                            ["fileName"] = Str("Strict basename of the declared output"),
+                            ["contentType"] = Str("Single media type; default application/octet-stream"),
+                        },
+                        required = ["fileName"],
+                    },
+                };
+            }
+            tools.Add(runPython);
         }
+
+        if (includeGeneratedArtifacts)
+            tools.Add(ImportGeneratedFileTool());
 
         tools.AddRange(
         [
@@ -178,6 +211,54 @@ public static class AgentToolCatalog
         foreach (var (key, prop) in props)
             schema.properties[key] = prop;
         return new AiTool { name = name, description = desc, input_schema = schema };
+    }
+
+    /// <summary>
+    /// The import tool's contract needs nullable integers, which the legacy
+    /// <see cref="AiToolProperty"/> DTO cannot express; the exact JSON Schema rides
+    /// in <see cref="AiToolInputSchema.RawSchema"/> (authoritative for providers),
+    /// while a DTO mirror keeps property enumeration working.
+    /// </summary>
+    private static AiTool ImportGeneratedFileTool()
+    {
+        const string schemaJson = """
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "artifactId": { "type": "string", "description": "Opaque ID returned by run_python artifacts" },
+                "sha256": { "type": "string", "description": "Exact lowercase SHA-256 returned for that artifact" },
+                "length": { "type": "integer", "description": "Exact byte length returned for that artifact" },
+                "expiresAtUtc": { "type": "string", "description": "Exact expiry returned for that artifact" },
+                "destination": { "type": "string", "enum": ["store", "product"], "description": "store or product; never infer an ambiguous destination" },
+                "productId": { "type": ["integer", "null"], "description": "Exact product ID for product destination; null for store" },
+                "folderId": { "type": ["integer", "null"], "description": "Exact folder of the target store/product; explicit null for root" }
+              },
+              "required": ["artifactId", "sha256", "length", "expiresAtUtc", "destination", "productId", "folderId"]
+            }
+            """;
+        using var doc = JsonDocument.Parse(schemaJson);
+        var schema = new AiToolInputSchema
+        {
+            RawSchema = doc.RootElement.Clone(),
+            required = ["artifactId", "sha256", "length", "expiresAtUtc", "destination", "productId", "folderId"],
+            properties = new Dictionary<string, AiToolProperty>
+            {
+                ["artifactId"] = Str("Opaque ID returned by run_python artifacts"),
+                ["sha256"] = Str("Exact lowercase SHA-256 returned for that artifact"),
+                ["length"] = new AiToolProperty { type = "integer", description = "Exact byte length returned for that artifact" },
+                ["expiresAtUtc"] = Str("Exact expiry returned for that artifact"),
+                ["destination"] = Str("store or product; never infer an ambiguous destination"),
+                ["productId"] = new AiToolProperty { type = "integer", description = "Exact product ID for product destination; null for store" },
+                ["folderId"] = new AiToolProperty { type = "integer", description = "Exact folder of the target store/product; explicit null for root" },
+            },
+        };
+        return new AiTool
+        {
+            name = GeneratedFileContract.ImportToolName,
+            description = "Save one captured generated artifact to its exact store or product destination after a NEW signed plan confirmation. Use only metadata returned in artifacts by a successful run_python. Required arguments bind artifactId, sha256, length, expiresAtUtc, destination, productId, and folderId; use explicit null for root or no product. Generation and import cannot share a plan. Do not regenerate an existing artifact to save it, put file bytes/base64 in arguments, substitute a store for a product, or invent a source URL/path. Only confirmed cabinet chat executes this tool; Python and external MCP cannot import. Use only the returned downloadUrl after success.",
+            input_schema = schema,
+        };
     }
 
     private static AiToolInputSchema Req(string[] required) => new() { required = required.ToList(), properties = new() };

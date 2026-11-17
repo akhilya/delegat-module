@@ -1053,10 +1053,14 @@ public class AgentToolHostTests
         {
             Last = request;
             ContentLength = request.Content?.Headers.ContentLength;
+            // The client probes /health before the single POST now.
+            var body = request.RequestUri?.AbsolutePath == "/health"
+                ? """{"ok":true}"""
+                : responseJson;
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    responseJson,
+                    body,
                     Encoding.UTF8,
                     "application/json"),
             });
