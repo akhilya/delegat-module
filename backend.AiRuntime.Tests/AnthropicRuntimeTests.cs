@@ -150,6 +150,9 @@ public class AnthropicRuntimeTests
         _output.WriteLine($"mid-stream cancellation surfaced as: {ex?.GetType().FullName}: {ex?.Message}");
         Assert.IsAssignableFrom<OperationCanceledException>(ex);
         Assert.Equal(1, http.RequestCount);
+        // The parser consumed the whole prefix before the stall: cancellation hit a
+        // live SSE read, not a pre-header wait or buffered serialization.
+        Assert.True(http.MidStreamPrefixFullyRead);
         Assert.Equal(0, harness.Tools.ProposePlanInvocations);
         Assert.Equal(0, harness.Tools.SiblingInvocations);
     }
