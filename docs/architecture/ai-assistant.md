@@ -37,13 +37,23 @@ User MCP (cabinet as client): Settings → AI lists HTTP MCP servers (`aiMcpServ
 
 Regression coverage: `frontend/e2e/ai-plans.spec.ts` uses intercepted APIs only (no catalog writes or marketplace jobs), with unit coverage in `frontend/src/lib/ai/` and isolated persistence/execution fixtures in `backend.Tests/Ai/`.
 
+## Turn events, persistence and reconnect
+
+- One server writer produces a turn's events: both chat engines emit typed `AiTurnEvent`s (legacy `AiChatService`, MAF `MafChatEngine`), the live hub stamps each with trusted `runId`/`messageId`/`dbId`/`phase`/`proposalId` and a monotonic `sequence`, and `AiSseTurnRecorder.FoldEvents` projects the same events into the persisted `_ui:"assistantTurn"` envelope. The wire shape stays `{ type, data }`; ownership fields are additive, so old servers/clients interoperate. `message_start` binds a segment (chat, execution, review); `assistant_start` still separates the review from the execution row; `execution_status` carries structured outcome data (status, counts, summary) — status is rendered from metadata, never folded into reply text, and raw diagnostics stay inside tool results.
+- The server owns canonical rows. `AiConversationTurnStore.BeginAssistantTurnAsync` creates/binds the assistant row (exact confirmed `proposalId` for execution — never last-row matching) before the first event; `PersistAssistantTurnAsync` writes each segment once by `DbId`+`messageId`+`runId`, idempotent on `lastEventSequence`. Client `SaveMessages` history sync is metadata-only on canonical rows (form replies and unconfirmed user plan decisions merge; role/content/tools/plan/lifecycle are immutable), an unknown canonical `messageId` is omitted rather than minted, and `DbId`/anonymous fallbacks cannot let a review acquire another message's plan.
+- The client targets events by stable `messageId` (`turnIdentity.selectTurnMessage`), deduplicates replays on `runId`+`sequence` (`isDuplicateTurnEvent`), and correlates `SaveMessages` responses to the exact submitted set via `clientMessageId`. A new run on an already-bound row resets the sequence window, and stream completion is tracked from control events separately from state deduplication, so an all-duplicate replay that ends cleanly cannot surface a transport error. Reconnecting replays the ordered buffer then tails it; a cursor applies only when its run id matches the current run — a missing or foreign one replays in full. Stale history reads reconcile canonical rows by `messageId` before proposal heuristics: sequence decides only within one run, an execution phase outranks a stale proposal phase of the same row, and rows a stale read omits keep their chronology. Canonical `mapStoredMessage.done` follows `messageState` instead of the role default, and `normalizeCopiedPlans` suppresses a proven copied parent plan only with full ownership evidence — a legitimate review proposal (owner = self) always stays visible and confirmable.
+- Live turns remain **process-local**: `AiLiveTurnHub` owns generation in memory, a browser disconnect never stops a run, and an API restart loses in-flight turns (persisted history survives; there is no automatic replay of an ambiguous write). A canonical row still marked `running` after the owning process is gone is projected as `interrupted` on read (with an `ai_turn_interrupted` marker and, for an execution without outcome, `interrupted`/`outcomeUnknown`) — the stored row is never rewritten. Durable job/checkpoint storage and side-effect idempotency are an explicit future gate, not implemented.
+
 ## Key files
 
 | File | Purpose |
 |------|---------|
 | `backend/Services/Ai/Prompts/AiPrompts.cs` | All prompts |
-| `backend/Services/Ai/AiChatService.cs` | SSE loop + confirmed-plan execution |
+| `backend/Services/Ai/AiChatService.cs` | Typed-event loop + confirmed-plan execution |
+| `backend/Services/Ai/AiTurnEvent.cs` | Canonical turn event + SSE serialization |
+| `backend/Services/Ai/AiSseTurnRecorder.cs` | Folds typed/legacy events into the persisted assistant envelope |
 | `backend/Services/Ai/AiLiveTurnHub.cs` | Live turn host (survives tab reload, not API restart) |
+| `backend/Services/Ai/AiConversationTurnStore.cs` | Canonical turn binding/persist + history-sync guards |
 | `backend/Services/Ai/AiServiceCollectionExtensions.cs` | `AddAiAssistant()` DI |
 | `backend/Services/Ai/Agent/*` | Thin tools, SQL guard, knowledge, nested cabinet HTTP, MCP/HTTP host |
 | `backend/Services/Ai/Agent/PlatformRequestPolicy.cs` | Denylist for `platform_request` |
@@ -53,7 +63,7 @@ Regression coverage: `frontend/e2e/ai-plans.spec.ts` uses intercepted APIs only 
 | `backend/Services/Ai/GraphMutationService.cs` | Mapping graph domain mutations |
 | `frontend/src/components/ai/AiChatPanel.vue` | Sheet UI, file attach |
 | `frontend/src/store/modules/aiChatModule.js` | SSE + reconnect + confirm |
-| `frontend/src/lib/ai/` | Chat persist, timeline, markdown, attachments, chrome gate |
+| `frontend/src/lib/ai/` | Chat persist, timeline, markdown, attachments, chrome gate, turn identity |
 
 ## Tools (closed set)
 

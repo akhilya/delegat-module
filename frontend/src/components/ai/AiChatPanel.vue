@@ -681,6 +681,42 @@ function hasPlanExec(msg) {
   return Number.isInteger(msg.planExecStart);
 }
 
+/**
+ * Legacy executed rows persisted before the planExecStart marker existed: the
+ * proposal/execution boundary cannot be reconstructed, so the plan card renders
+ * before the combined activity (which keeps its original order) with a note.
+ * A pending plan without a marker keeps the normal proposal layout.
+ */
+function legacyBoundaryless(msg) {
+  return !!(
+    msg?.plan &&
+    msg.planConfirmed &&
+    !hasPlanExec(msg) &&
+    (msg.planExecuted || msg.planFailed || msg.turnStopped)
+  );
+}
+
+function executionOutcomeText(msg) {
+  const status = msg.executionOutcome?.status;
+  const key = {
+    completed: "ai.executionOutcomeCompleted",
+    queued: "ai.executionOutcomeQueued",
+    partial: "ai.executionOutcomePartial",
+    failed: "ai.executionOutcomeFailed",
+    interrupted: "ai.executionOutcomeInterrupted",
+  }[status];
+  // An unknown status never leaks a raw server summary as status prose.
+  return key ? t(key) : t("ai.planOutcomeUnknown");
+}
+
+function executionOutcomeWarns(msg) {
+  return (
+    ["partial", "failed", "interrupted"].includes(
+      msg.executionOutcome?.status,
+    ) || msg.executionOutcome?.outcomeUnknown === true
+  );
+}
+
 function planExecutionTools(msg) {
   if (!hasPlanExec(msg)) return [];
   return messageTimeline(msg)
@@ -1025,6 +1061,38 @@ function isLatestTurn(msg) {
 
               <Message v-else-if="msg.role === 'assistant'" align="start">
                 <MessageContent class="gap-3">
+                  <div
+                    v-if="planHasContent(msg.plan) && legacyBoundaryless(msg)"
+                    :class="isLatestTurn(msg) && 'ai-block-in'"
+                  >
+                    <AiPlanCard
+                      :plan="msg.plan"
+                      :confirmed="msg.planConfirmed"
+                      :cancelled="msg.planCancelled"
+                      :superseded="msg.planSuperseded"
+                      :executed="msg.planExecuted"
+                      :stopped="msg.turnStopped"
+                      :failed="msg.planFailed"
+                      :confirming="msg.planConfirming"
+                      :confirmation-blocked="
+                        msg.planConfirmationError?.stage === 'confirmation' &&
+                        !msg.planConfirmed
+                      "
+                      :tool-calls="planExecutionTools(msg)"
+                      :ready="msg.done && !isLoading"
+                      @confirm="confirmPlan"
+                      @cancel="cancelPlan"
+                    />
+                  </div>
+                  <p
+                    v-if="legacyBoundaryless(msg)"
+                    role="status"
+                    class="w-full text-sm text-muted-foreground"
+                    data-testid="ai-boundary-missing"
+                  >
+                    {{ t("ai.executionBoundaryMissing") }}
+                  </p>
+
                   <AiChatProcess
                     :process="proposalView(msg).process"
                     :done="!!msg.done || hasPlanExec(msg)"
@@ -1070,7 +1138,7 @@ function isLatestTurn(msg) {
                   </Alert>
 
                   <div
-                    v-if="planHasContent(msg.plan)"
+                    v-if="planHasContent(msg.plan) && !legacyBoundaryless(msg)"
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard
@@ -1099,6 +1167,18 @@ function isLatestTurn(msg) {
                     :done="!!msg.done"
                     :enter="isLatestTurn(msg)"
                   />
+
+                  <div
+                    v-if="msg.executionOutcome"
+                    role="status"
+                    class="w-full text-sm text-muted-foreground"
+                    data-testid="ai-execution-outcome"
+                  >
+                    <p>{{ executionOutcomeText(msg) }}</p>
+                    <p v-if="executionOutcomeWarns(msg)" class="mt-1">
+                      {{ t("ai.executionOutcomeMayHaveApplied") }}
+                    </p>
+                  </div>
 
                   <MarkdownProse
                     v-if="replyText(msg)"

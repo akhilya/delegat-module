@@ -74,7 +74,7 @@ public class AiController : ControllerBase
 
         _liveTurns.TryStart(
             sessionId, storeId.Value, userId.Value, lastUser,
-            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatAsync(
+            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatEventsAsync(
                 messages, storeId.Value, userId.Value, modelId, pageContext, sessionId, locale, token));
 
         var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
@@ -141,7 +141,11 @@ public class AiController : ControllerBase
     // GET /api/ai/chat/stream?sessionId= — replay + tail a live turn after reload
     [HttpGet("chat/stream")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
-    public async Task<IActionResult> ChatStream([FromQuery] string sessionId, CancellationToken ct)
+    public async Task<IActionResult> ChatStream(
+        [FromQuery] string sessionId,
+        CancellationToken ct,
+        [FromQuery] string? runId = null,
+        [FromQuery] long afterSequence = 0)
     {
         EnsureAiEnabled();
         var userId = _currentUserService.GetUserId();
@@ -156,7 +160,7 @@ public class AiController : ControllerBase
             return NotFound();
 
         PrepareSseHeaders();
-        await WriteSseAsync(turn.Subscribe(ct), ct);
+        await WriteSseAsync(turn.Subscribe(ct, runId, afterSequence), ct);
         return new EmptyResult();
     }
 
@@ -176,24 +180,45 @@ public class AiController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.ProposalId))
             return BadRequest("proposalId required");
 
-        var attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
-            request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+        // Reserve the session slot BEFORE consuming the confirmation token: a busy
+        // session must reject here with the pending plan still consumable.
+        var reservation = _liveTurns.TryReserve(
+            request.SessionId, storeId.Value, userId.Value, request.ProposalId);
+        if (reservation == null)
+            throw ApiException.Conflict(
+                "Plan confirmation was rejected",
+                new { reason = "turn_running" },
+                code: "plan_not_pending_or_mismatched");
+
+        PlanConfirmationAttempt attempt;
+        try
+        {
+            attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
+                request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+        }
+        catch
+        {
+            _liveTurns.ReleaseReservation(reservation);
+            throw;
+        }
         if (attempt.Steps is not { } steps)
+        {
+            _liveTurns.ReleaseReservation(reservation);
             throw ApiException.Conflict(
                 "Plan confirmation was rejected",
                 new { reason = attempt.RejectionReason ?? "unknown" },
                 code: "plan_not_pending_or_mismatched");
+        }
 
         var sessionId = request.SessionId;
         var locale = Request.Headers["X-UI-Locale"].ToString();
-        _liveTurns.TryStart(
-            sessionId, storeId.Value, userId.Value, userMessage: null,
+        // Generation runs on the hub CTS, independent of this HTTP request.
+        _liveTurns.StartReserved(
+            reservation, userMessage: null,
             (sp, token) => sp.GetRequiredService<AiChatService>()
-                .ExecutePlanStreamAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
+                .ExecutePlanEventsAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
 
-        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
-        if (turn == null)
-            return NotFound();
+        var turn = reservation;
 
         PrepareSseHeaders();
         await WriteSseAsync(turn.Subscribe(ct), ct);

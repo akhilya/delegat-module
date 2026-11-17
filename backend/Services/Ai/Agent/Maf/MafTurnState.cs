@@ -22,7 +22,7 @@ internal sealed class MafTurnState
     public required AgentToolHost ToolHost { get; init; }
     public required AiTurnTelemetry Telemetry { get; init; }
     public required ILogger Logger { get; init; }
-    public required Channel<string> Events { get; init; }
+    public required Channel<AiTurnEvent> Events { get; init; }
 
     /// <summary>Provider requests already forwarded downstream (== legacy iteration index).</summary>
     public int RequestsSent { get; set; }

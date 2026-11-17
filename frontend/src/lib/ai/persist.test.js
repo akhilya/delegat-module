@@ -247,6 +247,303 @@ describe("plan result reviews", () => {
   });
 });
 
+describe("canonical turn reconciliation", () => {
+  const parentExecution = (over = {}) => ({
+    dbId: 2,
+    role: "assistant",
+    messageId: "srv-a",
+    runId: "run-exec",
+    phase: "execution",
+    lastEventSequence: 5,
+    messageState: "completed",
+    plan: { proposalId: "A" },
+    planOwnerMessageId: "srv-a",
+    planConfirmed: true,
+    planExecuted: true,
+    planExecStart: 1,
+    done: true,
+    ...over,
+  });
+
+  it("keeps a pending canonical B ahead of its begin-time row", () => {
+    // Local B finished with its recovery plan at seq 10; the stale read only
+    // has the empty running row the server inserted at Begin (seq 0).
+    const localB = {
+      id: "local-b",
+      role: "assistant",
+      messageId: "srv-b",
+      runId: "run-exec",
+      phase: "review",
+      lastEventSequence: 10,
+      messageState: "completed",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      planOwnerMessageId: "srv-b",
+      done: true,
+    };
+    const beginB = {
+      dbId: 3,
+      role: "assistant",
+      messageId: "srv-b",
+      runId: "run-exec",
+      phase: "review",
+      lastEventSequence: 0,
+      messageState: "running",
+      executionProposalId: "A",
+      done: false,
+    };
+    const result = reconcilePlanMessages(
+      [parentExecution(), localB],
+      [parentExecution(), beginB],
+    );
+    assert.equal(result.length, 2);
+    const merged = result[1];
+    assert.equal(merged.plan.proposalId, "B");
+    assert.equal(merged.dbId, 3); // real incoming dbId carried over
+    assert.equal(merged.done, true);
+    assert.equal(canConfirmPlan(merged), true);
+  });
+
+  it("keeps a no-plan canonical reply ahead of its begin row", () => {
+    const local = {
+      id: "r",
+      role: "assistant",
+      messageId: "srv-c",
+      runId: "run-exec",
+      phase: "review",
+      lastEventSequence: 5,
+      messageState: "completed",
+      executionProposalId: "A",
+      content: "Second review.",
+      done: true,
+    };
+    const begin = {
+      dbId: 9,
+      role: "assistant",
+      messageId: "srv-c",
+      runId: "run-exec",
+      phase: "review",
+      lastEventSequence: 0,
+      messageState: "running",
+      executionProposalId: "A",
+      done: false,
+    };
+    const [merged] = reconcilePlanMessages([local], [begin]);
+    assert.equal(merged.content, "Second review.");
+    assert.equal(merged.done, true);
+    assert.equal(merged.dbId, 9);
+  });
+
+  it("preserves a canonical B omitted entirely from the stale read", () => {
+    const localB = {
+      id: "local-b",
+      role: "assistant",
+      messageId: "srv-b",
+      runId: "run-exec",
+      phase: "review",
+      lastEventSequence: 10,
+      messageState: "completed",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      done: true,
+    };
+    const result = reconcilePlanMessages(
+      [parentExecution(), localB],
+      [parentExecution()],
+    );
+    assert.equal(result.length, 2);
+    assert.equal(result[1].messageId, "srv-b");
+    assert.equal(canConfirmPlan(result[1]), true);
+  });
+
+  it("a local execution run supersedes its stale proposal projection", () => {
+    // Same row, different run: the local execution phase is newer than the
+    // stale proposal-phase read - counters are never compared across runs.
+    const local = {
+      id: "a",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-exec",
+      phase: "execution",
+      lastEventSequence: 2,
+      messageState: "running",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecStart: 1,
+      timeline: [
+        { type: "text", text: "Ready." },
+        { type: "tool", id: "t1" },
+      ],
+      done: false,
+    };
+    const stale = {
+      dbId: 2,
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-propose",
+      phase: "chat",
+      lastEventSequence: 40,
+      messageState: "completed",
+      plan: { proposalId: "A" },
+      done: true,
+    };
+    const [merged] = reconcilePlanMessages([local], [stale]);
+    assert.equal(merged.phase, "execution");
+    assert.equal(merged.runId, "run-exec");
+    assert.equal(merged.dbId, 2);
+  });
+
+  it("a server execution terminal supersedes a merely local stopped flag", () => {
+    const local = {
+      id: "a",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-exec",
+      phase: "execution",
+      lastEventSequence: 4,
+      turnStopped: true,
+      done: true,
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+    };
+    const incoming = {
+      dbId: 2,
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-exec",
+      phase: "execution",
+      lastEventSequence: 6,
+      messageState: "completed",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 1,
+      done: true,
+    };
+    const [merged] = reconcilePlanMessages([local], [incoming]);
+    assert.equal(merged.planExecuted, true);
+    assert.equal(merged.messageState, "completed");
+    assert.equal(merged.turnStopped ?? false, false);
+  });
+
+  it("an orphan read projection interrupts a locally running turn", () => {
+    // After process loss the server can only offer the seq-0 begin row
+    // projected as interrupted; the local seq-7 projection keeps its partial
+    // content but the turn must end honestly - no spinner, no confirm.
+    const local = {
+      id: "a",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-exec",
+      phase: "execution",
+      lastEventSequence: 7,
+      messageState: "running",
+      plan: { proposalId: "B" },
+      planConfirmed: true,
+      planExecStart: 1,
+      content: "Partial answer",
+      timeline: [
+        { type: "text", text: "Partial answer" },
+        { type: "tool", id: "t1" },
+      ],
+      toolCalls: [{ id: "t1", name: "platform_request", status: "running" }],
+      done: false,
+    };
+    const orphan = {
+      dbId: 4,
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-exec",
+      phase: "execution",
+      lastEventSequence: 0,
+      messageState: "interrupted",
+      requestError: { code: "ai_turn_interrupted", status: null },
+      plan: { proposalId: "B" },
+      planConfirmed: true,
+      planExecStart: 1,
+      done: true,
+    };
+    const [merged] = reconcilePlanMessages([local], [orphan]);
+    // Partial local text survives; lifecycle is terminal, not running.
+    assert.equal(merged.content, "Partial answer");
+    assert.equal(merged.done, true);
+    assert.equal(merged.messageState, "interrupted");
+    assert.equal(merged.requestError?.code, "ai_turn_interrupted");
+    assert.equal(merged.executionOutcome?.status, "interrupted");
+    assert.equal(merged.executionOutcome?.outcomeUnknown, true);
+    // Running tools close neutrally - never success and never a user stop.
+    assert.equal(merged.toolCalls[0].status, "done");
+    assert.equal(merged.toolCalls[0].summary, "interrupted");
+    assert.equal(merged.turnStopped ?? false, false);
+    assert.equal(merged.planFailed ?? false, false);
+    assert.equal(canConfirmPlan(merged), false);
+  });
+
+  it("a confirmed server terminal drops stale local cancel/supersede flags", () => {
+    const local = {
+      id: "a",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-1",
+      phase: "chat",
+      lastEventSequence: 3,
+      messageState: "completed",
+      plan: { proposalId: "A" },
+      planCancelled: true,
+      planConfirming: true,
+      done: true,
+    };
+    const incoming = {
+      dbId: 2,
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-1",
+      phase: "execution",
+      lastEventSequence: 8,
+      messageState: "completed",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 1,
+      done: true,
+    };
+    const [merged] = reconcilePlanMessages([local], [incoming]);
+    assert.equal(merged.planExecuted, true);
+    assert.equal(merged.planCancelled ?? false, false);
+    assert.equal(merged.planSuperseded ?? false, false);
+    assert.equal(merged.planConfirming, false);
+    assert.equal(canConfirmPlan(merged), false);
+  });
+
+  it("unequal canonical identities never merge via proposal or parent", () => {
+    const localB = {
+      id: "local-b",
+      role: "assistant",
+      messageId: "srv-b",
+      runId: "run-exec",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      done: true,
+    };
+    const foreign = {
+      dbId: 8,
+      role: "assistant",
+      messageId: "srv-z",
+      runId: "run-exec",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      done: true,
+    };
+    const result = reconcilePlanMessages(
+      [parentExecution(), localB],
+      [parentExecution(), foreign],
+    );
+    assert.equal(result.length, 3);
+    assert.equal(result[1].messageId, "srv-b");
+    assert.equal(result[2].messageId, "srv-z");
+  });
+});
+
 describe("plan reconciliation", () => {
   const pending = {
     id: 2,
@@ -482,6 +779,32 @@ describe("mapStoredMessage", () => {
     assert.equal(m.plan.summary, "Next");
     assert.equal(m.timeline.length, 2);
     assert.equal(m.timeline[1].tool.name, "search_catalog");
+  });
+
+  it("a structured execution outcome never becomes timeline prose", () => {
+    // Zero-tool interrupted execution: the short summary lives in
+    // content/executionOutcome only - never synthesized into reply text.
+    const m = mapStoredMessage({
+      dbId: 12,
+      role: "assistant",
+      content: "No steps completed successfully.",
+      toolCallsJson: JSON.stringify({
+        _ui: "assistantTurn",
+        messageId: "srv-exec",
+        phase: "execution",
+        executionOutcome: {
+          status: "failed",
+          summary: "No steps completed successfully.",
+        },
+        plan: { proposalId: "A" },
+        planExecuted: true,
+        tools: [],
+        timeline: [],
+      }),
+    });
+    assert.equal(m.content, "No steps completed successfully.");
+    assert.equal(m.timeline.length, 0);
+    assert.equal(m.executionOutcome.status, "failed");
   });
 
   it("restores a localized API error code on a saved assistant turn", () => {

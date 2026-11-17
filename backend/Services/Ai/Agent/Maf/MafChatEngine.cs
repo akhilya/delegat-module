@@ -35,11 +35,11 @@ public sealed class MafChatEngine(
     public bool IsSelected =>
         string.Equals(configuration[RuntimeFlagKey], EngineName, StringComparison.OrdinalIgnoreCase);
 
-    internal async IAsyncEnumerable<string> RunAsync(
+    internal async IAsyncEnumerable<AiTurnEvent> RunAsync(
         ChatTurnPreparation turn,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var events = Channel.CreateUnbounded<string>();
+        var events = Channel.CreateUnbounded<AiTurnEvent>();
         var state = new MafTurnState
         {
             StoreId = turn.StoreId,
@@ -185,7 +185,7 @@ public sealed class MafChatEngine(
         yield return Sse(SseEventType.Done, new { modelName = turn.Model.modelId });
     }
 
-    private static IEnumerable<string> MapUpdate(
+    private static IEnumerable<AiTurnEvent> MapUpdate(
         AgentResponseUpdate update, bool reviewMode, MafTurnState state)
     {
         // Review mode suppresses streamed text; the terminal round's reply is emitted
@@ -245,5 +245,5 @@ public sealed class MafChatEngine(
         return (advertised, additional);
     }
 
-    private static string Sse(string type, object data) => AiSseTurnRecorder.Format(type, data);
+    private static AiTurnEvent Sse(string type, object data) => AiTurnEvent.Create(type, data);
 }

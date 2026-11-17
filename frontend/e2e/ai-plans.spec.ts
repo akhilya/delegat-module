@@ -313,17 +313,17 @@ async function fixture(
   };
 }
 
-async function reloadPlan(page: Page) {
+async function reloadPlan(page: Page, sid = sessionId) {
   await page.reload();
   await page.waitForFunction(
     () => !!(document.querySelector("#app") as any)?.__vue_app__,
   );
-  await page.evaluate(async (sid) => {
+  await page.evaluate(async (id) => {
     const store = (document.querySelector("#app") as any).__vue_app__.config
       .globalProperties.$store;
-    await store.dispatch("aiChat/loadConversation", sid);
+    await store.dispatch("aiChat/loadConversation", id);
     store.commit("aiChat/setOpen", true);
-  }, sessionId);
+  }, sid);
 }
 
 test("execution stays completed after history reconciliation and cannot be submitted twice", async ({
@@ -709,3 +709,584 @@ for (const width of [1280, 390]) {
     });
   }
 }
+
+
+// --- Canonical typed-event run (M4): stable runId/messageId/sequence ---------
+
+const canonicalSession = "plan-canonical-test";
+const canonicalRun = "run-exec";
+const recoveryPlan = {
+  ...plan,
+  proposalId: "corrected-proposal",
+  summary: "Исправленный расчёт",
+};
+const canonSse = (
+  type: string,
+  data: unknown,
+  meta: {
+    messageId: string;
+    sequence: number;
+    phase?: string;
+    proposalId?: string;
+    dbId?: number;
+  },
+) =>
+  `data: ${JSON.stringify({
+    type,
+    data,
+    runId: canonicalRun,
+    messageId: meta.messageId,
+    sequence: meta.sequence,
+    ...(meta.phase ? { phase: meta.phase } : {}),
+    ...(meta.proposalId ? { proposalId: meta.proposalId } : {}),
+    ...(meta.dbId ? { dbId: meta.dbId } : {}),
+  })}\n\n`;
+
+// One canonical live-turn buffer: execution A (failed), review B (plan),
+// review C (text only) - two distinct reviews sharing parent A.
+const canonicalStream = [
+  canonSse("message_start", {}, {
+    messageId: "srv-a", sequence: 1, phase: "execution", proposalId, dbId: 2,
+  }),
+  canonSse("tool", {
+    id: "exec-1", name: "platform_request", status: "running",
+    input: JSON.stringify(plan.steps[0].args),
+  }, { messageId: "srv-a", sequence: 2 }),
+  canonSse("tool", {
+    id: "exec-1", name: "platform_request", status: "done",
+    result: JSON.stringify({ code: "bad_request", status: 400 }),
+    summary: "HTTP 400",
+  }, { messageId: "srv-a", sequence: 3 }),
+  canonSse("execution_status", {
+    status: "failed", succeeded: 0, total: 1, queued: 0, failed: 1,
+    skipped: 0, summary: "No steps completed successfully.",
+    outcomeUnknown: true,
+  }, { messageId: "srv-a", sequence: 4 }),
+  canonSse("done", { ok: false, failedCount: 1 }, {
+    messageId: "srv-a", sequence: 5,
+  }),
+  canonSse("assistant_start", { executionProposalId: proposalId }, {
+    messageId: "srv-b", sequence: 6, phase: "review",
+  }),
+  canonSse("plan", recoveryPlan, { messageId: "srv-b", sequence: 7 }),
+  canonSse("done", {}, { messageId: "srv-b", sequence: 8 }),
+  canonSse("assistant_start", { executionProposalId: proposalId }, {
+    messageId: "srv-c", sequence: 9, phase: "review",
+  }),
+  canonSse("text", { delta: "Второй отзыв без плана." }, {
+    messageId: "srv-c", sequence: 10,
+  }),
+  canonSse("done", {}, { messageId: "srv-c", sequence: 11 }),
+];
+
+async function canonicalFixture(
+  page: Page,
+  opts: { streamEof?: boolean; staleGet?: boolean; reviewGap?: boolean } = {},
+) {
+  page.on("pageerror", (error) =>
+    console.error("Canonical fixture page error:", error.message),
+  );
+  page.on("requestfailed", (request) =>
+    console.error(
+      "Canonical fixture request failed:",
+      request.url(),
+      request.failure()?.errorText,
+    ),
+  );
+  let executed = !!opts.reviewGap;
+  let stopped = false;
+  let executions = 0;
+  const unexpectedWrites: string[] = [];
+  const expectedWrites = new Set([
+    "POST /ai/execute-plan",
+    "POST /ai/stop",
+    "POST /ai/conversations/messages",
+  ]);
+  const assistantRow = (
+    dbId: number,
+    envelope: Record<string, unknown>,
+    content = "",
+  ) => ({
+    dbId,
+    role: "assistant",
+    content,
+    toolCallsJson: JSON.stringify(envelope),
+  });
+  const conversation = () => ({
+    sessionId: canonicalSession,
+    title: "Канонический диалог",
+    generating: executed && !stopped,
+    messages: [
+      { dbId: 1, role: "user", content: "Обнови выбранные карточки" },
+      assistantRow(
+        2,
+        {
+          _ui: "assistantTurn",
+          messageId: "srv-a",
+          runId: executed ? canonicalRun : "run-propose",
+          phase: executed ? "execution" : "chat",
+          lastEventSequence: executed ? 5 : 3,
+          messageState: "completed",
+          plan,
+          planOwnerMessageId: "srv-a",
+          planConfirmed: executed || undefined,
+          planExecuted: executed || undefined,
+          planFailed: executed || undefined,
+          planExecStart: executed ? 1 : undefined,
+          executionOutcome: executed
+            ? { status: "failed", succeeded: 0, total: 1, failed: 1 }
+            : undefined,
+          tools: executed
+            ? [
+                {
+                  id: "exec-1",
+                  name: "platform_request",
+                  status: "done",
+                  summary: "HTTP 400",
+                  result: '{"code":"bad_request","status":400}',
+                },
+              ]
+            : [],
+          timeline: [
+            { type: "text", text: "Подготовил план." },
+            ...(executed ? [{ type: "tool", id: "exec-1" }] : []),
+          ],
+        },
+        "Подготовил план.",
+      ),
+      // With reviewGap the GET raced review-row insertion: only the
+      // executed canonical A is persisted yet, still generating=true.
+      ...(executed && !opts.reviewGap
+        ? [
+            assistantRow(
+              3,
+              opts.staleGet
+                ? {
+                    // A read that raced persistence: the review row exists but
+                    // only with its begin-time envelope.
+                    _ui: "assistantTurn",
+                    messageId: "srv-b",
+                    runId: canonicalRun,
+                    phase: "review",
+                    lastEventSequence: 0,
+                    messageState: "running",
+                    executionProposalId: proposalId,
+                    tools: [],
+                    timeline: [],
+                  }
+                : {
+                    _ui: "assistantTurn",
+                    messageId: "srv-b",
+                    runId: canonicalRun,
+                    phase: "review",
+                    lastEventSequence: 8,
+                    messageState: "completed",
+                    executionProposalId: proposalId,
+                    plan: recoveryPlan,
+                    planOwnerMessageId: "srv-b",
+                    tools: [],
+                    timeline: [],
+                  },
+            ),
+            ...(opts.staleGet
+              ? []
+              : [
+                  assistantRow(
+                    4,
+                    {
+                      _ui: "assistantTurn",
+                      messageId: "srv-c",
+                      runId: canonicalRun,
+                      phase: "review",
+                      lastEventSequence: stopped ? 12 : 11,
+                      messageState: stopped ? "stopped" : "completed",
+                      executionProposalId: proposalId,
+                      turnStopped: stopped || undefined,
+                      tools: [],
+                      timeline: [
+                        { type: "text", text: "Второй отзыв без плана." },
+                      ],
+                    },
+                    "Второй отзыв без плана.",
+                  ),
+                ]),
+          ]
+        : []),
+    ],
+  });
+  await page.addInitScript(
+    ({ replay, session, eof }) => {
+      localStorage.setItem("delegat.locale", "ru");
+      localStorage.setItem("mobile-warning-dismissed", "1");
+      const chunks = replay.map((line: string) =>
+        new TextEncoder().encode(line),
+      );
+      const listeners = new Set<ReadableStreamDefaultController>();
+      const originalFetch = window.fetch.bind(window);
+      (window as any).__canonicalTest = {
+        emit(line: string) {
+          const chunk = new TextEncoder().encode(line);
+          chunks.push(chunk);
+          for (const listener of listeners) listener.enqueue(chunk);
+          for (const listener of listeners) listener.close();
+          listeners.clear();
+        },
+        attached() {
+          return listeners.size;
+        },
+      };
+      window.fetch = async (input, init) => {
+        const url = new URL(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url,
+          location.href,
+        );
+        if (
+          url.pathname === "/api/ai/chat/stream" &&
+          url.searchParams.get("sessionId") === session
+        ) {
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                for (const chunk of chunks) controller.enqueue(chunk);
+                if (eof) {
+                  controller.close();
+                  return;
+                }
+                listeners.add(controller);
+                init?.signal?.addEventListener(
+                  "abort",
+                  () => {
+                    listeners.delete(controller);
+                    controller.error(
+                      new DOMException("Detached", "AbortError"),
+                    );
+                  },
+                  { once: true },
+                );
+              },
+            }),
+            { headers: { "Content-Type": "text/event-stream" } },
+          );
+        }
+        return originalFetch(input, init);
+      };
+    },
+    {
+      // In the gap the live buffer can only replay A's terminal segment; the
+      // review events arrive later as live emits.
+      replay: opts.reviewGap
+        ? canonicalStream.slice(0, 5)
+        : canonicalStream,
+      session: canonicalSession,
+      eof: !!opts.streamEof,
+    },
+  );
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname
+      .replace(/^\/api/, "")
+      .replace(/\/+$/, "");
+    let body: unknown = [];
+    if (path === "/auth/isAuthenticated") body = { isAuthenticated: true };
+    else if (path === "/auth/me")
+      body = {
+        id: 1,
+        userName: "canonical-test",
+        isAdmin: true,
+        permissions: ["ai.use", "catalog.manage"],
+        selectedStoreId: 1,
+        aiEnabled: true,
+      };
+    else if (path === "/health") body = { status: "healthy", version: "1.6.0" };
+    else if (path === "/users/me/memberships")
+      body = [
+        {
+          id: 1,
+          name: "Test store",
+          onboardingCompletedAt: "2026-01-01T00:00:00Z",
+        },
+      ];
+    else if (path === "/stores")
+      body = {
+        items: [
+          {
+            id: 1,
+            name: "Test store",
+            onboardingCompletedAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        totalCount: 1,
+      };
+    else if (path === "/products") body = { items: [], totalCount: 0 };
+    else if (path === "/ai/models/picker")
+      body = [{ id: 1, name: "Test model", isEnabled: true, isDefault: true }];
+    else if (path === "/ai/hosted-ai") body = { configured: false };
+    else if (path === "/ai/conversations/latest") body = null;
+    else if (path === "/ai/conversations")
+      body = [
+        {
+          sessionId: canonicalSession,
+          title: "Канонический диалог",
+          generating: executed && !stopped,
+          messageCount: 4,
+          lastMessageAt: new Date().toISOString(),
+        },
+      ];
+    else if (path === `/ai/conversations/${canonicalSession}`)
+      body = conversation();
+    else if (path === "/ai/execute-plan") {
+      expect(request.postDataJSON()).toEqual({
+        proposalId,
+        sessionId: canonicalSession,
+      });
+      executions++;
+      executed = true;
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: canonicalStream.join(""),
+      });
+      return;
+    } else if (path === "/ai/stop") {
+      stopped = true;
+      body = { stopped: true };
+    } else if (path === "/ai/conversations/messages") body = { saved: [] };
+    else if (path === "/settings/branding") body = {};
+    else if (request.method() !== "GET") {
+      const write = `${request.method()} ${path}`;
+      if (!expectedWrites.has(write)) unexpectedWrites.push(write);
+    }
+    await route.fulfill({ json: body });
+  });
+  await page.goto("/products");
+  await page.waitForFunction(
+    () => !!(document.querySelector("#app") as any)?.__vue_app__,
+  );
+  await page.evaluate(async (sid) => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store;
+    await store.dispatch("aiChat/loadConversation", sid);
+    store.commit("aiChat/setOpen", true);
+  }, canonicalSession);
+  if (opts.reviewGap) {
+    // A's executed card is the tail; there is no pending plan to execute.
+    await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+  } else {
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toBeEnabled();
+  }
+  return {
+    executions: () => executions,
+    unexpectedWrites,
+    emitReview: () =>
+      page.evaluate(
+        (line) => (window as any).__canonicalTest.emit(line),
+        canonSse(
+          "assistant_start",
+          { executionProposalId: proposalId },
+          { messageId: "srv-b", sequence: 6, phase: "review" },
+        ) +
+          canonSse(
+            "text",
+            { delta: "Отзыв после выполнения." },
+            { messageId: "srv-b", sequence: 7 },
+          ) +
+          canonSse("done", {}, { messageId: "srv-b", sequence: 8 }),
+      ),
+    emitStopped: () =>
+      page.evaluate(
+        (line) => (window as any).__canonicalTest.emit(line),
+        canonSse("stopped", {}, { messageId: "srv-c", sequence: 12 }),
+      ),
+    attachedCount: () =>
+      page.evaluate(() => (window as any).__canonicalTest.attached()),
+  };
+}
+
+for (const width of [1280, 390]) {
+  test(`canonical run replays deduped across reload and keeps review ownership at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await canonicalFixture(page);
+    await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+
+    // Execution A failed; recovery B is a separate confirmable review; C is a
+    // second no-plan review sharing the same parent.
+    const cards = page.getByTestId("ai-plan");
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0).getByRole("status")).toHaveText(
+      "Ошибка выполнения",
+    );
+    await expect(cards.nth(1).getByRole("status")).toHaveText(
+      "Ожидает подтверждения",
+    );
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toHaveCount(1);
+    await expect(page.getByTestId("ai-execution-outcome")).toContainText(
+      "Ни один шаг не завершился успешно.",
+    );
+    await expect(
+      page.getByText("Второй отзыв без плана.", { exact: true }),
+    ).toHaveCount(1);
+    expect(state.executions()).toBe(1);
+
+    // Reload while the review turn is still generating: the live attach
+    // replays the whole canonical buffer; every event is a deduped no-op.
+    await reloadPlan(page, canonicalSession);
+    await expect(page.getByTestId("ai-plan")).toHaveCount(2);
+    await expect(
+      page.getByText("Второй отзыв без плана.", { exact: true }),
+    ).toHaveCount(1);
+    await expect(page.getByTestId("ai-execution-outcome")).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: "Остановить", exact: false }),
+    ).toBeVisible();
+
+    // Stopping the trailing review does not reopen completed A or pending B.
+    await page
+      .getByRole("button", { name: "Остановить", exact: false })
+      .click();
+    await state.emitStopped();
+    await expect(page.getByTestId("ai-turn-stopped")).toHaveCount(1);
+    await expect(cards.nth(0).getByRole("status")).toHaveText(
+      "Ошибка выполнения",
+    );
+    await expect(cards.nth(1).getByRole("status")).toHaveText(
+      "Ожидает подтверждения",
+    );
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toHaveCount(1);
+    expect(state.executions()).toBe(1);
+    expect(state.unexpectedWrites).toEqual([]);
+  });
+}
+
+async function waitForAttachCycle(page: Page) {
+  // The replay attach flips isLoading true then back to false at EOF.
+  await page.waitForFunction(() => {
+    const s = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store.state.aiChat;
+    return s.isLoading === true;
+  });
+  await page.waitForFunction(() => {
+    const s = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store.state.aiChat;
+    return s.isLoading === false;
+  });
+}
+
+test("an all-duplicate canonical replay that EOFs ends cleanly", async ({
+  page,
+}) => {
+  await canonicalFixture(page, { streamEof: true });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(page.getByTestId("ai-plan")).toHaveCount(2);
+
+  // Reload: the attach replays the full buffer (every event a dedupe no-op)
+  // and the stream EOFs at once - a completed review is a clean end, not a
+  // transport error.
+  await reloadPlan(page, canonicalSession);
+  await waitForAttachCycle(page);
+  await expect(page.getByTestId("ai-plan")).toHaveCount(2);
+  await expect(
+    page.getByText("Второй отзыв без плана.", { exact: true }),
+  ).toHaveCount(1);
+  const ui = await page.evaluate(() => {
+    const s = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store.state.aiChat;
+    return {
+      isLoading: s.isLoading,
+      errors: s.messages.filter(
+        (m: { requestError?: unknown; planConfirmationError?: unknown }) =>
+          m.requestError || m.planConfirmationError,
+      ).length,
+    };
+  });
+  expect(ui).toEqual({ isLoading: false, errors: 0 });
+});
+
+test("a stale canonical reload keeps the streamed pending review and its text", async ({
+  page,
+}) => {
+  // The GET only knows the begin-time review row (seq 0, running, no plan);
+  // the canonical reconciliation must keep the finished local projection.
+  await canonicalFixture(page, { streamEof: true, staleGet: true });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(page.getByTestId("ai-plan")).toHaveCount(2);
+
+  await reloadPlan(page, canonicalSession);
+  await waitForAttachCycle(page);
+  const cards = page.getByTestId("ai-plan");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(1).getByRole("status")).toHaveText(
+    "Ожидает подтверждения",
+  );
+  await expect(
+    page.getByText("Второй отзыв без плана.", { exact: true }),
+  ).toHaveCount(1);
+  const ui = await page.evaluate(() => {
+    const s = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store.state.aiChat;
+    return {
+      isLoading: s.isLoading,
+      errors: s.messages.filter(
+        (m: { requestError?: unknown; planConfirmationError?: unknown }) =>
+          m.requestError || m.planConfirmationError,
+      ).length,
+    };
+  });
+  expect(ui).toEqual({ isLoading: false, errors: 0 });
+});
+
+test("canonical attach bridges the executed/review persistence gap", async ({
+  page,
+}) => {
+  // The GET raced the review-row insert: only executed canonical A is
+  // persisted and generating=true. The live attach must NOT bail out on
+  // planExecuted - it replays A's terminal events, then the review segment
+  // arrives live.
+  const state = await canonicalFixture(page, { reviewGap: true });
+  await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store.state.aiChat.isLoading === true,
+  );
+  // The stream is attached before the review emit is injected.
+  await expect
+    .poll(() => state.attachedCount(), { timeout: 5000 })
+    .toBeGreaterThan(0);
+  await state.emitReview();
+  await expect(
+    page.getByText("Отзыв после выполнения.", { exact: true }),
+  ).toHaveCount(1);
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store.state.aiChat.isLoading === false,
+  );
+  const ui = await page.evaluate(() => {
+    const s = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store.state.aiChat;
+    return {
+      reviews: s.messages.filter(
+        (m: { content?: string }) => m.content === "Отзыв после выполнения.",
+      ).length,
+      errors: s.messages.filter(
+        (m: { requestError?: unknown; planConfirmationError?: unknown }) =>
+          m.requestError || m.planConfirmationError,
+      ).length,
+    };
+  });
+  expect(ui).toEqual({ reviews: 1, errors: 0 });
+  // The attach alone must never trigger another execute request.
+  expect(state.executions()).toBe(0);
+  expect(state.unexpectedWrites).toEqual([]);
+});

@@ -19,6 +19,12 @@ import {
 import { applyStagedIds, attachmentMetaList } from "@/lib/ai/attachments";
 import { readSseEvents } from "@/lib/ai/sse";
 import { canConfirmPlan, reconcilePlanMessages } from "@/lib/ai/planState";
+import {
+  assignSavedMessageIds,
+  isCanonicalEvent,
+  isDuplicateTurnEvent,
+  selectTurnMessage,
+} from "@/lib/ai/turnIdentity";
 
 function newSessionId() {
   return randomUuid();
@@ -190,11 +196,36 @@ function buildHistory(messages) {
 async function consumeSse(response, commit, { execution = false } = {}) {
   let completed = false;
   for await (const event of readSseEvents(response)) {
+    // Transport lifecycle bookkeeping runs BEFORE state deduplication: a
+    // duplicate terminal event still completes the leg, and a segment start
+    // resets the in-flight execution flag even when its state projection was
+    // already applied.
     switch (event.type) {
       case "assistant_start":
         completed = false;
         execution = false;
-        commit("startPlanReview", event.data);
+        break;
+      case "done":
+        completed =
+          !execution ||
+          typeof event.data?.ok === "boolean" ||
+          event.data?.cancelled === true ||
+          event.data?.interrupted === true;
+        break;
+      case "stopped":
+      case "interrupted":
+        completed = true;
+        break;
+    }
+    if (commit("acceptStreamEvent", event) === false) continue;
+    switch (event.type) {
+      case "message_start":
+        // Canonical segment binding only - no visible mutation.
+        break;
+      case "assistant_start":
+        // Canonical selection already created the review row; the legacy
+        // mutation only applies to uncanonical (old-server) streams.
+        if (!isCanonicalEvent(event)) commit("startPlanReview", event.data);
         break;
       case "text":
         commit("updateLastAssistantMessage", {
@@ -239,11 +270,10 @@ async function consumeSse(response, commit, { execution = false } = {}) {
       case "plan":
         commit("updateLastAssistantMessage", { plan: event.data });
         break;
+      case "execution_status":
+        commit("setExecutionOutcome", event.data);
+        break;
       case "done": {
-        completed =
-          !execution ||
-          typeof event.data?.ok === "boolean" ||
-          event.data?.cancelled === true;
         if (event.data?.cancelled === true) {
           commit("setTurnStopped");
           break;
@@ -261,7 +291,7 @@ async function consumeSse(response, commit, { execution = false } = {}) {
         break;
       }
       case "stopped":
-        completed = true;
+      case "interrupted":
         commit("setTurnStopped");
         break;
       case "error":
@@ -279,19 +309,51 @@ async function consumeSse(response, commit, { execution = false } = {}) {
   if (!completed) throw new Error("AI stream ended without a terminal result");
 }
 
+/**
+ * The assistant message stream mutations write to. Canonical events select their
+ * target by stable messageId; legacy/local actions fall back to the last message.
+ */
+function selectedAssistant(state) {
+  if (state.streamMessageId != null) {
+    const selected = state.messages.find((m) => m.id === state.streamMessageId);
+    if (selected?.role === "assistant") return selected;
+  }
+  return state.messages.at(-1);
+}
+
 function turnCommit(state, commit) {
   const sessionId = state.sessionId;
   let messageId = state.messages.at(-1)?.id;
   const stream = activeStream;
   return (type, payload) => {
-    if (
-      state.sessionId === sessionId &&
-      activeStream === stream &&
-      state.messages.at(-1)?.id === messageId
-    ) {
+    if (state.sessionId !== sessionId || activeStream !== stream) return false;
+    if (type === "acceptStreamEvent") {
+      const event = payload;
+      if (!isCanonicalEvent(event)) return true; // additive old-server stream
+      const existing = state.messages.find(
+        (m) =>
+          m.messageId === event.messageId ||
+          (!m.messageId &&
+            Number.isInteger(event.dbId) &&
+            m.dbId === event.dbId),
+      );
+      if (existing && isDuplicateTurnEvent(existing, event)) return false;
+      commit("selectStreamMessage", event);
+      if (state.streamMessageId == null) return false;
+      messageId = state.streamMessageId;
+      // Selection already bound the target; the switch treats canonical
+      // message_start/assistant_start as metadata-only.
+      return true;
+    }
+    const canonical = state.streamMessageId != null;
+    const targetExists = canonical
+      ? state.messages.some((m) => m.id === state.streamMessageId)
+      : state.messages.at(-1)?.id === messageId;
+    if (targetExists) {
       commit(type, payload);
       if (type === "startPlanReview") messageId = state.messages.at(-1)?.id;
     }
+    return undefined;
   };
 }
 
@@ -312,6 +374,7 @@ export default {
     fabsHidden: localStorage.getItem("fabs-hidden") === "1",
     selectedModelId: null,
     attachedFiles: [],
+    streamMessageId: null,
   }),
 
   mutations: {
@@ -378,13 +441,16 @@ export default {
     setConversationTitle(state, title) {
       state.conversationTitle = title;
     },
-    applyDbIds(state, saved) {
-      let idx = 0;
-      for (const msg of state.messages) {
-        if (!msg.dbId && idx < saved.length) {
-          msg.dbId = saved[idx++].dbId;
-        }
-      }
+    applyDbIds(state, { saved, submitted }) {
+      assignSavedMessageIds(state.messages, saved, submitted);
+    },
+    selectStreamMessage(state, event) {
+      const selected = selectTurnMessage(state.messages, event);
+      state.streamMessageId = selected?.id ?? null;
+    },
+    setExecutionOutcome(state, outcome) {
+      const selected = selectedAssistant(state);
+      if (selected?.role === "assistant") selected.executionOutcome = outcome;
     },
     updateLastAssistantMessage(
       state,
@@ -402,7 +468,7 @@ export default {
         requestError,
       },
     ) {
-      const last = state.messages[state.messages.length - 1];
+      const last = selectedAssistant(state);
       if (!last || last.role !== "assistant") return;
 
       if (resume) last.done = false;
@@ -446,6 +512,8 @@ export default {
 
       if (plan) {
         last.plan = plan;
+        // The proposing row owns its plan under canonical identity.
+        if (last.messageId) last.planOwnerMessageId = last.messageId;
         if (plan.discardDraftText) {
           last.content = "";
           last.timeline = last.timeline.filter((item) => item.type !== "text");
@@ -454,10 +522,13 @@ export default {
       }
       if (done) {
         last.done = true;
+        // Canonical lifecycle mirrors the server's folded state; an already
+        // terminal server state is never rewritten locally.
+        if (last.messageState === "running") last.messageState = "completed";
       }
     },
     finalizeRunningTools(state) {
-      const last = state.messages[state.messages.length - 1];
+      const last = selectedAssistant(state);
       if (!last) return;
       finalizeTurnTools(last);
     },
@@ -465,17 +536,18 @@ export default {
       state.isStopping = value;
     },
     setTurnStopped(state) {
-      const last = state.messages.at(-1);
+      const last = selectedAssistant(state);
       if (!last || last.role !== "assistant") return;
       last.turnStopped = true;
       last.done = true;
+      if (last.messageState === "running") last.messageState = "stopped";
       last.planConfirming = false;
       last.planConfirmationError = null;
       last.requestError = null;
       finalizeTurnTools(last, { stopped: true });
     },
     resetPlanExecution(state) {
-      const last = state.messages.at(-1);
+      const last = selectedAssistant(state);
       if (!Number.isInteger(last?.planExecStart)) return;
       last.timeline = (last.timeline || []).slice(0, last.planExecStart);
       last.toolCalls = last.timeline
@@ -491,7 +563,7 @@ export default {
       last.done = false;
     },
     updateToolCall(state, { id, name, status, summary, result }) {
-      const last = state.messages[state.messages.length - 1];
+      const last = selectedAssistant(state);
       if (!last) return;
       const tc = last.toolCalls?.find(
         (t) =>
@@ -528,12 +600,14 @@ export default {
     },
     setLoading(state, val) {
       state.isLoading = val;
+      if (!val) state.streamMessageId = null;
     },
     clearMessages(state) {
       state.messages = [];
       state.sessionId = newSessionId();
       state.conversationTitle = null;
       state.attachedFiles = [];
+      state.streamMessageId = null;
     },
     setAttachedFiles(state, files) {
       state.attachedFiles = Array.isArray(files) ? files : [];
@@ -591,13 +665,14 @@ export default {
       planMsg.done = false;
     },
     setLastAssistantRequestError(state, error) {
-      let last = state.messages.at(-1);
+      let last = selectedAssistant(state);
       if (!last || last.role !== "assistant") {
         last = emptyAssistantMessage();
         state.messages.push(last);
       }
       last.requestError = error;
       last.done = true;
+      if (last.messageState === "running") last.messageState = "interrupted";
     },
     setFormReply(state, { messageId, formId, answers }) {
       const id = String(formId ?? "");
@@ -709,7 +784,9 @@ export default {
       if (!state.sessionId) return;
       const sessionId = state.sessionId;
       const last = state.messages.at(-1);
-      if (last?.planExecuted) return;
+      // An executed uncanonical tail can never gain a review segment; a
+      // canonical one may still be the parent of a live review run.
+      if (last?.planExecuted && !last?.messageId) return;
       const stream = beginStream(sessionId);
       stream.started = true;
       commit("setLoading", true);
@@ -737,16 +814,20 @@ export default {
         }
         if (!response.ok) throw await responseError(response);
 
-        commit("preparePlanReplay");
         const current = state.messages.at(-1);
-        if (current?.role === "assistant") {
-          if (current.plan && current.planConfirmed && !current.planExecuted) {
-            commit("resetPlanExecution");
-          } else if (!current.plan) {
-            commit("replaceLastAssistant", emptyAssistantMessage());
+        // Canonical runs are replayed and deduplicated by runId/messageId/sequence:
+        // no plan-replay splice or snapshot reset - that is the legacy path only.
+        if (!state.messages.some((m) => m.messageId)) {
+          commit("preparePlanReplay");
+          if (current?.role === "assistant") {
+            if (current.plan && current.planConfirmed && !current.planExecuted) {
+              commit("resetPlanExecution");
+            } else if (!current.plan) {
+              commit("replaceLastAssistant", emptyAssistantMessage());
+            }
+          } else {
+            commit("addMessage", emptyAssistantMessage());
           }
-        } else {
-          commit("addMessage", emptyAssistantMessage());
         }
         await consumeSse(response, turnCommit(state, commit), {
           execution: !!current?.planConfirmed && !current?.planExecuted,
@@ -1052,6 +1133,15 @@ export default {
             (m.content || m.toolCalls?.length || m.plan || m.turnStopped)),
       );
       if (msgs.length < 1) return;
+      // Capture the exact submitted set as immutable identity proof: response
+      // correlation must only reach these messages, never later placeholders
+      // or appended turns. The request body still serializes the full rows.
+      const submitted = msgs.map((m) => ({
+        id: m.id,
+        dbId: m.dbId,
+        role: m.role,
+        messageId: m.messageId,
+      }));
       const modelName =
         [...msgs].reverse().find((m) => m.modelName)?.modelName ?? null;
       try {
@@ -1065,6 +1155,7 @@ export default {
             toolCallsJson: serializeToolCallsJson(m),
             createdAt: new Date().toISOString(),
             dbId: m.dbId || undefined,
+            clientMessageId: String(m.id),
           })),
         };
         const res = await http.post("/ai/conversations/messages", body);
@@ -1072,7 +1163,7 @@ export default {
           return;
         const saved = res.data?.saved ?? [];
         if (saved.length > 0) {
-          commit("applyDbIds", saved);
+          commit("applyDbIds", { saved, submitted });
           if (!state.conversationTitle) {
             const firstUserMsg = state.messages.find(
               (m) => m.role === "user" && !isHiddenUserMessage(m),

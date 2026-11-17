@@ -119,7 +119,7 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapt
         return resultJson;
     }
 
-    private static string Sse(string type, object data) => AiSseTurnRecorder.Format(type, data);
+    private static AiTurnEvent Sse(string type, object data) => AiTurnEvent.Create(type, data);
 }
 
 /// <summary>
@@ -167,7 +167,7 @@ internal sealed class MafProposePlanAdapter(
         var (proposalId, proposalNonce) = AiPlanProposalToken.Mint(
             state.SessionId ?? "", state.StoreId, state.UserId, stepsHash, expiresAt);
         state.Telemetry.Complete("plan_proposed");
-        state.Events.Writer.TryWrite(AiSseTurnRecorder.Format(SseEventType.Plan, new
+        state.Events.Writer.TryWrite(AiTurnEvent.Create(SseEventType.Plan, new
         {
             proposalId,
             proposalNonce,

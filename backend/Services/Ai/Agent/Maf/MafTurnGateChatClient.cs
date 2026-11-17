@@ -146,7 +146,7 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
             msgs = msgs.Concat([new FrameworkChatMessage(ChatRole.User, AgentChatTurnGate.CloseTaskNowMessage)]);
 
         if (state.CurrentRequestIndex > 0 && !state.ReviewMode)
-            state.Events.Writer.TryWrite(AiSseTurnRecorder.Format(
+            state.Events.Writer.TryWrite(AiTurnEvent.Create(
                 SseEventType.Text, new { delta = "\n\n" }));
 
         state.CurrentRequestInputChars = EstimateInputCharacters(msgs, opts);

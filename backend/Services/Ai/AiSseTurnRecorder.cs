@@ -6,7 +6,11 @@ using Delegat.Services.Ai.Agent;
 
 namespace Delegat.Services.Ai;
 
-/// <summary>Parses buffered cabinet-chat SSE into the same assistant JSON the SPA persists.</summary>
+/// <summary>
+/// Projects canonical typed turn events into the same assistant JSON the SPA persists.
+/// The legacy string-SSE <see cref="Fold"/>/<see cref="FoldTurns"/> remain compatibility
+/// parsers for old fixtures and readers; production hub input is <see cref="FoldEvents"/>.
+/// </summary>
 public static class AiSseTurnRecorder
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -39,19 +43,91 @@ public static class AiSseTurnRecorder
         return turns;
     }
 
+    /// <summary>
+    /// Split one run's typed events into per-message snapshots. A new segment starts
+    /// at assistant_start (the execution/review boundary); message_start belongs to
+    /// the current segment. No empty segment is emitted when assistant_start is first.
+    /// </summary>
+    public static IReadOnlyList<AiSseTurnSnapshot> FoldEventTurns(IEnumerable<AiTurnEvent> events)
+    {
+        var turns = new List<AiSseTurnSnapshot>();
+        var current = new List<AiTurnEvent>();
+        foreach (var item in events)
+        {
+            if (item.Type == SseEventType.AssistantStart && current.Count > 0)
+            {
+                turns.Add(FoldEvents(current));
+                current.Clear();
+            }
+            current.Add(item);
+        }
+        turns.Add(FoldEvents(current));
+        return turns;
+    }
+
+    /// <summary>Parse raw SSE chunks into typed events (compatibility reader for old callers/tests).</summary>
+    public static IEnumerable<AiTurnEvent> ParseEvents(IEnumerable<string> chunks)
+    {
+        foreach (var payload in SsePayloads(chunks))
+        {
+            AiTurnEvent? item = null;
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                var root = document.RootElement;
+                if (root.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String)
+                {
+                    var data = root.TryGetProperty("data", out var d) ? d.Clone() : default;
+                    item = new AiTurnEvent(type.GetString()!, data)
+                    {
+                        RunId = ReadString(root, "runId"),
+                        MessageId = ReadString(root, "messageId"),
+                        Sequence = ReadLong(root, "sequence"),
+                        DbId = ReadInt(root, "dbId"),
+                        Phase = ReadString(root, "phase"),
+                        ProposalId = ReadString(root, "proposalId"),
+                    };
+                }
+            }
+            catch (JsonException)
+            {
+                /* skip malformed payload */
+            }
+            if (item != null) yield return item;
+        }
+    }
+
+    private static string? ReadString(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static long? ReadLong(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt64(out var number) ? number : null;
+
+    private static int? ReadInt(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out var number) ? number : null;
+
     private static JsonDocument? ParsePayload(string payload)
     {
         try { return JsonDocument.Parse(payload); }
         catch (JsonException) { return null; }
     }
 
+    /// <summary>Legacy compatibility entry point: parses raw SSE chunks, then folds typed events.</summary>
     public static AiSseTurnSnapshot Fold(IEnumerable<string> chunks)
+        => FoldEvents(ParseEvents(chunks));
+
+    public static AiSseTurnSnapshot FoldEvents(IEnumerable<AiTurnEvent> events)
     {
         var content = new StringBuilder();
         var tools = new List<Dictionary<string, object?>>();
         var toolById = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
         var timeline = new List<Dictionary<string, object?>>();
         JsonElement? plan = null;
+        JsonElement? executionOutcome = null;
         string? modelName = null;
         string? requestErrorCode = null;
         int? requestErrorStatus = null;
@@ -61,103 +137,142 @@ public static class AiSseTurnRecorder
         var turnStopped = false;
         string? executionProposalId = null;
 
-        foreach (var payload in SsePayloads(chunks))
+        // Canonical ownership, stamped by the live turn - never inferred from
+        // role, content, or the review's parent execution link.
+        string? messageId = null;
+        string? runId = null;
+        int? dbId = null;
+        string? phase = null;
+        long lastEventSequence = 0;
+        var sawEvent = false;
+        var messageState = "running";
+
+        foreach (var item in events)
         {
-            JsonDocument doc;
-            try { doc = JsonDocument.Parse(payload); }
-            catch (JsonException) { continue; }
+            sawEvent = true;
+            var type = item.Type;
+            var data = item.Data;
 
-            using (doc)
+            messageId ??= item.MessageId;
+            runId ??= item.RunId;
+            dbId ??= item.DbId;
+            phase ??= item.Phase;
+            if (item.Sequence is { } sequence && sequence > lastEventSequence)
+                lastEventSequence = sequence;
+
+            switch (type)
             {
-                var root = doc.RootElement;
-                if (!root.TryGetProperty("type", out var typeEl)) continue;
-                var type = typeEl.GetString();
-                if (!root.TryGetProperty("data", out var data))
-                    data = default;
-
-                switch (type)
-                {
-                    case SseEventType.AssistantStart:
-                        if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("executionProposalId", out var parent))
-                            executionProposalId = parent.GetString();
-                        break;
-                    case SseEventType.Text:
-                        if (data.ValueKind == JsonValueKind.Object
-                            && data.TryGetProperty("delta", out var deltaEl))
+                case SseEventType.MessageStart:
+                    break;
+                case SseEventType.AssistantStart:
+                    if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("executionProposalId", out var parent))
+                        executionProposalId = parent.GetString();
+                    break;
+                case SseEventType.Text:
+                    if (data.ValueKind == JsonValueKind.Object
+                        && data.TryGetProperty("delta", out var deltaEl))
+                    {
+                        var delta = deltaEl.GetString();
+                        if (string.IsNullOrEmpty(delta)) break;
+                        content.Append(delta);
+                        AppendText(timeline, delta);
+                    }
+                    break;
+                case SseEventType.Tool:
+                    ApplyTool(data, tools, toolById, timeline);
+                    if (ToolDataFailed(data))
+                        planFailed = true;
+                    break;
+                case SseEventType.Plan:
+                    if (data.ValueKind == JsonValueKind.Object)
+                    {
+                        plan = data.Clone();
+                        if (data.TryGetProperty("discardDraftText", out var discard) && discard.ValueKind == JsonValueKind.True)
                         {
-                            var delta = deltaEl.GetString();
-                            if (string.IsNullOrEmpty(delta)) break;
-                            content.Append(delta);
-                            AppendText(timeline, delta);
+                            content.Clear();
+                            timeline.RemoveAll(item2 => item2.GetValueOrDefault("type") as string == "text");
                         }
-                        break;
-                    case SseEventType.Tool:
-                        ApplyTool(data, tools, toolById, timeline);
-                        if (ToolDataFailed(data))
-                            planFailed = true;
-                        break;
-                    case SseEventType.Plan:
-                        if (data.ValueKind == JsonValueKind.Object)
+                    }
+                    break;
+                case SseEventType.ExecutionStatus:
+                    // Structured outcome, not assistant prose: the status data goes to
+                    // the envelope, the short summary goes to Content only (never a
+                    // Text timeline item, so the UI cannot render it as a reply).
+                    if (data.ValueKind == JsonValueKind.Object)
+                    {
+                        executionOutcome = data.Clone();
+                        if (data.TryGetProperty("summary", out var summaryEl)
+                            && summaryEl.ValueKind == JsonValueKind.String
+                            && summaryEl.GetString() is { Length: > 0 } summaryText)
+                            content.Append(summaryText);
+                    }
+                    break;
+                case SseEventType.Error:
+                    turnEnded = true;
+                    messageState = "interrupted";
+                    if (data.ValueKind == JsonValueKind.Object)
+                    {
+                        if (data.TryGetProperty("code", out var codeEl)
+                            && codeEl.ValueKind == JsonValueKind.String)
+                            requestErrorCode = codeEl.GetString();
+                        if (data.TryGetProperty("status", out var statusEl)
+                            && statusEl.TryGetInt32(out var status))
+                            requestErrorStatus = status;
+                    }
+                    if (data.ValueKind == JsonValueKind.Object
+                        && data.TryGetProperty("message", out var msgEl))
+                    {
+                        var message = msgEl.GetString();
+                        if (string.IsNullOrEmpty(message)) break;
+                        var piece = "\n\n" + message;
+                        content.Append(piece);
+                        AppendText(timeline, piece);
+                    }
+                    break;
+                case SseEventType.Stopped:
+                    turnEnded = true;
+                    turnStopped = true;
+                    messageState = "stopped";
+                    break;
+                case SseEventType.Done:
+                    turnEnded = true;
+                    if (data.ValueKind == JsonValueKind.Object)
+                    {
+                        if (data.TryGetProperty("interrupted", out var interruptedEl)
+                            && interruptedEl.ValueKind == JsonValueKind.True)
+                            messageState = "interrupted";
+                        else if (messageState == "running")
+                            messageState = "completed";
+                        if (data.TryGetProperty("modelName", out var modelEl))
+                            modelName = modelEl.GetString();
+                        if (data.TryGetProperty("ok", out var okEl)
+                            && okEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
                         {
-                            plan = data.Clone();
-                            if (data.TryGetProperty("discardDraftText", out var discard) && discard.ValueKind == JsonValueKind.True)
-                            {
-                                content.Clear();
-                                timeline.RemoveAll(item => item.GetValueOrDefault("type") as string == "text");
-                            }
+                            planExecuted = true;
+                            planFailed |= okEl.ValueKind == JsonValueKind.False;
                         }
-                        break;
-                    case SseEventType.Error:
-                        turnEnded = true;
-                        if (data.ValueKind == JsonValueKind.Object)
+                        if (data.TryGetProperty("cancelled", out var cancelledEl)
+                            && cancelledEl.ValueKind == JsonValueKind.True)
                         {
-                            if (data.TryGetProperty("code", out var codeEl)
-                                && codeEl.ValueKind == JsonValueKind.String)
-                                requestErrorCode = codeEl.GetString();
-                            if (data.TryGetProperty("status", out var statusEl)
-                                && statusEl.TryGetInt32(out var status))
-                                requestErrorStatus = status;
+                            turnStopped = true;
+                            messageState = "stopped";
                         }
-                        if (data.ValueKind == JsonValueKind.Object
-                            && data.TryGetProperty("message", out var msgEl))
-                        {
-                            var message = msgEl.GetString();
-                            if (string.IsNullOrEmpty(message)) break;
-                            var piece = "\n\n" + message;
-                            content.Append(piece);
-                            AppendText(timeline, piece);
-                        }
-                        break;
-                    case SseEventType.Stopped:
-                        turnEnded = true;
-                        turnStopped = true;
-                        break;
-                    case SseEventType.Done:
-                        turnEnded = true;
-                        if (data.ValueKind == JsonValueKind.Object)
-                        {
-                            if (data.TryGetProperty("modelName", out var modelEl))
-                                modelName = modelEl.GetString();
-                            if (data.TryGetProperty("ok", out var okEl)
-                                && okEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                            {
-                                planExecuted = true;
-                                planFailed |= okEl.ValueKind == JsonValueKind.False;
-                            }
-                            if (data.TryGetProperty("cancelled", out var cancelledEl)
-                                && cancelledEl.ValueKind == JsonValueKind.True)
-                                turnStopped = true;
-                        }
-                        break;
-                }
+                    }
+                    else if (messageState == "running")
+                    {
+                        messageState = "completed";
+                    }
+                    break;
             }
         }
 
         if (turnEnded)
             MarkInterruptedTools(tools, turnStopped);
 
+        var identified = messageId != null || runId != null;
         string? toolCallsJson = null;
-        if (plan != null || tools.Count > 0 || requestErrorCode != null || planExecuted || turnStopped || executionProposalId != null)
+        if (identified || plan != null || tools.Count > 0 || requestErrorCode != null
+            || planExecuted || turnStopped || executionProposalId != null || executionOutcome != null)
         {
             var envelope = new Dictionary<string, object?>
             {
@@ -182,6 +297,25 @@ public static class AiSseTurnRecorder
                 envelope["turnStopped"] = true;
             if (executionProposalId != null)
                 envelope["executionProposalId"] = executionProposalId;
+            if (executionOutcome != null)
+                envelope["executionOutcome"] = executionOutcome.Value;
+            if (messageId != null)
+                envelope["messageId"] = messageId;
+            if (runId != null)
+                envelope["runId"] = runId;
+            if (phase != null)
+                envelope["phase"] = phase;
+            if (dbId != null)
+                envelope["dbId"] = dbId.Value;
+            if (sawEvent && (identified || phase != null))
+            {
+                envelope["lastEventSequence"] = lastEventSequence;
+                envelope["messageState"] = messageState;
+            }
+            // The message that proposes a plan owns it; the review parent link must
+            // never be copied into ownership.
+            if (plan != null && messageId != null)
+                envelope["planOwnerMessageId"] = messageId;
             toolCallsJson = JsonSerializer.Serialize(envelope, JsonOpts);
         }
 

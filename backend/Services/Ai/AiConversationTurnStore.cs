@@ -174,6 +174,11 @@ public static class AiConversationTurnStore
     {
         // Stale history sync must not erase a server-owned stop or partial reply.
         if (HasStoppedTurn(storedJson)) return storedJson;
+        // An incompatible review identity must never acquire another message's
+        // plan state - including via an explicit-but-wrong DbId update. A null or
+        // non-envelope stored row has no identity to conflict with.
+        if (storedJson != null && !HasCompatibleReviewIdentity(storedJson, incomingJson))
+            return storedJson;
         var stored = ReadTurn(storedJson);
         if (stored?["plan"] is not JsonObject storedPlan)
         {
@@ -201,6 +206,75 @@ public static class AiConversationTurnStore
     internal static bool HasStoppedTurn(string? json) =>
         ReadTurn(json)?["turnStopped"] is JsonValue value
         && value.TryGetValue<bool>(out var stopped) && stopped;
+
+    /// <summary>Server-minted canonical identity, when the envelope carries a valid one.</summary>
+    internal static string? ReadTurnMessageId(string? json)
+    {
+        var turn = ReadTurn(json);
+        if (turn == null || !turn.TryGetPropertyValue("messageId", out var node) || node == null)
+            return null;
+        return TryReadString(node, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// True when the envelope carries a <c>messageId</c> field at all - valid,
+    /// malformed, or an explicit JSON null. A present-but-invalid canonical
+    /// identity is non-matching, not a missing identity that could fall
+    /// through to content matching.
+    /// </summary>
+    internal static bool HasCanonicalMessageIdField(string? json)
+    {
+        var turn = ReadTurn(json);
+        return turn != null && turn.TryGetPropertyValue("messageId", out _);
+    }
+
+    /// <summary>
+    /// Metadata-only merge for a canonical server-owned row during client history
+    /// sync. Server role/content/tools/timeline/plan/identity/lifecycle fields are
+    /// immutable here; the client may only merge formReplies and monotonic user
+    /// plan decisions (cancelled/superseded), and only while the plan was never
+    /// confirmed or executed and the incoming own proposal matches the stored one.
+    /// </summary>
+    internal static bool MergeCanonicalMetadata(AiConversationMessage row, string? incomingJson)
+    {
+        var stored = ReadTurn(row.toolCallsJson);
+        var incoming = ReadTurn(incomingJson);
+        if (stored == null || incoming == null) return false;
+
+        var changed = false;
+        if (incoming["formReplies"] is JsonObject replies && replies.Count > 0)
+        {
+            var merged = stored["formReplies"] as JsonObject ?? new JsonObject();
+            foreach (var pair in replies)
+                merged[pair.Key] = pair.Value?.DeepClone();
+            stored["formReplies"] = merged;
+            changed = true;
+        }
+
+        var processed = (TryReadBool(stored["planConfirmed"], out var confirmed) && confirmed)
+            || (TryReadBool(stored["planExecuted"], out var executed) && executed);
+        var ownProposal = ReadOwnPlanId(stored, out _);
+        var incomingProposal = ReadOwnPlanId(incoming, out _);
+        if (!processed
+            && ownProposal != null
+            && ownProposal == incomingProposal)
+        {
+            // Only a literal boolean true counts as a user decision; malformed
+            // client flags are ignored rather than throwing.
+            foreach (var key in new[] { "planCancelled", "planSuperseded" })
+            {
+                if (TryReadBool(incoming[key], out var flag) && flag)
+                {
+                    stored[key] = true;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+            row.toolCallsJson = stored.ToJsonString(PlanJsonOptions);
+        return changed;
+    }
 
     /// <summary>
     /// Constrains anonymous (role+content/rebase) matching: a review envelope
@@ -264,6 +338,32 @@ public static class AiConversationTurnStore
             return id;
         invalid = true;
         return null;
+    }
+
+    private static bool TryReadBool(JsonNode? node, out bool value)
+    {
+        value = false;
+        return node is JsonValue v && v.TryGetValue<bool>(out value);
+    }
+
+    private static bool TryReadString(JsonNode? node, out string? value)
+    {
+        value = null;
+        return node is JsonValue v
+            && v.TryGetValue<string>(out value)
+            && !string.IsNullOrEmpty(value);
+    }
+
+    private static bool TryReadLong(JsonNode? node, out long value)
+    {
+        value = 0;
+        return node is JsonValue v && v.TryGetValue<long>(out value);
+    }
+
+    private static bool TryReadDateTime(JsonNode? node, out DateTime value)
+    {
+        value = default;
+        return node is JsonValue v && v.TryGetValue<DateTime>(out value);
     }
 
     private static void RemoveServerPlanFlags(JsonObject turn)
@@ -345,19 +445,21 @@ public static class AiConversationTurnStore
         var turn = ReadTurn(last.toolCallsJson);
         if (turn?["plan"] is not JsonObject plan)
             return Rejected("plan_missing");
-        if (turn["planCancelled"]?.GetValue<bool>() == true)
+        if (TryReadBool(turn["planCancelled"], out var cancelled) && cancelled)
             return Rejected("plan_cancelled");
-        if (turn["planConfirmed"]?.GetValue<bool>() == true || HasExecutedPlan(last.toolCallsJson))
+        if ((TryReadBool(turn["planConfirmed"], out var confirmed) && confirmed)
+            || HasExecutedPlan(last.toolCallsJson))
             return Rejected("already_processed");
-        if (turn["turnStopped"]?.GetValue<bool>() == true)
+        if (TryReadBool(turn["turnStopped"], out var stopped) && stopped)
             return Rejected("plan_cancelled");
-        if (!string.Equals(plan["proposalId"]?.GetValue<string>(), proposalId, StringComparison.Ordinal))
+        if (!TryReadString(plan["proposalId"], out var planProposalId)
+            || !string.Equals(planProposalId, proposalId, StringComparison.Ordinal))
             return Rejected("proposal_mismatch");
         if (plan["steps"] is not JsonArray plannedSteps
             || plannedSteps.Count == 0
-            || plan["stepsHash"]?.GetValue<string>() is not { } expectedHash
-            || plan["createdAtUtc"]?.GetValue<DateTime>() is not { } createdAtUtc
-            || plan["expiresAtUtc"]?.GetValue<DateTime>() is not { } expiresAtUtc)
+            || !TryReadString(plan["stepsHash"], out var expectedHash)
+            || !TryReadDateTime(plan["createdAtUtc"], out var createdAtUtc)
+            || !TryReadDateTime(plan["expiresAtUtc"], out var expiresAtUtc))
             return Rejected("invalid_plan");
 
         var now = DateTime.UtcNow;
@@ -374,7 +476,8 @@ public static class AiConversationTurnStore
                 expectedHash,
                 expiresAtUtc,
                 out var nonce)
-            || !string.Equals(plan["proposalNonce"]?.GetValue<string>(), nonce, StringComparison.Ordinal))
+            || !TryReadString(plan["proposalNonce"], out var storedNonce)
+            || !string.Equals(storedNonce, nonce, StringComparison.Ordinal))
             return Rejected("signature_invalid");
 
         if (await db.aiAgentAudits.AnyAsync(a => a.storeId == storeId
@@ -447,7 +550,11 @@ public static class AiConversationTurnStore
         var mergedTimeline = CloneArray(proposalTimeline);
         foreach (var node in execTimeline)
             mergedTimeline.Add(node?.DeepClone());
-        if (execTimeline.Count == 0 && !string.IsNullOrEmpty(snapshot.Content))
+        // A structured execution outcome keeps its summary in Content only;
+        // it must never turn back into assistant prose on the timeline.
+        if (execTimeline.Count == 0
+            && !string.IsNullOrEmpty(snapshot.Content)
+            && incoming["executionOutcome"] is null)
         {
             mergedTimeline.Add(new JsonObject
             {
@@ -468,7 +575,7 @@ public static class AiConversationTurnStore
             ["plan"] = plan.DeepClone(),
             ["planConfirmed"] = true,
             // EOF, cancellation, or a generic chat done event is not a plan outcome.
-            ["planExecuted"] = incoming["planExecuted"]?.GetValue<bool>() == true,
+            ["planExecuted"] = TryReadBool(incoming["planExecuted"], out var execFlag) && execFlag,
             ["planExecStart"] = proposalTimeline.Count,
         };
         foreach (var metadataKey in new[]
@@ -481,12 +588,16 @@ public static class AiConversationTurnStore
             merged["planFailed"] = true;
         if (incoming["requestError"] is { } requestError)
             merged["requestError"] = requestError.DeepClone();
-        if (incoming["turnStopped"]?.GetValue<bool>() == true)
+        if (TryReadBool(incoming["turnStopped"], out var stoppedFlag) && stoppedFlag)
             merged["turnStopped"] = true;
         if (existing["planCancelled"] is JsonValue cancelled
             && cancelled.TryGetValue<bool>(out var cancelledFlag)
             && cancelledFlag)
             merged["planCancelled"] = true;
+        if (existing["planSuperseded"] is JsonValue superseded
+            && superseded.TryGetValue<bool>(out var supersededFlag)
+            && supersededFlag)
+            merged["planSuperseded"] = true;
 
         var left = last.content ?? "";
         var right = snapshot.Content ?? "";
@@ -614,4 +725,302 @@ public static class AiConversationTurnStore
             .OrderByDescending(m => m.createdAt)
             .ThenByDescending(m => m.Id)
             .FirstOrDefaultAsync(ct);
+
+    // ----- canonical server-owned assistant turns (M4) -----
+    //
+    // The live hub is the single writer for generated assistant output. Every
+    // segment (chat answer, plan execution, result review) binds to exactly one
+    // row: chat/review rows are inserted empty BEFORE the first event, execution
+    // rebinds the confirmed proposal row it targets. Identity lives in the
+    // existing toolCallsJson envelope - no schema change.
+
+    /// <summary>Canonical binding between a live-turn segment and its row.</summary>
+    internal sealed record AiAssistantTurnBinding(
+        int DbId,
+        string MessageId,
+        string RunId,
+        string Phase,
+        string? ProposalId);
+
+    /// <summary>
+    /// Reserve the canonical assistant row for one live-turn segment.
+    /// Chat/review insert an empty running envelope (server minted messageId);
+    /// review additionally records its execution parent link. Execution locates
+    /// the exact confirmed, unexecuted proposal in this conversation - never the
+    /// "last" or "matching content" row - stamps ownership and the honest
+    /// proposal/execution boundary, and never falls back to a different plan.
+    /// </summary>
+    internal static async Task<AiAssistantTurnBinding> BeginAssistantTurnAsync(
+        DataContext db,
+        string sessionId,
+        int storeId,
+        int userId,
+        string runId,
+        string phase,
+        string? proposalId,
+        string? reviewParent,
+        CancellationToken ct,
+        string? messageId = null)
+    {
+        var conv = await EnsureConversationAsync(db, sessionId, storeId, userId, ct);
+
+        if (phase == "execution")
+        {
+            if (string.IsNullOrEmpty(proposalId))
+                throw new InvalidOperationException("Execution turn requires a proposal id.");
+
+            var candidates = await db.aiConversationMessages
+                .Where(m => m.conversationId == conv.Id && m.role == "assistant")
+                .ToListAsync(ct);
+            // Malformed historical rows are skipped, not fatal; a confirmed
+            // unexecuted proposal must resolve to exactly one target.
+            var matches = candidates
+                .Select(row => (row, turn: ReadTurn(row.toolCallsJson)))
+                .Where(x => TryReadString((x.turn?["plan"] as JsonObject)?["proposalId"], out var pid)
+                    && pid == proposalId
+                    && TryReadBool(x.turn!["planConfirmed"], out var confirmed) && confirmed
+                    && !(TryReadBool(x.turn["planExecuted"], out var executed) && executed))
+                .Select(x => x.row)
+                .ToList();
+            if (matches.Count > 1)
+                throw new InvalidOperationException(
+                    $"Execution target '{proposalId}' is ambiguous in this conversation.");
+            var target = matches.FirstOrDefault()
+                ?? throw new InvalidOperationException(
+                    $"Execution target '{proposalId}' was not found in this conversation.");
+
+            var turn = ReadTurn(target.toolCallsJson)
+                ?? throw new InvalidOperationException(
+                    $"Execution target '{proposalId}' has no turn envelope.");
+            if (!TryReadString(turn["messageId"], out var boundMessageId) || boundMessageId == null)
+                boundMessageId = Guid.NewGuid().ToString("N");
+            turn["messageId"] = boundMessageId;
+            turn["runId"] = runId;
+            turn["phase"] = "execution";
+            // This row owns the plan; never copy the review's parent link here.
+            turn["planOwnerMessageId"] = boundMessageId;
+            // The proposal/execution boundary is fixed before any step runs.
+            turn["planExecStart"] = (turn["timeline"] as JsonArray)?.Count ?? 0;
+            turn["messageState"] = "running";
+            turn["lastEventSequence"] = 0;
+            target.toolCallsJson = turn.ToJsonString(PlanJsonOptions);
+            conv.lastMessageAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new AiAssistantTurnBinding(target.Id, boundMessageId, runId, "execution", proposalId);
+        }
+
+        var newMessageId = !string.IsNullOrEmpty(messageId)
+            ? messageId
+            : Guid.NewGuid().ToString("N");
+        var envelope = new JsonObject
+        {
+            ["_ui"] = "assistantTurn",
+            ["tools"] = new JsonArray(),
+            ["timeline"] = new JsonArray(),
+            ["messageId"] = newMessageId,
+            ["runId"] = runId,
+            ["phase"] = phase,
+            ["lastEventSequence"] = 0,
+            ["messageState"] = "running",
+        };
+        if (!string.IsNullOrEmpty(reviewParent))
+            envelope["executionProposalId"] = reviewParent;
+
+        var row = new AiConversationMessage
+        {
+            conversationId = conv.Id,
+            role = "assistant",
+            content = "",
+            toolCallsJson = envelope.ToJsonString(PlanJsonOptions),
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(row);
+        conv.messageCount++;
+        conv.lastMessageAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new AiAssistantTurnBinding(row.Id, newMessageId, runId, phase, null);
+    }
+
+    /// <summary>
+    /// Write the folded snapshot of one segment into its bound row. Lookup is by
+    /// the bound DbId only - never by role, empty content, or row position - and
+    /// the stored messageId/runId must match the binding. A repeat persist of the
+    /// same run with an equal-or-lower sequence is a no-op.
+    /// </summary>
+    internal static async Task PersistAssistantTurnAsync(
+        DataContext db,
+        string sessionId,
+        int storeId,
+        int userId,
+        AiAssistantTurnBinding binding,
+        AiSseTurnSnapshot snapshot,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await PersistAssistantTurnAttemptAsync(db, sessionId, storeId, userId, binding, snapshot, ct);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 2)
+            {
+                // Reload the bound row and re-apply the same snapshot; a tool is
+                // never re-dispatched by a persist retry.
+                db.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private static async Task PersistAssistantTurnAttemptAsync(
+        DataContext db,
+        string sessionId,
+        int storeId,
+        int userId,
+        AiAssistantTurnBinding binding,
+        AiSseTurnSnapshot snapshot,
+        CancellationToken ct)
+    {
+        var conv = await EnsureConversationAsync(db, sessionId, storeId, userId, ct);
+        var row = await db.aiConversationMessages
+            .FirstOrDefaultAsync(m => m.Id == binding.DbId && m.conversationId == conv.Id, ct)
+            ?? throw new InvalidOperationException(
+                $"Canonical assistant row {binding.DbId} missing.");
+
+        var stored = ReadTurn(row.toolCallsJson);
+        if (stored == null
+            || !TryReadString(stored["messageId"], out var storedMessageId)
+            || storedMessageId != binding.MessageId
+            || !TryReadString(stored["runId"], out var storedRunId)
+            || storedRunId != binding.RunId)
+            throw new InvalidOperationException(
+                $"Canonical binding mismatch for row {binding.DbId}.");
+
+        var incoming = ReadTurn(snapshot.ToolCallsJson);
+        // An already-terminal execution row must never be reopened by a later
+        // segment snapshot of the same run (a review-admission failure writes
+        // error events with a higher sequence). Its tools and outcome are final.
+        if (binding.Phase == "execution"
+            && TryReadString(stored["messageState"], out var storedState)
+            && storedState is "completed" or "stopped" or "interrupted")
+            return;
+
+        // Idempotent: an already-fresher stored segment wins over a stale repeat.
+        if (incoming != null
+            && TryReadLong(stored["lastEventSequence"], out var have)
+            && have > 0
+            && TryReadLong(incoming["lastEventSequence"], out var got)
+            && have >= got)
+            return;
+
+        if (!string.IsNullOrEmpty(snapshot.ModelName) && conv.modelName == null)
+            conv.modelName = snapshot.ModelName;
+
+        JsonObject merged;
+        if (binding.Phase == "execution"
+            && TryMergePlanExecution(row, snapshot, out var mergedContent, out var mergedJson))
+        {
+            row.content = mergedContent;
+            merged = ReadTurn(mergedJson)
+                ?? throw new InvalidOperationException(
+                    $"Execution merge produced an unreadable envelope for row {binding.DbId}.");
+            // Canonical identity survives the merge.
+            foreach (var key in new[] { "messageId", "runId", "phase",
+                     "messageState", "lastEventSequence", "executionOutcome", "requestError" })
+            {
+                if (incoming != null && incoming[key] is { } value)
+                    merged[key] = value.DeepClone();
+                else
+                    merged.Remove(key);
+            }
+            merged["messageId"] = binding.MessageId;
+            merged["runId"] = binding.RunId;
+            merged["phase"] = binding.Phase;
+            // The executing row owns its plan; a recovery review additionally
+            // keeps its own parent link - never the parent's ownership fields.
+            merged["planOwnerMessageId"] = binding.MessageId;
+            if (stored["executionProposalId"] is { } parent)
+                merged["executionProposalId"] = parent.DeepClone();
+        }
+        else if (binding.Phase != "execution")
+        {
+            // Chat/review: the server snapshot is authoritative for text, tools,
+            // timeline, the owned proposal, and lifecycle. A snapshot without an
+            // envelope keeps the begin-time identity fields.
+            row.content = snapshot.Content;
+            merged = incoming ?? stored;
+        }
+        else
+        {
+            // The execution target lost its plan between Begin and Persist:
+            // refuse to overwrite the signed envelope with a planless snapshot.
+            throw new InvalidOperationException(
+                $"Execution target {binding.DbId} has no mergeable plan.");
+        }
+
+        // Client-owned formReplies survive a server rewrite.
+        if (stored?["formReplies"] is JsonObject replies && replies.Count > 0)
+            merged["formReplies"] = replies.DeepClone();
+
+        row.toolCallsJson = merged.ToJsonString(PlanJsonOptions);
+        conv.lastMessageAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Read-side projection for a canonical row left at <c>messageState:
+    /// running</c> by a process loss. There is no durable recovery, but the UI
+    /// must report interrupted/unknown rather than spin forever. The stored row
+    /// is never rewritten and nothing replays. A row owned by the currently
+    /// active run (<paramref name="activeRunId"/>) is returned unchanged.
+    /// </summary>
+    internal static string? ProjectTurnForRead(string? persistedJson, string? activeRunId)
+    {
+        var turn = ReadTurn(persistedJson);
+        if (turn == null) return persistedJson;
+        // Only a fully valid canonical envelope is projected; an unknown or
+        // malformed identity is never normalized into canonical territory.
+        if (!TryReadString(turn["messageId"], out var messageId) || messageId == null)
+            return persistedJson;
+        if (!TryReadString(turn["messageState"], out var state) || state != "running")
+            return persistedJson;
+        if (!TryReadString(turn["runId"], out var runId) || runId == null)
+            return persistedJson;
+        if (activeRunId != null
+            && string.Equals(runId, activeRunId, StringComparison.Ordinal))
+            return persistedJson;
+
+        var projected = (JsonObject)turn.DeepClone();
+        projected["messageState"] = "interrupted";
+        projected["requestError"] = new JsonObject
+        {
+            ["code"] = "ai_turn_interrupted",
+            ["status"] = null,
+        };
+        if (projected["tools"] is JsonArray tools)
+        {
+            // Running tools get the neutral interrupted summary/status - never a
+            // planFailed or success inference.
+            foreach (var node in tools)
+            {
+                if (node is not JsonObject tool) continue;
+                if (!TryReadString(tool["status"], out var status)
+                    || status == "running")
+                {
+                    tool["status"] = "done";
+                    tool["summary"] = "interrupted";
+                }
+            }
+        }
+        if (TryReadString(projected["phase"], out var phase) && phase == "execution"
+            && projected["executionOutcome"] == null)
+        {
+            projected["executionOutcome"] = new JsonObject
+            {
+                ["status"] = "interrupted",
+                ["outcomeUnknown"] = true,
+            };
+        }
+        return projected.ToJsonString(PlanJsonOptions);
+    }
 }

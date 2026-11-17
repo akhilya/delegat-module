@@ -197,11 +197,12 @@ public static class AgentToolResult
                     ? $"Шаги плана запущены: {succeeded} из {total}; фоновых операций поставлено в очередь: {queued}. Фактическое завершение отслеживается отдельно."
                     : $"Plan steps started: {succeeded} of {total}; background operations queued: {queued}. Their completion is tracked separately.";
             return ru
-                ? $"Готово: выполнены все шаги ({succeeded} из {total})."
-                : $"All steps finished ({succeeded} of {total}).";
+                ? $"Шаги плана выполнены: {succeeded} из {total}. Результат задачи ещё требует проверки."
+                : $"Plan steps completed: {succeeded} of {total}. The task result still needs verification.";
         }
 
-        var list = string.Join("\n", errors.Select(e => "• " + e));
+        // Human status text never embeds raw tool diagnostics - those stay in the
+        // structured tool results and the review payload.
         var queuedNote = queued > 0
             ? (ru ? $" Фоновых операций поставлено в очередь: {queued}." : $" Background operations queued: {queued}.")
             : "";
@@ -209,8 +210,8 @@ public static class AgentToolResult
         if (succeeded == 0 && queued == 0)
         {
             return ru
-                ? $"Не удалось завершить шаги ({succeeded} из {total}). Ошибка не доказывает, что изменений не было; проверьте результат перед повторным запуском.{queuedNote}\n{list}"
-                : $"No steps completed successfully ({succeeded} of {total}). A failure does not prove that nothing changed; check the outcome before retrying.{queuedNote}\n{list}";
+                ? $"Не удалось завершить шаги ({succeeded} из {total}). Ошибка не доказывает, что изменений не было; проверьте результат перед повторным запуском.{queuedNote}"
+                : $"No steps completed successfully ({succeeded} of {total}). A failure does not prove that nothing changed; check the outcome before retrying.{queuedNote}";
         }
 
         if (queued > 0)
@@ -219,12 +220,12 @@ public static class AgentToolResult
                 ? (ru ? " Часть синхронных шагов уже применена." : " Some synchronous steps were applied.")
                 : "";
             return ru
-                ? $"Не все шаги выполнены ({succeeded} из {total} выполнено или поставлено в очередь).{appliedNote}{queuedNote}\n{list}"
-                : $"Not all steps completed ({succeeded} of {total} completed or queued).{appliedNote}{queuedNote}\n{list}";
+                ? $"Не все шаги выполнены ({succeeded} из {total} выполнено или поставлено в очередь).{appliedNote}{queuedNote}"
+                : $"Not all steps completed ({succeeded} of {total} completed or queued).{appliedNote}{queuedNote}";
         }
 
         return ru
-            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.{queuedNote}\n{list}"
-            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.{queuedNote}\n{list}";
+            ? $"Сделано частично ({succeeded} из {total}). Часть шагов уже применена — проверьте каталог и корзину.{queuedNote}"
+            : $"Partly done ({succeeded} of {total}). Some steps already applied — check the catalog and trash.{queuedNote}";
     }
 }

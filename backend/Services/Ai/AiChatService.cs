@@ -69,7 +69,28 @@ public class AiChatService
         _mafEngine = mafEngine;
     }
 
+    /// <summary>
+    /// Legacy string-SSE wrapper over the typed event stream. Kept with the exact
+    /// old signature for non-hub callers and existing tests.
+    /// </summary>
     public async IAsyncEnumerable<string> StreamChatAsync(
+        List<ChatMessage> userMessages,
+        int storeId,
+        int userId,
+        int? modelId = null,
+        AiPageContext? pageContext = null,
+        string? sessionId = null,
+        string? locale = null,
+        [EnumeratorCancellation] CancellationToken ct = default,
+        bool planResultReview = false)
+    {
+        await foreach (var item in StreamChatEventsAsync(
+            userMessages, storeId, userId, modelId, pageContext,
+            sessionId, locale, ct, planResultReview))
+            yield return item.ToSse();
+    }
+
+    public async IAsyncEnumerable<AiTurnEvent> StreamChatEventsAsync(
         List<ChatMessage> userMessages,
         int storeId,
         int userId,
@@ -85,11 +106,11 @@ public class AiChatService
             var modelConfig = await _modelService.ResolveEnabledModelAsync(modelId, ct);
             if (modelConfig == null)
             {
-                yield return Sse(SseEventType.Error, new
+                yield return Event(SseEventType.Error, new
                 {
                     message = "No connected or enabled AI models. An administrator can add and enable models in Settings → AI.",
                 });
-                yield return Sse(SseEventType.Done, new { });
+                yield return Event(SseEventType.Done, new { });
                 yield break;
             }
 
@@ -141,7 +162,7 @@ public class AiChatService
                 };
 
                 if (iteration > 0 && !planResultReview)
-                    yield return Sse(SseEventType.Text, new { delta = "\n\n" });
+                    yield return Event(SseEventType.Text, new { delta = "\n\n" });
 
                 var textBuffer = new StringBuilder();
                 var toolUses = new List<(string id, string name, string inputJson)>();
@@ -183,7 +204,7 @@ public class AiChatService
                                     {
                                         if (HasVisibleReply(drain.Visible))
                                             spoke = true;
-                                        yield return Sse(SseEventType.Text, new { delta = drain.Visible });
+                                        yield return Event(SseEventType.Text, new { delta = drain.Visible });
                                     }
                                 }
                                 foreach (var invoke in drain.Invokes)
@@ -228,8 +249,8 @@ public class AiChatService
                         roundUsage);
                     turnTelemetry.Complete("provider_error");
                     yield return apiErrorCode is { Length: > 0 }
-                        ? Sse(SseEventType.Error, new { code = apiErrorCode, status = apiErrorStatus })
-                        : Sse(SseEventType.Error, new
+                        ? Event(SseEventType.Error, new { code = apiErrorCode, status = apiErrorStatus })
+                        : Event(SseEventType.Error, new
                         {
                             message = iteration > 0
                                 ? AgentToolResult.TurnInterruptedMessage
@@ -249,7 +270,7 @@ public class AiChatService
                     {
                         if (HasVisibleReply(dsmlTail.Visible))
                             spoke = true;
-                        yield return Sse(SseEventType.Text, new { delta = dsmlTail.Visible });
+                        yield return Event(SseEventType.Text, new { delta = dsmlTail.Visible });
                     }
                 }
                 foreach (var invoke in dsmlTail.Invokes)
@@ -270,7 +291,7 @@ public class AiChatService
                     if (planResultReview && HasVisibleReply(finalText))
                     {
                         spoke = true;
-                        yield return Sse(SseEventType.Text, new { delta = finalText });
+                        yield return Event(SseEventType.Text, new { delta = finalText });
                         break;
                     }
                     if (!planResultReview && passTools != null && !autoContinued && EndsWithUnfulfilledIntent(finalText))
@@ -383,7 +404,7 @@ public class AiChatService
                         var (proposalId, proposalNonce) = AiPlanProposalToken.Mint(
                             sessionId ?? "", storeId, userId, stepsHash, expiresAt);
                         turnTelemetry.Complete("plan_proposed");
-                        yield return Sse(SseEventType.Plan, new
+                        yield return Event(SseEventType.Plan, new
                         {
                             proposalId,
                             proposalNonce,
@@ -435,7 +456,7 @@ public class AiChatService
                         continue;
                     }
 
-                    yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
+                    yield return Event(SseEventType.Tool, new { id = toolId, name = toolName, status = "running", input = toolInputJson });
                     object result;
                     string summary;
                     var toolTimer = Stopwatch.StartNew();
@@ -466,7 +487,7 @@ public class AiChatService
                         toolTimer.ElapsedMilliseconds, toolFailed);
                     var resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                     ToolEffects.TryGetValue(toolName, out var effects);
-                    yield return Sse(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
+                    yield return Event(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
                     toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = resultJson });
                 }
 
@@ -488,13 +509,13 @@ public class AiChatService
 
             if (!spoke && !sawPlan)
             {
-                yield return Sse(SseEventType.Text, new
+                yield return Event(SseEventType.Text, new
                 {
                     delta = AgentChatTurnGate.SilentTurnFallback(localeCode)
                 });
             }
 
-            yield return Sse(SseEventType.Done, new { modelName = model.modelId });
+            yield return Event(SseEventType.Done, new { modelName = model.modelId });
         }
     }
 
@@ -804,7 +825,21 @@ public class AiChatService
         }
     }
 
+    /// <summary>
+    /// Legacy string-SSE wrapper over the typed execution event stream. Kept with
+    /// the exact old signature for non-hub callers and existing tests.
+    /// </summary>
     public async IAsyncEnumerable<string> ExecutePlanStreamAsync(
+        List<PlanStepInput> steps, int storeId, int userId, string proposalId,
+        [EnumeratorCancellation] CancellationToken ct = default,
+        string? sessionId = null, string? locale = null)
+    {
+        await foreach (var item in ExecutePlanEventsAsync(
+            steps, storeId, userId, proposalId, ct, sessionId, locale))
+            yield return item.ToSse();
+    }
+
+    public async IAsyncEnumerable<AiTurnEvent> ExecutePlanEventsAsync(
         List<PlanStepInput> steps, int storeId, int userId, string proposalId,
         [EnumeratorCancellation] CancellationToken ct = default,
         string? sessionId = null, string? locale = null)
@@ -832,7 +867,7 @@ public class AiChatService
                 tool = tool["functions.".Length..];
             var argsJson = step.Args.HasValue ? step.Args.Value.GetRawText() : "{}";
             var stepId = Guid.NewGuid().ToString("N")[..8];
-            yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "running", input = argsJson });
+            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "running", input = argsJson });
 
             string summary;
             bool failed;
@@ -882,7 +917,7 @@ public class AiChatService
                         ? errorClass.GetString()
                         : null,
                 result = resultElement });
-            yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
+            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
             if (failed)
             {
                 errors.Add(summary);
@@ -910,13 +945,26 @@ public class AiChatService
             await _context.SaveChangesAsync(CancellationToken.None);
         }
         // A successful tool exit is not a verified answer to the user's task.
-        // Keep the card's execution status, but let review provide the visible answer.
-        if (followup == null || errors.Count > 0)
-            yield return Sse(SseEventType.Text, new { delta = text });
-        yield return Sse(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count, cancelled });
+        // The structured execution_status event carries the honest outcome; raw
+        // diagnostics stay in the tool results, never in assistant prose.
+        var status = cancelled ? "interrupted" : errors.Count == 0
+            ? queued > 0 ? "queued" : "completed"
+            : ok > 0 ? "partial" : "failed";
+        yield return Event(SseEventType.ExecutionStatus, new
+        {
+            status,
+            succeeded = ok,
+            total = steps.Count,
+            queued,
+            failed = errors.Count,
+            skipped = steps.Count - outcomes.Count,
+            summary = text,
+            outcomeUnknown = cancelled || errors.Count > 0,
+        });
+        yield return Event(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count, cancelled });
         if (cancelled || followup == null) yield break;
         ct.ThrowIfCancellationRequested();
-        yield return Sse(SseEventType.AssistantStart, new { executionProposalId = proposalId });
+        yield return Event(SseEventType.AssistantStart, new { executionProposalId = proposalId });
         var review = JsonSerializer.SerializeToElement(new
         {
             originalUserRequest = followup.UserRequest,
@@ -924,10 +972,10 @@ public class AiChatService
             outcome = new { succeeded = ok, total = steps.Count, queued, failed = errors.Count,
                 skipped = steps.Count - outcomes.Count, results = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(outcomes, _jsonOpts)) },
         }, _jsonOpts);
-        await foreach (var chunk in StreamChatAsync(
+        await foreach (var item in StreamChatEventsAsync(
             [new ChatMessage { role = "user", content = JsonSerializer.SerializeToElement(review.GetRawText()) }], storeId, userId, followup.ModelId,
             sessionId: sessionId, locale: localeCode, ct: ct, planResultReview: true))
-            yield return chunk;
+            yield return item;
     }
 
     private sealed record PlanFollowup(string UserRequest, JsonElement Plan, int? ModelId);
@@ -982,8 +1030,8 @@ public class AiChatService
         return _unfulfilledIntentRegex.IsMatch(tail);
     }
 
-    private static string Sse(string type, object data)
-        => AiSseTurnRecorder.Format(type, data);
+    private static AiTurnEvent Event(string type, object data)
+        => AiTurnEvent.Create(type, data);
 
     private static object ParseJsonOrEmpty(string json)
     {

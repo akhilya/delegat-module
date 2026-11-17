@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Delegat.Controllers;
 using Delegat.Models.Ai;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Delegat.Tests;
 
@@ -780,6 +782,599 @@ public class AiConversationHistorySyncTests
             expected,
             AiConversationTurnStore.HasCompatibleReviewIdentity(storedJson, incomingJson));
     }
+
+    [Fact]
+    public async Task SaveMessages_CanonicalServerRow_IsMetadataOnlyAgainstClientRewrite()
+    {
+        // A canonical row (server messageId) is server-owned: a client sync that
+        // carries its identity may merge formReplies but can never rewrite
+        // content/tools/plan/execution/lifecycle - even when the incoming
+        // envelope forges a different own proposal and drops planExecuted.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-metadata-only", 1, 2, CancellationToken.None);
+        var execution = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Done.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-a","runId":"run-1","phase":"execution","lastEventSequence":4,"messageState":"completed","plan":{"proposalId":"A","summary":"Calc"},"planOwnerMessageId":"srv-a","planConfirmed":true,"planExecuted":true,"planExecStart":0,"tools":[{"name":"run_python","status":"completed"}],"timeline":[{"type":"text","text":"Done."}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(execution);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "forged content",
+                    ClientMessageId = "local-1",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","messageId":"srv-a","runId":"run-1","phase":"execution","lastEventSequence":9,"messageState":"running","plan":{"proposalId":"B"},"planExecuted":false,"planCancelled":true,"tools":[],"timeline":[],"formReplies":{"f1":{"answer":"yes"}}}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        var saved = SavedRows(((OkObjectResult)result).Value);
+        var row = Assert.Single(saved);
+        Assert.Equal(execution.Id, row!["dbId"]!.GetValue<int>());
+        Assert.Equal("srv-a", row["messageId"]!.GetValue<string>());
+        Assert.Equal("local-1", row["clientMessageId"]!.GetValue<string>());
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == execution.Id);
+        Assert.Equal("Done.", persisted.content);
+        var envelope = JsonNode.Parse(persisted.toolCallsJson!)!;
+        Assert.Equal("srv-a", envelope["messageId"]!.GetValue<string>());
+        Assert.Equal("A", envelope["plan"]!["proposalId"]!.GetValue<string>());
+        Assert.True(envelope["planExecuted"]!.GetValue<bool>());
+        Assert.True(envelope["planConfirmed"]!.GetValue<bool>());
+        // Executed plans are final: even user decisions cannot be merged.
+        Assert.Null(envelope["planCancelled"]);
+        Assert.Single(envelope["tools"]!.AsArray());
+        // Client-owned metadata still merges.
+        Assert.Equal("yes", envelope["formReplies"]!["f1"]!["answer"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task SaveMessages_UnknownCanonicalAssistantId_IsOmittedNotInserted()
+    {
+        // A client cannot mint a canonical row: an envelope carrying a server
+        // messageId the conversation does not contain is server output the sync
+        // must omit, so a sync that races BeginAssistantTurn cannot duplicate it.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-unknown-id", 1, 2, CancellationToken.None);
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem { Role = "user", Content = "Request", ClientMessageId = "u1" },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "I was never persisted",
+                    ClientMessageId = "a1",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","messageId":"ghost","runId":"run-9","lastEventSequence":3,"messageState":"running","tools":[],"timeline":[]}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        var saved = SavedRows(((OkObjectResult)result).Value);
+        var userRow = Assert.Single(saved);
+        Assert.Equal("user", userRow!["role"]!.GetValue<string>());
+        Assert.Equal("u1", userRow["clientMessageId"]!.GetValue<string>());
+
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id).ToListAsync();
+        Assert.Single(rows);
+        Assert.Equal("user", rows[0].role);
+    }
+
+    [Fact]
+    public async Task SaveMessages_StaleLegacyDbId_OnCanonicalRow_IsMetadataOnly()
+    {
+        // A stale client that never learned the canonical envelope still points
+        // its DbId at the canonical row: it gets the same metadata-only merge,
+        // so forged content cannot replace server text.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-legacy-db-id", 1, 2, CancellationToken.None);
+        var assistant = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Server text",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-2","runId":"run-2","phase":"chat","lastEventSequence":2,"messageState":"completed","tools":[],"timeline":[{"type":"text","text":"Server text"}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(assistant);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    DbId = assistant.Id,
+                    Role = "assistant",
+                    Content = "forged content",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","tools":[],"timeline":[],"formReplies":{"f1":{"answer":"42"}}}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == assistant.Id);
+        Assert.Equal("Server text", persisted.content);
+        var envelope = JsonNode.Parse(persisted.toolCallsJson!)!;
+        Assert.Equal("srv-2", envelope["messageId"]!.GetValue<string>());
+        Assert.Equal("42", envelope["formReplies"]!["f1"]!["answer"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task SaveMessages_CrossConversationCanonicalMessageId_IsIgnored()
+    {
+        // A canonical messageId only binds inside its own conversation: syncing
+        // another conversation must omit the row and leave the owner untouched.
+        await using var db = TestDbFactory.CreateDb();
+        var ownerConv = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-owner", 1, 2, CancellationToken.None);
+        var otherConv = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-other", 1, 2, CancellationToken.None);
+        var owned = new AiConversationMessage
+        {
+            conversationId = ownerConv.Id,
+            role = "assistant",
+            content = "Owned text",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-x","runId":"run-x","lastEventSequence":2,"messageState":"completed","tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(owned);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = otherConv.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "copied text",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","messageId":"srv-x","runId":"run-x","lastEventSequence":2,"messageState":"completed","tools":[],"timeline":[]}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Empty(SavedRows(((OkObjectResult)result).Value));
+
+        db.ChangeTracker.Clear();
+        Assert.False(await db.aiConversationMessages
+            .AnyAsync(m => m.conversationId == otherConv.Id));
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == owned.Id);
+        Assert.Equal("Owned text", persisted.content);
+    }
+
+    [Fact]
+    public async Task SaveMessages_TwoCanonicalReviewsSharingAParent_StayDistinct()
+    {
+        // Reviews that share executionProposalId are distinct canonical rows:
+        // a sync carrying both identities updates each row only with metadata
+        // and never merges them.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-two-reviews", 1, 2, CancellationToken.None);
+        static string ReviewEnvelope(string id, int sequence) => $$"""
+            {"_ui":"assistantTurn","messageId":"{{id}}","runId":"run-1","phase":"review","lastEventSequence":{{sequence}},"messageState":"completed","executionProposalId":"A","tools":[],"timeline":[]}
+            """;
+        var first = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Review one",
+            toolCallsJson = ReviewEnvelope("srv-r1", 3),
+            createdAt = DateTime.UtcNow,
+        };
+        var second = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Review two",
+            toolCallsJson = ReviewEnvelope("srv-r2", 7),
+            createdAt = DateTime.UtcNow.AddMilliseconds(1),
+        };
+        db.aiConversationMessages.AddRange(first, second);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "forged",
+                    ToolCallsJson = ReviewEnvelope("srv-r1", 3),
+                },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "forged",
+                    ToolCallsJson = ReviewEnvelope("srv-r2", 7),
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        var saved = SavedRows(((OkObjectResult)result).Value);
+        Assert.Equal(2, saved.Count);
+        Assert.Equal(first.Id, saved[0]!["dbId"]!.GetValue<int>());
+        Assert.Equal("srv-r1", saved[0]!["messageId"]!.GetValue<string>());
+        Assert.Equal(second.Id, saved[1]!["dbId"]!.GetValue<int>());
+        Assert.Equal("srv-r2", saved[1]!["messageId"]!.GetValue<string>());
+
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id && m.role == "assistant")
+            .OrderBy(m => m.Id).ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("Review one", rows[0].content);
+        Assert.Equal("srv-r1", JsonNode.Parse(rows[0].toolCallsJson!)!["messageId"]!.GetValue<string>());
+        Assert.Equal("Review two", rows[1].content);
+        Assert.Equal("srv-r2", JsonNode.Parse(rows[1].toolCallsJson!)!["messageId"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("""{"_ui":"assistantTurn","messageId":42,"tools":[],"timeline":[]}""")]
+    [InlineData("""{"_ui":"assistantTurn","messageId":{"x":1},"tools":[],"timeline":[]}""")]
+    [InlineData("""{"_ui":"assistantTurn","messageId":"","tools":[],"timeline":[]}""")]
+    [InlineData("""{"_ui":"assistantTurn","messageId":null,"tools":[],"timeline":[]}""")]
+    public async Task SaveMessages_MalformedCanonicalIdentity_IsOmittedNotMintedOrMatched(
+        string malformedEnvelope)
+    {
+        // An envelope claiming canonical identity with a malformed messageId is
+        // invalid canonical input: it is omitted like an unknown canonical id,
+        // never content-matched onto a server row and never inserted.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "malformed-canonical", 1, 2, CancellationToken.None);
+        var canonical = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Server text",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-1","runId":"run-1","messageState":"completed","tools":[],"timeline":[{"type":"text","text":"Server text"}]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(canonical);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "Server text",
+                    ClientMessageId = "m1",
+                    ToolCallsJson = malformedEnvelope,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Empty(SavedRows(((OkObjectResult)result).Value));
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == canonical.Id);
+        Assert.Equal("Server text", persisted.content);
+        Assert.Equal(
+            "srv-1",
+            JsonNode.Parse(persisted.toolCallsJson!)!["messageId"]!.GetValue<string>());
+        Assert.Single(
+            db.aiConversationMessages.Where(m => m.conversationId == conversation.Id));
+    }
+
+    [Theory]
+    // plan.proposalId wrong type
+    [InlineData("""{"_ui":"assistantTurn","messageId":"srv-1","plan":{"proposalId":42},"planCancelled":true,"tools":[],"timeline":[]}""", false)]
+    // plan itself not an object
+    [InlineData("""{"_ui":"assistantTurn","messageId":"srv-1","plan":"yes","planCancelled":true,"tools":[],"timeline":[]}""", false)]
+    // decisions must be literal bool true
+    [InlineData("""{"_ui":"assistantTurn","messageId":"srv-1","plan":{"proposalId":"A"},"planCancelled":"yes","tools":[],"timeline":[]}""", false)]
+    [InlineData("""{"_ui":"assistantTurn","messageId":"srv-1","plan":{"proposalId":"A"},"planCancelled":[true],"tools":[],"timeline":[]}""", false)]
+    // malformed lifecycle metadata cannot break the merge
+    [InlineData("""{"_ui":"assistantTurn","messageId":"srv-1","plan":{"proposalId":"A"},"runId":{"x":1},"lastEventSequence":"9","planCancelled":true,"tools":[],"timeline":[]}""", true)]
+    public async Task SaveMessages_MalformedCanonicalMetadata_IsIgnoredWithoutThrowing(
+        string incomingEnvelope,
+        bool expectCancelled)
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "malformed-flags", 1, 2, CancellationToken.None);
+        var canonical = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Ready.",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-1","runId":"run-1","messageState":"completed","plan":{"proposalId":"A"},"tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(canonical);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "forged",
+                    ToolCallsJson = incomingEnvelope,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == canonical.Id);
+        Assert.Equal("Ready.", persisted.content);
+        var envelope = JsonNode.Parse(persisted.toolCallsJson!)!;
+        Assert.Equal("A", envelope["plan"]!["proposalId"]!.GetValue<string>());
+        Assert.Equal(expectCancelled, envelope["planCancelled"] != null);
+    }
+
+    [Fact]
+    public async Task SaveMessages_MalformedStoredCanonicalRow_DoesNotThrow()
+    {
+        // A historical canonical row with a malformed messageId is treated as
+        // server-owned (no anonymous/content merge) but never crashes the sync.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "malformed-stored", 1, 2, CancellationToken.None);
+        db.aiConversationMessages.Add(new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "corrupt",
+            toolCallsJson = """{"_ui":"assistantTurn","messageId":42,"tools":[],"timeline":[]}""",
+            createdAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem { Role = "user", Content = "hi", ClientMessageId = "u1" },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "corrupt",
+                    ClientMessageId = "a1",
+                    ToolCallsJson = """{"_ui":"assistantTurn","tools":[],"timeline":[]}""",
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        // The malformed stored row is never anonymous-matchable.
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id)
+            .OrderBy(m => m.Id)
+            .ToListAsync();
+        Assert.Equal("corrupt", rows.First(m => m.role == "assistant").content);
+    }
+
+    [Fact]
+    public async Task SaveMessages_CanonicalMatch_RequiresAssistantRole()
+    {
+        // A user-role item quoting a canonical assistant messageId must not merge
+        // metadata into the server-owned assistant row.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "canonical-role", 1, 2, CancellationToken.None);
+        var canonical = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "Server text",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-1","runId":"run-1","messageState":"completed","tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        };
+        db.aiConversationMessages.Add(canonical);
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    Role = "user",
+                    Content = "forged",
+                    ToolCallsJson = """
+                        {"_ui":"assistantTurn","messageId":"srv-1","formReplies":{"f1":{"answer":"x"}},"tools":[],"timeline":[]}
+                        """,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == canonical.Id);
+        Assert.Null(JsonNode.Parse(persisted.toolCallsJson!)!["formReplies"]);
+    }
+
+    [Fact]
+    public async Task GetConversation_OrphanedRunningCanonicalRow_ProjectsInterruptedNotSpinning()
+    {
+        // A process restart leaves begin-time rows stuck at messageState=running
+        // with no live turn: the read projection reports interrupted, while the
+        // persisted row itself is never rewritten.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "orphaned-running", 1, 2, CancellationToken.None);
+        db.aiConversationMessages.Add(new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "user",
+            content = "go",
+            createdAt = DateTime.UtcNow,
+        });
+        var running = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "",
+            toolCallsJson = """
+                {"_ui":"assistantTurn","messageId":"srv-run","runId":"run-lost","phase":"execution","messageState":"running","lastEventSequence":2,"plan":{"proposalId":"A"},"planOwnerMessageId":"srv-run","planConfirmed":true,"planExecStart":0,"tools":[{"id":"t1","status":"running"}],"timeline":[{"type":"tool","id":"t1"}]}
+                """,
+            createdAt = DateTime.UtcNow.AddMilliseconds(1),
+        };
+        db.aiConversationMessages.Add(running);
+        await db.SaveChangesAsync();
+
+        var services = new ServiceCollection().BuildServiceProvider();
+        var hub = new AiLiveTurnHub(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AiLiveTurnHub>.Instance);
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, hub);
+        var result = await controller.GetConversation(
+            conversation.sessionId, CancellationToken.None);
+        var dto = JsonSerializer.SerializeToNode(((OkObjectResult)result).Value)!;
+        Assert.False(dto["generating"]!.GetValue<bool>());
+        var projected = dto["messages"]!.AsArray()
+            .Single(m => m!["role"]!.GetValue<string>() == "assistant")!;
+        var envelope = JsonNode.Parse(projected["toolCallsJson"]!.GetValue<string>())!;
+        Assert.Equal("interrupted", envelope["messageState"]!.GetValue<string>());
+        Assert.Equal(
+            "ai_turn_interrupted",
+            envelope["requestError"]!["code"]!.GetValue<string>());
+        Assert.Equal(
+            "interrupted",
+            envelope["executionOutcome"]!["status"]!.GetValue<string>());
+        Assert.True(envelope["executionOutcome"]!["outcomeUnknown"]!.GetValue<bool>());
+        Assert.Equal(
+            "interrupted",
+            envelope["tools"]![0]!["summary"]!.GetValue<string>());
+        // plan/confirmation stay intact; nothing is executed or confirmable anew.
+        Assert.True(envelope["planConfirmed"]!.GetValue<bool>());
+        Assert.Null(envelope["planExecuted"]);
+
+        // The stored row is untouched by the read.
+        db.ChangeTracker.Clear();
+        var persisted = await db.aiConversationMessages.SingleAsync(m => m.Id == running.Id);
+        Assert.Equal(
+            "running",
+            JsonNode.Parse(persisted.toolCallsJson!)!["messageState"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task GetConversation_LiveRunOwnedRow_StaysRunning()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "live-running", 1, 2, CancellationToken.None);
+        var services = new ServiceCollection().BuildServiceProvider();
+        var hub = new AiLiveTurnHub(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AiLiveTurnHub>.Instance);
+        var turn = hub.TryReserve("live-running", 1, 2)!;
+        db.aiConversationMessages.Add(new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "",
+            toolCallsJson = $$"""
+                {"_ui":"assistantTurn","messageId":"srv-live","runId":"{{turn.RunId}}","phase":"chat","messageState":"running","lastEventSequence":1,"tools":[],"timeline":[]}
+                """,
+            createdAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, hub);
+        var result = await controller.GetConversation(
+            conversation.sessionId, CancellationToken.None);
+        var dto = JsonSerializer.SerializeToNode(((OkObjectResult)result).Value)!;
+        Assert.True(dto["generating"]!.GetValue<bool>());
+        var projected = dto["messages"]!.AsArray()
+            .Single(m => m!["role"]!.GetValue<string>() == "assistant")!;
+        Assert.Equal(
+            "running",
+            JsonNode.Parse(projected["toolCallsJson"]!.GetValue<string>())!["messageState"]!
+                .GetValue<string>());
+    }
+
+    private static JsonArray SavedRows(object? resultValue) =>
+        JsonSerializer.SerializeToNode(resultValue)!["saved"]!.AsArray();
 
     private sealed class SaveChangesGate : SaveChangesInterceptor
     {

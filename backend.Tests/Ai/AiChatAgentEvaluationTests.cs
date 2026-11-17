@@ -626,7 +626,12 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("Matched: 1", fixture.Client.Requests[1].Messages.Last().Content);
         var turns = AiSseTurnRecorder.FoldTurns(chunks);
         Assert.Equal(2, turns.Count);
-        Assert.Equal("", turns[0].Content);
+        // The structured execution_status summary is not assistant prose: it lives
+        // in the outcome envelope, and no text event may carry it.
+        Assert.Contains("Plan steps completed: 1 of 1", turns[0].Content);
+        Assert.Contains("executionOutcome", turns[0].ToolCallsJson);
+        Assert.DoesNotContain(chunks,
+            c => c.Contains("\"type\":\"text\"") && c.Contains("Plan steps completed"));
         Assert.Equal(table, turns[1].Content);
         Assert.DoesNotContain("planFailed", turns[1].ToolCallsJson);
         Assert.Contains("executionProposalId", turns[1].ToolCallsJson);
@@ -658,7 +663,10 @@ public class AiChatAgentEvaluationTests
         Assert.DoesNotContain("All steps finished", string.Concat(chunks));
         var turns = AiSseTurnRecorder.FoldTurns(chunks);
         Assert.Equal(2, turns.Count);
-        Assert.Equal("", turns[0].Content);
+        Assert.Contains("Plan steps completed: 1 of 1", turns[0].Content);
+        Assert.Contains("executionOutcome", turns[0].ToolCallsJson);
+        Assert.DoesNotContain(chunks,
+            c => c.Contains("\"type\":\"text\"") && c.Contains("Plan steps completed"));
         Assert.Equal("", turns[1].Content);
         using var review = JsonDocument.Parse(turns[1].ToolCallsJson!);
         Assert.NotEqual(proposalId, review.RootElement.GetProperty("plan").GetProperty("proposalId").GetString());
