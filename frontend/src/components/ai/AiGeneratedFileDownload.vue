@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
 import { Download, Loader2 } from "lucide-vue-next";
@@ -12,12 +12,54 @@ const props = defineProps({
   contextKey: { type: String, required: true },
 });
 const store = useStore();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const busy = ref(false);
 const errorKey = ref(null);
+const expired = ref(false);
 let controller;
+let expiryTimer;
 const objectUrls = new Map();
+
+const isTemporary = computed(() => props.file?.kind === "temporary");
+const expiryMs = computed(() => {
+  if (!isTemporary.value || typeof props.file?.expiresAtUtc !== "string")
+    return null;
+  const ms = Date.parse(props.file.expiresAtUtc);
+  return Number.isNaN(ms) ? null : ms;
+});
+const expiresLabel = computed(() => {
+  if (expiryMs.value == null) return "";
+  try {
+    return new Intl.DateTimeFormat(locale.value, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(expiryMs.value));
+  } catch {
+    return new Date(expiryMs.value).toLocaleString();
+  }
+});
+const expiredNow = () => expiryMs.value != null && Date.now() >= expiryMs.value;
+
+function scheduleExpiry() {
+  clearTimeout(expiryTimer);
+  expiryTimer = undefined;
+  if (expiryMs.value == null) {
+    expired.value = false;
+    return;
+  }
+  const delay = expiryMs.value - Date.now();
+  if (delay <= 0) {
+    expired.value = true;
+    return;
+  }
+  expired.value = false;
+  // setTimeout clamps >~24.8 days; re-evaluate on firing instead of polling.
+  expiryTimer = setTimeout(scheduleExpiry, Math.min(delay, 2147483647));
+}
+
 function reset() {
+  clearTimeout(expiryTimer);
+  expiryTimer = undefined;
   controller?.abort();
   controller = null;
   busy.value = false;
@@ -33,15 +75,38 @@ watch(
     () => props.file.downloadUrl,
     () => props.file.fileName,
     () => props.file.length,
+    () => props.file.kind,
+    () => props.file.expiresAtUtc,
     () => props.contextKey,
     () => store.state.isSwitchingStore,
   ],
-  reset,
-  { flush: "sync" },
+  () => {
+    reset();
+    scheduleExpiry();
+  },
+  { flush: "sync", immediate: true },
 );
 onBeforeUnmount(reset);
+
+function failureKey(status) {
+  if ([404, 410].includes(status))
+    return isTemporary.value
+      ? "ai.generatedTemporaryMissing"
+      : "ai.generatedFileDownloadMissing";
+  if ([400, 401, 403].includes(status))
+    return "ai.generatedFileDownloadForbidden";
+  return isTemporary.value
+    ? "ai.generatedTemporaryFailed"
+    : "ai.generatedFileDownloadFailed";
+}
+
 async function download(event) {
   if (busy.value || store.state.isSwitchingStore) return;
+  // Background tabs may lag timers: re-check the deadline synchronously.
+  if (expiredNow()) {
+    expired.value = true;
+    return;
+  }
   const button = event?.currentTarget;
   const restoreFocus =
     button instanceof HTMLElement && document.activeElement === button;
@@ -58,17 +123,15 @@ async function download(event) {
     });
     if (request.signal.aborted || controller !== request) return;
     if (!response.ok) {
-      errorKey.value = [404, 410].includes(response.status)
-        ? "ai.generatedFileDownloadMissing"
-        : [400, 401, 403].includes(response.status)
-          ? "ai.generatedFileDownloadForbidden"
-          : "ai.generatedFileDownloadFailed";
+      errorKey.value = failureKey(response.status);
       return;
     }
     const blob = await response.blob();
     if (request.signal.aborted || controller !== request) return;
     if (blob.size !== file.length) {
-      errorKey.value = "ai.generatedFileDownloadFailed";
+      errorKey.value = isTemporary.value
+        ? "ai.generatedTemporaryFailed"
+        : "ai.generatedFileDownloadFailed";
       return;
     }
     const url = URL.createObjectURL(blob);
@@ -80,7 +143,9 @@ async function download(event) {
     triggerBrowserDownload(url, file.fileName);
   } catch {
     if (!request.signal.aborted && controller === request)
-      errorKey.value = "ai.generatedFileDownloadFailed";
+      errorKey.value = isTemporary.value
+        ? "ai.generatedTemporaryFailed"
+        : "ai.generatedFileDownloadFailed";
   } finally {
     if (controller === request) {
       busy.value = false;
@@ -112,7 +177,7 @@ async function download(event) {
       type="button"
       variant="outline"
       size="sm"
-      :disabled="busy || store.state.isSwitchingStore"
+      :disabled="busy || expired || store.state.isSwitchingStore"
       :aria-busy="busy"
       :aria-label="t('ai.generatedFileDownloadNamed', { name: file.fileName })"
       @click="download"
@@ -127,6 +192,17 @@ async function download(event) {
         busy ? t("ai.generatedFileDownloading") : t("ai.generatedFileDownload")
       }}
     </Button>
+    <p
+      v-if="isTemporary"
+      class="text-xs text-muted-foreground"
+      data-testid="ai-temporary-expiry"
+    >
+      {{
+        expired
+          ? t("ai.generatedTemporaryExpired")
+          : t("ai.generatedTemporaryUntil", { time: expiresLabel })
+      }}
+    </p>
     <p v-if="errorKey" role="alert" class="text-xs text-destructive">
       {{ t(errorKey) }}
     </p>

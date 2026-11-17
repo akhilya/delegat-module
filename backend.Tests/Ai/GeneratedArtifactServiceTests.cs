@@ -1444,6 +1444,295 @@ public class GeneratedArtifactServiceTests
         Assert.Equal(0, lastHttp!.Response.Body.Length);
     }
 
+    // ---- F4: temporary download of a staged generated artifact ----
+
+    [Fact]
+    public async Task OpenDownload_OwnerTwice_ExactBytesNoRowsNoWrites()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: user);
+        await data.SaveAsync();
+
+        var storage = new MemoryStorage();
+        var svc = NewService(db, storage);
+        var csv = Encoding.UTF8.GetBytes("a,b\n1,2\n");
+        var bin = Enumerable.Range(0, 64).Select(i => (byte)i).ToArray();
+        var metas = await svc.StageCapturedAsync(store.Id, user.Id, 1,
+            [Out("r.csv", "text/csv", csv),
+             Out("b.bin", "application/octet-stream", bin)], default);
+        Assert.Equal(
+            GeneratedFileContract.TemporaryDownloadUrl(metas[0].ArtifactId),
+            metas[0].DownloadUrl);
+
+        var rowBefore = await db.aiGeneratedArtifacts.AsNoTracking()
+            .SingleAsync(a => a.Id == metas[0].ArtifactId);
+        var uploadsBefore = storage.UploadCount;
+        foreach (var (meta, bytes) in new[]
+                 {
+                     (metas[0], (byte[])csv), (metas[1], bin),
+                     (metas[0], (byte[])csv), // second open re-reads fresh bytes
+                 })
+        {
+            var file = await svc.OpenDownloadAsync(
+                meta.ArtifactId, store.Id, user.Id, default);
+            var path = ((FileStream)file.Stream).Name;
+            await using (file.Stream)
+            {
+                var read = new MemoryStream();
+                await file.Stream.CopyToAsync(read);
+                Assert.Equal(bytes, read.ToArray());
+                Assert.Equal(meta.FileName, file.FileName);
+                Assert.Equal(meta.ContentType, file.ContentType);
+                Assert.Equal(meta.Length, file.Length);
+            }
+            Assert.False(System.IO.File.Exists(path)); // DeleteOnClose spool is gone
+        }
+        Assert.Equal(uploadsBefore, storage.UploadCount); // a read never writes
+        Assert.Equal(3, storage.ReadCount);
+        // Reads never mutate the persisted row: expiry, hash and length are
+        // byte-identical before and after.
+        var rowAfter = await db.aiGeneratedArtifacts.AsNoTracking()
+            .SingleAsync(a => a.Id == metas[0].ArtifactId);
+        Assert.Equal(rowBefore.expiresAtUtc, rowAfter.expiresAtUtc);
+        Assert.Equal(rowBefore.sha256, rowAfter.sha256);
+        Assert.Equal(rowBefore.length, rowAfter.length);
+        Assert.Empty(await db.files.ToListAsync());
+        Assert.Empty(await db.storeFiles.ToListAsync());
+        Assert.Empty(await db.aiGeneratedArtifactImports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OpenDownload_ForeignScope_NotFoundWithZeroStorageReads()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var owner = data.AddUser();
+        var other = data.AddUser();
+        var admin = data.AddUser();
+        admin.isAdmin = true;
+        var store = data.AddStore(members: [owner, other, admin]);
+        var foreignStore = data.AddStore(members: [owner, other]);
+        await data.SaveAsync();
+
+        var storage = new MemoryStorage();
+        var svc = NewService(db, storage);
+        var metas = await svc.StageCapturedAsync(store.Id, owner.Id, 1,
+            [Out("r.csv", "text/csv", [5])], default);
+        var id = metas[0].ArtifactId;
+
+        // Another member of the SAME store, an admin non-owner, a store the
+        // owner belongs to but that does not own the row, a malformed id and a
+        // non-ready row all collapse to the same not_found with zero reads -
+        // none of them reveals whether a row exists.
+        var capturing = await db.aiGeneratedArtifacts
+            .SingleAsync(a => a.Id == id);
+        capturing.state = "capturing";
+        await db.SaveChangesAsync();
+        var notReady = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(id, store.Id, owner.Id, default));
+        Assert.Equal("ai_artifact_not_found", notReady.Code);
+        capturing.state = "ready";
+        await db.SaveChangesAsync();
+
+        foreach (var (sid, uid) in new[]
+                 {
+                     (store.Id, other.Id), (store.Id, admin.Id),
+                     (foreignStore.Id, owner.Id),
+                 })
+        {
+            var ex = await Assert.ThrowsAsync<GeneratedArtifactException>(
+                () => svc.OpenDownloadAsync(id, sid, uid, default));
+            Assert.Equal("ai_artifact_not_found", ex.Code);
+        }
+        var malformed = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync("not-an-id!", store.Id, owner.Id, default));
+        Assert.Equal("ai_artifact_not_found", malformed.Code);
+        Assert.Equal(0, storage.ReadCount);
+    }
+
+    [Fact]
+    public async Task OpenDownload_IntegrityFailures_FailClosed()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: user);
+        await data.SaveAsync();
+
+        var storage = new MemoryStorage();
+        var svc = NewService(db, storage);
+        var csv = Encoding.UTF8.GetBytes("x,y\n1,2\n");
+        var metas = await svc.StageCapturedAsync(store.Id, user.Id, 1,
+            [Out("r.csv", "text/csv", csv)], default);
+        var meta = metas[0];
+
+        // Expired source: denied before any storage read.
+        var row = await db.aiGeneratedArtifacts.SingleAsync(a => a.Id == meta.ArtifactId);
+        row.expiresAtUtc = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+        var expired = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(meta.ArtifactId, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_expired", expired.Code);
+        Assert.Equal(0, storage.ReadCount);
+        row.expiresAtUtc = DateTime.UtcNow.AddHours(24);
+        await db.SaveChangesAsync();
+
+        // Tampered storage namespace: mismatch before the object is read.
+        row.storageKey = $"{store.Id}/store/{meta.ArtifactId}/r.csv";
+        await db.SaveChangesAsync();
+        var ns = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(meta.ArtifactId, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_mismatch", ns.Code);
+        Assert.Equal(0, storage.ReadCount);
+        row.storageKey = $"{GeneratedArtifactService.StoragePrefix}{store.Id}/{user.Id}/{meta.ArtifactId}/r.csv";
+        await db.SaveChangesAsync();
+
+        // Missing blob, corrupt bytes of equal length and a truncated stream.
+        var key = row.storageKey;
+        storage.StoredObjects.Remove(key);
+        var missing = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(meta.ArtifactId, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_not_found", missing.Code);
+        storage.StoredObjects[key] = csv.Select(b => (byte)(b ^ 0x5A)).ToArray();
+        var corrupt = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(meta.ArtifactId, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_mismatch", corrupt.Code);
+        storage.StoredObjects[key] = csv[..^1];
+        var truncated = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(meta.ArtifactId, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_mismatch", truncated.Code);
+        Assert.Empty(await db.files.ToListAsync());
+        Assert.Empty(await db.aiGeneratedArtifactImports.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OpenDownload_PermissionOrExpiryLostDuringRead_FailsSecondCheck()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: user);
+        await data.SaveAsync();
+
+        var clock = new Clock();
+        var permissions = new StaticPermissions(
+            Permissions.AiUse, Permissions.FilesManage);
+        var storage = new MemoryStorage();
+        var svc = NewService(db, storage, time: clock, permissions: permissions);
+        var metas = await svc.StageCapturedAsync(store.Id, user.Id, 1,
+            [Out("r.csv", "text/csv", [7])], default);
+        var id = metas[0].ArtifactId;
+
+        // ai.use revoked DURING the source read: the post-I/O recheck denies.
+        permissions.Current = [Permissions.AiUse, Permissions.FilesManage];
+        storage.BeforeRead = () =>
+        {
+            permissions.Current = [Permissions.FilesManage];
+            return Task.CompletedTask;
+        };
+        var revoked = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(id, store.Id, user.Id, default));
+        Assert.Equal("forbidden", revoked.Code);
+        Assert.Equal(1, storage.ReadCount);
+
+        // Artifact expiry crossing during the read also denies.
+        permissions.Current = [Permissions.AiUse, Permissions.FilesManage];
+        storage.BeforeRead = () =>
+        {
+            clock.UtcNow = clock.UtcNow.AddHours(25);
+            return Task.CompletedTask;
+        };
+        var stale = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(id, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_expired", stale.Code);
+
+        // Cancellation during the read propagates; the finally disposes the
+        // spool, so no new ai-download temp file survives the failure.
+        var tempBefore = System.IO.Directory.GetFiles(
+            System.IO.Path.GetTempPath(), "ai-download-*.tmp");
+        clock.UtcNow = DateTimeOffset.UtcNow;
+        storage.BeforeRead = () => throw new OperationCanceledException();
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => svc.OpenDownloadAsync(id, store.Id, user.Id, default));
+        var leaked = System.IO.Directory
+            .GetFiles(System.IO.Path.GetTempPath(), "ai-download-*.tmp")
+            .Where(path => !tempBefore.Contains(path, StringComparer.Ordinal));
+        Assert.Empty(leaked);
+
+        // Cleanup removing the row during the read yields not_found.
+        storage.BeforeRead = async () =>
+        {
+            var victim = await db.aiGeneratedArtifacts.SingleAsync(a => a.Id == id);
+            db.aiGeneratedArtifacts.Remove(victim);
+            await db.SaveChangesAsync();
+        };
+        var gone = await Assert.ThrowsAsync<GeneratedArtifactException>(
+            () => svc.OpenDownloadAsync(id, store.Id, user.Id, default));
+        Assert.Equal("ai_artifact_not_found", gone.Code);
+        Assert.Empty(await db.files.ToListAsync());
+        Assert.Empty(await db.storeFiles.ToListAsync());
+        Assert.Empty(await db.aiGeneratedArtifactImports.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OpenDownload_MembershipRemovedMidRead_StaleNavIgnored(
+        bool deactivate)
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using (db)
+        {
+            var data = new TestDataBuilder(db);
+            var user = data.AddUser();
+            var store = data.AddStore(members: user);
+            await data.SaveAsync();
+            var stale = await db.Users.Include(u => u.memberships)
+                .SingleAsync(u => u.Id == user.Id);
+            Assert.Contains(stale.memberships, s => s.Id == store.Id);
+
+            var storage = new MemoryStorage();
+            var svc = NewService(db, storage,
+                permissions: new StaticPermissions(
+                    Permissions.AiUse, Permissions.FilesManage));
+            var metas = await svc.StageCapturedAsync(store.Id, user.Id, 1,
+                [Out("r.csv", "text/csv", [3])], default);
+
+            var dsn = TestDbFactory.SqliteDsn(db);
+            storage.BeforeRead = async () =>
+            {
+                await using var other = TestDbFactory.CreateSqliteContext(dsn);
+                if (deactivate)
+                {
+                    var otherUser = await other.Users
+                        .SingleAsync(u => u.Id == user.Id);
+                    otherUser.isActive = false;
+                }
+                else
+                {
+                    var storeOther = await other.stores.Include(s => s.members)
+                        .SingleAsync(s => s.Id == store.Id);
+                    storeOther.members.Remove(
+                        storeOther.members.Single(m => m.Id == user.Id));
+                }
+                await other.SaveChangesAsync();
+            };
+
+            var ex = await Assert.ThrowsAsync<GeneratedArtifactException>(
+                () => svc.OpenDownloadAsync(
+                    metas[0].ArtifactId, store.Id, user.Id, default));
+            Assert.Equal("forbidden", ex.Code);
+            // The tracked navigation is still stale while the fresh database
+            // authorization already sees the revocation/deactivation.
+            Assert.Contains(stale.memberships, s => s.Id == store.Id);
+            Assert.True(stale.isActive);
+            Assert.Equal(1, storage.ReadCount);
+        }
+    }
+
     private sealed class Clock : TimeProvider
     {
         public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
@@ -1491,8 +1780,10 @@ public class GeneratedArtifactServiceTests
         public UploadBehavior Behavior { get; set; } = UploadBehavior.Ok;
         public Func<Task<bool>>? DeleteOverride { get; set; }
         public Func<Task>? BeforeDestinationUpload { get; set; }
+        public Func<Task>? BeforeRead { get; set; }
         public int UploadCount { get; private set; }
         public int DestinationUploadCount { get; private set; }
+        public int ReadCount { get; private set; }
         public string Bucket => "test";
         public Dictionary<string, byte[]> StoredObjects { get; } = new(StringComparer.Ordinal);
 
@@ -1542,9 +1833,13 @@ public class GeneratedArtifactServiceTests
         }
         public Task<bool> ExistsAsync(string path, CancellationToken ct = default) =>
             Task.FromResult(StoredObjects.ContainsKey(path));
-        public Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default) =>
-            Task.FromResult<Stream?>(
-                StoredObjects.TryGetValue(path, out var bytes) ? new MemoryStream(bytes) : null);
+        public async Task<Stream?> GetStreamAsync(string path, CancellationToken ct = default)
+        {
+            ReadCount++;
+            if (BeforeRead != null)
+                await BeforeRead();
+            return StoredObjects.TryGetValue(path, out var bytes) ? new MemoryStream(bytes) : null;
+        }
         public string GetFullPath(string path) => path;
         public Task StreamToAsync(string path, Stream outputStream, CancellationToken ct = default) =>
             outputStream.WriteAsync(StoredObjects[path], 0, StoredObjects[path].Length, ct);

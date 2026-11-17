@@ -138,6 +138,49 @@ public class AiController : ControllerBase
         await _storage.StreamToAsync(row.storageKey, Response.Body, ct);
     }
 
+    // GET /api/ai/chat/generated-files/{artifactId}/download — temporary download
+    // of a staged generated output by its owning user (24h after capture).
+    // Read-only: no permanent file, receipt or TTL change; Range/HEAD are not
+    // part of the contract and full bytes are always sent.
+    [HttpGet("chat/generated-files/{artifactId}/download")]
+    [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
+    public async Task DownloadGeneratedFile(
+        string artifactId,
+        [FromServices] GeneratedArtifactService artifacts,
+        CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.Pragma = "no-cache";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        EnsureAiEnabled();
+        var userId = _currentUserService.GetUserId();
+        var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
+        if (userId == null || storeId == null)
+            throw ApiException.Unauthorized();
+
+        try
+        {
+            var file = await artifacts.OpenDownloadAsync(
+                artifactId, storeId.Value, userId.Value, ct);
+            await using var stream = file.Stream;
+            StorageDownloadHttp.Prepare(
+                Response, file.ContentType, file.FileName, inline: false, file.Length);
+            await stream.CopyToAsync(Response.Body, ct);
+        }
+        catch (GeneratedArtifactException ex)
+        {
+            var status = ex.Code switch
+            {
+                "forbidden" => StatusCodes.Status403Forbidden,
+                "ai_artifact_expired" => StatusCodes.Status410Gone,
+                "ai_artifact_not_found" => StatusCodes.Status404NotFound,
+                "ai_artifact_mismatch" => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status503ServiceUnavailable,
+            };
+            throw new ApiException("Generated file is unavailable.", status, code: ex.Code);
+        }
+    }
+
     // GET /api/ai/chat/stream?sessionId= — replay + tail a live turn after reload
     [HttpGet("chat/stream")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]

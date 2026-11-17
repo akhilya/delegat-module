@@ -210,8 +210,90 @@ public sealed class GeneratedArtifactService
         }
 
         return rows.Select(row => new GeneratedArtifactMetadata(
-            row.Id, row.fileName, row.contentType, row.length, row.sha256, row.expiresAtUtc))
+            row.Id, row.fileName, row.contentType, row.length, row.sha256,
+            row.expiresAtUtc, GeneratedFileContract.TemporaryDownloadUrl(row.Id)))
             .ToList();
+    }
+
+    /// <summary>
+    /// Temporary download of a staged artifact by its owning user in their
+    /// selected store. Read-only end to end: no rows, receipts, uploads or TTL
+    /// changes. Bytes are spooled and re-hashed, then ownership, membership,
+    /// ai.use, expiry and every immutable metadata field are checked AGAIN
+    /// before the stream is handed out - a revocation or cleanup landing
+    /// mid-read can never leak bytes. No byte is sent until the second check
+    /// succeeds; an HTTP transfer already admitted is not retroactively
+    /// revocable.
+    /// </summary>
+    public async Task<GeneratedArtifactDownload> OpenDownloadAsync(
+        string artifactId, int storeId, int userId, CancellationToken ct)
+    {
+        FileStream? spool = null;
+        try
+        {
+            if (!GeneratedFileContract.IsValidArtifactId(artifactId))
+                throw new GeneratedArtifactException("ai_artifact_not_found");
+            await RequireDownloadActorAsync(storeId, userId, ct);
+            var row = await LoadDownloadAsync(artifactId, storeId, userId, ct);
+            var expectedKey = $"{StoragePrefix}{storeId}/{userId}/{row.Id}/{row.fileName}";
+            if (row.length < 0 || row.length > GeneratedFileContract.MaxFileBytes
+                || !GeneratedFileContract.IsValidSha256(row.sha256)
+                || !string.Equals(row.storageKey, expectedKey, StringComparison.Ordinal))
+                throw new GeneratedArtifactException("ai_artifact_mismatch");
+            var path = Path.Combine(Path.GetTempPath(), $"ai-download-{Guid.NewGuid():N}.tmp");
+            spool = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite,
+                FileShare.None, 81920, FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+            SetPrivateFileMode(path);
+            await using (var input = await _storage.GetStreamAsync(row.storageKey, ct)
+                ?? throw new GeneratedArtifactException("ai_artifact_not_found"))
+            {
+                var (bytes, sha) = await CopyHashingAsync(input, spool,
+                    GeneratedFileContract.MaxFileBytes + 1, ct);
+                if (bytes != row.length
+                    || !string.Equals(sha, row.sha256, StringComparison.Ordinal))
+                    throw new GeneratedArtifactException("ai_artifact_mismatch");
+            }
+            // Fresh database authorization and immutable metadata after object I/O.
+            await RequireDownloadActorAsync(storeId, userId, ct);
+            var fresh = await LoadDownloadAsync(artifactId, storeId, userId, ct);
+            if (fresh.storageKey != row.storageKey || fresh.length != row.length
+                || fresh.sha256 != row.sha256 || fresh.fileName != row.fileName
+                || fresh.contentType != row.contentType
+                || fresh.expiresAtUtc != row.expiresAtUtc)
+                throw new GeneratedArtifactException("ai_artifact_mismatch");
+            spool.Position = 0;
+            var result = new GeneratedArtifactDownload(
+                spool, row.fileName, row.contentType, row.length);
+            spool = null; // ownership transfers to caller; every failure closes/deletes it
+            return result;
+        }
+        catch (GeneratedArtifactException) { throw; }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Generated artifact {ArtifactId} download failed", artifactId);
+            throw new GeneratedArtifactException("ai_artifact_download_failed");
+        }
+        finally { if (spool != null) await spool.DisposeAsync(); }
+    }
+
+    private async Task RequireDownloadActorAsync(int storeId, int userId, CancellationToken ct)
+    {
+        var session = await ResolveActorAsync(storeId, userId, ct);
+        if (!session.Permissions.Contains(Permissions.AiUse, StringComparer.OrdinalIgnoreCase))
+            throw new GeneratedArtifactException("forbidden");
+    }
+
+    private async Task<AiGeneratedArtifact> LoadDownloadAsync(
+        string artifactId, int storeId, int userId, CancellationToken ct)
+    {
+        var row = await _db.aiGeneratedArtifacts.AsNoTracking().SingleOrDefaultAsync(
+            a => a.Id == artifactId && a.storeId == storeId && a.userId == userId, ct);
+        if (row == null || row.state != StateReady)
+            throw new GeneratedArtifactException("ai_artifact_not_found");
+        if (row.expiresAtUtc <= _time.GetUtcNow().UtcDateTime)
+            throw new GeneratedArtifactException("ai_artifact_expired");
+        return row;
     }
 
     /// <summary>

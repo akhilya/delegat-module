@@ -33,8 +33,8 @@ public static class AgentToolResult
             return json;
 
         var important = ExtractImportantFields(json);
-        // Verified generated-artifact handles survive truncation verbatim; they
-        // are the only structural fields promoted out of the payload.
+        // Verified generated-artifact handles survive truncation verbatim beside
+        // the root execution verdict; no other structural fields are promoted.
         var artifacts = ExtractArtifactHandles(json);
         var previewLength = Math.Min(json.Length, MaxModelResultChars);
         while (true)
@@ -60,22 +60,29 @@ public static class AgentToolResult
     {
         // The artifacts field is only emitted when validated handles exist, so
         // non-artifact truncation keeps its historical shape byte for byte.
-        object envelope = artifacts.Count > 0
-            ? new
-            {
-                truncated = true,
-                originalLength,
-                important,
-                artifacts,
-                preview,
-            }
-            : new
+        if (artifacts.Count == 0)
+            return JsonSerializer.Serialize(new
             {
                 truncated = true,
                 originalLength,
                 important,
                 preview,
-            };
+            }, JsonOpts);
+        var envelope = new Dictionary<string, object?>
+        {
+            ["truncated"] = true,
+            ["originalLength"] = originalLength,
+            ["important"] = important,
+            ["artifacts"] = artifacts,
+        };
+        // Keep the root execution verdict beside promoted handles for SSE/history;
+        // never infer a success from artifacts or from a nested text preview.
+        string[] verdictFields =
+            ["exitCode", "error", "errorClass", "outcomeUnknown", "isError", "status"];
+        foreach (var field in verdictFields)
+            if (important.TryGetValue(field, out var value))
+                envelope[field] = value;
+        envelope["preview"] = preview;
         return JsonSerializer.Serialize(envelope, JsonOpts);
     }
 
@@ -163,9 +170,23 @@ public static class AgentToolResult
             || expiryElement.ValueKind != JsonValueKind.String
             || !GeneratedFileContract.TryParseInstant(expiryElement.GetString(), out var expiry))
             return null;
+        // Optional canonical download URL: when present it must be the exact
+        // server route for this artifact id - a foreign or malformed URL
+        // rejects the whole handle rather than passing a substituted link.
+        string? downloadUrl = null;
+        if (element.TryGetProperty("downloadUrl", out var urlElement)
+            && urlElement.ValueKind != JsonValueKind.Null)
+        {
+            if (urlElement.ValueKind != JsonValueKind.String
+                || urlElement.GetString()
+                    != GeneratedFileContract.TemporaryDownloadUrl(idElement.GetString()!))
+                return null;
+            downloadUrl = urlElement.GetString();
+        }
         return new GeneratedArtifactMetadata(
             idElement.GetString()!, nameElement.GetString()!, contentType, length,
-            shaElement.GetString()!, GeneratedFileContract.TruncateToMicroseconds(expiry));
+            shaElement.GetString()!, GeneratedFileContract.TruncateToMicroseconds(expiry),
+            downloadUrl);
     }
 
     private static Dictionary<string, object?> ExtractImportantFields(string json)

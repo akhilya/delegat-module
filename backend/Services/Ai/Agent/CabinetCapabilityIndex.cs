@@ -187,8 +187,9 @@ public sealed class CabinetCapabilityIndex
         if (capability.BinaryResponse)
         {
             return Reject(StatusBinaryDownload, upper, apiPath, capability,
-                "This route returns a binary download; call create_file_download_link "
-                + "with the file id and GET its short-lived downloadUrl instead.",
+                "This route returns binary bytes and cannot be called through platform_request. "
+                + "Use the server-returned downloadUrl in the cabinet download control; "
+                + "create_file_download_link is for persisted product files only.",
                 segments);
         }
         if (capability.Denied)

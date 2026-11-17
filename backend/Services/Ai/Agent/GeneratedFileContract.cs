@@ -19,14 +19,26 @@ public sealed class GeneratedArtifactException(string code, bool outcomeUnknown 
 /// <summary>One file the script declares it will produce inside the sandbox.</summary>
 public sealed record GeneratedOutputSpec(string FileName, string ContentType);
 
-/// <summary>Metadata-only handle returned to the model; never bytes, keys, or paths.</summary>
+/// <summary>
+/// Metadata-only handle returned to the model; never bytes, keys, or paths.
+/// <see cref="DownloadUrl"/> is the server-owned temporary download route for
+/// this artifact; handles minted before the route existed carry null.
+/// </summary>
 public sealed record GeneratedArtifactMetadata(
     string ArtifactId,
     string FileName,
     string ContentType,
     long Length,
     string Sha256,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    string? DownloadUrl = null);
+
+/// <summary>An authorized temporary download: seekable verified spool plus immutable metadata.</summary>
+public sealed record GeneratedArtifactDownload(
+    Stream Stream,
+    string FileName,
+    string ContentType,
+    long Length);
 
 /// <summary>Exact effective arguments of a confirmed import_generated_file step.</summary>
 public sealed record GeneratedFileImportRequest(
@@ -110,6 +122,13 @@ public static class GeneratedFileContract
 
     public static string NewArtifactId() =>
         Guid.NewGuid().ToString("N");
+
+    /// <summary>
+    /// The one canonical temporary download route for a staged artifact. The
+    /// server mints this URL; the model and client never construct it.
+    /// </summary>
+    public static string TemporaryDownloadUrl(string artifactId) =>
+        $"/api/ai/chat/generated-files/{artifactId}/download";
 
     /// <summary>MySQL datetime(6) precision: exact expiry must survive save/reload.</summary>
     public static DateTime TruncateToMicroseconds(DateTime utc) =>

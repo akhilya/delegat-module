@@ -24,7 +24,11 @@ import {
   summarizePlanOperations,
 } from "@/lib/ai/planOperations";
 import { toolResultFailed } from "@/lib/ai/persist";
-import { generatedFileDownloads } from "@/lib/ai/generatedFiles";
+import {
+  declaredGeneratedOutputs,
+  generatedFileDownloads,
+  generatedTemporaryDownloads,
+} from "@/lib/ai/generatedFiles";
 import AiGeneratedFileDownload from "./AiGeneratedFileDownload.vue";
 
 const props = defineProps({
@@ -89,6 +93,18 @@ const generatedExpiryLabel = (imp) => {
 // TTL covers only the source artifact, not the imported file.
 const generatedDownloads = computed(() =>
   generatedFileDownloads(props.plan, props.toolCalls, {
+    confirmed: props.confirmed,
+  }),
+);
+
+// Declared run_python outputs are previewed before confirmation; only a
+// completed, fully verified capture promotes the temporary download control.
+const declaredOutputs = computed(() => declaredGeneratedOutputs(props.plan));
+const declaredOutputNames = computed(() =>
+  declaredOutputs.value.map((spec) => spec.fileName).join(", "),
+);
+const temporaryDownloads = computed(() =>
+  generatedTemporaryDownloads(props.plan, props.toolCalls, {
     confirmed: props.confirmed,
   }),
 );
@@ -254,6 +270,57 @@ const warning = computed(() =>
       >
         {{ t("ai.planAffected") }} {{ plan.affectedCount }}
       </p>
+    </div>
+
+    <div
+      v-if="
+        declaredOutputs.length &&
+        (!confirmed || temporaryDownloads.length) &&
+        !cancelled
+      "
+      class="mx-3 border-t border-border/70 py-1"
+      data-testid="ai-temporary-outputs"
+    >
+      <div v-if="!temporaryDownloads.length" class="min-w-0 py-1.5 text-xs">
+        <span class="font-medium text-foreground">{{
+          t("ai.generatedTemporaryPreview")
+        }}</span>
+        <p class="mt-1 break-words text-sm leading-snug">
+          {{ declaredOutputNames }}
+        </p>
+        <p class="mt-1 text-muted-foreground">
+          {{ t("ai.generatedTemporaryNotice") }}
+        </p>
+      </div>
+      <div
+        v-for="tmp in temporaryDownloads"
+        :key="`temporary-${tmp.artifactId}`"
+        class="min-w-0 py-1.5 text-xs"
+        data-testid="ai-temporary-file"
+      >
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5"
+        >
+          <span class="font-medium text-foreground">{{
+            t("ai.generatedTemporaryTitle")
+          }}</span>
+          <span class="tabular-nums text-muted-foreground">{{
+            t("ai.generatedFileBytes", {
+              count: numberFormat.format(tmp.length ?? 0),
+            })
+          }}</span>
+        </div>
+        <p class="mt-1 break-words text-sm leading-snug">{{ tmp.fileName }}</p>
+        <p
+          class="mt-1 select-all break-all font-mono text-[11px] leading-snug text-muted-foreground"
+        >
+          {{ t("ai.generatedFileHash") }}: {{ tmp.sha256 }}
+        </p>
+        <AiGeneratedFileDownload
+          :file="tmp"
+          :context-key="downloadContextKey"
+        />
+      </div>
     </div>
 
     <div

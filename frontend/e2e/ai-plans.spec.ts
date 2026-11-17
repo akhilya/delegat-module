@@ -295,7 +295,8 @@ async function fixture(
       return;
     } else if (
       /^\/store-storage\/files\/\d+\/download$/.test(path) ||
-      /^\/files\/\d+\/download$/.test(path)
+      /^\/files\/\d+\/download$/.test(path) ||
+      /^\/ai\/chat\/generated-files\/[a-f0-9]{32}\/download$/.test(path)
     ) {
       downloadGets++;
       await downloadResponder(route);
@@ -1502,7 +1503,10 @@ async function confirmAndSeeDownload(page: Page) {
 }
 
 async function shot(page: Page, name: string) {
-  await page.screenshot({ path: `artifacts/f3-screenshots/${name}.png` });
+  await page.screenshot({
+    path: `artifacts/f3-screenshots/${name}.png`,
+    animations: "disabled",
+  });
 }
 
 for (const destination of ["store", "product"] as const) {
@@ -1806,5 +1810,439 @@ test("generated-file download absent for a failed import", async ({
   await page.getByRole("button", { name: "Выполнить", exact: true }).click();
   await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
   await reloadPlan(page);
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+});
+
+// ---- F4: temporary generated-output download control ----
+
+const BIN_BYTES = Buffer.from([0, 1, 2, 3, 250, 251]);
+const TMP_ID = "c".repeat(32);
+const TMP_ID2 = "e".repeat(32);
+const TMP_SHA = "d".repeat(64);
+const TMP_SHA2 = "f".repeat(64);
+const TMP_URL = `/api/ai/chat/generated-files/${TMP_ID}/download`;
+const TMP_URL2 = `/api/ai/chat/generated-files/${TMP_ID2}/download`;
+
+function generatedTemporary({
+  binary = true,
+  expiresInMs = 24 * 3600 * 1000,
+  url = TMP_URL,
+  dropUrl = false,
+  outcomeUnknown = false,
+}: {
+  binary?: boolean;
+  expiresInMs?: number;
+  url?: string | null;
+  dropUrl?: boolean;
+  outcomeUnknown?: boolean;
+} = {}) {
+  const expiresAtUtc = new Date(Date.now() + expiresInMs).toISOString();
+  const outputs = [
+    { fileName: "r.csv", contentType: "text/csv" },
+    ...(binary
+      ? [{ fileName: "b.bin", contentType: "application/octet-stream" }]
+      : []),
+  ];
+  const artifact = (
+    artifactId: string,
+    fileName: string,
+    contentType: string,
+    length: number,
+    sha256: string,
+    downloadUrl: string | null,
+  ) => ({
+    artifactId,
+    fileName,
+    contentType,
+    length,
+    sha256,
+    expiresAtUtc,
+    ...(dropUrl ? {} : { downloadUrl }),
+  });
+  const importPlan = {
+    proposalId,
+    summary: "Рассчитать отчёт",
+    steps: [
+      {
+        tool: "run_python",
+        description: "Рассчитать отчёт",
+        args: { code: "print(1)", outputs },
+      },
+    ],
+  };
+  const importResult = {
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+    error: null,
+    ...(outcomeUnknown ? { outcomeUnknown: true } : {}),
+    artifacts: [
+      artifact(TMP_ID, "r.csv", "text/csv", CSV_BYTES.length, TMP_SHA, url),
+      ...(binary
+        ? [
+            artifact(
+              TMP_ID2,
+              "b.bin",
+              "application/octet-stream",
+              BIN_BYTES.length,
+              TMP_SHA2,
+              TMP_URL2,
+            ),
+          ]
+        : []),
+    ],
+  };
+  return { importPlan, importResult };
+}
+
+const okTemporary =
+  () => async (route: any) => {
+    const url = route.request().url();
+    const isBin = url.includes(TMP_ID2);
+    await route.fulfill({
+      status: 200,
+      contentType: isBin ? "application/octet-stream" : "text/csv",
+      headers: {
+        "Content-Disposition": `attachment; filename="${isBin ? "b.bin" : "r.csv"}"`,
+      },
+      body: isBin ? BIN_BYTES : CSV_BYTES,
+    });
+  };
+
+const temporaryRows = (page: Page) => page.getByTestId("ai-temporary-file");
+const temporaryButton = (page: Page, index = 0) =>
+  temporaryRows(page).nth(index).getByRole("button");
+
+async function confirmAndSeeTemporary(page: Page, count = 1) {
+  await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(temporaryRows(page)).toHaveCount(count);
+}
+
+for (const viewport of [
+  { width: 1280, height: 800, tag: "desktop" },
+  { width: 390, height: 844, tag: "mobile" },
+]) {
+  test(`temporary-output download works after capture at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    const { importPlan, importResult } = generatedTemporary();
+    const state = await fixture(page, "success", {
+      importPlan,
+      importResult,
+    });
+    state.setDownload(okTemporary());
+    await page.setViewportSize(viewport);
+
+    // Before confirmation: the declaration and 24-hour notice are visible,
+    // but no download control exists yet.
+    const preview = page.getByTestId("ai-temporary-outputs");
+    await expect(preview).toContainText("Временные результаты расчёта");
+    await expect(preview).toContainText("r.csv");
+    await expect(preview).toContainText("b.bin");
+    await expect(preview).toContainText("24 часа");
+    await expect(
+      page.getByTestId("ai-generated-file-download"),
+    ).toHaveCount(0);
+
+    await confirmAndSeeTemporary(page, 2);
+    // "Temporary file" - never the saved-file label.
+    await expect(temporaryRows(page).first()).toContainText("Временный файл");
+    await expect(temporaryRows(page).first()).not.toContainText("Файл сохранён");
+    await expect(temporaryRows(page).first()).toContainText("r.csv");
+    await expect(temporaryRows(page).first()).toContainText(TMP_SHA);
+    await expect(temporaryRows(page).first()).toContainText(
+      "Можно скачать до",
+    );
+    await shot(page, `temporary-${viewport.tag}-ready`);
+
+    const [dl] = await Promise.all([
+      page.waitForEvent("download"),
+      temporaryButton(page, 0).press("Enter"),
+    ]);
+    expect(dl.suggestedFilename()).toBe("r.csv");
+    expect(await downloadBytes(dl)).toEqual(CSV_BYTES);
+    const [dl2] = await Promise.all([
+      page.waitForEvent("download"),
+      temporaryButton(page, 1).press("Enter"),
+    ]);
+    expect(dl2.suggestedFilename()).toBe("b.bin");
+    expect(await downloadBytes(dl2)).toEqual(BIN_BYTES);
+    expect(state.downloadGets()).toBe(2);
+    expect(state.executions()).toBe(1);
+    expect(state.unexpectedWrites).toEqual([]);
+
+    await reloadPlan(page);
+    await expect(temporaryRows(page)).toHaveCount(2);
+    await expect(temporaryRows(page).first()).toContainText("Временный файл");
+    const [dl3] = await Promise.all([
+      page.waitForEvent("download"),
+      temporaryButton(page, 0).click(),
+    ]);
+    expect(await downloadBytes(dl3)).toEqual(CSV_BYTES);
+    expect(state.downloadGets()).toBe(3);
+    expect(state.executions()).toBe(1);
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await shot(page, `temporary-${viewport.tag}-reloaded`);
+  });
+}
+
+test("temporary-output control expires on the clock without a GET or re-run", async ({
+  page,
+}) => {
+  await page.clock.install({ time: Date.now() });
+  const { importPlan, importResult } = generatedTemporary({
+    binary: false,
+    expiresInMs: 60_000,
+  });
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  state.setDownload(okTemporary());
+  await confirmAndSeeTemporary(page, 1);
+  await expect(temporaryRows(page)).toContainText("Можно скачать до");
+  await expect(temporaryButton(page)).toBeEnabled();
+
+  // Advancing past the deadline disables the control and shows the expired
+  // state - no GET is made and the computation does not run again.
+  await page.clock.runFor(61_000);
+  await expect(temporaryButton(page)).toBeDisabled();
+  await expect(temporaryRows(page)).toContainText(
+    "Срок скачивания истёк",
+  );
+  await shot(page, "temporary-desktop-expired");
+  expect(state.downloadGets()).toBe(0);
+  expect(state.executions()).toBe(1);
+  expect(state.unexpectedWrites).toEqual([]);
+
+  // A reload after expiry keeps the control disabled and silent.
+  await reloadPlan(page);
+  await expect(temporaryRows(page)).toHaveCount(1);
+  await expect(temporaryButton(page)).toBeDisabled();
+  await expect(temporaryRows(page)).toContainText("Срок скачивания истёк");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(temporaryRows(page)).toContainText("Срок скачивания истёк");
+  const mobileOverflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect(mobileOverflow).toBeLessThanOrEqual(0);
+  await shot(page, "temporary-mobile-expired");
+  expect(state.downloadGets()).toBe(0);
+  expect(state.executions()).toBe(1);
+});
+
+test("temporary-output download sanitizes 404/410 and retries cleanly after 503", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedTemporary({ binary: false });
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  await confirmAndSeeTemporary(page, 1);
+  const alert = page.getByRole("alert");
+
+  state.setDownload(errorDownload(404));
+  await temporaryButton(page).click();
+  await expect(alert).toContainText("Временный файл больше недоступен");
+  await expect(alert).not.toContainText("SENSITIVE DOWNLOAD DIAGNOSTIC");
+  await expect(alert).not.toContainText("file_not_found");
+
+  state.setDownload(errorDownload(410));
+  await temporaryButton(page).click();
+  await expect(alert).toContainText("Временный файл больше недоступен");
+
+  state.setDownload(errorDownload(503));
+  await temporaryButton(page).click();
+  await expect(alert).toContainText(
+    "Не удалось скачать файл полностью",
+  );
+  await expect(alert).not.toContainText("SENSITIVE DOWNLOAD DIAGNOSTIC");
+
+  // A retry is a plain GET of the same temporary route - nothing is
+  // re-captured, re-imported, or re-executed.
+  state.setDownload(okTemporary());
+  const [dl] = await Promise.all([
+    page.waitForEvent("download"),
+    temporaryButton(page).click(),
+  ]);
+  expect(await downloadBytes(dl)).toEqual(CSV_BYTES);
+  expect(state.downloadGets()).toBe(4);
+  expect(state.executions()).toBe(1);
+  expect(state.unexpectedWrites).toEqual([]);
+});
+
+test("temporary-output truncated capture remains downloadable after reload", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedTemporary({ binary: false });
+  // The envelope the server emits when the raw capture result is truncated
+  // for the model: the root verdict sits beside the promoted artifacts, and
+  // the nested important/preview text is ignored.
+  const truncatedResult = {
+    truncated: true,
+    originalLength: 90_000,
+    important: {
+      exitCode: 1,
+      error: "nested lie",
+      stdout: "x".repeat(1_000),
+    },
+    artifacts: importResult.artifacts,
+    exitCode: 0,
+    error: null,
+    preview: `{"exitCode":1,"artifacts":[{"artifactId":"${TMP_ID2}"}]}`,
+  };
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult: truncatedResult,
+  });
+  state.setDownload(okTemporary());
+  await confirmAndSeeTemporary(page, 1);
+  const [dl] = await Promise.all([
+    page.waitForEvent("download"),
+    temporaryButton(page).click(),
+  ]);
+  expect(await downloadBytes(dl)).toEqual(CSV_BYTES);
+  expect(state.executions()).toBe(1);
+  expect(state.unexpectedWrites).toEqual([]);
+
+  await reloadPlan(page);
+  await expect(temporaryRows(page)).toHaveCount(1);
+  const [dl2] = await Promise.all([
+    page.waitForEvent("download"),
+    temporaryButton(page).click(),
+  ]);
+  expect(await downloadBytes(dl2)).toEqual(CSV_BYTES);
+  expect(state.downloadGets()).toBe(2);
+  expect(state.executions()).toBe(1);
+  expect(state.unexpectedWrites).toEqual([]);
+});
+
+test("temporary-output control absent for foreign, absent or unknown results", async ({
+  page,
+}) => {
+  for (const variant of [
+    generatedTemporary({ url: "https://evil.example/x" }),
+    generatedTemporary({ dropUrl: true }),
+    generatedTemporary({ outcomeUnknown: true }),
+  ]) {
+    await fixture(page, "success", {
+      importPlan: variant.importPlan,
+      importResult: variant.importResult,
+    });
+    await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+    await expect(
+      page.getByTestId("ai-generated-file-download"),
+    ).toHaveCount(0);
+    await reloadPlan(page);
+    await expect(
+      page.getByTestId("ai-generated-file-download"),
+    ).toHaveCount(0);
+  }
+});
+
+test("temporary-output control never attaches to a pending recovery proposal", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedTemporary({ binary: false });
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+    review: "recovery",
+  });
+  state.setDownload(okTemporary());
+  await confirmAndSeeTemporary(page, 1);
+  const cards = page.getByTestId("ai-plan");
+  await expect(cards).toHaveCount(2);
+  // A (executed capture) owns the control; pending proposal B does not,
+  // even though it declares the same outputs.
+  const cardA = cards.first();
+  const cardB = cards.nth(1);
+  await expect(cardA.getByTestId("ai-generated-file-download")).toHaveCount(1);
+  await expect(cardB.getByTestId("ai-generated-file-download")).toHaveCount(0);
+  await expect(cardB).toContainText("Временные результаты расчёта");
+});
+
+test("temporary-output download aborts a late response on conversation switch", async ({
+  page,
+}) => {
+  const { importPlan, importResult } = generatedTemporary({ binary: false });
+  const state = await fixture(page, "success", {
+    importPlan,
+    importResult,
+  });
+  await confirmAndSeeTemporary(page, 1);
+
+  let downloadEvents = 0;
+  page.on("download", () => downloadEvents++);
+  await page.evaluate((downloadPath) => {
+    const w = window as any;
+    w.__f4late = { aborted: false, settled: false, createdUrls: 0 };
+    const origFetch = window.fetch.bind(window);
+    const origCreate = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (b: any) => {
+      w.__f4late.createdUrls++;
+      return origCreate(b);
+    };
+    window.fetch = ((input: any, init: any) => {
+      const url = typeof input === "string" ? input : input?.url;
+      if (typeof url === "string" && url.includes(downloadPath)) {
+        const { signal, ...rest } = init ?? {};
+        signal?.addEventListener(
+          "abort",
+          () => {
+            w.__f4late.aborted = true;
+          },
+          { once: true },
+        );
+        return origFetch(input, rest).then((r: any) => {
+          w.__f4late.settled = true;
+          return r;
+        });
+      }
+      return origFetch(input, init);
+    }) as typeof fetch;
+  }, `/ai/chat/generated-files/${TMP_ID}/download`);
+
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  state.setDownload(async (route: any) => {
+    await gate;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/csv",
+      body: CSV_BYTES,
+    });
+  });
+  const clickDone = temporaryButton(page).click();
+  await expect(temporaryButton(page)).toBeDisabled();
+  await expect.poll(() => state.downloadGets()).toBe(1);
+
+  // Switching conversation unmounts the child; reset() aborts the GET.
+  await page.evaluate(async () => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+      .globalProperties.$store;
+    await store.dispatch("aiChat/startNewConversation");
+  });
+  await page.waitForFunction(() => (window as any).__f4late.aborted);
+  // The signal-stripped transport still resolves; the component must ignore
+  // the late response - no download, no object URL, no alert.
+  release();
+  await page.waitForFunction(() => (window as any).__f4late.settled);
+  await clickDone;
+  await page.waitForTimeout(100);
+  expect(downloadEvents).toBe(0);
+  expect(
+    await page.evaluate(() => (window as any).__f4late.createdUrls),
+  ).toBe(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
 });

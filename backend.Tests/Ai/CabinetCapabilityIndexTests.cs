@@ -246,4 +246,31 @@ public class CabinetCapabilityIndexTests
         var json = hits.Single(h => h.Path == "/store-storage/files/from-text");
         Assert.True(json.CallableViaJson);
     }
+
+    [Fact]
+    public void Validate_GeneratedFilesDownload_RouteDeniedNotCallableThroughPlatformRequest()
+    {
+        var index = new CabinetCapabilityIndex(CabinetActions.Provider(
+            CabinetActions.Action(typeof(FakeCabinetController), "GeneratedDownload",
+                "ai/chat/generated-files/{artifactId}/download", "GET"),
+            CabinetActions.Action(typeof(FakeCabinetController), "DownloadFile",
+                "/files/{id}/download", "GET")));
+
+        // The temporary generated-output route sits under the denied /api/ai
+        // prefix: it is never callable by platform_request even though an
+        // action template exists, and the denial must not offer the
+        // product-file ticket helper or a binary-route diagnostic.
+        var generated = index.Validate("GET",
+            "/ai/chat/generated-files/" + "a".PadRight(32, 'a') + "/download");
+        Assert.Equal(CabinetCapabilityIndex.StatusRouteDenied, generated.Status);
+        Assert.DoesNotContain("create_file_download_link", generated.Details);
+        Assert.DoesNotContain("binary", generated.Details);
+
+        // The generic binary diagnostic distinguishes the cabinet-owned
+        // temporary control from the persisted product-file ticket helper.
+        var product = index.Validate("GET", "/files/9/download");
+        Assert.Equal(CabinetCapabilityIndex.StatusBinaryDownload, product.Status);
+        Assert.Contains("downloadUrl", product.Details);
+        Assert.Contains("persisted product files", product.Details);
+    }
 }

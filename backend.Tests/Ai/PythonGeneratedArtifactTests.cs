@@ -203,6 +203,13 @@ public class PythonGeneratedArtifactTests
         Assert.Equal(Convert.ToHexString(SHA256.HashData(csv)).ToLowerInvariant(),
             artifacts[0].GetProperty("Sha256").GetString());
         Assert.Equal(csv.Length, artifacts[0].GetProperty("Length").GetInt64());
+        foreach (var item in artifacts.EnumerateArray())
+        {
+            var artifactId = item.GetProperty("ArtifactId").GetString()!;
+            Assert.Equal(
+                GeneratedFileContract.TemporaryDownloadUrl(artifactId),
+                item.GetProperty("DownloadUrl").GetString());
+        }
 
         // No bytes, base64, storage keys, or paths in the model-facing payload.
         var serialized = json.ToString();
