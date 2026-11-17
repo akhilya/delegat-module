@@ -105,6 +105,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- Platform AI usage is shown as a compact percentage beside the selected chat model and in administration, without raw token counts or accounting details. The administration model lists now include the platform-provided model as read-only.
+
 - AI assistant cabinet calls are now validated against the real action catalog before dispatch: invented routes, wrong HTTP verbs, and multipart/binary endpoints invoked through `platform_request` are rejected immediately with a structured error (error class plus up to three verified JSON-callable alternatives) instead of a misleading 404, and `search_actions` marks which actions the assistant can actually call. Proposed plans containing unexecutable cabinet steps are rejected before presentation. A cabinet 404 that still occurs now means a missing resource and no longer claims the route does not exist.
 
 - The mapping editor opens with one graph request that also returns mapping details and the marketplace field schema. Card and price field schemas are cached for an hour, so opening a mapping no longer calls the marketplace API twice. **Update fields** still reads the live schema. Previewing on a product loads it with split, untracked queries.
@@ -270,6 +272,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
 ### Fixed
+
+- Deleting a connected AI model now honors confirmation with mouse or keyboard, preserves the model-management dialog, and refreshes model pickers. Platform-provided model rows keep the same compact height as other models, with their origin badge outside the status column.
 
 - AI assistant turns now run through a single canonical event writer. Streamed events carry stable run/message identity and monotonic sequence numbers, so reconnecting or reloading replays an in-flight reply in order and deduplicates it instead of duplicating text, tools, or plan cards (ordered replay plus idempotent client dedup within the process lifetime; not a distributed exactly-once guarantee); a recovery plan proposed after a failed execution stays a separate confirmable message and can no longer be merged into its parent execution or lost on reload. Client history sync can only merge metadata (such as form replies) onto server-produced assistant rows — it cannot rewrite their text, tools, plan, or lifecycle — and stale syncs cannot reopen or erase a completed execution. Plan execution reports an honest localized status (completed, queued, partial, failed, interrupted) below the execution process instead of unverified prose. An assistant row left running by an API restart now reads as interrupted instead of staying in progress forever. Disconnecting the browser stream no longer stops generation. Note: live-turn replay state is process-local — restarting the API loses in-flight turns while persisted history survives.
 

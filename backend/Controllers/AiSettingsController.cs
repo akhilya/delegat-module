@@ -34,12 +34,12 @@ public class AiSettingsController : ControllerBase
         _context = context;
     }
 
-    // GET /api/ai/models
+    /// <summary>Lists local and platform-provided models; provided models are read-only and have no key mask.</summary>
     [HttpGet("models")]
     [RequiresPermission(Permissions.SettingsPlatform)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        var models = await _modelService.GetAllAsync(ct);
+        var models = await _modelService.GetPickerModelsAsync(ct);
         return Ok(models.Select(m => new
         {
             m.Id,
@@ -52,7 +52,8 @@ public class AiSettingsController : ControllerBase
             m.isEnabled,
             m.createdAt,
             m.proxyUrl,
-            apiKeyMasked = MaskKey(m.apiKeyEncrypted)
+            m.isPlatformHosted,
+            apiKeyMasked = m.isPlatformHosted ? null : MaskKey(m.apiKeyEncrypted)
         }));
     }
 
@@ -82,22 +83,31 @@ public class AiSettingsController : ControllerBase
             }));
     }
 
+    /// <summary>Returns the monthly usage percentage and availability, without raw token counts or period dates.</summary>
     [HttpGet("hosted-ai")]
     [RequiresPermission(Permissions.AiUse, requireStoreMembership: true)]
-    public async Task<IActionResult> GetHostedAiStatus(CancellationToken ct)
+    public Task<IActionResult> GetHostedAiStatus(CancellationToken ct) => ReadHostedAiStatusAsync(ct);
+
+    /// <summary>Returns the same percentage-only usage status for instance administrators.</summary>
+    [HttpGet("hosted-ai/admin")]
+    [RequiresPermission(Permissions.SettingsPlatform)]
+    public Task<IActionResult> GetHostedAiAdminStatus(CancellationToken ct) => ReadHostedAiStatusAsync(ct);
+
+    private async Task<IActionResult> ReadHostedAiStatusAsync(CancellationToken ct)
     {
         var config = await _modelService.GetPlatformHostedConfigAsync(ct);
+        var quota = Math.Max(0, config?.QuotaTokens ?? 0);
+        var used = Math.Max(0, config?.UsedTokens ?? 0);
+        var usagePercent = quota > 0
+            ? Math.Round(Math.Clamp((double)used / quota * 100, 0, 100), 1, MidpointRounding.AwayFromZero)
+            : 0;
         return Ok(new
         {
             configured = config?.Configured ?? false,
             entitled = config?.Entitled ?? false,
             available = config?.Available ?? false,
-            quotaTokens = config?.QuotaTokens ?? 0,
-            usedTokens = config?.UsedTokens ?? 0,
-            reservedTokens = config?.ReservedTokens ?? 0,
-            remainingTokens = config?.RemainingTokens ?? 0,
-            periodStart = config?.PeriodStart,
-            periodEnd = config?.PeriodEnd,
+            usagePercent,
+            quotaExhausted = quota > 0 && used >= quota,
             usageUnavailable = config?.UsageUnavailable ?? false,
         });
     }

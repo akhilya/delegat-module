@@ -2,6 +2,7 @@
 import { Spinner } from "@/components/ui/spinner";
 import SettingsFormField from "@/components/settings/SettingsFormField.vue";
 import OperatorMcpConnectPanel from "@/components/settings/OperatorMcpConnectPanel.vue";
+import AiHostedUsage from "@/components/ai/AiHostedUsage.vue";
 import {
   InsetGroup,
   InsetGroupItem,
@@ -20,16 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { confirm } from "@/composables/useConfirm";
 import {
   Select,
   SelectContent,
@@ -69,6 +61,7 @@ export default {
     Spinner,
     SettingsFormField,
     OperatorMcpConnectPanel,
+    AiHostedUsage,
     InsetGroup,
     InsetGroupItem,
     InsetGroupLabel,
@@ -85,14 +78,6 @@ export default {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
     Select,
     SelectContent,
     SelectItem,
@@ -116,6 +101,15 @@ export default {
   setup() {
     const store = useStore();
     const models = ref([]);
+    const editableModels = computed(() =>
+      models.value.filter((model) => !model.isPlatformHosted),
+    );
+    const hostedAiStatus = computed(() => store.state.aiModels.hostedAiStatus);
+    const hostedUsageError = ref(false);
+    const hostedUsageLoading = ref(false);
+    const hasHostedModel = computed(() =>
+      models.value.some((model) => model.isPlatformHosted),
+    );
     const isLoading = ref(false);
     const isModelsDialogOpen = ref(false);
     const isDialogOpen = ref(false);
@@ -142,18 +136,6 @@ export default {
     const form = ref(defaultForm());
     const modelOptions = ref([]);
     const isDiscovering = ref(false);
-    const confirmDialog = ref({
-      open: false,
-      title: "",
-      message: "",
-      resolve: null,
-    });
-
-    function showConfirm(title, message) {
-      return new Promise((r) => {
-        confirmDialog.value = { open: true, title, message, resolve: r };
-      });
-    }
 
     async function discoverModels() {
       if (!form.value.apiUrl) {
@@ -219,6 +201,20 @@ export default {
       });
     }
 
+    async function loadHostedUsage() {
+      hostedUsageLoading.value = true;
+      hostedUsageError.value = false;
+      try {
+        await store.dispatch("aiModels/getHostedAiStatus", {
+          forAdministration: true,
+        });
+      } catch {
+        hostedUsageError.value = true;
+      } finally {
+        hostedUsageLoading.value = false;
+      }
+    }
+
     async function saveSettings() {
       isSettingsSaving.value = true;
       try {
@@ -264,6 +260,7 @@ export default {
     const isAnthropic = (p) => providerToSelect(p) === "0";
 
     function openEdit(model) {
+      if (model.isPlatformHosted) return;
       editingModel.value = model;
       form.value = {
         name: model.name,
@@ -354,22 +351,32 @@ export default {
     }
 
     async function deleteModel(model) {
-      const confirmed = await showConfirm(
-        t("pages.aiModelsPage.deleteModelTitle"),
-        t("pages.aiModelsPage.deleteModelDescription", { name: model.name }),
-      );
+      if (model.isPlatformHosted) return;
+      const confirmed = await confirm({
+        title: t("pages.aiModelsPage.deleteModelTitle"),
+        description: t("pages.aiModelsPage.deleteModelDescription", {
+          name: model.name,
+        }),
+      });
       if (!confirmed) return;
       await store.dispatch("aiModels/deleteAiModel", {
         id: model.id,
         onSuccess: () => {
           displaySonnerSuccess(t("pages.aiModelsPage.modelDeleted"));
           load();
+          store
+            .dispatch("aiModels/getPickerModels", {
+              force: true,
+              onError: () => {},
+            })
+            .catch(() => {});
         },
         onError: displaySonnerError,
       });
     }
 
     async function setDefault(model) {
+      if (model.isPlatformHosted) return;
       await store.dispatch("aiModels/setDefaultAiModel", {
         id: model.id,
         onSuccess: () => {
@@ -381,6 +388,7 @@ export default {
     }
 
     async function setModelEnabled(model, enabled) {
+      if (model.isPlatformHosted) return;
       if (model.isEnabled === enabled) return;
       const prev = model.isEnabled;
       model.isEnabled = enabled;
@@ -407,6 +415,7 @@ export default {
     }
 
     async function testModel(model) {
+      if (model.isPlatformHosted) return;
       testingId.value = model.id;
       await store.dispatch("aiModels/testAiModel", {
         id: model.id,
@@ -428,11 +437,18 @@ export default {
     onMounted(() => {
       load();
       loadSettings();
+      loadHostedUsage();
     });
 
     return {
       Bot,
       models,
+      editableModels,
+      hostedAiStatus,
+      hasHostedModel,
+      hostedUsageError,
+      hostedUsageLoading,
+      loadHostedUsage,
       isLoading,
       isModelsDialogOpen,
       isDialogOpen,
@@ -462,7 +478,6 @@ export default {
       isDiscovering,
       discoverModels,
       isAnthropic,
-      confirmDialog,
       FIELD_LIMITS,
     };
   },
@@ -495,14 +510,19 @@ export default {
           <InsetGroupItem
             v-for="model in models"
             :key="model.id"
-            show-chevron
+            :as="model.isPlatformHosted ? 'div' : 'button'"
+            :show-chevron="!model.isPlatformHosted"
             :class="!model.isEnabled ? 'text-muted-foreground' : ''"
             @click="openEdit(model)"
           >
             <template #leading>
               <Bot class="size-4" />
             </template>
-            <p class="truncate font-medium">{{ model.name }}</p>
+            <p class="truncate font-medium">
+              {{
+                model.isPlatformHosted ? $t("ai.platformModelName") : model.name
+              }}
+            </p>
             <p
               class="mt-0.5 truncate text-xs font-normal text-muted-foreground"
             >
@@ -511,9 +531,18 @@ export default {
               }}
               · {{ model.modelId }}
             </p>
-            <template v-if="model.isDefault" #trailing>
+            <template
+              v-if="model.isDefault || model.isPlatformHosted"
+              #trailing
+            >
               <Badge variant="secondary">
-                {{ $t("pages.aiModelsPage.defaultModelLabel") }}
+                {{
+                  $t(
+                    model.isPlatformHosted
+                      ? "pages.aiModelsPage.platformManaged"
+                      : "pages.aiModelsPage.defaultModelLabel",
+                  )
+                }}
               </Badge>
             </template>
           </InsetGroupItem>
@@ -536,6 +565,29 @@ export default {
           {{ $t("pages.aiModelsPage.addModel") }}
         </Button>
       </div>
+    </section>
+
+    <section
+      v-if="hasHostedModel"
+      class="mt-8"
+      data-testid="admin-hosted-ai-usage"
+    >
+      <p
+        v-if="hostedUsageLoading"
+        class="flex items-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
+        <Spinner size="sm" /> {{ $t("common.loading") }}
+      </p>
+      <div v-else-if="hostedUsageError" class="space-y-2">
+        <p class="text-sm text-muted-foreground" role="status">
+          {{ $t("pages.aiModelsPage.hostedUsageLoadError") }}
+        </p>
+        <Button variant="outline" size="sm" @click="loadHostedUsage">{{
+          $t("pages.aiModelsPage.hostedUsageRetry")
+        }}</Button>
+      </div>
+      <AiHostedUsage v-else inline :status="hostedAiStatus" />
     </section>
 
     <OperatorMcpConnectPanel class="mt-8" />
@@ -573,13 +625,19 @@ export default {
                 <TableCell>
                   <Switch
                     :model-value="model.isEnabled"
+                    :disabled="model.isPlatformHosted"
+                    :aria-label="`${$t('common.status')}: ${model.isPlatformHosted ? $t('ai.platformModelName') : model.name}`"
                     class="scale-[0.8]"
                     @update:model-value="(v) => setModelEnabled(model, v)"
                   />
                 </TableCell>
                 <TableCell class="max-w-0">
                   <div class="truncate font-medium" :title="model.name">
-                    {{ model.name }}
+                    {{
+                      model.isPlatformHosted
+                        ? $t("ai.platformModelName")
+                        : model.name
+                    }}
                   </div>
                 </TableCell>
                 <TableCell>
@@ -619,7 +677,17 @@ export default {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div class="flex items-center justify-end gap-1">
+                  <Badge
+                    v-if="model.isPlatformHosted"
+                    variant="secondary"
+                    class="max-w-full"
+                    :title="$t('pages.aiModelsPage.platformManaged')"
+                  >
+                    <span class="truncate">{{
+                      $t("pages.aiModelsPage.platformManaged")
+                    }}</span>
+                  </Badge>
+                  <div v-else class="flex items-center justify-end gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -661,42 +729,6 @@ export default {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog
-      :open="confirmDialog.open"
-      @update:open="
-        (v) => {
-          if (!v) confirmDialog.resolve?.(false);
-          confirmDialog.open = v;
-        }
-      "
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ confirmDialog.title }}</AlertDialogTitle>
-          <AlertDialogDescription>{{
-            confirmDialog.message
-          }}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            @click="
-              confirmDialog.resolve(false);
-              confirmDialog.open = false;
-            "
-            >{{ $t("common.cancel") }}</AlertDialogCancel
-          >
-          <AlertDialogAction
-            variant="destructive"
-            @click="
-              confirmDialog.resolve(true);
-              confirmDialog.open = false;
-            "
-            >{{ $t("common.delete") }}</AlertDialogAction
-          >
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-
     <Dialog v-model:open="isPersonalSettingsOpen">
       <DialogContent
         size="xl"
@@ -714,6 +746,7 @@ export default {
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <FieldGroup class="gap-5">
             <SettingsFormField
+              v-if="editableModels.length"
               :label="$t('pages.aiModelsPage.defaultModelLabel')"
             >
               <Select
@@ -729,7 +762,7 @@ export default {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    v-for="m in models"
+                    v-for="m in editableModels"
                     :key="m.id"
                     :value="String(m.id)"
                     :text-value="m.name"
