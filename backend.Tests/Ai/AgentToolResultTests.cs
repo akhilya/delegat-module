@@ -223,19 +223,48 @@ public class AgentToolResultTests
     }
 
     [Fact]
-    public void InterpretResponse_404_DoesNotAssumeCatalogConnect()
+    public void InterpretResponse_404_IsResourceNotFoundWithoutRouteHints()
     {
-        var json = """{"title":"Not Found","status":404}""";
+        var json = """{"title":"Product not found","status":404}""";
         var (result, summary) = CabinetRequestInvoker.InterpretResponse(404, Encoding.UTF8.GetBytes(json));
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal("not_found", doc.RootElement.GetProperty("error").GetString());
-        var hint = doc.RootElement.GetProperty("hint").GetString();
-        Assert.Contains("TOOLS", hint, StringComparison.Ordinal);
-        Assert.Contains("mappings/{mappingId}/graph", hint, StringComparison.Ordinal);
-        Assert.Contains("do not invent", hint, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("does not exist", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("resource_not_found", doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("hint").ValueKind);
+        // A resource 404 keeps the response's own title and never prescribes routes.
+        Assert.Equal("Product not found", summary);
+        var serialized = JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("do not invent", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mappings/{mappingId}/graph", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("Request failed (404)", summary, StringComparison.Ordinal);
         Assert.True(AgentToolResult.IsFailure(result, summary));
+    }
+
+    [Fact]
+    public void InterpretResponse_404_WithoutBodyTitle_UsesNeutralNotFound()
+    {
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(404, Encoding.UTF8.GetBytes("{}"));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("not_found", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal("resource_not_found", doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.Equal("Not found", doc.RootElement.GetProperty("title").GetString());
+        Assert.Equal("Not found", summary);
+    }
+
+    [Theory]
+    [InlineData(401, "forbidden")]
+    [InlineData(403, "forbidden")]
+    [InlineData(409, "conflict")]
+    [InlineData(429, "quota")]
+    [InlineData(500, "upstream_error")]
+    [InlineData(503, "upstream_error")]
+    public void InterpretResponse_MapsHttpStatusToErrorClass(int status, string errorClass)
+    {
+        var json = """{"title":"failed","status":400}""";
+        var (result, _) = CabinetRequestInvoker.InterpretResponse(status, Encoding.UTF8.GetBytes(json));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(errorClass, doc.RootElement.GetProperty("errorClass").GetString());
+        Assert.True(AgentToolResult.IsFailure(result, ""));
     }
 
     [Fact]
@@ -257,9 +286,11 @@ public class AgentToolResultTests
         var json = """
             {"title":"One or more validation errors occurred.","status":400,"errors":{"$.attributeValues[1].value":["The JSON value could not be converted to System.String. Path: $.attributeValues[1].value | LineNumber: 0 | BytePositionInLine: 12."]}}
             """;
-        var (_, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
+        var (result, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
         Assert.Contains("Characteristic values must be text", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("One or more validation errors occurred", summary, StringComparison.Ordinal);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal("validation_failed", doc.RootElement.GetProperty("errorClass").GetString());
     }
 
     [Fact]
@@ -269,6 +300,8 @@ public class AgentToolResultTests
         var (result, summary) = CabinetRequestInvoker.InterpretResponse(400, Encoding.UTF8.GetBytes(json));
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal("validation_failed", doc.RootElement.GetProperty("error").GetString());
+        // Without a flattened errors object the class is a generic bad request.
+        Assert.Equal("bad_request", doc.RootElement.GetProperty("errorClass").GetString());
         Assert.Equal(400, doc.RootElement.GetProperty("status").GetInt32());
         Assert.True(AgentToolResult.IsFailure(result, summary));
         Assert.DoesNotContain("Plan executed", AgentToolResult.FormatPlanOutcome(0, 1, [summary], "en"), StringComparison.Ordinal);

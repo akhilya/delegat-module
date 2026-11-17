@@ -198,6 +198,95 @@ public class AiChatAgentEvaluationTests
     }
 
     [Fact]
+    public async Task MultipartPlatformStep_IsRejectedBeforePresentation_AndCanBeCorrected()
+    {
+        using var signingKey = new TemporaryEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        const string multipart = """
+            {"summary":"Save the generated file","steps":[{"description":"Upload the generated file","tool":"platform_request","args":{"method":"PUT","path":"/store-storage/files"}}]}
+            """;
+        const string corrected = """
+            {"summary":"Save the generated file","steps":[{"description":"Save the generated text as a store file","tool":"platform_request","args":{"method":"POST","path":"/store-storage/files/from-text","body":{"fileName":"report.csv","text":"a,b"}}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [ToolCall("propose_plan", multipart, "multipart-plan"), ToolCall("propose_plan", corrected, "json-plan")],
+            capabilities: CabinetCapabilities.Standard());
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Save this report as a store file")], fixture.StoreId, fixture.UserId,
+            sessionId: "eval-multipart-plan", locale: "en"));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        var correction = fixture.Client.Requests[1].Messages.Last().Content;
+        Assert.Contains("Plan not presented", correction, StringComparison.Ordinal);
+        Assert.Contains("step 1", correction, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("requires multipart", correction, StringComparison.Ordinal);
+        Assert.Contains("JSON-only", correction, StringComparison.Ordinal);
+        Assert.Contains("/store-storage/files/from-text", correction, StringComparison.Ordinal);
+        Assert.Single(chunks, chunk => chunk.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task InventedRoutePlatformStep_IsRejectedBeforePresentation_AndCanBeCorrected()
+    {
+        using var signingKey = new TemporaryEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        const string invented = """
+            {"summary":"Save the generated file","steps":[{"description":"Create the file","tool":"platform_request","args":{"method":"POST","path":"/store-files","body":{"name":"report.csv","content":"a,b"}}}]}
+            """;
+        const string corrected = """
+            {"summary":"Save the generated file","steps":[{"description":"Save the generated text as a store file","tool":"platform_request","args":{"method":"POST","path":"/store-storage/files/from-text","body":{"fileName":"report.csv","text":"a,b"}}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [ToolCall("propose_plan", invented, "invented-plan"), ToolCall("propose_plan", corrected, "json-plan")],
+            capabilities: CabinetCapabilities.Standard());
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Save this report as a store file")], fixture.StoreId, fixture.UserId,
+            sessionId: "eval-invented-plan", locale: "en"));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        var correction = fixture.Client.Requests[1].Messages.Last().Content;
+        Assert.Contains("Plan not presented", correction, StringComparison.Ordinal);
+        Assert.Contains("/store-files", correction, StringComparison.Ordinal);
+        Assert.Single(chunks, chunk => chunk.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task ConfirmedPlanStep_RecheckedAtExecution_NeverReachesInvoker()
+    {
+        using var signingKey = new TemporaryEnvironmentVariable(
+            "ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [Text("done")], capabilities: CabinetCapabilities.Standard());
+        using var argsDoc = JsonDocument.Parse(
+            """{"method":"PUT","path":"/store-storage/files"}""");
+        var steps = new List<PlanStepInput>
+        {
+            new()
+            {
+                Tool = "platform_request",
+                Description = "Upload the generated file",
+                Args = argsDoc.RootElement.Clone(),
+            },
+        };
+
+        var chunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(
+            steps, fixture.StoreId, fixture.UserId, "proposal-1", locale: "en"));
+        var serialized = string.Concat(chunks);
+
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Contains("multipart_required", serialized, StringComparison.Ordinal);
+        Assert.Contains("transport_mismatch", serialized, StringComparison.Ordinal);
+        Assert.Contains("Route rejected before dispatch", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AttachmentReadInMixedBatch_CompletesBeforePlanIsPresented()
     {
         using var signingKey = new TemporaryEnvironmentVariable(
@@ -720,7 +809,8 @@ public class AiChatAgentEvaluationTests
         string? attachmentSessionId,
         string? attachmentFileName,
         byte[]? attachmentBytes,
-        IReadOnlyList<AiStreamEvent>[] responses, IHttpClientFactory? pythonHttp = null)
+        IReadOnlyList<AiStreamEvent>[] responses, IHttpClientFactory? pythonHttp = null,
+        CabinetCapabilityIndex? capabilities = null)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -770,12 +860,13 @@ public class AiChatAgentEvaluationTests
             new CatalogSearchService(db),
             new SqlReadonlyService(db),
             new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
-            new AgentPlatformGateway(uploads, invoker),
+            new AgentPlatformGateway(uploads, invoker, capabilities),
             python,
             new GrantAllPermissions(),
             db,
             NullLogger<AgentToolHost>.Instance,
             mcp,
+            actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
             chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage));
         var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
         var modelService = new AiModelConfigService(

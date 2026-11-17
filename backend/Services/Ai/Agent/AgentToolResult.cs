@@ -72,7 +72,7 @@ public static class AgentToolResult
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 return fields;
 
-            string[] names = ["error", "status", "code", "exitCode", "title", "message", "id", "fileName", "operationId", "totalCount", "totalRows", "totalCharacters", "nextStartRow", "nextStartColumn", "nextStartOffset", "hasMore", "truncated", "isError"];
+            string[] names = ["error", "errorClass", "status", "code", "exitCode", "title", "message", "id", "fileName", "operationId", "totalCount", "totalRows", "totalCharacters", "nextStartRow", "nextStartColumn", "nextStartOffset", "hasMore", "truncated", "isError"];
             foreach (var name in names)
             {
                 var pascalName = char.ToUpperInvariant(name[0]) + name[1..];

@@ -314,7 +314,173 @@ public class AgentToolHostTests
         Assert.Null(invoker.Path);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal("route_denied", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("forbidden", json.RootElement.GetProperty("errorClass").GetString());
+        Assert.False(json.RootElement.GetProperty("retryable").GetBoolean());
         Assert.Contains("not allowed", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlatformRequest_InventedRoute_IsRejectedBeforeInvoker()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, summary) = await host.DispatchAsync("platform_request",
+            """{"method":"POST","path":"/store-files","body":{"name":"x","content":"a"}}""", 1, 1, default);
+
+        Assert.Null(invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var root = json.RootElement;
+        Assert.Equal("route_not_found", root.GetProperty("error").GetString());
+        Assert.Equal("route_not_found", root.GetProperty("errorClass").GetString());
+        Assert.False(root.GetProperty("retryable").GetBoolean());
+        var alternatives = root.GetProperty("callableAlternatives");
+        Assert.True(alternatives.GetArrayLength() <= CabinetCapabilityIndex.MaxAlternatives);
+        foreach (var alternative in alternatives.EnumerateArray())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(alternative.GetProperty("method").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(alternative.GetProperty("path").GetString()));
+        }
+        Assert.Contains("rejected before dispatch", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlatformRequest_WrongVerb_IsRejectedWithAllowedMethods()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, summary) = await host.DispatchAsync("platform_request",
+            """{"method":"DELETE","path":"/products"}""", 1, 1, default);
+
+        Assert.Null(invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var root = json.RootElement;
+        Assert.Equal("method_not_allowed", root.GetProperty("error").GetString());
+        Assert.Equal("method_not_allowed", root.GetProperty("errorClass").GetString());
+        Assert.Contains("GET", root.GetProperty("details").GetString());
+        Assert.Contains("POST", root.GetProperty("details").GetString());
+        Assert.Contains("rejected before dispatch", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("PUT", "/store-storage/files")]
+    [InlineData("PUT", "/products/9/files")]
+    [InlineData("POST", "/products/import-preview")]
+    public async Task PlatformRequest_MultipartRoute_IsRejectedWithoutDispatch(string method, string path)
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, summary) = await host.DispatchAsync("platform_request",
+            JsonSerializer.Serialize(new { method, path }), 1, 1, default);
+
+        Assert.Null(invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var root = json.RootElement;
+        Assert.Equal("multipart_required", root.GetProperty("error").GetString());
+        Assert.Equal("transport_mismatch", root.GetProperty("errorClass").GetString());
+        Assert.False(root.GetProperty("retryable").GetBoolean());
+        Assert.Contains("JSON", root.GetProperty("details").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rejected before dispatch", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlatformRequest_MultipartRoute_OffersJsonCallableAlternatives()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, _) = await host.DispatchAsync("platform_request",
+            """{"method":"PUT","path":"/store-storage/files"}""", 1, 1, default);
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var alternatives = json.RootElement.GetProperty("callableAlternatives")
+            .EnumerateArray()
+            .Select(a => a.GetProperty("method").GetString() + " " + a.GetProperty("path").GetString())
+            .ToList();
+        Assert.Contains("POST /store-storage/files/from-text", alternatives);
+    }
+
+    [Fact]
+    public async Task PlatformRequest_BinaryDownload_IsRejectedWithoutDispatch()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, summary) = await host.DispatchAsync("platform_request",
+            """{"method":"GET","path":"/files/9/download"}""", 1, 1, default);
+
+        Assert.Null(invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var root = json.RootElement;
+        Assert.Equal("binary_download", root.GetProperty("error").GetString());
+        Assert.Equal("transport_mismatch", root.GetProperty("errorClass").GetString());
+        Assert.Contains("create_file_download_link", root.GetProperty("details").GetString());
+        Assert.Contains("rejected before dispatch", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlatformRequest_ValidRoute_StillDispatches()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: CabinetCapabilities.Standard());
+
+        var (result, _) = await host.DispatchAsync("platform_request",
+            """{"method":"GET","path":"/products?pageSize=5"}""", 1, 1, default);
+
+        Assert.Equal("/api/products", invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task PlatformRequest_EmptyCapabilityIndex_DegradesToDispatch()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var invoker = new RecordingInvoker();
+        var host = CreateHost(db, invoker: invoker, capabilities: new CabinetCapabilityIndex());
+
+        var (result, _) = await host.DispatchAsync("platform_request",
+            """{"method":"GET","path":"/made-up-path"}""", 1, 1, default);
+
+        Assert.Equal("/api/made-up-path", invoker.Path);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task SearchActions_MultipartHit_IsFlaggedNotCallableViaJson()
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var host = CreateHost(db, capabilities: CabinetCapabilities.Standard());
+
+        var (result, _) = await host.DispatchAsync("search_actions",
+            """{"query":"upload files","limit":8}""", 1, 1, default);
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        var hits = json.RootElement.GetProperty("hits").EnumerateArray().ToList();
+        var multipart = hits.Single(h => h.GetProperty("path").GetString() == "/store-storage/files"
+            && h.GetProperty("method").GetString() == "PUT");
+        Assert.False(multipart.GetProperty("callableViaJson").GetBoolean());
+        Assert.Equal("multipart", multipart.GetProperty("transport").GetString());
+        Assert.Contains("not callable via platform_request JSON",
+            multipart.GetProperty("note").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(hits, h => h.GetProperty("path").GetString() == "/files/{id}/download");
+
+        var (jsonResult, _) = await host.DispatchAsync("search_actions",
+            """{"query":"list products","limit":8}""", 1, 1, default);
+        using var jsonDoc = JsonDocument.Parse(JsonSerializer.Serialize(jsonResult));
+        var jsonHit = jsonDoc.RootElement.GetProperty("hits").EnumerateArray()
+            .Single(h => h.GetProperty("path").GetString() == "/products"
+                && h.GetProperty("method").GetString() == "GET");
+        Assert.True(jsonHit.GetProperty("callableViaJson").GetBoolean());
     }
 
     [Fact]
@@ -781,7 +947,8 @@ public class AgentToolHostTests
         IPermissionService? permissions = null,
         IMcpToolGateway? mcp = null,
         IPublicDocsClient? publicDocs = null,
-        ChatAttachmentReadService? chatAttachments = null)
+        ChatAttachmentReadService? chatAttachments = null,
+        CabinetCapabilityIndex? capabilities = null)
     {
         storage ??= new FakeStorage();
         var catalog = new CatalogSearchService(db);
@@ -789,7 +956,7 @@ public class AgentToolHostTests
         var knowledge = new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance);
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var uploads = new AgentFileUploadService(db, uow, storage, new QuotaService(uow, db));
-        var platform = new AgentPlatformGateway(uploads, invoker ?? new RecordingInvoker());
+        var platform = new AgentPlatformGateway(uploads, invoker ?? new RecordingInvoker(), capabilities);
         var python = new PythonSandboxClient(
             db,
             http ?? new ThrowingHttpFactory(),
@@ -803,6 +970,7 @@ public class AgentToolHostTests
             NullLogger<AgentToolHost>.Instance,
             mcp,
             publicDocs,
+            actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
             chatAttachments: chatAttachments);
     }
 

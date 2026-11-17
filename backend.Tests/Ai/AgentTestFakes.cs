@@ -1,7 +1,15 @@
+using System.Reflection;
 using System.Security.Claims;
 using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Storage;
+using Delegat.Services.Ai.Agent;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.ActionConstraints;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.Routing;
 
 namespace Delegat.Tests;
 
@@ -38,6 +46,75 @@ internal sealed class FakeJwt : IJwtService
 internal sealed class ThrowingHttpFactory : IHttpClientFactory
 {
     public HttpClient CreateClient(string name) => new();
+}
+
+/// <summary>
+/// Builds MVC action descriptors for the capability index without a live app:
+/// enough metadata for route/method extraction plus multipart classification.
+/// </summary>
+internal static class CabinetActions
+{
+    public static IActionDescriptorCollectionProvider Provider(params ControllerActionDescriptor[] actions) =>
+        new StubProvider(actions);
+
+    public static ControllerActionDescriptor Action(
+        Type controller,
+        string actionName,
+        string template,
+        string method,
+        bool multipartForm = false,
+        Type? parameterType = null)
+    {
+        var controllerName = controller.Name;
+        if (controllerName.EndsWith("Controller", StringComparison.Ordinal))
+            controllerName = controllerName[..^"Controller".Length];
+        var descriptor = new ControllerActionDescriptor
+        {
+            ControllerName = controllerName,
+            ActionName = actionName,
+            ControllerTypeInfo = controller.GetTypeInfo(),
+            AttributeRouteInfo = new AttributeRouteInfo { Template = template },
+            ActionConstraints = [new HttpMethodActionConstraint([method])],
+            EndpointMetadata = [],
+            FilterDescriptors = [],
+            Parameters = [],
+        };
+        if (multipartForm)
+        {
+            descriptor.FilterDescriptors.Add(new FilterDescriptor(
+                new DisableFormValueModelBindingAttribute(), FilterScope.Action));
+        }
+        if (parameterType != null)
+        {
+            descriptor.Parameters.Add(new ControllerParameterDescriptor
+            {
+                Name = "file",
+                ParameterType = parameterType,
+            });
+        }
+        return descriptor;
+    }
+
+    private sealed class StubProvider(ControllerActionDescriptor[] actions) : IActionDescriptorCollectionProvider
+    {
+        public ActionDescriptorCollection ActionDescriptors { get; } = new(actions, 0);
+    }
+}
+
+internal sealed class FakeCabinetController : Microsoft.AspNetCore.Mvc.ControllerBase { }
+
+/// <summary>A small representative route set: JSON routes, multipart uploads, a binary download.</summary>
+internal static class CabinetCapabilities
+{
+    public static CabinetCapabilityIndex Standard() => new(CabinetActions.Provider(
+        CabinetActions.Action(typeof(FakeCabinetController), "ListProducts", "/products", "GET"),
+        CabinetActions.Action(typeof(FakeCabinetController), "CreateProduct", "/products", "POST"),
+        CabinetActions.Action(typeof(FakeCabinetController), "GetProduct", "/products/{id}", "GET"),
+        CabinetActions.Action(typeof(FakeCabinetController), "UploadStoreFiles", "/store-storage/files", "PUT", multipartForm: true),
+        CabinetActions.Action(typeof(FakeCabinetController), "StoreFileFromText", "/store-storage/files/from-text", "POST"),
+        CabinetActions.Action(typeof(FakeCabinetController), "UploadProductFiles", "/products/{productId}/files", "PUT", multipartForm: true),
+        CabinetActions.Action(typeof(FakeCabinetController), "DownloadFile", "/files/{id}/download", "GET"),
+        CabinetActions.Action(typeof(FakeCabinetController), "ImportPreview", "/products/import-preview", "POST", parameterType: typeof(IFormFile))));
 }
 
 internal sealed class FakeStorage : IStorageService

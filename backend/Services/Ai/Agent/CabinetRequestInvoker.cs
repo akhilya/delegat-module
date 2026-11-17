@@ -76,7 +76,8 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
     {
         var next = _pipeline.Next;
         if (next == null)
-            return (new { error = "pipeline_not_ready" }, "Cabinet pipeline is not ready");
+            return (new { error = "pipeline_not_ready", errorClass = "unavailable" },
+                "Cabinet pipeline is not ready");
 
         byte[] bodyBytes = [];
         if (body is { ValueKind: JsonValueKind.Object or JsonValueKind.Array } el)
@@ -132,7 +133,8 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Nested cabinet request {Method} {Path} failed", method, apiPath);
-            return (new { error = "request_failed", message = ex.Message }, ex.Message);
+            return (new { error = "request_failed", errorClass = "upstream_error", message = ex.Message },
+                ex.Message);
         }
         finally
         {
@@ -149,6 +151,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         (new
         {
             error = "binary_response_requires_download",
+            errorClass = "transport_mismatch",
             status,
             contentType,
             hint = "Do not transfer file bytes through platform_request or MCP JSON. Call create_file_download_link with the file id, then GET its short-lived downloadUrl directly; Range requests are supported.",
@@ -158,6 +161,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         (new
         {
             error = "response_too_large",
+            errorClass = "limit",
             status,
             limitBytes = MaxResponseBytes,
             bytesAtLeast = bytesObserved,
@@ -281,6 +285,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             return (new
             {
                 error = "response_too_large",
+                errorClass = "limit",
                 status,
                 bytes = working.Length,
                 hint = "Do not GET a full product card. Use category attributes or sql_readonly on one table.",
@@ -300,6 +305,7 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         string? title = null;
         object? data = null;
         object? body = null;
+        var validationErrorsFlattened = false;
         if (bytes.Length > 0)
         {
             try
@@ -313,7 +319,8 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
                     if (root.TryGetProperty("data", out var d))
                         data = JsonSerializer.Deserialize<object>(d.GetRawText(), JsonRead);
                     var details = FlattenValidation(root);
-                    if (!string.IsNullOrEmpty(details))
+                    validationErrorsFlattened = !string.IsNullOrEmpty(details);
+                    if (validationErrorsFlattened)
                         title = string.IsNullOrEmpty(title) || IsGenericValidationTitle(title)
                             ? details
                             : title + " " + details;
@@ -326,13 +333,15 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
             }
         }
 
-        code ??= "http_error";
-        title ??= $"Request failed ({status})";
         if (status == 404)
         {
+            // A 404 that survived gateway preflight means the route exists but the
+            // resource does not — it is never an instruction to stop inventing routes.
             code = "not_found";
-            title = "This path does not exist. Do not invent cabinet URLs.";
+            title ??= "Not found";
         }
+        code ??= "http_error";
+        title ??= $"Request failed ({status})";
         var atCap = string.Equals(code, "product_limit_reached", StringComparison.OrdinalIgnoreCase);
         var summary = atCap
             ? "Product limit reached — nothing was created."
@@ -340,15 +349,28 @@ public sealed class CabinetRequestInvoker : ICabinetRequestInvoker
         return (new
         {
             error = code,
+            errorClass = ErrorClass(status, validationErrorsFlattened),
             status,
             title,
-            hint = status == 404
-                ? "Use paths listed under TOOLS. Mapping canvas: GET/PATCH /marketplace/connections/{id}/mappings/{mappingId}/graph. Link cards: POST …/match/preview then POST …/match/apply. Do not invent URLs or GET OpenAPI."
-                : null,
+            hint = (string?)null,
             data,
             body,
         }, summary);
     }
+
+    private static string ErrorClass(int status, bool validationErrorsFlattened) =>
+        status switch
+        {
+            400 => validationErrorsFlattened ? "validation_failed" : "bad_request",
+            401 or 403 => "forbidden",
+            404 => "resource_not_found",
+            409 => "conflict",
+            413 => "limit",
+            422 => "validation_failed",
+            429 => "quota",
+            >= 500 => "upstream_error",
+            _ => "bad_request",
+        };
 
     private static bool IsGenericValidationTitle(string title) =>
         title.Contains("One or more validation errors", StringComparison.OrdinalIgnoreCase);

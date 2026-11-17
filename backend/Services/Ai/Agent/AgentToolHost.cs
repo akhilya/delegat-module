@@ -61,6 +61,9 @@ public sealed class AgentToolHost
         _chatAttachments = chatAttachments;
     }
 
+    /// <summary>Capability index shared with discovery and the gateway preflight.</summary>
+    internal CabinetCapabilityIndex Capabilities => _actions.Index;
+
     public async Task<(object result, string summary)> DispatchAsync(
         string toolName,
         string inputJson,
@@ -188,7 +191,17 @@ public sealed class AgentToolHost
         return (
             new
             {
-                hits = hits.Select(h => new { method = h.Method, path = h.Path, write = h.Write, note = h.Note }),
+                hits = hits.Select(h => new
+                {
+                    method = h.Method,
+                    path = h.Path,
+                    write = h.Write,
+                    note = h.CallableViaJson
+                        ? h.Note
+                        : h.Note + " Requires multipart — not callable via platform_request JSON.",
+                    callableViaJson = h.CallableViaJson,
+                    transport = h.CallableViaJson ? null : h.Transport,
+                }),
             },
             $"{hits.Count} actions");
     }

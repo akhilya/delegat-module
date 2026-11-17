@@ -101,6 +101,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Changed
 
+- AI assistant cabinet calls are now validated against the real action catalog before dispatch: invented routes, wrong HTTP verbs, and multipart/binary endpoints invoked through `platform_request` are rejected immediately with a structured error (error class plus up to three verified JSON-callable alternatives) instead of a misleading 404, and `search_actions` marks which actions the assistant can actually call. Proposed plans containing unexecutable cabinet steps are rejected before presentation. A cabinet 404 that still occurs now means a missing resource and no longer claims the route does not exist.
+
 - The mapping editor opens with one graph request that also returns mapping details and the marketplace field schema. Card and price field schemas are cached for an hour, so opening a mapping no longer calls the marketplace API twice. **Update fields** still reads the live schema. Previewing on a product loads it with split, untracked queries.
 
 - The standalone barcode and notes pages are hidden from navigation without removing their routes. Administration is a single, tab-free page with Plan, Summary (instance and per-store usage), Stores, Users, AI, Public API, Logging, and Database backup in sequence; section access remains independent, and previous settings/admin links redirect there. The AI model table opens in a wide dialog. Product barcode previews use a compact, readable scale on a white background in both themes. Help, Operations, and the enabled AI assistant share the navbar; the account menu remains in the sidebar footer. Missing-photo placeholders use the muted surface in both themes.

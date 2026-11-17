@@ -425,6 +425,13 @@ public class AiChatService
                             continue;
                         }
 
+                        var feasibilityReason = _toolHost.Capabilities.PlanStepRejection(planInput.Steps);
+                        if (feasibilityReason != null)
+                        {
+                            toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = feasibilityReason });
+                            continue;
+                        }
+
                         var efficiencyReason = AgentPlanEfficiencyGuard.RejectionReason(planInput.Steps);
                         if (efficiencyReason != null)
                         {
@@ -805,9 +812,16 @@ public class AiChatService
             }
 
             _toolEffects.TryGetValue(tool, out var effects);
+            var resultElement = JsonSerializer.Deserialize<JsonElement>(resultJson);
             outcomes.Add(new { step = outcomes.Count + 1, tool, description = step.Description,
-                status = failed ? "failed" : AgentToolResult.IsQueuedJob(JsonSerializer.Deserialize<JsonElement>(resultJson)) ? "queued" : "completed",
-                summary, result = JsonSerializer.Deserialize<JsonElement>(resultJson) });
+                status = failed ? "failed" : AgentToolResult.IsQueuedJob(resultElement) ? "queued" : "completed",
+                summary,
+                errorClass = resultElement.ValueKind == JsonValueKind.Object
+                    && resultElement.TryGetProperty("errorClass", out var errorClass)
+                    && errorClass.ValueKind == JsonValueKind.String
+                        ? errorClass.GetString()
+                        : null,
+                result = resultElement });
             yield return Sse(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
             if (failed)
             {

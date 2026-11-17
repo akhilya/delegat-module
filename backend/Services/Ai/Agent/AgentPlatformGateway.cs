@@ -7,11 +7,16 @@ public sealed class AgentPlatformGateway
 {
     private readonly AgentFileUploadService _uploads;
     private readonly ICabinetRequestInvoker _invoker;
+    private readonly CabinetCapabilityIndex? _capabilities;
 
-    public AgentPlatformGateway(AgentFileUploadService uploads, ICabinetRequestInvoker invoker)
+    public AgentPlatformGateway(
+        AgentFileUploadService uploads,
+        ICabinetRequestInvoker invoker,
+        CabinetCapabilityIndex? capabilities = null)
     {
         _uploads = uploads;
         _invoker = invoker;
+        _capabilities = capabilities;
     }
 
     public async Task<(object result, string summary)> ExecuteAsync(
@@ -29,13 +34,23 @@ public sealed class AgentPlatformGateway
 
         var deny = PlatformRequestPolicy.DenyReason(method, path);
         if (deny != null)
-            return (new { error = deny, path, method }, "Route is not allowed for the assistant");
+            return (new { error = deny, errorClass = "forbidden", retryable = false, path, method },
+                "Route is not allowed for the assistant");
 
         var mutating = PlatformRequestPolicy.IsMutating(method);
         if (mutating && AgentAccess.IsReadOnly(permissions))
-            return (new { error = "forbidden" }, "This account is read-only");
+            return (new { error = "forbidden", errorClass = "forbidden", retryable = false },
+                "This account is read-only");
 
         var (apiPath, query) = PlatformRequestPolicy.SplitPathAndQuery(path);
+        if (_capabilities != null)
+        {
+            var validation = _capabilities.Validate(method, apiPath);
+            if (validation.Status != CabinetCapabilityIndex.StatusOk)
+                return (PreflightError(validation, method, path),
+                    $"Route rejected before dispatch: {validation.ErrorClass}");
+        }
+
         var mismatch = AssistantBodyGuard.RejectReason(method, apiPath, body);
         if (mismatch != null)
             return (new { error = "body_mismatch", message = mismatch }, mismatch);
@@ -56,6 +71,20 @@ public sealed class AgentPlatformGateway
 
         return await _invoker.InvokeAsync(storeId, userId, method, apiPath, query, body, ct);
     }
+
+    private static object PreflightError(CabinetCapabilityIndex.Validation validation, string method, string path) =>
+        new
+        {
+            error = validation.Status,
+            errorClass = validation.ErrorClass,
+            retryable = false,
+            method,
+            path,
+            callableAlternatives = validation.Alternatives
+                .Select(a => new { method = a.Method, path = a.Path })
+                .ToArray(),
+            details = validation.Details,
+        };
 
     private static bool IsAttachStagedFiles(
         string method,
