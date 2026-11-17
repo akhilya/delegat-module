@@ -202,6 +202,70 @@ public static class AiConversationTurnStore
         ReadTurn(json)?["turnStopped"] is JsonValue value
         && value.TryGetValue<bool>(out var stopped) && stopped;
 
+    /// <summary>
+    /// Constrains anonymous (role+content/rebase) matching: a review envelope
+    /// (<c>executionProposalId</c>) may only merge with a row carrying the same
+    /// parent link <em>and</em> the same own <c>plan.proposalId</c>. Malformed
+    /// review fields fail the match instead of throwing. Explicit DbId updates
+    /// and <see cref="PreserveServerPlan"/> semantics are unaffected.
+    /// </summary>
+    internal static bool HasCompatibleReviewIdentity(string? storedJson, string? incomingJson)
+    {
+        var stored = ReadTurn(storedJson);
+        var incoming = ReadTurn(incomingJson);
+        var storedParent = ReadParentLink(stored, out var storedBadParent);
+        var incomingParent = ReadParentLink(incoming, out var incomingBadParent);
+        if (storedBadParent || incomingBadParent)
+            return false;
+        if (storedParent == null && incomingParent == null)
+            return true; // Ordinary non-review sync - unchanged.
+        if (storedParent == null || incomingParent == null
+            || !string.Equals(storedParent, incomingParent, StringComparison.Ordinal))
+            return false;
+
+        var storedOwn = ReadOwnPlanId(stored, out var storedBadPlan);
+        var incomingOwn = ReadOwnPlanId(incoming, out var incomingBadPlan);
+        if (storedBadPlan || incomingBadPlan)
+            return false;
+        if (storedOwn == null && incomingOwn == null)
+            return true;
+        return string.Equals(storedOwn, incomingOwn, StringComparison.Ordinal);
+    }
+
+    private static string? ReadParentLink(JsonObject? turn, out bool invalid)
+    {
+        invalid = false;
+        if (turn == null || !turn.TryGetPropertyValue("executionProposalId", out var node) || node == null)
+            return null;
+        if (node is JsonValue value && value.TryGetValue<string>(out var link)
+            && !string.IsNullOrEmpty(link))
+            return link;
+        invalid = true;
+        return null;
+    }
+
+    private static string? ReadOwnPlanId(JsonObject? turn, out bool invalid)
+    {
+        invalid = false;
+        if (turn == null || !turn.TryGetPropertyValue("plan", out var node) || node == null)
+            return null;
+        if (node is not JsonObject plan)
+        {
+            invalid = true;
+            return null;
+        }
+        if (!plan.TryGetPropertyValue("proposalId", out var idNode) || idNode == null)
+        {
+            invalid = true;
+            return null;
+        }
+        if (idNode is JsonValue value && value.TryGetValue<string>(out var id)
+            && !string.IsNullOrEmpty(id))
+            return id;
+        invalid = true;
+        return null;
+    }
+
     private static void RemoveServerPlanFlags(JsonObject turn)
     {
         foreach (var key in new[]
@@ -471,8 +535,11 @@ public static class AiConversationTurnStore
         try
         {
             if (JsonNode.Parse(json) is not JsonObject obj) return null;
-            var ui = obj["_ui"]?.GetValue<string>();
-            return string.Equals(ui, "assistantTurn", StringComparison.Ordinal) ? obj : null;
+            if (obj["_ui"] is not JsonValue uiValue
+                || !uiValue.TryGetValue<string>(out var ui)
+                || !string.Equals(ui, "assistantTurn", StringComparison.Ordinal))
+                return null;
+            return obj;
         }
         catch (JsonException)
         {

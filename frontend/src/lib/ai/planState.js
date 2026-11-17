@@ -55,11 +55,38 @@ export function reconcilePlanMessages(current, incoming) {
       next.splice(later < 0 ? next.length : later, 0, local);
     }
   }
+  // The parent link scopes reviews but is not a unique identity: several
+  // reviews can share one executed plan. Keep locals that no incoming row
+  // proves to be the same review.
   for (const local of current.filter((m) => m.executionProposalId)) {
-    if (!next.some((m) => m.executionProposalId === local.executionProposalId))
-      next.push(local);
+    if (next.some((candidate) => sameReviewIdentity(local, candidate, current, next)))
+      continue;
+    const later = local.dbId ? next.findIndex((m) => m.dbId > local.dbId) : -1;
+    next.splice(later < 0 ? next.length : later, 0, local);
   }
   return next;
+}
+
+function sameReviewIdentity(local, candidate, current, next) {
+  const parent = local.executionProposalId;
+  if (
+    typeof parent !== "string" ||
+    !parent ||
+    candidate.executionProposalId !== parent
+  )
+    return false;
+  if (local.dbId && candidate.dbId) return local.dbId === candidate.dbId;
+  if (local.id && candidate.id && local.id === candidate.id) return true;
+  const localPlan = local.plan?.proposalId;
+  const candidatePlan = candidate.plan?.proposalId;
+  if (localPlan || candidatePlan)
+    return !!localPlan && localPlan === candidatePlan;
+  // Anonymous reviews only collapse onto a sole unambiguous counterpart.
+  const anonymous = (list) =>
+    list.filter(
+      (m) => m.executionProposalId === parent && !m.plan?.proposalId,
+    ).length;
+  return anonymous(current) === 1 && anonymous(next) === 1;
 }
 
 export function canConfirmPlan(message) {

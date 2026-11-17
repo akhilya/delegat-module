@@ -128,6 +128,123 @@ describe("plan result reviews", () => {
     assert.equal(reconciled[1].content, "Actual result");
     assert.equal(reconciled[1].done, true);
   });
+  it("keeps distinct review identities on a stale read sharing the parent execution", () => {
+    const execution = {
+      id: "execution", dbId: 2, role: "assistant",
+      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+    };
+    const reviewOne = {
+      id: "review-one", dbId: 3, role: "assistant",
+      executionProposalId: "A", content: "First review", done: true,
+    };
+    const reviewTwo = {
+      id: "review-two", role: "assistant", executionProposalId: "A",
+      content: "", plan: { proposalId: "B" }, done: true,
+    };
+    const result = reconcilePlanMessages(
+      [execution, reviewOne, reviewTwo],
+      [execution, reviewOne],
+    );
+    assert.deepEqual(
+      result.map((m) => m.id),
+      ["execution", "review-one", "review-two"],
+    );
+    const restoredB = result.at(-1);
+    assert.equal(restoredB.plan.proposalId, "B");
+    assert.equal(canConfirmPlan(restoredB), true);
+    assert.equal(restoredB.planConfirmed, undefined);
+    assert.equal(restoredB.planExecuted, undefined);
+  });
+  it("keeps two persisted no-plan reviews sharing the parent in dbId order", () => {
+    const execution = {
+      id: "execution", dbId: 2, role: "assistant",
+      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+    };
+    const reviewThree = {
+      id: "r3", dbId: 3, role: "assistant",
+      executionProposalId: "A", content: "First", done: true,
+    };
+    const reviewFour = {
+      id: "r4", dbId: 4, role: "assistant",
+      executionProposalId: "A", content: "Second", done: true,
+    };
+    const result = reconcilePlanMessages(
+      [execution, reviewThree, reviewFour],
+      [execution, reviewThree],
+    );
+    assert.deepEqual(result.map((m) => m.dbId), [2, 3, 4]);
+    assert.equal(result[1].content, "First");
+    assert.equal(result[2].content, "Second");
+  });
+  it("adopts the persisted row for the same own proposal without duplicating it", () => {
+    const execution = {
+      id: "execution", dbId: 2, role: "assistant",
+      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+    };
+    const localB = {
+      id: "local-b", role: "assistant", executionProposalId: "A",
+      plan: { proposalId: "B" }, content: "", done: true,
+    };
+    const serverB = {
+      id: "server-b", dbId: 4, role: "assistant", executionProposalId: "A",
+      plan: { proposalId: "B" }, content: "Done", done: true,
+    };
+    const result = reconcilePlanMessages(
+      [execution, localB],
+      [execution, serverB],
+    );
+    assert.equal(result.length, 2);
+    assert.equal(result[1].dbId, 4);
+    assert.equal(result[1].plan.proposalId, "B");
+    assert.equal(canConfirmPlan(result[1]), true);
+  });
+  it("retains ambiguous anonymous reviews instead of collapsing them onto one row", () => {
+    const execution = {
+      id: "execution", dbId: 2, role: "assistant",
+      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+    };
+    const reviewOne = {
+      id: "r1", role: "assistant", executionProposalId: "A",
+      content: "One", done: true,
+    };
+    const reviewTwo = {
+      id: "r2", role: "assistant", executionProposalId: "A",
+      content: "Two", done: true,
+    };
+    const serverReview = {
+      id: "srv", dbId: 5, role: "assistant", executionProposalId: "A",
+      content: "Server", done: true,
+    };
+    const result = reconcilePlanMessages(
+      [execution, reviewOne, reviewTwo],
+      [execution, serverReview],
+    );
+    const ids = result.map((m) => m.id);
+    assert.ok(ids.includes("r1") && ids.includes("r2"));
+    assert.equal(ids.filter((id) => id === "srv").length, 1);
+  });
+  it("adopts an evolved own proposal on the same persisted review row", () => {
+    const execution = {
+      id: "execution", dbId: 2, role: "assistant",
+      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+    };
+    const localReview = {
+      id: "r3", dbId: 3, role: "assistant",
+      executionProposalId: "A", content: "Text", done: true,
+    };
+    const updated = {
+      id: "r3-updated", dbId: 3, role: "assistant",
+      executionProposalId: "A", plan: { proposalId: "B" },
+      content: "Text", done: true,
+    };
+    const result = reconcilePlanMessages(
+      [execution, localReview],
+      [execution, updated],
+    );
+    assert.equal(result.length, 2);
+    assert.equal(result[1].plan.proposalId, "B");
+    assert.equal(canConfirmPlan(result[1]), true);
+  });
 });
 
 describe("plan reconciliation", () => {

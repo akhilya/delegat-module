@@ -585,6 +585,202 @@ public class AiConversationHistorySyncTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task NoPlanReview_DoesNotAcquireParentPlan(
+        bool includeKnownUserId, bool reviewPersistedFirst)
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "m0-d3-probe", 1, 2, CancellationToken.None);
+        var start = DateTime.UtcNow;
+        var user = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "user",
+            content = "Request",
+            createdAt = start,
+        };
+        var execution = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "",
+            createdAt = start.AddMilliseconds(1),
+            toolCallsJson = """
+                {"_ui":"assistantTurn","plan":{"proposalId":"A"},"planConfirmed":true,"planExecuted":true,"planExecStart":0,"tools":[],"timeline":[]}
+                """,
+        };
+        db.aiConversationMessages.AddRange(user, execution);
+        await db.SaveChangesAsync();
+        const string reviewJson = """
+            {"_ui":"assistantTurn","executionProposalId":"A","tools":[],"timeline":[]}
+            """;
+        if (reviewPersistedFirst)
+            await AiConversationTurnStore.AppendAssistantAsync(
+                db, conversation.sessionId, 1, 2,
+                new AiSseTurnSnapshot("Review result", reviewJson, null),
+                CancellationToken.None);
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    DbId = includeKnownUserId ? user.Id : null,
+                    Role = "user",
+                    Content = "Request",
+                },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "Review result",
+                    ToolCallsJson = reviewJson,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id)
+            .OrderBy(m => m.Id).ToListAsync();
+        var review = Assert.Single(rows, m => m.content == "Review result");
+        var metadata = JsonNode.Parse(review.toolCallsJson!)!;
+        Assert.Equal("A", metadata["executionProposalId"]!.GetValue<string>());
+        Assert.Null(metadata["plan"]);
+        Assert.NotEqual(execution.Id, review.Id);
+        // The executed parent row must not be overwritten or lose its plan A.
+        var persistedExecution = Assert.Single(rows, m => m.Id == execution.Id);
+        Assert.Equal("", persistedExecution.content);
+        var parent = JsonNode.Parse(persistedExecution.toolCallsJson!)!;
+        Assert.Equal("A", parent["plan"]?["proposalId"]?.GetValue<string>());
+        Assert.Equal(true, parent["planExecuted"]?.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IdlessEmptyReview_DoesNotMatchOrRebaseExecutedPlanRow(bool includeKnownUserId)
+    {
+        // An id-less review with empty content shares role+content with the executed
+        // plan row: anonymous matching AND the final-assistant rebase must both refuse
+        // to merge it, so the review becomes its own row instead of inheriting plan A.
+        await using var db = TestDbFactory.CreateDb();
+        var conversation = await AiConversationTurnStore.EnsureConversationAsync(
+            db, "m0-d3-empty-review", 1, 2, CancellationToken.None);
+        var start = DateTime.UtcNow;
+        var user = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "user",
+            content = "Request",
+            createdAt = start,
+        };
+        var execution = new AiConversationMessage
+        {
+            conversationId = conversation.Id,
+            role = "assistant",
+            content = "",
+            createdAt = start.AddMilliseconds(1),
+            toolCallsJson = """
+                {"_ui":"assistantTurn","plan":{"proposalId":"A"},"planConfirmed":true,"planExecuted":true,"planExecStart":0,"tools":[],"timeline":[]}
+                """,
+        };
+        db.aiConversationMessages.AddRange(user, execution);
+        await db.SaveChangesAsync();
+        const string reviewJson = """
+            {"_ui":"assistantTurn","executionProposalId":"A","tools":[],"timeline":[]}
+            """;
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conversation.sessionId,
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    DbId = includeKnownUserId ? user.Id : null,
+                    Role = "user",
+                    Content = "Request",
+                },
+                new SaveMessageItem
+                {
+                    Role = "assistant",
+                    Content = "",
+                    ToolCallsJson = reviewJson,
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id)
+            .OrderBy(m => m.Id).ToListAsync();
+        var review = Assert.Single(rows,
+            m => m.role == "assistant" && m.Id != execution.Id);
+        var metadata = JsonNode.Parse(review.toolCallsJson!)!;
+        Assert.Equal("A", metadata["executionProposalId"]!.GetValue<string>());
+        Assert.Null(metadata["plan"]);
+        Assert.Null(metadata["planExecuted"]);
+        var persistedExecution = Assert.Single(rows, m => m.Id == execution.Id);
+        Assert.Equal("", persistedExecution.content);
+        var parent = JsonNode.Parse(persistedExecution.toolCallsJson!)!;
+        Assert.Equal("A", parent["plan"]?["proposalId"]?.GetValue<string>());
+        Assert.Equal(true, parent["planExecuted"]?.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"B"}}""",
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"B"}}""",
+        true)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"B"}}""",
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"C"}}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"B"}}""",
+        """{"_ui":"assistantTurn","executionProposalId":"A"}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A"}""",
+        """{"_ui":"assistantTurn","executionProposalId":"Z"}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":123}""",
+        """{"_ui":"assistantTurn","executionProposalId":123}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":"oops"}""",
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":"oops"}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","executionProposalId":"A","plan":{}}""",
+        """{"_ui":"assistantTurn","executionProposalId":"A"}""",
+        false)]
+    [InlineData(
+        """{"_ui":"assistantTurn","plan":{"proposalId":"A"}}""",
+        """{"_ui":"assistantTurn","plan":{"proposalId":"Z"}}""",
+        true)]
+    public void HasCompatibleReviewIdentity_RejectsIncompatibleReviewEnvelopes(
+        string storedJson, string incomingJson, bool expected)
+    {
+        Assert.Equal(
+            expected,
+            AiConversationTurnStore.HasCompatibleReviewIdentity(storedJson, incomingJson));
+    }
+
     private sealed class SaveChangesGate : SaveChangesInterceptor
     {
         public TaskCompletionSource SaveStarted { get; } =

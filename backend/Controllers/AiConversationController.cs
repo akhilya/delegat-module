@@ -187,7 +187,9 @@ public class AiConversationController : ControllerBase
                 var matchingIndex = existing.FindIndex(
                     Math.Max(0, nextUnpersistedIndex),
                     candidate => string.Equals(candidate.role, m.Role, StringComparison.OrdinalIgnoreCase)
-                        && string.Equals(candidate.content, m.Content, StringComparison.Ordinal));
+                        && string.Equals(candidate.content, m.Content, StringComparison.Ordinal)
+                        && AiConversationTurnStore.HasCompatibleReviewIdentity(
+                            candidate.toolCallsJson, m.ToolCallsJson));
                 if (matchingIndex >= 0)
                 {
                     var matched = existing[matchingIndex];
@@ -228,7 +230,9 @@ public class AiConversationController : ControllerBase
             var matchingIndex = existing.FindIndex(
                 nextExistingIndex,
                 candidate => string.Equals(candidate.role, incoming.Role, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(candidate.content, incoming.Content, StringComparison.Ordinal));
+                    && string.Equals(candidate.content, incoming.Content, StringComparison.Ordinal)
+                    && AiConversationTurnStore.HasCompatibleReviewIdentity(
+                        candidate.toolCallsJson, incoming.ToolCallsJson));
             if (matchingIndex >= 0)
             {
                 var matched = existing[matchingIndex];
@@ -247,7 +251,9 @@ public class AiConversationController : ControllerBase
                 && string.Equals(incoming.Role, "assistant", StringComparison.OrdinalIgnoreCase)
                 && nextExistingIndex == existing.Count - 1
                 && nextExistingIndex >= 0
-                && existing[nextExistingIndex].role == "assistant")
+                && existing[nextExistingIndex].role == "assistant"
+                && AiConversationTurnStore.HasCompatibleReviewIdentity(
+                    existing[nextExistingIndex].toolCallsJson, incoming.ToolCallsJson))
             {
                 var last = existing[nextExistingIndex];
                 if (!AiConversationTurnStore.HasStoppedTurn(last.toolCallsJson)) last.content = incoming.Content;
