@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -27,7 +28,7 @@ namespace Delegat.Tests;
 /// the SSE stream shape. Fixtures mirror AiChatAgentEvaluationTests; the model is
 /// driven through a scripted Microsoft.Extensions.AI IChatClient.
 /// </summary>
-[Collection("AiPlanSigningKey")]
+[Collection("EnvVars")]
 public class MafEngineParityTests
 {
     [Fact]
@@ -305,6 +306,228 @@ public class MafEngineParityTests
         Assert.Contains("\"type\":\"done\"", string.Concat(chunks), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("functions.propose_plan")]
+    [InlineData("FuNcTiOnS.propose_plan")]
+    public async Task PrefixedProposePlan_IsPresentedAfterNormalization(string toolName)
+    {
+        // Some OpenAI-compatible servers return legacy "functions." tool names;
+        // the gate normalizes them so the proposal still reaches the plan card.
+        using var signingKey = SigningKey();
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall(toolName,
+                "{\"summary\":\"Create Mug\",\"steps\":[{\"description\":\"Create Mug\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Mug\"}}}]}",
+                "prefixed-plan"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Create a product named Mug")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-prefixed-plan", locale: "en"));
+
+        Assert.Single(fixture.Client.Requests);
+        var serialized = string.Concat(chunks);
+        Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("proposalNonce", serialized, StringComparison.Ordinal);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Theory]
+    [InlineData("functions.platform_request")]
+    [InlineData("FuNcTiOnS.platform_request")]
+    public async Task PrefixedReadTool_DispatchesAfterNormalization(string toolName)
+    {
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall(toolName, "{\"method\":\"GET\",\"path\":\"/products\"}", "prefixed-read"),
+            Text("The read completed."));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Read the products")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-prefixed-read", locale: "en"));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Equal(1, fixture.Invoker.Calls);
+        // The gateway maps the agent-facing path onto the real cabinet route.
+        Assert.Equal("/api/products", fixture.Invoker.LastPath);
+        var history = fixture.Client.Requests[1];
+        using var callMessage = JsonDocument.Parse(history.Messages.Last(m => m.Role == "assistant").Content);
+        var call = Assert.Single(callMessage.RootElement.EnumerateArray());
+        Assert.Equal("prefixed-read", call.GetProperty("id").GetString());
+        Assert.Equal("platform_request", call.GetProperty("name").GetString());
+        Assert.Equal("GET", call.GetProperty("input").GetProperty("method").GetString());
+        Assert.Equal("/products", call.GetProperty("input").GetProperty("path").GetString());
+        using var resultMessage = JsonDocument.Parse(LastToolResult(history));
+        Assert.Equal("prefixed-read", Assert.Single(resultMessage.RootElement.EnumerateArray())
+            .GetProperty("tool_use_id").GetString());
+        Assert.DoesNotContain("Unknown tool", LastToolResult(history), StringComparison.Ordinal);
+        Assert.Contains("The read completed.", AiSseTurnRecorder.Fold(chunks).Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReviewMode_CorrectedPlan_OnSecondRequest_IsNotStripped()
+    {
+        // An invalid first proposal leaves requests 1 and 2 for recovery; the
+        // second request must still advertise propose_plan (speak-only starts
+        // at the third, legacy iteration >= 2).
+        using var signingKey = SigningKey();
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan"),
+            ToolCall("propose_plan",
+                "{\"summary\":\"Retry the write\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
+                "good-plan"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Review the actual results")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-review-retry", locale: "en", planResultReview: true));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
+        Assert.Contains(AgentChatTurnGate.InvalidPlanText,
+            LastToolResult(fixture.Client.Requests[1]), StringComparison.Ordinal);
+        var serialized = string.Concat(chunks);
+        Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("proposalNonce", serialized, StringComparison.Ordinal);
+        Assert.Contains("Retry the write", serialized, StringComparison.Ordinal);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task ReviewMode_ThirdRequest_StripsEvenValidRecoveryProposal()
+    {
+        using var signingKey = SigningKey();
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-1"),
+            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-2"),
+            ToolCall("propose_plan",
+                "{\"summary\":\"Too late\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
+                "late-plan"));
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Review the actual results")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-review-third", locale: "en", planResultReview: true));
+
+        Assert.Equal(3, fixture.Client.Requests.Count);
+        Assert.Equal(["propose_plan"], fixture.Client.Requests[0].ToolNames);
+        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
+        Assert.Empty(fixture.Client.Requests[2].ToolNames);
+        var serialized = string.Concat(chunks);
+        Assert.DoesNotContain("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"done\"", serialized, StringComparison.Ordinal);
+        Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task AnthropicPromptCache_EnabledEndpoint_MarksLastTool()
+    {
+        using var flag = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE", "true");
+        using var endpoint = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE_ENDPOINT",
+            "https://api.example.test");
+        await using var fixture = await CreateFixtureAsync(
+            ToolCall("search_catalog", "{\"query\":\"SKU-42\",\"limit\":5}", "cache-read"),
+            Text("done"));
+
+        await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Find SKU-42")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-cache-on", locale: "en"));
+
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        foreach (var request in fixture.Client.Requests)
+        {
+            using var wire = await SerializeAnthropicRequestAsync(request);
+            var tools = wire.RootElement.GetProperty("tools").EnumerateArray().ToArray();
+            Assert.Equal(request.ToolNames.Count, tools.Length);
+            Assert.Equal(request.ToolNames[^1], tools[^1].GetProperty("name").GetString());
+            var cacheControl = tools[^1].GetProperty("cache_control");
+            Assert.Equal("ephemeral", cacheControl.GetProperty("type").GetString());
+            Assert.Equal("5m", cacheControl.GetProperty("ttl").GetString());
+            Assert.All(tools[..^1], tool => Assert.False(
+                tool.TryGetProperty("cache_control", out var cache)
+                && cache.ValueKind != JsonValueKind.Null));
+        }
+
+        var lastTool = Assert.IsAssignableFrom<AIFunction>(
+            fixture.Client.Requests[0].Tools![^1]);
+        Assert.IsType<Anthropic.Models.Messages.CacheControlEphemeral>(
+            lastTool.AdditionalProperties?[nameof(Anthropic.Models.Messages.Tool.CacheControl)]);
+    }
+
+    [Theory]
+    [InlineData(null, "https://api.example.test")]
+    [InlineData("false", "https://api.example.test")]
+    [InlineData("invalid", "https://api.example.test")]
+    [InlineData("true", null)]
+    [InlineData("true", "not-a-uri")]
+    [InlineData("true", "https://unrelated.example.test")]
+    [InlineData("true", "http://api.example.test")]
+    [InlineData("true", "https://api.example.test:8443")]
+    public async Task AnthropicPromptCache_DisabledOrOtherEndpoint_LeavesToolsUnmarked(
+        string? enabled, string? allowlistedEndpoint)
+    {
+        using var flag = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE", enabled);
+        using var endpoint = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE_ENDPOINT",
+            allowlistedEndpoint);
+        await using var fixture = await CreateFixtureAsync(Text("done"));
+
+        await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("hi")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-cache-off", locale: "en"));
+
+        var request = Assert.Single(fixture.Client.Requests);
+        using var wire = await SerializeAnthropicRequestAsync(request);
+        var tools = wire.RootElement.GetProperty("tools").EnumerateArray().ToArray();
+        Assert.All(tools, tool => Assert.False(
+            tool.TryGetProperty("cache_control", out var cache)
+            && cache.ValueKind != JsonValueKind.Null));
+    }
+
+    [Fact]
+    public void AnthropicPromptCache_RequestHintFalse_DoesNotEnableCache()
+    {
+        using var flag = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE", "true");
+        using var endpoint = new TemporaryEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE_ENDPOINT",
+            "https://api.example.test");
+        var model = new AiModelConfig { apiUrl = "https://api.example.test/v1/messages" };
+        Assert.True(AiApiClient.IsAnthropicPromptCacheEnabled(true, model));
+        Assert.False(AiApiClient.IsAnthropicPromptCacheEnabled(false, model));
+    }
+
+    /// <summary>
+    /// Serializes the captured tool objects through the real Anthropic provider
+    /// adapter so wire assertions cover what the SDK emits - no network.
+    /// </summary>
+    private static async Task<JsonDocument> SerializeAnthropicRequestAsync(CapturedRequest request)
+    {
+        var handler = new CapturingAnthropicHandler();
+        using var http = new HttpClient(handler);
+        using var client = Microsoft.Extensions.AI.AnthropicClientExtensions.AsIChatClient(
+            new Anthropic.AnthropicClient
+            {
+                ApiKey = "test-key",
+                BaseUrl = "https://api.example.test",
+                HttpClient = http,
+            }, "scripted-model", 1024);
+        await client.GetResponseAsync(
+            [new FrameworkChatMessage(ChatRole.User, "hi")],
+            new ChatOptions { Instructions = request.System, Tools = request.Tools!.ToList() });
+        return JsonDocument.Parse(handler.RequestBody!);
+    }
+
+    private sealed class CapturingAnthropicHandler : HttpMessageHandler
+    {
+        public string? RequestBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            const string response = """
+                {"id":"msg_test","type":"message","role":"assistant","model":"scripted-model","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}
+                """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
     [Fact]
     public async Task TelemetryLine_CarriesMafEngineLabel_AndProviderUsage()
     {
@@ -521,7 +744,8 @@ public class MafEngineParityTests
             Requests.Add(new CapturedRequest(
                 options?.Instructions,
                 messages.Select(m => new CapturedMessage(m.Role.Value, SerializeContents(m))).ToList(),
-                options?.Tools?.Select(t => t.Name).ToList() ?? []));
+                options?.Tools?.Select(t => t.Name).ToList() ?? [],
+                options?.Tools?.ToList()));
             return _responses.Dequeue() switch
             {
                 Exception error => throw error,
@@ -590,7 +814,8 @@ public class MafEngineParityTests
     private sealed record CapturedRequest(
         string? System,
         IReadOnlyList<CapturedMessage> Messages,
-        IReadOnlyList<string> ToolNames);
+        IReadOnlyList<string> ToolNames,
+        IReadOnlyList<AITool>? Tools = null);
 
     private sealed class EmptyMcpGateway(params AiTool[] tools) : IMcpToolGateway
     {
@@ -666,7 +891,7 @@ public class MafEngineParityTests
         private readonly string _name;
         private readonly string? _previous;
 
-        public TemporaryEnvironmentVariable(string name, string value)
+        public TemporaryEnvironmentVariable(string name, string? value)
         {
             _name = name;
             _previous = Environment.GetEnvironmentVariable(name);

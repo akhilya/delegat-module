@@ -571,7 +571,8 @@ public class AiApiClient : IAiApiClient, IAiRuntimeClientFactory
         var systemPrompt = string.IsNullOrEmpty(request.system)
             ? null
             : (Anthropic.Models.Messages.MessageCreateParamsSystem)request.system!;
-        var cacheToolDefinitions = model != null && IsAnthropicPromptCacheEnabled(request, model)
+        var cacheToolDefinitions = model != null
+            && IsAnthropicPromptCacheEnabled(request.enable_prompt_cache, model)
             && request.tools is { Count: > 0 };
         // A breakpoint after the last tool caches the unchanged system + tool prefix,
         // before per-round messages. Keep it opt-in: one-round turns pay cache-write cost
@@ -607,9 +608,9 @@ public class AiApiClient : IAiApiClient, IAiRuntimeClientFactory
         };
     }
 
-    private static bool IsAnthropicPromptCacheEnabled(AiRequest request, AiModelConfig model)
+    internal static bool IsAnthropicPromptCacheEnabled(bool enablePromptCache, AiModelConfig model)
     {
-        if (!request.enable_prompt_cache
+        if (!enablePromptCache
             || !bool.TryParse(Environment.GetEnvironmentVariable("AI_ANTHROPIC_PROMPT_CACHE"), out var enabled)
             || !enabled
             || !Uri.TryCreate(model.apiUrl, UriKind.Absolute, out var modelEndpoint)
@@ -629,7 +630,7 @@ public class AiApiClient : IAiApiClient, IAiRuntimeClientFactory
 
     // Some OpenAI-compatible models return tool names with a "functions." prefix (legacy Function
     // Calling format). Strip it so the dispatcher matches our tool registry.
-    private static string NormalizeToolName(string? name)
+    internal static string NormalizeToolName(string? name)
     {
         const string prefix = "functions.";
         return name != null && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)

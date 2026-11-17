@@ -269,6 +269,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Opt-in Agent Framework chat keeps corrected recovery plans confirmable on the second review request and accepts provider tool names prefixed with `functions.`. Anthropic tool-prefix caching now retains its five-minute breakpoint when the existing feature flag and endpoint-origin allowlist permit it; legacy remains the default runtime.
+
 - AI assistant history sync no longer copies an executed plan and its confirmation/execution flags into anonymous review messages, and review follow-ups that propose their own corrected plan stay distinct and confirmable instead of being merged or lost across reloads.
 
 - Mapping canvas polish: block and pin selection no longer draws a glow ring, and the adapter-field inspector's group filter gained a "no group" entry so custom and hidden fields stay reachable while a group is selected. Pasting or importing a graph now also validates modifier parameters that reference adapter fields (such as value-map targets), and the block search indexes dictionary options once per menu instead of rescanning every option on each keystroke.

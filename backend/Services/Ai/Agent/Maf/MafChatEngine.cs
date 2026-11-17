@@ -226,6 +226,22 @@ public sealed class MafChatEngine(
         // this same sink before the batch dispatches.
         state.KnownToolNames.UnionWith(adapters.Keys);
         state.AdditionalToolSink = additional;
+
+        // Both chat paths pass a true request hint; the actual opt-in is the
+        // AI_ANTHROPIC_PROMPT_CACHE flag plus the endpoint-origin allowlist.
+        if (turn.Model.provider == AiModelProvider.Anthropic
+            && advertised.Count > 0
+            && AiApiClient.IsAnthropicPromptCacheEnabled(enablePromptCache: true, turn.Model))
+        {
+            if (advertised[^1] is MafAdapterBase lastTool)
+                lastTool.MutableProperties[
+                    nameof(Anthropic.Models.Messages.Tool.CacheControl)] =
+                    new Anthropic.Models.Messages.CacheControlEphemeral
+                    {
+                        Ttl = Anthropic.Models.Messages.Ttl.Ttl5m,
+                    };
+        }
+
         return (advertised, additional);
     }
 

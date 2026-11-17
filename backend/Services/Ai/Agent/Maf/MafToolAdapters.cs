@@ -30,13 +30,29 @@ internal static class MafToolAdapterShared
 }
 
 /// <summary>
+/// Shared base for the MAF tool adapters. The framework declares
+/// <see cref="AITool.AdditionalProperties"/> as a read-only view; adapters back it with
+/// a mutable dictionary so per-turn provider metadata (the Anthropic cache_control
+/// breakpoint) can attach to a tool after construction.
+/// </summary>
+internal abstract class MafAdapterBase : AIFunction
+{
+    private readonly AdditionalPropertiesDictionary _additionalProperties = new();
+
+    public override IReadOnlyDictionary<string, object?> AdditionalProperties =>
+        _additionalProperties;
+
+    internal AdditionalPropertiesDictionary MutableProperties => _additionalProperties;
+}
+
+/// <summary>
 /// One catalog/MCP tool exposed to the framework as an <see cref="AIFunction"/>.
 /// The batch gate flags in <see cref="MafTurnState"/> decide whether a call dispatches:
 /// plan batches defer siblings, review mode refuses everything but propose_plan, and
 /// write/external capabilities return the exact legacy synthetic results - FICC then
 /// turns each return value into the matching <see cref="FunctionResultContent"/>.
 /// </summary>
-internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : AIFunction
+internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapterBase
 {
     public override string Name => tool.name;
     public override string Description => tool.description ?? "";
@@ -114,7 +130,7 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : AIFuncti
 /// </summary>
 internal sealed class MafProposePlanAdapter(
     AiTool tool,
-    MafTurnState state) : AIFunction
+    MafTurnState state) : MafAdapterBase
 {
     public override string Name => tool.name;
     public override string Description => tool.description ?? "";

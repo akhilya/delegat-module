@@ -127,10 +127,12 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
         }
 
         state.CurrentRequestIndex = state.RequestsSent;
-        state.RequestsSent++;
         state.LastRoundStrippedCalls = false;
 
+        // SpeakOnly consults RequestsSent as the 0-based request index (legacy
+        // `iteration`), so it must be evaluated before the counter increments.
         var speakOnly = state.SpeakOnly;
+        state.RequestsSent++;
         state.LastRequestSpeakOnly = speakOnly;
         var opts = options;
         if (speakOnly && opts != null)
@@ -153,6 +155,7 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
 
     private ChatResponse ApplyResponse(ChatResponse response)
     {
+        response = NormalizeCallNames(response);
         var text = new StringBuilder();
         var calls = new List<FunctionCallContent>();
         foreach (var message in response.Messages)
@@ -220,6 +223,53 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
             RawRepresentation = response.RawRepresentation,
             AdditionalProperties = response.AdditionalProperties,
         };
+    }
+
+    /// <summary>
+    /// Some OpenAI-compatible servers emit legacy `functions.` tool names; the
+    /// legacy stream path strips the prefix before policy and dispatch, so the
+    /// framework response is rewritten the same way here - call ids and
+    /// arguments preserved, batch inspection and adapters see normalized names.
+    /// </summary>
+    private static ChatResponse NormalizeCallNames(ChatResponse response)
+    {
+        List<FrameworkChatMessage>? changed = null;
+        for (var i = 0; i < response.Messages.Count; i++)
+        {
+            var message = response.Messages[i];
+            List<AIContent>? contents = null;
+            for (var j = 0; j < message.Contents.Count; j++)
+            {
+                if (message.Contents[j] is not FunctionCallContent call)
+                    continue;
+                var normalized = AiApiClient.NormalizeToolName(call.Name);
+                if (normalized == call.Name)
+                    continue;
+                contents ??= new List<AIContent>(message.Contents);
+                contents[j] = new FunctionCallContent(call.CallId, normalized, call.Arguments);
+            }
+            if (contents == null)
+                continue;
+            changed ??= new List<FrameworkChatMessage>(response.Messages);
+            changed[i] = new FrameworkChatMessage(message.Role, contents)
+            {
+                AuthorName = message.AuthorName,
+                MessageId = message.MessageId,
+                RawRepresentation = message.RawRepresentation,
+                AdditionalProperties = message.AdditionalProperties,
+            };
+        }
+        return changed == null
+            ? response
+            : new ChatResponse(changed)
+            {
+                FinishReason = response.FinishReason,
+                Usage = response.Usage,
+                ResponseId = response.ResponseId,
+                ModelId = response.ModelId,
+                RawRepresentation = response.RawRepresentation,
+                AdditionalProperties = response.AdditionalProperties,
+            };
     }
 
     private static ChatResponse TerminalResponse() =>
