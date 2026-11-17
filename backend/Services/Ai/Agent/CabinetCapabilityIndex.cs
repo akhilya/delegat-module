@@ -150,20 +150,19 @@ public sealed class CabinetCapabilityIndex
                 segments);
         }
 
-        // ASP.NET picks the most specific matching template (literal segments
-        // beat parameters, constrained beat unconstrained, catch-all is last)
-        // before checking verbs — so a literal sibling route wins over a
-        // parameter route even when the parameter could bind the same text.
-        var bestKey = scored.Max(x => x.key);
-        var templateMatches = scored.Where(x => x.key == bestKey).Select(x => x.item).ToList();
-
-        var methodMatches = templateMatches
-            .Where(c => c.Capability.Method.Equals(upper, StringComparison.OrdinalIgnoreCase))
+        // Endpoint routing eliminates method-incompatible candidates BEFORE
+        // picking the most specific template: GET /products/export-template
+        // dispatches to /products/{productId} (the POST literal loses its
+        // edge), while PATCH /categories/7/attributes/42 reaches the
+        // unconstrained PATCH route even though a constrained GET sibling
+        // is more specific. Same order here: method filter, then precedence.
+        var methodMatches = scored
+            .Where(x => x.item.Capability.Method.Equals(upper, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (methodMatches.Count == 0)
         {
-            var allowed = templateMatches
-                .Select(c => c.Capability.Method)
+            var allowed = scored
+                .Select(x => x.item.Capability.Method)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(m => m, StringComparer.Ordinal)
                 .ToArray();
@@ -177,7 +176,8 @@ public sealed class CabinetCapabilityIndex
                 $"This route exists for {string.Join("/", allowed)} but not {upper}.");
         }
 
-        var capability = methodMatches[0].Capability;
+        var bestKey = methodMatches.Max(x => x.key);
+        var capability = methodMatches.First(x => x.key == bestKey).item.Capability;
         if (capability.RequiresMultipart)
         {
             return Reject(StatusMultipartRequired, upper, apiPath, capability,

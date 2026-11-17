@@ -56,19 +56,37 @@ public class CabinetCapabilityIndexTests
     }
 
     [Fact]
-    public void Validate_LiteralRouteBeatsParameterSibling_WrongVerb()
+    public void Validate_MethodFilterRunsBeforePrecedence()
     {
-        // GET /products/export-template must not validate against the generic
-        // GET /products/{productId} — the literal POST route wins precedence,
-        // so the honest answer is method_not_allowed, like endpoint routing.
+        // Endpoint routing eliminates method-incompatible candidates first:
+        // GET /products/export-template dispatches to the parameter route
+        // (the literal POST loses its edge) and fails model binding later —
+        // the invoker reports that failure, preflight must not block it.
         var index = new CabinetCapabilityIndex(CabinetActions.Provider(
             CabinetActions.Action(typeof(FakeCabinetController), "GetProduct", "/products/{productId}", "GET"),
             CabinetActions.Action(typeof(FakeCabinetController), "ExportTemplate", "/products/export-template", "POST")));
 
         var result = index.Validate("GET", "/products/export-template");
 
-        Assert.Equal(CabinetCapabilityIndex.StatusMethodNotAllowed, result.Status);
-        Assert.Equal(["POST"], result.AllowedMethods);
+        Assert.Equal(CabinetCapabilityIndex.StatusOk, result.Status);
+        Assert.Equal("/api/products/{productId}", result.MatchedCapability!.PathTemplate);
+    }
+
+    [Fact]
+    public void Validate_UnconstrainedWriteSibling_SurvivesConstrainedGet()
+    {
+        // Category attributes: GET uses {attributeId:int} while PATCH/DELETE
+        // share the unconstrained {attributeId} template. A numeric id must
+        // reach the write action — method filtering removes the GET edge.
+        var index = new CabinetCapabilityIndex(CabinetActions.Provider(
+            CabinetActions.Action(typeof(FakeCabinetController), "GetCategoryAttribute",
+                "/categories/{categoryId}/attributes/{attributeId:int}", "GET")));
+
+        var result = index.Validate("PATCH", "/categories/7/attributes/42");
+
+        Assert.Equal(CabinetCapabilityIndex.StatusOk, result.Status);
+        Assert.Equal("/api/categories/{categoryId}/attributes/{attributeId}",
+            result.MatchedCapability!.PathTemplate);
     }
 
     [Fact]
@@ -84,16 +102,21 @@ public class CabinetCapabilityIndexTests
     }
 
     [Fact]
-    public void Validate_ConstrainedParameter_PreferredOverUnconstrained()
+    public void Validate_ConstrainedParameter_PreferredWithinSameMethod()
     {
+        // Both templates match /files/42; for GET only the wildcard edge
+        // survives, for POST the constrained route wins precedence.
         var index = new CabinetCapabilityIndex(CabinetActions.Provider(
             CabinetActions.Action(typeof(FakeCabinetController), "Wildcard", "/files/{name}", "GET"),
             CabinetActions.Action(typeof(FakeCabinetController), "ById", "/files/{id:int}", "POST")));
 
-        var result = index.Validate("GET", "/files/42");
+        var get = index.Validate("GET", "/files/42");
+        var post = index.Validate("POST", "/files/42");
 
-        Assert.Equal(CabinetCapabilityIndex.StatusMethodNotAllowed, result.Status);
-        Assert.Equal(["POST"], result.AllowedMethods);
+        Assert.Equal(CabinetCapabilityIndex.StatusOk, get.Status);
+        Assert.Equal("/api/files/{name}", get.MatchedCapability!.PathTemplate);
+        Assert.Equal(CabinetCapabilityIndex.StatusOk, post.Status);
+        Assert.Equal("/api/files/{id:int}", post.MatchedCapability!.PathTemplate);
     }
 
     [Theory]
