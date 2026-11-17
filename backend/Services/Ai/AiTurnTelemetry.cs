@@ -24,6 +24,7 @@ internal sealed class AiTurnTelemetry : IDisposable
     private readonly string _provider;
     private readonly string _model;
     private readonly string _promptVersion;
+    private readonly string _engine;
     private readonly ITransactionTracer? _trace;
     private readonly HashSet<string> _seenToolCallSignatures = new(StringComparer.Ordinal);
     private readonly Stopwatch _turnTimer = Stopwatch.StartNew();
@@ -48,14 +49,18 @@ internal sealed class AiTurnTelemetry : IDisposable
     private string? _outcome;
     private bool _disposed;
 
-    public AiTurnTelemetry(ILogger logger, int storeId, string provider, string model, string promptVersion)
+    /// <summary><paramref name="engine"/> is the selected chat engine: "legacy" or "maf".</summary>
+    public AiTurnTelemetry(ILogger logger, int storeId, string provider, string model,
+        string promptVersion, string engine = "legacy")
     {
         _logger = logger;
         _storeId = storeId;
         _provider = provider;
         _model = model;
         _promptVersion = promptVersion;
+        _engine = engine;
         _trace = StartTrace(logger, provider, model, promptVersion);
+        try { _trace?.SetTag("ai.engine", engine); } catch { /* best-effort */ }
     }
 
     public AiTurnSpan StartModelRound()
@@ -155,11 +160,12 @@ internal sealed class AiTurnTelemetry : IDisposable
         _turnTimer.Stop();
 
         _logger.LogInformation(
-            "AI chat turn telemetry: StoreId={StoreId} Provider={Provider} Model={Model} PromptVersion={PromptVersion} Outcome={Outcome} DurationMs={DurationMs} ModelRounds={ModelRounds} ToolRounds={ToolRounds} ModelToolCalls={ModelToolCalls} RepeatedModelToolCalls={RepeatedModelToolCalls} ExecutedTools={ExecutedTools} FailedTools={FailedTools} ModelLatencyMs={ModelLatencyMs} ToolLatencyMs={ToolLatencyMs} InputCharacters={InputCharacters} OutputCharacters={OutputCharacters} HistoryTurnsRemoved={HistoryTurnsRemoved} HistoryCharactersRemoved={HistoryCharactersRemoved} HistoryBudgetExceeded={HistoryBudgetExceeded} UsageRounds={UsageRounds} InputTokens={InputTokens} OutputTokens={OutputTokens} CacheReadInputTokens={CacheReadInputTokens} CacheCreationInputTokens={CacheCreationInputTokens}",
+            "AI chat turn telemetry: StoreId={StoreId} Provider={Provider} Model={Model} PromptVersion={PromptVersion} Engine={Engine} Outcome={Outcome} DurationMs={DurationMs} ModelRounds={ModelRounds} ToolRounds={ToolRounds} ModelToolCalls={ModelToolCalls} RepeatedModelToolCalls={RepeatedModelToolCalls} ExecutedTools={ExecutedTools} FailedTools={FailedTools} ModelLatencyMs={ModelLatencyMs} ToolLatencyMs={ToolLatencyMs} InputCharacters={InputCharacters} OutputCharacters={OutputCharacters} HistoryTurnsRemoved={HistoryTurnsRemoved} HistoryCharactersRemoved={HistoryCharactersRemoved} HistoryBudgetExceeded={HistoryBudgetExceeded} UsageRounds={UsageRounds} InputTokens={InputTokens} OutputTokens={OutputTokens} CacheReadInputTokens={CacheReadInputTokens} CacheCreationInputTokens={CacheCreationInputTokens}",
             _storeId,
             _provider,
             _model,
             _promptVersion,
+            _engine,
             _outcome ?? "interrupted",
             _turnTimer.ElapsedMilliseconds,
             _modelRounds,

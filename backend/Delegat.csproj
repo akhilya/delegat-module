@@ -62,7 +62,11 @@
 
     <!-- AI provider SDKs (official) -->
     <PackageReference Include="Anthropic" Version="13.3.0" />
-    <PackageReference Include="OpenAI" Version="*" />
+    <!-- Pinned for the agent-runtime migration (M3); Microsoft.Agents.AI.OpenAI requires >= 2.14. -->
+    <PackageReference Include="OpenAI" Version="2.15.0" />
+    <!-- Agent runtime behind the Ai:AgentRuntime=maf flag (docs/ai/assistant-dialog-issues.md §9.4 M3). -->
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.28.0" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.28.0" />
     <!-- Manual content-free AI turn traces. No ASP.NET request instrumentation. -->
     <PackageReference Include="Sentry" Version="6.12.1" />
 

@@ -11,6 +11,9 @@ public static class AiServiceCollectionExtensions
     {
         services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<IAiApiClient>(sp => sp.GetRequiredService<AiApiClient>());
+        // IChatClient adapter for the Ai:AgentRuntime=maf engine; shares AiApiClient's
+        // endpoint/credential/proxy/hosted-signer construction.
+        services.AddTransient<IAiRuntimeClientFactory>(sp => sp.GetRequiredService<AiApiClient>());
         services.AddTransient<PlatformLinkHostedAiSigningHandler>();
         services.AddHttpClient("platform-link-hosted-ai", c => c.Timeout = TimeSpan.FromMinutes(5))
             .AddHttpMessageHandler<PlatformLinkHostedAiSigningHandler>();
@@ -28,6 +31,8 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<AiModelConfigService>();
         services.AddSingleton<AiLiveTurnHub>();
         services.AddScoped<AiChatService>();
+        // Microsoft Agent Framework engine; inert unless Ai:AgentRuntime=maf for the run.
+        services.AddScoped<Agent.Maf.MafChatEngine>();
         services.AddSingleton<CabinetCapabilityIndex>();
         services.AddSingleton<CabinetActionCatalog>();
         services.AddScoped<CatalogSearchService>();

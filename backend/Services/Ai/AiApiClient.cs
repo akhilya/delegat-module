@@ -18,7 +18,7 @@ namespace Delegat.Services.Ai;
 /// <see cref="AiRequest"/> DTOs and stream events go out as Anthropic-shaped
 /// <see cref="AiStreamEvent"/>s - the agentic loop in AiChatService is unaware of the provider.
 /// </summary>
-public class AiApiClient : IAiApiClient
+public class AiApiClient : IAiApiClient, IAiRuntimeClientFactory
 {
     private readonly ILogger<AiApiClient> _logger;
     private readonly IHttpClientFactory? _httpClientFactory;
@@ -36,6 +36,18 @@ public class AiApiClient : IAiApiClient
         _logger = logger;
         _httpClientFactory = httpClientFactory;
     }
+
+    /// <summary>
+    /// Microsoft.Extensions.AI adapter over the same provider construction used by the
+    /// legacy transport (endpoint, credentials, proxy, hosted-link signing). Used by the
+    /// <c>Ai:AgentRuntime=maf</c> chat engine; both SDK adapters come from the official
+    /// packages (OpenAI via Microsoft.Extensions.AI.OpenAI, Anthropic via the SDK itself).
+    /// </summary>
+    public Microsoft.Extensions.AI.IChatClient CreateChatClient(AiModelConfig model) =>
+        model.provider == AiModelProvider.Anthropic
+            ? Microsoft.Extensions.AI.AnthropicClientExtensions.AsIChatClient(
+                BuildAnthropicClient(model), model.modelId, model.maxTokens)
+            : Microsoft.Extensions.AI.OpenAIClientExtensions.AsIChatClient(BuildOpenAiClient(model));
 
     /// <summary>
     /// Creates an HttpClient routed through a proxy URI (http://... or socks5://user:pass@host:port).
