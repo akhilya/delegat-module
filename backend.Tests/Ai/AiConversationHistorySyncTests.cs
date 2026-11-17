@@ -489,6 +489,102 @@ public class AiConversationHistorySyncTests
         Assert.Equal("search_catalog", savedTurn?["tools"]?[0]?["name"]?.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task SaveMessages_PersistedReviewKeepsOwnProposalAndParentAcrossReload(
+        bool includeDbIds, bool hasRecoveryPlan)
+    {
+        await using var db = TestDbFactory.CreateDb();
+        var conv = await AiConversationTurnStore.EnsureConversationAsync(
+            db, $"review-reload-{Guid.NewGuid():N}", 1, 2, CancellationToken.None);
+        var createdAt = DateTime.UtcNow;
+        var user = new AiConversationMessage
+        {
+            conversationId = conv.Id,
+            role = "user",
+            content = "Request",
+            createdAt = createdAt,
+        };
+        const string parentJson = """
+            {"_ui":"assistantTurn","plan":{"proposalId":"A"},"planConfirmed":true,"planExecuted":true,"planFailed":true,"planExecStart":0,"planConfirmationId":"A","tools":[],"timeline":[]}
+            """;
+        var parent = new AiConversationMessage
+        {
+            conversationId = conv.Id,
+            role = "assistant",
+            content = "",
+            toolCallsJson = parentJson,
+            createdAt = createdAt.AddMilliseconds(1),
+        };
+        // A server-persisted review links to the parent execution only; a recovery
+        // variant also carries its own pending proposal B (this fixture tests
+        // identity; signing/confirmation is covered separately). Two empty-content
+        // assistant rows must stay distinct - the review never inherits A's flags.
+        var reviewContent = hasRecoveryPlan ? "" : "Review result";
+        var reviewJson = hasRecoveryPlan
+            ? """{"_ui":"assistantTurn","executionProposalId":"A","plan":{"proposalId":"B"},"tools":[],"timeline":[]}"""
+            : """{"_ui":"assistantTurn","executionProposalId":"A","tools":[],"timeline":[]}""";
+        var review = new AiConversationMessage
+        {
+            conversationId = conv.Id,
+            role = "assistant",
+            content = reviewContent,
+            toolCallsJson = reviewJson,
+            createdAt = createdAt.AddMilliseconds(2),
+        };
+        db.aiConversationMessages.AddRange(user, parent, review);
+        await db.SaveChangesAsync();
+
+        SaveMessageItem Echo(AiConversationMessage row) => new()
+        {
+            DbId = includeDbIds ? row.Id : null,
+            Role = row.role,
+            Content = row.content,
+            ToolCallsJson = row.toolCallsJson,
+        };
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 }, null!, null!);
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = conv.sessionId,
+            Messages = [Echo(user), Echo(parent), Echo(review)],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+
+        db.ChangeTracker.Clear();
+        var rows = await db.aiConversationMessages
+            .Where(m => m.conversationId == conv.Id)
+            .OrderBy(m => m.createdAt).ThenBy(m => m.Id)
+            .ToListAsync();
+        Assert.Equal(new[] { user.Id, parent.Id, review.Id }, rows.Select(m => m.Id).ToArray());
+        Assert.NotEqual(parent.Id, review.Id);
+
+        var savedParent = JsonNode.Parse(rows[1].toolCallsJson!);
+        Assert.Empty(rows[1].content);
+        Assert.Equal("A", savedParent?["plan"]?["proposalId"]?.GetValue<string>());
+        Assert.Equal(true, savedParent?["planConfirmed"]?.GetValue<bool>());
+        Assert.Equal(true, savedParent?["planExecuted"]?.GetValue<bool>());
+        Assert.Equal(true, savedParent?["planFailed"]?.GetValue<bool>());
+        Assert.Equal(0, savedParent?["planExecStart"]?.GetValue<int>());
+        Assert.Equal("A", savedParent?["planConfirmationId"]?.GetValue<string>());
+
+        Assert.Equal(reviewContent, rows[2].content);
+        var savedReview = JsonNode.Parse(rows[2].toolCallsJson!);
+        Assert.Equal("A", savedReview?["executionProposalId"]?.GetValue<string>());
+        if (hasRecoveryPlan)
+            Assert.Equal("B", savedReview?["plan"]?["proposalId"]?.GetValue<string>());
+        else
+            Assert.Null(savedReview?["plan"]);
+        foreach (var flag in new[]
+                 { "planConfirmed", "planExecuted", "planFailed", "planExecStart", "planConfirmationId" })
+        {
+            Assert.Null(savedReview?[flag]);
+        }
+    }
+
     private sealed class SaveChangesGate : SaveChangesInterceptor
     {
         public TaskCompletionSource SaveStarted { get; } =
