@@ -104,7 +104,13 @@ public sealed class CabinetCapabilityIndex
     /// <summary>False when no MVC descriptors were indexed; validation degrades to ok.</summary>
     public bool HasMvcRoutes => _data.Value.Mvc.Count > 0;
 
-    private sealed record IndexedCapability(Capability Capability, string[] Segments);
+    private sealed record IndexedCapability(Capability Capability, string[] Segments, TemplateSegment[] Parsed);
+
+    /// <summary>
+    /// One parsed template segment: a literal, or a parameter with an optional
+    /// route constraint (int/guid/…) or a catch-all marker.
+    /// </summary>
+    private readonly record struct TemplateSegment(bool IsParameter, string Literal, string? Constraint, bool CatchAll);
 
     private sealed record IndexData(
         IReadOnlyList<Capability> All,
@@ -132,16 +138,24 @@ public sealed class CabinetCapabilityIndex
             return new Validation(StatusOk, upper, apiPath, null, [], [], "");
 
         var segments = PathSegments(apiPath);
-        var templateMatches = data.Indexed
-            .Where(c => TemplateMatches(c.Segments, segments))
+        var scored = data.Indexed
+            .Select(c => (item: c, key: MatchKey(c.Parsed, segments)))
+            .Where(x => x.key != null)
             .ToList();
-        if (templateMatches.Count == 0)
+        if (scored.Count == 0)
         {
             return Reject(StatusRouteNotFound, upper, apiPath, null,
                 "No cabinet action matches this method and path. "
                 + "Pick a listed callable alternative or discover routes with search_actions.",
                 segments);
         }
+
+        // ASP.NET picks the most specific matching template (literal segments
+        // beat parameters, constrained beat unconstrained, catch-all is last)
+        // before checking verbs — so a literal sibling route wins over a
+        // parameter route even when the parameter could bind the same text.
+        var bestKey = scored.Max(x => x.key);
+        var templateMatches = scored.Where(x => x.key == bestKey).Select(x => x.item).ToList();
 
         var methodMatches = templateMatches
             .Where(c => c.Capability.Method.Equals(upper, StringComparison.OrdinalIgnoreCase))
@@ -284,7 +298,7 @@ public sealed class CabinetCapabilityIndex
                 Denied: PlatformRequestPolicy.DenyReason(hit.Method, template) != null,
                 FromExtras: true);
             if (seen.Add(Key(capability)))
-                indexed.Add(new IndexedCapability(capability, PathSegments(template)));
+                indexed.Add(new IndexedCapability(capability, PathSegments(template), ParseTemplate(template)));
         }
 
         if (_actions == null)
@@ -333,7 +347,7 @@ public sealed class CabinetCapabilityIndex
                 if (!seen.Add(Key(capability)))
                     continue;
                 mvc.Add(capability);
-                indexed.Add(new IndexedCapability(capability, PathSegments(normalized)));
+                indexed.Add(new IndexedCapability(capability, PathSegments(normalized), ParseTemplate(normalized)));
             }
         }
 
@@ -424,24 +438,86 @@ public sealed class CabinetCapabilityIndex
     private static string[] PathSegments(string apiPath) =>
         apiPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-    private static bool TemplateMatches(string[] templateSegments, string[] pathSegments)
+    private static TemplateSegment[] ParseTemplate(string normalizedTemplate) =>
+        PathSegments(normalizedTemplate).Select(ParseSegment).ToArray();
+
+    private static TemplateSegment ParseSegment(string segment)
     {
-        if (templateSegments.Length != pathSegments.Length)
-            return false;
-        for (var i = 0; i < templateSegments.Length; i++)
+        if (!segment.Contains('{'))
+            return new TemplateSegment(false, segment, null, false);
+        var inner = segment.Trim('{', '}').TrimEnd('?');
+        var catchAll = inner.StartsWith('*');
+        inner = inner.TrimStart('*');
+        string? constraint = null;
+        var colon = inner.IndexOf(':');
+        if (colon >= 0)
         {
-            var segment = templateSegments[i];
-            if (segment.Contains('{') || segment.Contains('}'))
-            {
-                if (pathSegments[i].Length == 0)
-                    return false;
-                continue;
-            }
-            if (!segment.Equals(pathSegments[i], StringComparison.OrdinalIgnoreCase))
-                return false;
+            constraint = inner[(colon + 1)..];
+            var paren = constraint.IndexOf('(');
+            if (paren >= 0)
+                constraint = constraint[..paren];
         }
-        return true;
+        return new TemplateSegment(true, "", constraint, catchAll);
     }
+
+    /// <summary>
+    /// Returns the precedence key for a structurally matching template, or null.
+    /// Higher keys are more specific: '3' literal, '2' constrained parameter,
+    /// '1' parameter, '0' catch-all — compared left to right like endpoint
+    /// routing, so a literal sibling beats a parameter route regardless of the
+    /// parameter being able to bind the same text.
+    /// </summary>
+    private static string? MatchKey(TemplateSegment[] template, string[] path)
+    {
+        var key = new System.Text.StringBuilder(template.Length);
+        var pi = 0;
+        foreach (var seg in template)
+        {
+            if (seg.CatchAll)
+            {
+                key.Append('0');
+                return key.ToString();
+            }
+            if (pi >= path.Length)
+                return null;
+            if (!seg.IsParameter)
+            {
+                if (!seg.Literal.Equals(path[pi], StringComparison.OrdinalIgnoreCase))
+                    return null;
+                key.Append('3');
+            }
+            else
+            {
+                var value = path[pi];
+                if (value.Length == 0 || !ConstraintMatches(seg.Constraint, value))
+                    return null;
+                key.Append(seg.Constraint == null ? '1' : '2');
+            }
+            pi++;
+        }
+        return pi == path.Length ? key.ToString() : null;
+    }
+
+    /// <summary>
+    /// Route constraints verified against the path value. An unrecognized
+    /// constraint is treated as unbounded — a recorded limit, since only :int
+    /// is used in cabinet routes today.
+    /// </summary>
+    private static bool ConstraintMatches(string? constraint, string value) =>
+        constraint switch
+        {
+            null or "" => true,
+            "int" => int.TryParse(value, out _),
+            "long" => long.TryParse(value, out _),
+            "bool" => bool.TryParse(value, out _),
+            "guid" => Guid.TryParse(value, out _),
+            "datetime" => DateTime.TryParse(value, out _),
+            "decimal" => decimal.TryParse(value, out _),
+            "double" or "float" => double.TryParse(value, out _),
+            "alpha" => value.All(char.IsLetter),
+            "nonalpha" => !value.All(char.IsLetter),
+            _ => true,
+        };
 
     /// <summary>Consecutive literal segments matching from the left; a parameter stops the count.</summary>
     private static int LiteralPrefix(string[] templateSegments, string[] pathSegments)

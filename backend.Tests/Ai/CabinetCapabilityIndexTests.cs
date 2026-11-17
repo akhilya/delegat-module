@@ -55,6 +55,47 @@ public class CabinetCapabilityIndexTests
         Assert.Equal(["GET", "POST"], result.AllowedMethods);
     }
 
+    [Fact]
+    public void Validate_LiteralRouteBeatsParameterSibling_WrongVerb()
+    {
+        // GET /products/export-template must not validate against the generic
+        // GET /products/{productId} — the literal POST route wins precedence,
+        // so the honest answer is method_not_allowed, like endpoint routing.
+        var index = new CabinetCapabilityIndex(CabinetActions.Provider(
+            CabinetActions.Action(typeof(FakeCabinetController), "GetProduct", "/products/{productId}", "GET"),
+            CabinetActions.Action(typeof(FakeCabinetController), "ExportTemplate", "/products/export-template", "POST")));
+
+        var result = index.Validate("GET", "/products/export-template");
+
+        Assert.Equal(CabinetCapabilityIndex.StatusMethodNotAllowed, result.Status);
+        Assert.Equal(["POST"], result.AllowedMethods);
+    }
+
+    [Fact]
+    public void Validate_IntConstraint_RejectsNonNumericSegment()
+    {
+        var index = new CabinetCapabilityIndex(CabinetActions.Provider(
+            CabinetActions.Action(typeof(FakeCabinetController), "GetFile", "/files/{id:int}", "GET")));
+
+        Assert.Equal(CabinetCapabilityIndex.StatusRouteNotFound,
+            index.Validate("GET", "/files/abc").Status);
+        Assert.Equal(CabinetCapabilityIndex.StatusOk,
+            index.Validate("GET", "/files/42").Status);
+    }
+
+    [Fact]
+    public void Validate_ConstrainedParameter_PreferredOverUnconstrained()
+    {
+        var index = new CabinetCapabilityIndex(CabinetActions.Provider(
+            CabinetActions.Action(typeof(FakeCabinetController), "Wildcard", "/files/{name}", "GET"),
+            CabinetActions.Action(typeof(FakeCabinetController), "ById", "/files/{id:int}", "POST")));
+
+        var result = index.Validate("GET", "/files/42");
+
+        Assert.Equal(CabinetCapabilityIndex.StatusMethodNotAllowed, result.Status);
+        Assert.Equal(["POST"], result.AllowedMethods);
+    }
+
     [Theory]
     [InlineData("PUT", "/store-storage/files")]
     [InlineData("PUT", "/products/9/files")]
