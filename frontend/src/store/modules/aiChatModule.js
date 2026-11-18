@@ -250,6 +250,7 @@ async function consumeSse(response, commit, { execution = false } = {}) {
             status: "done",
             summary: event.data?.summary,
             result: event.data?.result,
+            counts: event.data?.counts,
           });
           let parsedResult = event.data?.result;
           if (typeof parsedResult === "string") {
@@ -562,7 +563,7 @@ export default {
       last.planFailed = false;
       last.done = false;
     },
-    updateToolCall(state, { id, name, status, summary, result }) {
+    updateToolCall(state, { id, name, status, summary, result, counts }) {
       const last = selectedAssistant(state);
       if (!last) return;
       const tc = last.toolCalls?.find(
@@ -573,6 +574,7 @@ export default {
       if (tc) {
         tc.status = status;
         if (summary) tc.summary = summary;
+        if (counts !== undefined) tc.counts = counts;
         if (result !== undefined && result !== null) {
           try {
             tc.result =
@@ -820,7 +822,11 @@ export default {
         if (!state.messages.some((m) => m.messageId)) {
           commit("preparePlanReplay");
           if (current?.role === "assistant") {
-            if (current.plan && current.planConfirmed && !current.planExecuted) {
+            if (
+              current.plan &&
+              current.planConfirmed &&
+              !current.planExecuted
+            ) {
               commit("resetPlanExecution");
             } else if (!current.plan) {
               commit("replaceLastAssistant", emptyAssistantMessage());

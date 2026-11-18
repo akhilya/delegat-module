@@ -38,6 +38,7 @@ async function fixture(
     generatedImports?: Array<Record<string, unknown>>;
     importPlan?: Record<string, unknown>;
     importResult?: Record<string, unknown>;
+    stepCounts?: Record<string, unknown>;
   } = {},
 ) {
   page.on("pageerror", (error) =>
@@ -86,6 +87,7 @@ async function fixture(
                 : ["failed", "partial"].includes(outcome)
                   ? { code: "bad_request", status: 400 }
                   : { success: true }),
+            counts: options.stepCounts,
           },
         ]
       : [];
@@ -269,6 +271,7 @@ async function fixture(
             status: "done",
             result: JSON.stringify(result),
             summary: outcome === "failed" ? "HTTP 400" : "Accepted",
+            counts: options.stepCounts,
           }) +
           (outcome === "disconnect"
             ? ""
@@ -401,6 +404,163 @@ test("a successful calculation review is separate from the plan and survives rel
     }),
   ).toHaveCount(1);
   expect(state.executions()).toBe(1);
+});
+
+const unknownCountMetric = (unit = "records") => ({
+  value: null,
+  accuracy: "unknown",
+  unit,
+});
+const unknownEventCounts = (source: string) => ({
+  version: 1,
+  source,
+  read: unknownCountMetric(),
+  matched: unknownCountMetric(),
+  written: unknownCountMetric(),
+});
+const importEventCounts = (written: number) => ({
+  version: 1,
+  source: "import_generated_file",
+  read: unknownCountMetric(),
+  matched: unknownCountMetric(),
+  written: { value: written, accuracy: "exact", unit: "files" },
+});
+const importPlanWithEstimate = (count: number) => ({
+  proposalId,
+  summary: "Сохранить отчёт в файлы",
+  affectedCount: count,
+  steps: [
+    {
+      tool: "import_generated_file",
+      description: "Сохранить отчёт в файлы магазина",
+      args: { artifactId: "a".repeat(32), destination: "store" },
+    },
+  ],
+});
+const importReceipt = (writtenCount: number) => ({
+  fileId: 7,
+  fileName: "отчёт.csv",
+  length: 42,
+  destination: "store",
+  writtenCount,
+  idempotent: writtenCount === 0,
+});
+
+for (const width of [1280, 390]) {
+  test(`count evidence shows the prior estimate beside per-step observed counts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await fixture(page, "success", {
+      importPlan: importPlanWithEstimate(99),
+      importResult: importReceipt(1),
+      stepCounts: importEventCounts(1),
+    });
+    await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+    const card = page.getByTestId("ai-plan");
+    await expect(card.getByRole("status")).toHaveText("Готово");
+    await expect(card.getByTestId("ai-plan-count-estimate")).toHaveText(
+      "Оценка модели до выполнения: около 99",
+    );
+    const counts = card.getByTestId("ai-plan-step-counts");
+    await expect(counts.locator("span").nth(2)).toHaveText(
+      "Записано файлов: 1",
+    );
+    await reloadPlan(page);
+    // The estimate is a pre-execution hint forever: it is never replaced by
+    // the observed count after reload either.
+    const restored = page.getByTestId("ai-plan");
+    await expect(restored.getByTestId("ai-plan-count-estimate")).toHaveText(
+      "Оценка модели до выполнения: около 99",
+    );
+    await expect(
+      restored.getByTestId("ai-plan-step-counts").locator("span").nth(2),
+    ).toHaveText("Записано файлов: 1");
+    // Count evidence stays readable inside the viewport at both widths.
+    const overflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+    await page.screenshot({
+      path: `artifacts/d5-screenshots/${width === 1280 ? "desktop" : "mobile"}.png`,
+      animations: "disabled",
+    });
+    expect(state.executions()).toBe(1);
+    expect(state.unexpectedWrites).toEqual([]);
+  });
+}
+
+test("an idempotent import receipt reports written 0, not unknown", async ({
+  page,
+}) => {
+  await fixture(page, "success", {
+    importPlan: importPlanWithEstimate(1),
+    importResult: importReceipt(0),
+    stepCounts: importEventCounts(0),
+  });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  const card = page.getByTestId("ai-plan");
+  await expect(card.getByRole("status")).toHaveText("Готово");
+  await expect(
+    card.getByTestId("ai-plan-step-counts").locator("span").nth(2),
+  ).toHaveText("Записано файлов: 0");
+});
+
+test("a queued job keeps counts unknown despite list-shaped args", async ({
+  page,
+}) => {
+  await fixture(page, "queued", {
+    importPlan: {
+      ...plan,
+      affectedCount: 3,
+      steps: [
+        {
+          ...plan.steps[0],
+          args: {
+            ...plan.steps[0].args,
+            body: { productIds: [1, 2, 3] },
+          },
+        },
+      ],
+    },
+    importResult: { operationId: "op-plan", status: "pending", count: 3 },
+    stepCounts: unknownEventCounts("platform_request"),
+  });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  const card = page.getByTestId("ai-plan");
+  const counts = card.getByTestId("ai-plan-step-counts");
+  await expect(counts.locator("span").nth(2)).toHaveText(
+    "Записано: неизвестно",
+  );
+});
+
+test("a legacy plan without count metadata shows an estimate and unknown actuals; a pending recovery inherits nothing", async ({
+  page,
+}) => {
+  await fixture(page, "failed", {
+    review: "recovery",
+    importPlan: {
+      ...plan,
+      affectedCount: 4,
+    },
+  });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  const cards = page.getByTestId("ai-plan");
+  await expect(cards).toHaveCount(2);
+  const executed = cards.nth(0);
+  await expect(executed.getByTestId("ai-plan-count-estimate")).toHaveText(
+    "Оценка модели до выполнения: около 4",
+  );
+  await expect(
+    executed.getByTestId("ai-plan-step-counts").locator("span").nth(2),
+  ).toHaveText("Записано: неизвестно");
+  const recovery = cards.nth(1);
+  await expect(
+    recovery.getByTestId("ai-plan-count-estimate"),
+  ).toBeVisible();
+  await expect(recovery.getByTestId("ai-plan-step-counts")).toHaveCount(0);
 });
 
 test("failure keeps the failed plan and offers only a fresh unexecuted recovery plan", async ({

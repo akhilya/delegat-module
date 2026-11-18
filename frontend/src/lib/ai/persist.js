@@ -289,6 +289,7 @@ export function serializeToolCallsJson(m) {
     input: tc.input,
     summary: tc.summary,
     result: tc.result,
+    counts: tc.counts,
     status: tc.status,
   }));
   const formReplies = readFormReplies(m.formReplies);
@@ -435,7 +436,9 @@ export function foldPlanTurns(messages) {
 export function hydrateConversation(rows) {
   return applyFormReplies(
     foldPlanTurns(
-      applyPlanDecisions(normalizeCopiedPlans((rows || []).map(mapStoredMessage))),
+      applyPlanDecisions(
+        normalizeCopiedPlans((rows || []).map(mapStoredMessage)),
+      ),
     ),
   );
 }

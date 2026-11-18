@@ -29,6 +29,7 @@ import {
   generatedFileDownloads,
   generatedTemporaryDownloads,
 } from "@/lib/ai/generatedFiles";
+import { planCountEstimate, stepCountEvidence } from "@/lib/ai/countEvidence";
 import AiGeneratedFileDownload from "./AiGeneratedFileDownload.vue";
 
 const props = defineProps({
@@ -74,6 +75,25 @@ const generatedImports = computed(() =>
 );
 
 const numberFormat = computed(() => new Intl.NumberFormat(locale.value));
+
+// The model's pre-execution scope hint stays labeled as an estimate forever -
+// it is never replaced by an aggregated "actual" count.
+const countEstimate = computed(() => planCountEstimate(props.plan));
+// Per-step server-observed counts; unknown stays unknown, never merged.
+const stepCounts = computed(() =>
+  steps.value.map((_, i) =>
+    stepCountEvidence(props.plan, props.toolCalls, i, {
+      confirmed: props.confirmed,
+    }),
+  ),
+);
+const countMetricLabel = (kind, metric) =>
+  metric.accuracy === "exact"
+    ? t(`ai.count${kind}`, {
+        count: numberFormat.value.format(metric.value),
+        unit: t(`ai.countUnit_${metric.unit}`),
+      })
+    : t(`ai.count${kind}Unknown`);
 const generatedTargetLabel = (imp) =>
   imp.destination === "product"
     ? t("ai.generatedFileProduct", { id: imp.productId })
@@ -265,10 +285,16 @@ const warning = computed(() =>
         {{ plan.summary }}
       </p>
       <p
-        v-if="plan.affectedCount"
         class="mt-1 text-xs tabular-nums text-muted-foreground"
+        data-testid="ai-plan-count-estimate"
       >
-        {{ t("ai.planAffected") }} {{ plan.affectedCount }}
+        {{
+          countEstimate.accuracy === "estimated"
+            ? t("ai.planCountEstimate", {
+                count: numberFormat.format(countEstimate.value),
+              })
+            : t("ai.planCountUnknown")
+        }}
       </p>
     </div>
 
@@ -383,32 +409,47 @@ const warning = computed(() =>
           aria-hidden="true"
           >{{ i + 1 }}.</span
         >
-        <Collapsible
-          v-if="planStepDescriptionNeedsCollapse(step)"
-          v-model:open="expandedDescriptions[i]"
-          class="min-w-0 grow"
-        >
-          <CollapsibleTrigger
-            class="flex min-h-8 w-full items-start justify-between gap-2 rounded-sm text-left text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:[&_svg]:rotate-180"
+        <div class="min-w-0 grow">
+          <Collapsible
+            v-if="planStepDescriptionNeedsCollapse(step)"
+            v-model:open="expandedDescriptions[i]"
+            class="min-w-0 grow"
           >
-            <span class="min-w-0 break-words">{{
-              expandedDescriptions[i]
-                ? t("ai.planStepDetails")
-                : planStepPreview(step)
+            <CollapsibleTrigger
+              class="flex min-h-8 w-full items-start justify-between gap-2 rounded-sm text-left text-sm leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:[&_svg]:rotate-180"
+            >
+              <span class="min-w-0 break-words">{{
+                expandedDescriptions[i]
+                  ? t("ai.planStepDetails")
+                  : planStepPreview(step)
+              }}</span>
+              <ChevronDown
+                class="mt-1 size-3.5 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent
+              class="pb-1 text-sm leading-relaxed break-words"
+              >{{ step.description }}</CollapsibleContent
+            >
+          </Collapsible>
+          <p v-else class="min-w-0 text-sm leading-relaxed break-words">
+            {{ step.description }}
+          </p>
+          <p
+            v-if="confirmed && (executed || failed || stopped || confirming)"
+            class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-muted-foreground"
+            data-testid="ai-plan-step-counts"
+          >
+            <span>{{ countMetricLabel("Read", stepCounts[i].read) }}</span>
+            <span>{{
+              countMetricLabel("Matched", stepCounts[i].matched)
             }}</span>
-            <ChevronDown
-              class="mt-1 size-3.5 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent
-            class="pb-1 text-sm leading-relaxed break-words"
-            >{{ step.description }}</CollapsibleContent
-          >
-        </Collapsible>
-        <p v-else class="min-w-0 text-sm leading-relaxed break-words">
-          {{ step.description }}
-        </p>
+            <span>{{
+              countMetricLabel("Written", stepCounts[i].written)
+            }}</span>
+          </p>
+        </div>
       </li>
     </ol>
     <Button

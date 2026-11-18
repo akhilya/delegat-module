@@ -66,7 +66,7 @@ public class MafEngineParityTests
         using var signingKey = SigningKey();
         await using var fixture = await CreateFixtureAsync(
             ToolBatch(
-                ("propose_plan", "{\"summary\":\"First proposed action\",\"steps\":[{\"description\":\"Do the first action\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"First\"}}}]}", "first-plan"),
+                ("propose_plan", "{\"summary\":\"First proposed action\",\"affectedCount\":2,\"steps\":[{\"description\":\"Do the first action\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"First\"}}}]}", "first-plan"),
                 ("propose_plan", "{\"summary\":\"Second proposed action\",\"steps\":[{\"description\":\"Do the second action\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Second\"}}}]}", "second-plan")));
 
         var chunks = await Collect(fixture.Chat.StreamChatAsync(
@@ -76,6 +76,7 @@ public class MafEngineParityTests
         var plan = Assert.Single(chunks,
             chunk => chunk.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
         Assert.Contains("First proposed action", plan, StringComparison.Ordinal);
+        Assert.Contains("\"affectedCountAccuracy\":\"estimated\"", plan);
         Assert.DoesNotContain("Second proposed action", string.Concat(chunks), StringComparison.Ordinal);
         Assert.Single(fixture.Client.Requests);
         Assert.Equal(0, fixture.Invoker.Calls);
@@ -220,8 +221,20 @@ public class MafEngineParityTests
         Assert.Contains("search_catalog", fixture.Client.Requests[0].ToolNames);
         var toolResult = LastToolResult(fixture.Client.Requests[1]);
         Assert.Contains("SKU-42", toolResult, StringComparison.Ordinal);
-        Assert.Contains("Ceramic Mug", AiSseTurnRecorder.Fold(chunks).Content, StringComparison.Ordinal);
+        var folded = AiSseTurnRecorder.Fold(chunks);
+        Assert.Contains("Ceramic Mug", folded.Content, StringComparison.Ordinal);
         Assert.Contains("\"status\":\"done\"", string.Concat(chunks), StringComparison.Ordinal);
+        using var doc = JsonDocument.Parse(folded.ToolCallsJson!);
+        var counts = Assert.Single(doc.RootElement.GetProperty("tools").EnumerateArray(),
+            tool => tool.GetProperty("id").GetString() == "read-1")
+            .GetProperty("counts");
+        Assert.Equal(1, counts.GetProperty("version").GetInt32());
+        Assert.Equal("search_catalog", counts.GetProperty("source").GetString());
+        Assert.Equal(1, counts.GetProperty("read").GetProperty("value").GetInt64());
+        Assert.Equal("results", counts.GetProperty("read").GetProperty("unit").GetString());
+        Assert.Equal(1, counts.GetProperty("matched").GetProperty("value").GetInt64());
+        Assert.Equal("exact", counts.GetProperty("matched").GetProperty("accuracy").GetString());
+        Assert.Equal(0, counts.GetProperty("written").GetProperty("value").GetInt64());
     }
 
     [Fact]
@@ -593,6 +606,7 @@ public class MafEngineParityTests
                             },
                         },
                     }), "artifact-import")),
+                Text("The report file is saved."),
             ], artifacts: true, pythonHttp: python);
         const string sessionId = "maf-artifact-e2e";
         var user = UserMessage("Generate report.");
@@ -602,6 +616,8 @@ public class MafEngineParityTests
         var snapshot = AiSseTurnRecorder.Fold(initial);
         using var firstDoc = JsonDocument.Parse(snapshot.ToolCallsJson!);
         var proposalId = firstDoc.RootElement.GetProperty("plan").GetProperty("proposalId").GetString()!;
+        Assert.Equal("unknown", firstDoc.RootElement.GetProperty("plan")
+            .GetProperty("affectedCountAccuracy").GetString());
         await AiConversationTurnStore.AppendUserIfNeededAsync(
             fixture.Db, sessionId, fixture.StoreId, fixture.UserId, user, default);
         await AiConversationTurnStore.UpsertAssistantAsync(
@@ -650,9 +666,40 @@ public class MafEngineParityTests
         var importSteps = await fixture.Chat.ConsumeConfirmedPlanAsync(
             sessionId, secondProposal, fixture.StoreId, fixture.UserId, default);
         Assert.NotNull(importSteps);
-        await Collect(fixture.Chat.ExecutePlanStreamAsync(
+        var importChunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(
             importSteps!.ToList(), fixture.StoreId, fixture.UserId, secondProposal,
             sessionId: sessionId, locale: "en"));
+
+        // The executed import carries server-observed write evidence on the
+        // tool event itself, independent of clipped result text.
+        var importTurns = AiSseTurnRecorder.FoldTurns(importChunks);
+        using var importDoc = JsonDocument.Parse(importTurns[0].ToolCallsJson!);
+        var importCounts = Assert.Single(
+                importDoc.RootElement.GetProperty("tools").EnumerateArray(),
+                tool => tool.GetProperty("name").GetString() == "import_generated_file")
+            .GetProperty("counts");
+        Assert.Equal(1, importCounts.GetProperty("version").GetInt32());
+        Assert.Equal("import_generated_file",
+            importCounts.GetProperty("source").GetString());
+        Assert.Equal(JsonValueKind.Null,
+            importCounts.GetProperty("read").GetProperty("value").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            importCounts.GetProperty("matched").GetProperty("value").ValueKind);
+        Assert.Equal(1, importCounts.GetProperty("written").GetProperty("value").GetInt64());
+        Assert.Equal("exact",
+            importCounts.GetProperty("written").GetProperty("accuracy").GetString());
+        Assert.Equal("files",
+            importCounts.GetProperty("written").GetProperty("unit").GetString());
+        // The review request carries the same per-step evidence in its
+        // serialized outcome, so verdicts survive clipped stdout.
+        using var reviewBlocks = JsonDocument.Parse(
+            fixture.Client.Requests[2].Messages.Last().Content);
+        var reviewJson = reviewBlocks.RootElement[0].GetProperty("text").GetString()!;
+        using var reviewPayload = JsonDocument.Parse(reviewJson);
+        var stepCounts = reviewPayload.RootElement
+            .GetProperty("outcome").GetProperty("counts");
+        Assert.Equal(1,
+            stepCounts[0].GetProperty("written").GetProperty("value").GetInt64());
 
         var file = await fixture.Db.storeFiles.SingleAsync();
         Assert.Equal("отчёт.csv", file.displayName);

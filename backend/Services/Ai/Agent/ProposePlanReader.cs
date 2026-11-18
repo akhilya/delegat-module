@@ -7,16 +7,18 @@ namespace Delegat.Services.Ai.Agent;
 /// </summary>
 internal static class ProposePlanReader
 {
-    internal sealed record Plan(string Summary, IReadOnlyList<JsonElement> Steps, int AffectedCount, bool IsDestructive)
+    internal sealed record Plan(string Summary, IReadOnlyList<JsonElement> Steps, int? AffectedCount, bool IsDestructive)
     {
+        public string AffectedCountAccuracy => AffectedCount.HasValue ? "estimated" : "unknown";
+
         public bool HasContent =>
             !string.IsNullOrWhiteSpace(Summary)
             && Steps.Count > 0
             && Steps.All(IsWellFormedStep)
-            && Steps.All(step => HasConsistentNamedExport(step, Steps.Count == 1 ? AffectedCount : 0));
+            && Steps.All(step => HasConsistentNamedExport(step, Steps.Count == 1 ? AffectedCount : null));
     }
 
-    private static bool HasConsistentNamedExport(JsonElement step, int affectedCount)
+    private static bool HasConsistentNamedExport(JsonElement step, int? affectedCount)
     {
         if (!string.Equals(step.GetProperty("tool").GetString(), "platform_request", StringComparison.OrdinalIgnoreCase))
             return true;
@@ -38,7 +40,7 @@ internal static class ProposePlanReader
         return values.Length > 0
             && values.All(id => id.ValueKind == JsonValueKind.Number && id.TryGetInt32(out var n) && n > 0)
             && values.Select(id => id.GetInt32()).Distinct().Count() == values.Length
-            && (affectedCount == 0 || affectedCount == values.Length);
+            && (!affectedCount.HasValue || affectedCount == values.Length);
     }
 
     private static bool IsWellFormedStep(JsonElement step) =>
@@ -67,7 +69,9 @@ internal static class ProposePlanReader
                 return Empty;
 
             var summary = FirstString(root, "summary", "title");
-            var affected = root.TryGetProperty("affectedCount", out var count) && count.TryGetInt32(out var n) ? n : 0;
+            int? affected = root.TryGetProperty("affectedCount", out var count)
+                && count.ValueKind == JsonValueKind.Number
+                && count.TryGetInt32(out var n) && n >= 0 ? n : null;
             var destructive = root.TryGetProperty("isDestructive", out var flag) && flag.ValueKind == JsonValueKind.True;
             var steps = root.TryGetProperty("steps", out var raw) ? CoerceSteps(raw) : [];
             return new Plan(summary, steps, affected, destructive);
@@ -78,7 +82,7 @@ internal static class ProposePlanReader
         }
     }
 
-    private static readonly Plan Empty = new("", [], 0, false);
+    private static readonly Plan Empty = new("", [], null, false);
 
     private static string FirstString(JsonElement root, params string[] names)
     {
