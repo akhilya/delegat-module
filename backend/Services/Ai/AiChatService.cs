@@ -417,6 +417,7 @@ public class AiChatService
                             summary = planInput.Summary,
                             steps = planInput.Steps,
                             affectedCount = planInput.AffectedCount,
+                            affectedCountAccuracy = planInput.AffectedCountAccuracy,
                             isDestructive = planInput.IsDestructive,
                             generatedFileImports = planValidation.GeneratedFileImports
                         });
@@ -487,9 +488,12 @@ public class AiChatService
                     toolSpan.Finish();
                     turnTelemetry.RecordToolExecution(
                         toolTimer.ElapsedMilliseconds, toolFailed);
+                    var counts = toolFailed
+                        ? AgentResultCounts.Unknown
+                        : AgentResultCounts.Observe(toolName, toolInputJson, result);
                     var resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                     ToolEffects.TryGetValue(toolName, out var effects);
-                    yield return Event(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects });
+                    yield return Event(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects, counts });
                     toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = resultJson });
                 }
 
@@ -884,6 +888,9 @@ public class AiChatService
         var queued = 0;
         var cancelled = false;
         var errors = new List<string>();
+        // Per-step count evidence in executed order; verdicts stay readable for
+        // the bounded review even when the raw result JSON is clipped.
+        var stepCounts = new List<AgentResultCounts>();
 
         foreach (var step in steps)
         {
@@ -903,6 +910,7 @@ public class AiChatService
             string summary;
             bool failed;
             string resultJson;
+            var counts = AgentResultCounts.Unknown;
             if (forbidden.Contains(tool))
             {
                 summary = "Tool is not allowed inside a plan";
@@ -920,6 +928,9 @@ public class AiChatService
                     failed = AgentToolResult.IsFailure(result, s);
                     if (!failed && AgentToolResult.IsQueuedJob(result))
                         queued++;
+                    counts = failed
+                        ? AgentResultCounts.Unknown
+                        : AgentResultCounts.Observe(tool, argsJson, result);
                     resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -928,6 +939,7 @@ public class AiChatService
                     summary = "Execution was cancelled.";
                     failed = true;
                     resultJson = JsonSerializer.Serialize(new { error = summary }, _jsonOpts);
+                    counts = AgentResultCounts.Unknown;
                 }
                 catch (Exception ex)
                 {
@@ -935,6 +947,7 @@ public class AiChatService
                     summary = $"Error: {ex.Message}";
                     failed = true;
                     resultJson = JsonSerializer.Serialize(new { error = ex.Message }, _jsonOpts);
+                    counts = AgentResultCounts.Unknown;
                 }
             }
 
@@ -948,8 +961,10 @@ public class AiChatService
                     && errorClass.ValueKind == JsonValueKind.String
                         ? errorClass.GetString()
                         : null,
-                result = resultElement });
-            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects });
+                result = resultElement,
+                counts });
+            stepCounts.Add(counts);
+            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects, counts });
             if (failed)
             {
                 errors.Add(summary);
@@ -1002,7 +1017,8 @@ public class AiChatService
             originalUserRequest = followup.UserRequest,
             approvedPlan = AgentToolResult.TruncateForModel(followup.Plan.GetRawText()),
             outcome = new { succeeded = ok, total = steps.Count, queued, failed = errors.Count,
-                skipped = steps.Count - outcomes.Count, results = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(outcomes, _jsonOpts)) },
+                skipped = steps.Count - outcomes.Count, results = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(outcomes, _jsonOpts)),
+                counts = stepCounts },
         }, _jsonOpts);
         await foreach (var item in StreamChatEventsAsync(
             [new ChatMessage { role = "user", content = JsonSerializer.SerializeToElement(review.GetRawText()) }], storeId, userId, followup.ModelId,

@@ -48,6 +48,9 @@ public class AiChatAgentEvaluationTests
         using var document = JsonDocument.Parse(snapshot.ToolCallsJson!);
         var plan = document.RootElement.GetProperty("plan");
         Assert.Single(plan.GetProperty("steps").EnumerateArray());
+        Assert.Equal(3, plan.GetProperty("affectedCount").GetInt32());
+        Assert.Equal("estimated",
+            plan.GetProperty("affectedCountAccuracy").GetString());
         Assert.DoesNotContain("run_python", string.Concat(chunks));
         await AiConversationTurnStore.AppendUserIfNeededAsync(fixture.Db, session, fixture.StoreId, fixture.UserId, user, default);
         await AiConversationTurnStore.UpsertAssistantAsync(fixture.Db, session, fixture.StoreId, fixture.UserId, snapshot, default);
@@ -75,6 +78,7 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("exactly the same productIds", fixture.Client.Requests[1].Messages.Last().Content);
         var presented = Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
         Assert.Contains("/products/bulk", presented);
+        Assert.Contains("\"affectedCountAccuracy\":\"unknown\"", presented);
         Assert.Equal(0, fixture.Invoker.Calls);
     }
 
@@ -147,7 +151,22 @@ public class AiChatAgentEvaluationTests
         Assert.Contains(payload.RootElement.GetProperty("columns").EnumerateArray(),
             column => column.GetString() == "price");
         Assert.Contains("SKU-42", result, StringComparison.Ordinal);
-        Assert.Equal("100", AiSseTurnRecorder.Fold(chunks).Content.Trim());
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        Assert.Equal("100", snapshot.Content.Trim());
+        using var folded = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var counts = Assert.Single(folded.RootElement.GetProperty("tools").EnumerateArray(),
+            tool => tool.GetProperty("id").GetString() == "exact-price")
+            .GetProperty("counts");
+        Assert.Equal(1, counts.GetProperty("version").GetInt32());
+        Assert.Equal("sql_readonly", counts.GetProperty("source").GetString());
+        Assert.Equal(1, counts.GetProperty("read").GetProperty("value").GetInt64());
+        Assert.Equal("exact", counts.GetProperty("read").GetProperty("accuracy").GetString());
+        Assert.Equal("rows", counts.GetProperty("read").GetProperty("unit").GetString());
+        Assert.Equal(JsonValueKind.Null,
+            counts.GetProperty("matched").GetProperty("value").ValueKind);
+        Assert.Equal("unknown", counts.GetProperty("matched").GetProperty("accuracy").GetString());
+        Assert.Equal(0, counts.GetProperty("written").GetProperty("value").GetInt64());
+        Assert.Equal("exact", counts.GetProperty("written").GetProperty("accuracy").GetString());
         Assert.Equal(0, fixture.Invoker.Calls);
         var telemetry = fixture.Logger.Messages.Single(m => m.Contains("AI chat turn telemetry", StringComparison.Ordinal));
         Assert.Contains("ModelRounds=2", telemetry, StringComparison.Ordinal);
@@ -757,9 +776,39 @@ public class AiChatAgentEvaluationTests
         var importSteps = await fixture.Chat.ConsumeConfirmedPlanAsync(
             sessionId, secondProposal, fixture.StoreId, fixture.UserId, default);
         Assert.NotNull(importSteps);
-        await Collect(fixture.Chat.ExecutePlanStreamAsync(
+        var importChunks = await Collect(fixture.Chat.ExecutePlanStreamAsync(
             importSteps!.ToList(), fixture.StoreId, fixture.UserId, secondProposal,
             sessionId: sessionId, locale: "en"));
+
+        // The executed import carries server-observed write evidence on the
+        // tool event itself, independent of clipped result text.
+        var importTurns = AiSseTurnRecorder.FoldTurns(importChunks);
+        using var importDoc = JsonDocument.Parse(importTurns[0].ToolCallsJson!);
+        var importCounts = Assert.Single(
+                importDoc.RootElement.GetProperty("tools").EnumerateArray(),
+                tool => tool.GetProperty("name").GetString() == "import_generated_file")
+            .GetProperty("counts");
+        Assert.Equal(1, importCounts.GetProperty("version").GetInt32());
+        Assert.Equal("import_generated_file",
+            importCounts.GetProperty("source").GetString());
+        Assert.Equal(JsonValueKind.Null,
+            importCounts.GetProperty("read").GetProperty("value").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            importCounts.GetProperty("matched").GetProperty("value").ValueKind);
+        Assert.Equal(1, importCounts.GetProperty("written").GetProperty("value").GetInt64());
+        Assert.Equal("exact",
+            importCounts.GetProperty("written").GetProperty("accuracy").GetString());
+        Assert.Equal("files",
+            importCounts.GetProperty("written").GetProperty("unit").GetString());
+        // The review request carries the same per-step evidence in its
+        // serialized outcome, so verdicts survive clipped stdout.
+        var reviewJson = JsonSerializer.Deserialize<string>(
+            fixture.Client.Requests[2].Messages.Last().Content)!;
+        using var reviewPayload = JsonDocument.Parse(reviewJson);
+        var stepCounts = reviewPayload.RootElement
+            .GetProperty("outcome").GetProperty("counts");
+        Assert.Equal(1,
+            stepCounts[0].GetProperty("written").GetProperty("value").GetInt64());
 
         var file = await fixture.Db.storeFiles.SingleAsync();
         Assert.Equal("отчёт.csv", file.displayName);

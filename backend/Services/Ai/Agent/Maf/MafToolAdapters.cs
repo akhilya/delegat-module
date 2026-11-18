@@ -111,11 +111,14 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapt
         var toolFailed = AgentToolResult.IsFailure(result, summary);
         toolSpan.SetOutcome(toolFailed ? "failed" : "completed");
         state.Telemetry.RecordToolExecution(toolTimer.ElapsedMilliseconds, toolFailed);
+        var counts = toolFailed
+            ? AgentResultCounts.Unknown
+            : AgentResultCounts.Observe(toolName, argsJson, result);
         var resultJson = AgentToolResult.TruncateForModel(
             JsonSerializer.Serialize(result, MafToolAdapterShared.JsonOpts));
         AiChatService.ToolEffects.TryGetValue(toolName, out var effects);
         state.Events.Writer.TryWrite(Sse(SseEventType.Tool,
-            new { id = callId, name = toolName, status = "done", summary, result = resultJson, effects }));
+            new { id = callId, name = toolName, status = "done", summary, result = resultJson, effects, counts }));
         return resultJson;
     }
 
@@ -180,6 +183,7 @@ internal sealed class MafProposePlanAdapter(
             summary = planInput.Summary,
             steps = planInput.Steps,
             affectedCount = planInput.AffectedCount,
+            affectedCountAccuracy = planInput.AffectedCountAccuracy,
             isDestructive = planInput.IsDestructive,
             generatedFileImports = validation.GeneratedFileImports
         }));

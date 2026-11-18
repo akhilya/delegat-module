@@ -848,6 +848,93 @@ public class AiConversationHistorySyncTests
     }
 
     [Fact]
+    public async Task SaveMessages_ToolCountsSurviveProjectionPersistAndForgedSync()
+    {
+        // D5: per-step count evidence is a server-emitted tool event field,
+        // never parsed back out of result text. The canonical typed-event
+        // projection, the persisted server-owned row and a forged client sync
+        // must all keep the exact counts JSON.
+        const string countsJson = """
+            {"version":1,"source":"sql_readonly","read":{"value":2,"accuracy":"exact","unit":"rows"},"matched":{"value":null,"accuracy":"unknown","unit":"records"},"written":{"value":0,"accuracy":"exact","unit":"records"}}
+            """;
+        var expected = JsonNode.Parse(countsJson)!;
+        await using var db = TestDbFactory.CreateDb();
+        var binding = await AiConversationTurnStore.BeginAssistantTurnAsync(
+            db, "counts-sync", 1, 2, "counts-run", "chat", null, null,
+            CancellationToken.None);
+        var seq = 0;
+        AiTurnEvent Chat(string type, object data) =>
+            AiTurnEvent.Create(type, data) with
+            {
+                MessageId = binding.MessageId, RunId = binding.RunId,
+                DbId = binding.DbId, Phase = binding.Phase,
+                ProposalId = binding.ProposalId, Sequence = ++seq,
+            };
+        var snapshot = AiSseTurnRecorder.FoldEvents(
+        [
+            Chat(SseEventType.Tool,
+                new { id = "t1", name = "sql_readonly", status = "running", input = """{"query":"select 1"}""" }),
+            Chat(SseEventType.Tool,
+                new { id = "t1", name = "sql_readonly", status = "done", summary = "2 rows", result = """{"rows":[{"a":1},{"a":2}]}""", counts = expected }),
+            Chat(SseEventType.Done, new { ok = true }),
+        ]);
+        using (var folded = JsonDocument.Parse(snapshot.ToolCallsJson!))
+        {
+            var tool = Assert.Single(folded.RootElement.GetProperty("tools").EnumerateArray());
+            Assert.True(JsonNode.DeepEquals(expected,
+                JsonNode.Parse(tool.GetProperty("counts").GetRawText())));
+        }
+
+        await AiConversationTurnStore.PersistAssistantTurnAsync(
+            db, "counts-sync", 1, 2, binding, snapshot, CancellationToken.None);
+        var stored = await db.aiConversationMessages
+            .SingleAsync(m => m.Id == binding.DbId);
+        var persistedEnvelope = JsonNode.Parse(stored.toolCallsJson!)!;
+        Assert.True(JsonNode.DeepEquals(expected,
+            persistedEnvelope["tools"]![0]!["counts"]));
+
+        var controller = new AiConversationController(
+            db, new FakeCurrentUserService { UserId = 2, SelectedStoreId = 1 },
+            null!, null!);
+        var forgedCounts = JsonNode.Parse(countsJson)!.AsObject();
+        forgedCounts["read"]!["value"] = 999;
+        forgedCounts["written"]!["value"] = 999;
+        var forgedEnvelope = new JsonObject
+        {
+            ["_ui"] = "assistantTurn",
+            ["messageId"] = binding.MessageId,
+            ["runId"] = binding.RunId,
+            ["tools"] = new JsonArray(new JsonObject
+            {
+                ["name"] = "sql_readonly", ["status"] = "done",
+                ["counts"] = forgedCounts.DeepClone(),
+            }),
+            ["timeline"] = new JsonArray(),
+        };
+        var result = await controller.SaveMessages(new SaveMessagesRequest
+        {
+            SessionId = "counts-sync",
+            Messages =
+            [
+                new SaveMessageItem
+                {
+                    DbId = binding.DbId, Role = "assistant",
+                    Content = "forged content",
+                    ToolCallsJson = forgedEnvelope.ToJsonString(),
+                },
+            ],
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+        db.ChangeTracker.Clear();
+        var after = await db.aiConversationMessages.AsNoTracking()
+            .SingleAsync(m => m.Id == binding.DbId);
+        Assert.Equal(stored.content, after.content);
+        var afterEnvelope = JsonNode.Parse(after.toolCallsJson!)!;
+        Assert.True(JsonNode.DeepEquals(expected,
+            afterEnvelope["tools"]![0]!["counts"]));
+    }
+
+    [Fact]
     public async Task SaveMessages_UnknownCanonicalAssistantId_IsOmittedNotInserted()
     {
         // A client cannot mint a canonical row: an envelope carrying a server

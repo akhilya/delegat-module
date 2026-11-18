@@ -371,6 +371,8 @@ public static class AiSseTurnRecorder
                 row["result"] = resultEl.Clone();
             }
         }
+        if (data.TryGetProperty("counts", out var countsEl) && countsEl.ValueKind == JsonValueKind.Object)
+            row["counts"] = countsEl.Clone();
     }
 
     private static void AppendText(List<Dictionary<string, object?>> timeline, string delta)

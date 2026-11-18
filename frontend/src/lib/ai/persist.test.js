@@ -130,16 +130,28 @@ describe("plan result reviews", () => {
   });
   it("keeps distinct review identities on a stale read sharing the parent execution", () => {
     const execution = {
-      id: "execution", dbId: 2, role: "assistant",
-      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+      id: "execution",
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
     };
     const reviewOne = {
-      id: "review-one", dbId: 3, role: "assistant",
-      executionProposalId: "A", content: "First review", done: true,
+      id: "review-one",
+      dbId: 3,
+      role: "assistant",
+      executionProposalId: "A",
+      content: "First review",
+      done: true,
     };
     const reviewTwo = {
-      id: "review-two", role: "assistant", executionProposalId: "A",
-      content: "", plan: { proposalId: "B" }, done: true,
+      id: "review-two",
+      role: "assistant",
+      executionProposalId: "A",
+      content: "",
+      plan: { proposalId: "B" },
+      done: true,
     };
     const result = reconcilePlanMessages(
       [execution, reviewOne, reviewTwo],
@@ -157,37 +169,65 @@ describe("plan result reviews", () => {
   });
   it("keeps two persisted no-plan reviews sharing the parent in dbId order", () => {
     const execution = {
-      id: "execution", dbId: 2, role: "assistant",
-      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+      id: "execution",
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
     };
     const reviewThree = {
-      id: "r3", dbId: 3, role: "assistant",
-      executionProposalId: "A", content: "First", done: true,
+      id: "r3",
+      dbId: 3,
+      role: "assistant",
+      executionProposalId: "A",
+      content: "First",
+      done: true,
     };
     const reviewFour = {
-      id: "r4", dbId: 4, role: "assistant",
-      executionProposalId: "A", content: "Second", done: true,
+      id: "r4",
+      dbId: 4,
+      role: "assistant",
+      executionProposalId: "A",
+      content: "Second",
+      done: true,
     };
     const result = reconcilePlanMessages(
       [execution, reviewThree, reviewFour],
       [execution, reviewThree],
     );
-    assert.deepEqual(result.map((m) => m.dbId), [2, 3, 4]);
+    assert.deepEqual(
+      result.map((m) => m.dbId),
+      [2, 3, 4],
+    );
     assert.equal(result[1].content, "First");
     assert.equal(result[2].content, "Second");
   });
   it("adopts the persisted row for the same own proposal without duplicating it", () => {
     const execution = {
-      id: "execution", dbId: 2, role: "assistant",
-      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+      id: "execution",
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
     };
     const localB = {
-      id: "local-b", role: "assistant", executionProposalId: "A",
-      plan: { proposalId: "B" }, content: "", done: true,
+      id: "local-b",
+      role: "assistant",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      content: "",
+      done: true,
     };
     const serverB = {
-      id: "server-b", dbId: 4, role: "assistant", executionProposalId: "A",
-      plan: { proposalId: "B" }, content: "Done", done: true,
+      id: "server-b",
+      dbId: 4,
+      role: "assistant",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      content: "Done",
+      done: true,
     };
     const result = reconcilePlanMessages(
       [execution, localB],
@@ -200,20 +240,34 @@ describe("plan result reviews", () => {
   });
   it("retains ambiguous anonymous reviews instead of collapsing them onto one row", () => {
     const execution = {
-      id: "execution", dbId: 2, role: "assistant",
-      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+      id: "execution",
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
     };
     const reviewOne = {
-      id: "r1", role: "assistant", executionProposalId: "A",
-      content: "One", done: true,
+      id: "r1",
+      role: "assistant",
+      executionProposalId: "A",
+      content: "One",
+      done: true,
     };
     const reviewTwo = {
-      id: "r2", role: "assistant", executionProposalId: "A",
-      content: "Two", done: true,
+      id: "r2",
+      role: "assistant",
+      executionProposalId: "A",
+      content: "Two",
+      done: true,
     };
     const serverReview = {
-      id: "srv", dbId: 5, role: "assistant", executionProposalId: "A",
-      content: "Server", done: true,
+      id: "srv",
+      dbId: 5,
+      role: "assistant",
+      executionProposalId: "A",
+      content: "Server",
+      done: true,
     };
     const result = reconcilePlanMessages(
       [execution, reviewOne, reviewTwo],
@@ -225,17 +279,29 @@ describe("plan result reviews", () => {
   });
   it("adopts an evolved own proposal on the same persisted review row", () => {
     const execution = {
-      id: "execution", dbId: 2, role: "assistant",
-      plan: { proposalId: "A" }, planConfirmed: true, planExecuted: true,
+      id: "execution",
+      dbId: 2,
+      role: "assistant",
+      plan: { proposalId: "A" },
+      planConfirmed: true,
+      planExecuted: true,
     };
     const localReview = {
-      id: "r3", dbId: 3, role: "assistant",
-      executionProposalId: "A", content: "Text", done: true,
+      id: "r3",
+      dbId: 3,
+      role: "assistant",
+      executionProposalId: "A",
+      content: "Text",
+      done: true,
     };
     const updated = {
-      id: "r3-updated", dbId: 3, role: "assistant",
-      executionProposalId: "A", plan: { proposalId: "B" },
-      content: "Text", done: true,
+      id: "r3-updated",
+      dbId: 3,
+      role: "assistant",
+      executionProposalId: "A",
+      plan: { proposalId: "B" },
+      content: "Text",
+      done: true,
     };
     const result = reconcilePlanMessages(
       [execution, localReview],
@@ -756,6 +822,30 @@ describe("serializeToolCallsJson", () => {
     const parsed = JSON.parse(json);
     assert.equal(parsed._ui, "assistantTurn");
     assert.equal(parsed.plan.summary, "Upload photos");
+  });
+
+  it("preserves server count evidence through serialize and hydrate", () => {
+    // Exact zero and explicit null are both meaningful: written 0 is an
+    // idempotent replay, not "unknown".
+    const counts = {
+      version: 1,
+      source: "sql_readonly",
+      read: { value: 2, accuracy: "exact", unit: "rows" },
+      matched: { value: null, accuracy: "unknown", unit: "records" },
+      written: { value: 0, accuracy: "exact", unit: "records" },
+    };
+    const json = serializeToolCallsJson({
+      toolCalls: [{ id: "t1", name: "sql_readonly", status: "done", counts }],
+      timeline: [{ type: "tool", id: "t1" }],
+    });
+    assert.deepEqual(JSON.parse(json).tools[0].counts, counts);
+    const m = mapStoredMessage({
+      dbId: 21,
+      role: "assistant",
+      content: "Done.",
+      toolCallsJson: json,
+    });
+    assert.deepEqual(m.toolCalls[0].counts, counts);
   });
 });
 

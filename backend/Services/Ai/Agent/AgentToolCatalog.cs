@@ -33,7 +33,7 @@ public static class AgentToolCatalog
                     },
                 },
             }),
-            ("affectedCount", Int("How many entities")),
+            ("affectedCount", Int("Optional non-negative estimate of affected entities before execution. Omit when unknown. This is not an observed result or a count of successful writes.")),
             ("isDestructive", Bool("True for delete/overwrite"))),
         Prop("search_knowledge", "Search fetched product docs, MEMORY/DESIGN, and instance operator playbooks. Follow hits with get_doc (slug or sourcePath).",
             Req(["query"]), ("query", Str()), ("limit", Int("Max hits, default 12"))),
