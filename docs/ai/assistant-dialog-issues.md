@@ -656,3 +656,23 @@ The first remote documentation job rejected the missing required acknowledgement
 **Isolation follow-up.** The HTTP suite uses the existing `EnvVars` collection with `DisableParallelization = true`, so temporary `AI_ENABLED`/`ENCRYPTION_KEY` changes cannot overlap other test collections. After this scheduling change the combined scoped gate was rerun: **25 tests / 0 failures / 0 skips** on the final state. The separate seven-scenario browser result is retained; no frontend source changed.
 
 **Boundaries.** The harness is not the production Program startup, JWT issuer, MySQL, deployment or a killed OS process. Lease expiry is advanced explicitly after disposing the old host. Native-prefix cases omit model review; browser replay/review gates use intercepted APIs and are separate component evidence, not a live browser-to-Kestrel end-to-end run. Historical 359/204/69 results remain unchanged.
+
+### 9.21. Local browser and process-boundary verification
+
+**Scope.** A separate test-only console host serves the built Vue UI and production AI chat/conversation controllers, durable worker/store and shared executor/review over one temporary file-backed SQLite database. The signed plan and owned history are seeded server-side; model/native transports and authentication are fixtures. Browser flow requests (execution confirmation, history, Stop and SSE) reach the actual controllers without fulfilled or rewritten responses; unrelated bootstrap and model-picker metadata remain explicitly stubbed.
+
+**Crash boundary.** The runner terminates only its own child host process, reuses its SQLite file and origin, and waits for the real lease deadline without changing the database clock. Fsynced fixture invocation ledgers distinguish actual fake-native/model calls from replayed UI events. This is not an exactly-once guarantee for external services; the started-step case intentionally crashes before the fake native dispatch and remains conservatively unknown.
+
+**Verification.** The final dedicated browser gate passed **5 scenarios / 0 failures / 0 skips**: nominal desktop/mobile execution and three process-crash boundaries. Recovery assertions observe terminal UI state through the real SSE subscription before any additional history reload. The shared-fixture backend blast-radius gate passed **67 tests / 0 failures / 0 skips**; it was not repeated after console validation, browser assertions and process-cleanup hardening that leave those cases unchanged. The test-host and static frontend builds pass. No production defect was found. Git Bash required disabling environment path conversion when building the `/api`-relative frontend; no production configuration or frontend source was changed to accommodate the harness. These gates are not summed with earlier evidence.
+
+**Limits.** This is not production Program startup, JWT-issuer validation, live model planning/adherence, MySQL or deployment. The legacy default and confirmation barriers remain unchanged. Earlier host-only, component-browser and numerical results remain historical evidence rather than being recomputed or summed into this stage.
+
+**Run locally.** Build the test host and the static UI, then run the dedicated browser gate:
+
+```bash
+dotnet build backend.AiHttpTestHost/Delegat.AiHttpTestHost.csproj -m:1 -p:UseSharedCompilation=false -nodeReuse:false
+MSYS_NO_PATHCONV=1 MSYS2_ENV_CONV_EXCL=VITE_API_SERVER VITE_API_SERVER=/api npm --prefix frontend run build
+cd frontend && npx playwright test --config=playwright.ai-durable.config.ts
+```
+
+The console host is spawned by the Playwright runner as `dotnet <built dll> <stateDir> <frontend/dist> <sessionId> <port> <pauseMode>`; it is never run against production configuration. Crash cases wait for the real one-minute lease, so the full gate takes several minutes.

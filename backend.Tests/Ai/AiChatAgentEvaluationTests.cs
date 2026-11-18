@@ -1160,9 +1160,13 @@ public class AiChatAgentEvaluationTests
     /// </summary>
     internal static async Task<(AiChatService Chat, int UserId, int StoreId,
         Func<int> ToolCalls, Func<JsonElement?> LastBody, Func<int> ModelCalls,
-        IAsyncDisposable Lifetime)> CreateDurableHttpRuntimeAsync()
+        IAsyncDisposable Lifetime)> CreateDurableHttpRuntimeAsync(
+        string? sqliteDsn = null, Action<JsonElement?>? nativeCall = null, Action? modelCall = null)
     {
-        var fixture = await CreateFixtureAsync(Text("HTTP reply"));
+        var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [Text("HTTP reply")],
+            database: sqliteDsn == null ? null : TestDbFactory.CreateSqliteContext(sqliteDsn),
+            nativeCall: nativeCall, modelCall: modelCall);
         return (fixture.Chat, fixture.UserId, fixture.StoreId,
             () => fixture.Invoker.Calls, () => fixture.Invoker.LastBody,
             () => fixture.Client.Requests.Count, fixture);
@@ -1181,88 +1185,116 @@ public class AiChatAgentEvaluationTests
         string? attachmentFileName,
         byte[]? attachmentBytes,
         object[] responses, IHttpClientFactory? pythonHttp = null,
-        CabinetCapabilityIndex? capabilities = null, bool artifacts = false)
+        CabinetCapabilityIndex? capabilities = null, bool artifacts = false,
+        DataContext? database = null, Action<JsonElement?>? nativeCall = null,
+        Action? modelCall = null)
     {
-        var db = TestDbFactory.CreateDb();
-        var data = new TestDataBuilder(db);
-        var user = data.AddUser("agent-eval");
-        var store = data.AddStore("Eval store", "RUB", "UTC", user);
-        data.AddProduct(store.Id, name: "Ceramic Mug", sku: "SKU-42");
-        if (attachmentSessionId != null && attachmentFileName != null && attachmentBytes != null)
+        var db = database ?? TestDbFactory.CreateDb();
+        int userId;
+        int storeId;
+        try
         {
-            db.aiChatAttachments.Add(new AiChatAttachment
+            if (database != null && await db.Users.AnyAsync())
             {
-                Id = 71,
-                sessionId = attachmentSessionId,
-                storeId = store.Id,
-                userId = user.Id,
-                fileName = attachmentFileName,
-                contentType = "text/csv",
-                length = attachmentBytes.Length,
-                storageKey = "staged/" + attachmentFileName,
-                createdAt = DateTime.UtcNow,
-            });
-        }
-        var otherStore = data.AddStore("Other eval store", "RUB", "UTC", user);
-        data.AddProduct(otherStore.Id, name: "Private Product", sku: "PRIVATE-OTHER-STORE");
-        db.aiModelConfigs.Add(new AiModelConfig
-        {
-            name = "scripted",
-            apiUrl = "https://api.example.test",
-            apiKeyEncrypted = "test-key",
-            modelId = "scripted-model",
-            isDefault = true,
-            isEnabled = true,
-            provider = AiModelProvider.Anthropic,
-            maxTokens = 1024,
-        });
-        await db.SaveChangesAsync();
+                // The durable file database keeps its earlier seed: only
+                // resolve the deterministic catalog identities, never reseed.
+                userId = await db.Users
+                    .Where(u => u.UserName == "agent-eval")
+                    .Select(u => u.Id).SingleAsync();
+                storeId = await db.stores
+                    .Where(s => s.name == "Eval store")
+                    .Select(s => s.Id).SingleAsync();
+            }
+            else
+            {
+                var data = new TestDataBuilder(db);
+                var user = data.AddUser("agent-eval");
+                var store = data.AddStore("Eval store", "RUB", "UTC", user);
+                data.AddProduct(store.Id, name: "Ceramic Mug", sku: "SKU-42");
+                if (attachmentSessionId != null && attachmentFileName != null && attachmentBytes != null)
+                {
+                    db.aiChatAttachments.Add(new AiChatAttachment
+                    {
+                        Id = 71,
+                        sessionId = attachmentSessionId,
+                        storeId = store.Id,
+                        userId = user.Id,
+                        fileName = attachmentFileName,
+                        contentType = "text/csv",
+                        length = attachmentBytes.Length,
+                        storageKey = "staged/" + attachmentFileName,
+                        createdAt = DateTime.UtcNow,
+                    });
+                }
+                var otherStore = data.AddStore("Other eval store", "RUB", "UTC", user);
+                data.AddProduct(otherStore.Id, name: "Private Product", sku: "PRIVATE-OTHER-STORE");
+                db.aiModelConfigs.Add(new AiModelConfig
+                {
+                    name = "scripted",
+                    apiUrl = "https://api.example.test",
+                    apiKeyEncrypted = "test-key",
+                    modelId = "scripted-model",
+                    isDefault = true,
+                    isEnabled = true,
+                    provider = AiModelProvider.Anthropic,
+                    maxTokens = 1024,
+                });
+                await db.SaveChangesAsync();
+                userId = user.Id;
+                storeId = store.Id;
+            }
 
-        var invoker = new RecordingInvoker();
-        var client = new ScriptedAiStreamingClient(responses);
-        var uow = TestDbFactory.CreateUnitOfWork(db);
-        var quota = new QuotaService(uow, db);
-        var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
-        IStorageService storage = artifacts
-            ? new MemoryStorage()
-            : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
-        GeneratedArtifactService? artifactService = artifacts
-            ? new GeneratedArtifactService(
+            var invoker = new RecordingInvoker(nativeCall);
+            var client = new ScriptedAiStreamingClient(responses, modelCall);
+            var uow = TestDbFactory.CreateUnitOfWork(db);
+            var quota = new QuotaService(uow, db);
+            var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
+            IStorageService storage = artifacts
+                ? new MemoryStorage()
+                : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+            GeneratedArtifactService? artifactService = artifacts
+                ? new GeneratedArtifactService(
+                    db,
+                    storage,
+                    quota,
+                    new AgentSessionResolver(
+                        new FakeCurrentUserService(), new GrantAllPermissions(), db,
+                        new HttpContextAccessor()),
+                    NullLogger<GeneratedArtifactService>.Instance)
+                : null;
+            var python = new PythonSandboxClient(
+                db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
+                new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
+            var toolHost = new AgentToolHost(
+                new CatalogSearchService(db),
+                new SqlReadonlyService(db),
+                new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
+                new AgentPlatformGateway(uploads, invoker, capabilities),
+                python,
+                new GrantAllPermissions(),
                 db,
-                storage,
-                quota,
-                new AgentSessionResolver(
-                    new FakeCurrentUserService(), new GrantAllPermissions(), db,
-                    new HttpContextAccessor()),
-                NullLogger<GeneratedArtifactService>.Instance)
-            : null;
-        var python = new PythonSandboxClient(
-            db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
-            new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
-        var toolHost = new AgentToolHost(
-            new CatalogSearchService(db),
-            new SqlReadonlyService(db),
-            new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
-            new AgentPlatformGateway(uploads, invoker, capabilities),
-            python,
-            new GrantAllPermissions(),
-            db,
-            NullLogger<AgentToolHost>.Instance,
-            mcp,
-            actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
-            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
-            artifacts: artifactService);
-        var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
-        var modelService = new AiModelConfigService(
-            db,
-            new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
-            new EncryptionService(encryptionKey));
-        var logger = new CapturingLogger<AiChatService>();
-        var chat = new AiChatService(
-            modelService, client, db, toolHost, new HttpContextAccessor(), quota,
-            logger, mcp);
+                NullLogger<AgentToolHost>.Instance,
+                mcp,
+                actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
+                chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
+                artifacts: artifactService);
+            var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
+            var modelService = new AiModelConfigService(
+                db,
+                new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
+                new EncryptionService(encryptionKey));
+            var logger = new CapturingLogger<AiChatService>();
+            var chat = new AiChatService(
+                modelService, client, db, toolHost, new HttpContextAccessor(), quota,
+                logger, mcp);
 
-        return new ChatFixture(db, chat, client, invoker, mcp, logger, user.Id, store.Id);
+            return new ChatFixture(db, chat, client, invoker, mcp, logger, userId, storeId);
+        }
+        catch
+        {
+            await db.DisposeAsync();
+            throw;
+        }
     }
 
     private static ChatMessage UserMessage(string text)
@@ -1373,7 +1405,8 @@ public class AiChatAgentEvaluationTests
         IReadOnlyList<CapturedMessage> Messages,
         IReadOnlyList<string> ToolNames);
 
-    private sealed class ScriptedAiStreamingClient(params object[] responses)
+    private sealed class ScriptedAiStreamingClient(
+        object[] responses, Action? modelCall = null)
         : IAiApiClient
     {
         private readonly Queue<object> _responses = new(responses);
@@ -1387,6 +1420,9 @@ public class AiChatAgentEvaluationTests
             AiRequest request,
             [EnumeratorCancellation] CancellationToken ct)
         {
+            // Record the attempt before the queue check so even unscripted
+            // model calls land in the invocation ledger.
+            modelCall?.Invoke();
             if (_responses.Count == 0)
                 throw new InvalidOperationException("No scripted model response remains.");
 
@@ -1428,7 +1464,8 @@ public class AiChatAgentEvaluationTests
         }
     }
 
-    private sealed class RecordingInvoker : ICabinetRequestInvoker
+    private sealed class RecordingInvoker(Action<JsonElement?>? nativeCall = null)
+        : ICabinetRequestInvoker
     {
         public int Calls { get; private set; }
         public string? LastPath { get; private set; }
@@ -1446,6 +1483,7 @@ public class AiChatAgentEvaluationTests
             Calls++;
             LastPath = apiPath;
             LastBody = body?.Clone();
+            nativeCall?.Invoke(LastBody);
             return Task.FromResult<(object, string)>((new { ok = true }, "called"));
         }
     }

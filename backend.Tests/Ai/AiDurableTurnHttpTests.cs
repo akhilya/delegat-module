@@ -27,6 +27,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -386,6 +387,128 @@ public class AiDurableTurnHttpTests
         }
     }
 
+    /// <summary>
+    /// The single narrow entry point used by the Delegat.AiHttpTestHost console
+    /// process: validates the parent-created state directory, starts one real
+    /// host over the supplied file database, seeds the browser scenario once,
+    /// publishes ready.json and then parks on the app's shutdown signal. The
+    /// child never deletes the caller's state directory.
+    /// </summary>
+    internal static async Task RunBrowserHostAsync(
+        string stateDirectory, string staticRoot, string sessionId, int port,
+        string pauseMode, string controlToken, CancellationToken ct)
+    {
+        var options = new StandaloneOptions(
+            Path.GetFullPath(stateDirectory), Path.GetFullPath(staticRoot),
+            sessionId, port, ParsePause(pauseMode), controlToken);
+        ValidateStandaloneOptions(options);
+
+        await using var fixture = await HttpFixture.CreateAsync(options);
+        var host = await fixture.StartAsync();
+        try
+        {
+            await EnsureBrowserScenarioAsync(fixture, host, options, ct);
+            await WriteReadyFileAsync(options, host, ct);
+            await host.WaitForShutdownAsync(ct);
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+    }
+
+    private sealed record StandaloneOptions(
+        string StateDirectory, string StaticRoot, string SessionId, int Port,
+        PauseAt Pause, string ControlToken);
+
+    private static PauseAt ParsePause(string mode) => mode switch
+    {
+        "none" => PauseAt.None,
+        "first-done" => PauseAt.FirstDone,
+        "first-running" => PauseAt.FirstRunning,
+        "review-text" => PauseAt.Text,
+        var other => throw new ArgumentException($"Unknown pause mode '{other}'."),
+    };
+
+    private static void ValidateStandaloneOptions(StandaloneOptions options)
+    {
+        var tempRoot = Path.GetFullPath(Path.GetTempPath().TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var dir = options.StateDirectory;
+        var parent = Path.GetFullPath(Path.GetDirectoryName(dir) ?? Path.Combine(tempRoot, ".."));
+        var pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var name = Path.GetFileName(dir);
+        const string prefix = "delegat-ai-browser-";
+        var validName = name.StartsWith(prefix, StringComparison.Ordinal)
+            && name.Length > prefix.Length
+            && name[prefix.Length..].All(char.IsAsciiLetterOrDigit);
+        if (!string.Equals(parent, tempRoot, pathComparison)
+            || !validName
+            || !Directory.Exists(dir)
+            || (File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0)
+            throw new ArgumentException(
+                $"The state directory must be a real direct delegat-ai-browser-* child of {tempRoot}.");
+        var tokenFile = Path.Combine(dir, "owner.token");
+        var token = File.Exists(tokenFile) ? File.ReadAllText(tokenFile).Trim() : "";
+        if (token.Length < 32 || token != options.ControlToken)
+            throw new ArgumentException("The supplied control token does not match owner.token.");
+        if (options.SessionId.Length is < 1 or > 36)
+            throw new ArgumentException("sessionId must be 1..36 characters.");
+        if (options.Port is < 0 or > 65535)
+            throw new ArgumentException("port must be in 0..65535.");
+        if (!File.Exists(Path.Combine(options.StaticRoot, "index.html")))
+            throw new ArgumentException($"The static root has no index.html: {options.StaticRoot}");
+    }
+
+    /// <summary>
+    /// Creates the owned user text, signed plan and conversation title exactly
+    /// once; a restarted host finds the session and never rewrites history.
+    /// </summary>
+    private static async Task EnsureBrowserScenarioAsync(
+        HttpFixture fixture, HttpHost host, StandaloneOptions options, CancellationToken ct)
+    {
+        await using var db = fixture.Context();
+        if (await db.aiConversations.AnyAsync(c => c.sessionId == options.SessionId, ct))
+            return;
+        await AiConversationTurnStore.AppendUserIfNeededAsync(db, options.SessionId,
+            host.StoreId, host.UserId, new ChatMessage
+            {
+                role = "user",
+                content = JsonSerializer.SerializeToElement("Update two local fixture records"),
+            }, ct);
+        await SeedPlanAsync(db, options.SessionId, host.StoreId, host.UserId);
+        var conversation = await db.aiConversations
+            .SingleAsync(c => c.sessionId == options.SessionId, ct);
+        conversation.title = "Local durable integration";
+        var planMessage = await db.aiConversationMessages
+            .Where(m => m.conversationId == conversation.Id && m.role == "assistant")
+            .SingleAsync(ct);
+        var envelope = JsonNode.Parse(planMessage.toolCallsJson!)!;
+        var plan = envelope["plan"]!.AsObject();
+        plan["summary"] ??= "Update two local fixture records";
+        planMessage.toolCallsJson = envelope.ToJsonString();
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task WriteReadyFileAsync(
+        StandaloneOptions options, HttpHost host, CancellationToken ct)
+    {
+        var ready = Path.Combine(options.StateDirectory, "ready.json");
+        var temp = ready + ".tmp";
+        var payload = JsonSerializer.Serialize(new
+        {
+            processId = Environment.ProcessId,
+            url = host.Client.BaseAddress!.ToString().TrimEnd('/'),
+            sessionId = options.SessionId,
+            userId = host.UserId,
+            storeId = host.StoreId,
+        });
+        await File.WriteAllTextAsync(temp, payload + "\n", new UTF8Encoding(false), ct);
+        File.Move(temp, ready, overwrite: true);
+    }
+
     private static HttpClientHandler NoCookies() => new() { UseCookies = false };
 
     private static HttpRequestMessage Json(HttpMethod method, string path, object body) =>
@@ -558,7 +681,8 @@ public class AiDurableTurnHttpTests
     /// The real shared executor behind an intentional fault boundary: the pause
     /// fires only after the worker has committed the yielded event.
     /// </summary>
-    private sealed class ControlledProducer(AiChatService chat, PauseAt pause) : IAiDurableTurnProducer
+    private sealed class ControlledProducer(
+        AiChatService chat, PauseAt pause, bool includeReview = false) : IAiDurableTurnProducer
     {
         public TaskCompletionSource Paused { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Invocations;
@@ -570,7 +694,9 @@ public class AiDurableTurnHttpTests
             Interlocked.Increment(ref Invocations);
             var source = job.kind == "execution"
                 ? chat.ExecutePlanEventsAsync(request.Steps, job.storeId, job.userId,
-                    request.ProposalId!, ct, sessionId: null, locale: "en",
+                    request.ProposalId!, ct,
+                    sessionId: includeReview ? job.sessionId : null,
+                    locale: includeReview ? request.Locale ?? "en" : "en",
                     resume: resume, runtimeOverride: job.engine)
                 : chat.StreamChatEventsAsync(request.Messages, job.storeId, job.userId,
                     request.ModelId, request.PageContext, job.sessionId, request.Locale,
@@ -677,6 +803,8 @@ public class AiDurableTurnHttpTests
         public Func<JsonElement?> LastBody => _runtime.LastBody;
         public Func<int> ModelCalls => _runtime.ModelCalls;
 
+        public Task WaitForShutdownAsync(CancellationToken ct) => _app.WaitForShutdownAsync(ct);
+
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -715,14 +843,20 @@ public class AiDurableTurnHttpTests
     {
         private readonly string _dir;
         private readonly string _dsn;
+        private readonly bool _ownsDirectory;
+        private readonly StandaloneOptions? _standalone;
+        private readonly object _ledgerLock = new();
         private readonly string? _oldAiEnabled;
         private readonly string? _oldKey;
         private readonly List<HttpHost> _hosts = [];
 
-        private HttpFixture()
+        private HttpFixture(StandaloneOptions? standalone)
         {
-            _dir = Path.Combine(Path.GetTempPath(), $"delegat-ai-http-{Guid.NewGuid():N}");
-            Directory.CreateDirectory(_dir);
+            _standalone = standalone;
+            _ownsDirectory = standalone == null;
+            _dir = standalone?.StateDirectory
+                ?? Path.Combine(Path.GetTempPath(), $"delegat-ai-http-{Guid.NewGuid():N}");
+            if (_ownsDirectory) Directory.CreateDirectory(_dir);
             _dsn = $"Data Source={Path.Combine(_dir, "turns.db")};Default Timeout=10;Pooling=False";
             _oldAiEnabled = Environment.GetEnvironmentVariable("AI_ENABLED");
             _oldKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
@@ -731,9 +865,9 @@ public class AiDurableTurnHttpTests
                 Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray()));
         }
 
-        public static async Task<HttpFixture> CreateAsync()
+        public static async Task<HttpFixture> CreateAsync(StandaloneOptions? standalone = null)
         {
-            var fixture = new HttpFixture();
+            var fixture = new HttpFixture(standalone);
             try
             {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -752,17 +886,31 @@ public class AiDurableTurnHttpTests
 
         public async Task<HttpHost> StartAsync(PauseAt pause = PauseAt.None)
         {
-            var runtime = await AiChatAgentEvaluationTests.CreateDurableHttpRuntimeAsync();
+            var standalone = _standalone;
+            var runtime = standalone == null
+                ? await AiChatAgentEvaluationTests.CreateDurableHttpRuntimeAsync()
+                // Standalone hosts run the shared executor/review over the same
+                // file database and record every fake transport call on disk.
+                : await AiChatAgentEvaluationTests.CreateDurableHttpRuntimeAsync(_dsn,
+                    nativeCall: body => WriteLedger("native-calls.ndjson",
+                        new { processId = Environment.ProcessId, body }),
+                    modelCall: () => WriteLedger("model-calls.ndjson",
+                        new { processId = Environment.ProcessId }));
             WebApplication? app = null;
             HttpClient? client = null;
             try
             {
-                var producer = new ControlledProducer(runtime.Chat, pause);
-                var builder = WebApplication.CreateBuilder(
-                    new WebApplicationOptions { EnvironmentName = "Testing" });
+                var producer = new ControlledProducer(
+                    runtime.Chat, standalone?.Pause ?? pause, includeReview: standalone != null);
+                var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+                {
+                    EnvironmentName = "Testing",
+                    WebRootPath = standalone?.StaticRoot,
+                });
                 builder.Configuration.Sources.Clear();
                 builder.Logging.ClearProviders();
-                builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+                builder.WebHost.ConfigureKestrel(options =>
+                    options.Listen(IPAddress.Loopback, standalone?.Port ?? 0));
 
                 var services = builder.Services;
                 services.AddControllers()
@@ -816,9 +964,22 @@ public class AiDurableTurnHttpTests
                         await context.Response.WriteAsJsonAsync(new { code = ex.Code });
                     }
                 });
+                if (standalone != null)
+                {
+                    app.UseDefaultFiles();
+                    app.UseStaticFiles();
+                }
                 app.UseAuthentication();
                 app.UseAuthorization();
                 app.MapGroup("/api").MapControllers();
+                if (standalone != null)
+                {
+                    MapTestControls(app, standalone, producer);
+                    // Unmatched API requests return a real 404; only the SPA
+                    // shell falls back to index.html.
+                    app.Map("/api/{**path}", () => Results.NotFound());
+                    app.MapFallbackToFile("index.html");
+                }
                 using (var startup = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
                     await app.StartAsync(startup.Token);
 
@@ -854,6 +1015,63 @@ public class AiDurableTurnHttpTests
                     j => j.leaseExpiresAtUtc, DateTime.UtcNow.AddSeconds(-1)));
         }
 
+        /// <summary>
+        /// Token-gated control surface, registered only for standalone hosts.
+        /// It exposes read-only durable state and a graceful shutdown; it never
+        /// mutates jobs or leases.
+        /// </summary>
+        private void MapTestControls(
+            WebApplication app, StandaloneOptions options, ControlledProducer producer)
+        {
+            bool Authorized(HttpContext http) => string.Equals(
+                http.Request.Headers["X-Ai-Test-Control"].ToString(),
+                options.ControlToken, StringComparison.Ordinal);
+
+            app.MapGet("/__test/state", async (HttpContext http) =>
+            {
+                if (!Authorized(http)) return Results.NotFound();
+                await using var db = Context();
+                var jobs = await db.aiTurnJobs.AsNoTracking()
+                    .Where(j => j.sessionId == options.SessionId)
+                    .OrderBy(j => j.Id)
+                    .Select(j => new
+                    {
+                        j.Id, j.runId, j.status, j.startedStep, j.executionEnded,
+                        j.lastSequence, j.leaseExpiresAtUtc, j.checkpointsJson, j.bindingJson,
+                    })
+                    .ToListAsync(http.RequestAborted);
+                return Results.Json(new
+                {
+                    processId = Environment.ProcessId,
+                    paused = producer.Paused.Task.IsCompleted,
+                    jobs,
+                });
+            });
+            app.MapPost("/__test/shutdown", (HttpContext http) =>
+            {
+                if (!Authorized(http)) return Results.NotFound();
+                http.Response.OnCompleted(() =>
+                {
+                    app.Lifetime.StopApplication();
+                    return Task.CompletedTask;
+                });
+                return Results.Ok();
+            });
+        }
+
+        /// <summary>Append one fsynced JSONL record to the caller-owned state dir.</summary>
+        private void WriteLedger(string name, object record)
+        {
+            var bytes = new UTF8Encoding(false).GetBytes(JsonSerializer.Serialize(record) + "\n");
+            lock (_ledgerLock)
+            {
+                using var stream = new FileStream(Path.Combine(_dir, name),
+                    FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(flushToDisk: true);
+            }
+        }
+
         public async ValueTask DisposeAsync()
         {
             var failures = new List<Exception>();
@@ -871,7 +1089,8 @@ public class AiDurableTurnHttpTests
                 Environment.SetEnvironmentVariable("ENCRYPTION_KEY", _oldKey);
                 try
                 {
-                    if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
+                    if (_ownsDirectory && Directory.Exists(_dir))
+                        Directory.Delete(_dir, recursive: true);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
