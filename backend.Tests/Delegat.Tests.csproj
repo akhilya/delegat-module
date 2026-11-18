@@ -51,6 +51,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reuse the no-network M1 transport fake; the isolated prototype has no production reference. -->
+    <Compile Include="..\backend.AiRuntime.Tests\Support\ScriptedHttpMessageHandler.cs" Link="Ai\Support\ScriptedHttpMessageHandler.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

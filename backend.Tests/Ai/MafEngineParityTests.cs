@@ -31,7 +31,7 @@ namespace Delegat.Tests;
 /// driven through a scripted Microsoft.Extensions.AI IChatClient.
 /// </summary>
 [Collection("EnvVars")]
-public class MafEngineParityTests
+public partial class MafEngineParityTests
 {
     [Fact]
     public async Task PlanInMixedBatch_DefersEverySiblingTool_AndStopsAtOneProviderRequest()
@@ -781,7 +781,9 @@ public class MafEngineParityTests
         ScriptedAiStreamingClient? legacyClient = null,
         string runtime = "maf",
         bool artifacts = false,
-        IHttpClientFactory? pythonHttp = null)
+        IHttpClientFactory? pythonHttp = null,
+        IChatClient? providerClient = null,
+        AiModelProvider modelProvider = AiModelProvider.Anthropic)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -811,14 +813,14 @@ public class MafEngineParityTests
             modelId = "scripted-model",
             isDefault = true,
             isEnabled = true,
-            provider = AiModelProvider.Anthropic,
+            provider = modelProvider,
             maxTokens = 1024,
         });
         await db.SaveChangesAsync();
 
         var invoker = new RecordingInvoker();
         var mafClient = new ScriptedChatClient(responses);
-        var factory = new ScriptedRuntimeClientFactory(mafClient);
+        var factory = new ScriptedRuntimeClientFactory(providerClient ?? mafClient);
         legacyClient ??= new ScriptedAiStreamingClient();
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var quota = new QuotaService(uow, db);

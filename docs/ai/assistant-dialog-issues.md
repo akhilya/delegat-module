@@ -676,3 +676,11 @@ cd frontend && npx playwright test --config=playwright.ai-durable.config.ts
 ```
 
 The console host is spawned by the Playwright runner as `dotnet <built dll> <stateDir> <frontend/dist> <sessionId> <port> <pauseMode>`; it is never run against production configuration. Crash cases wait for the real one-minute lease, so the full gate takes several minutes.
+
+### 9.22. Local SDK transport boundary verification
+
+**Scope.** The production AiApiClient.CreateChatClient constructs both pinned SDK adapters over the hosted custom-HTTP branch. A fixture supplies the resulting IChatClient to the real MAF engine; queued raw HTTP/SSE responses pass through the SDK parser, turn gate and application tool adapters. Coverage targets fragmented mixed batches, first/later provider failures, deterministic mid-body cancellation and a malformed tail after valid tool bytes. No production code changes are introduced by this stage.
+
+**Verification.** All **10 new transport scenarios** pass across OpenAI-compatible and Anthropic SDKs. The scoped MAF class gate passed **41 tests / 0 failures / 0 skips**, including those ten: fragmented calls produce one proposal without dispatching siblings; HTTP failures stay sanitized; the completed read and its SDK-serialized call/result pair survive a later provider failure; mid-body cancellation and malformed tails never dispatch the buffered call. After scoping cancellation-source disposal, the four directly affected failure cases passed again; the other 37 unchanged cases were not repeated. No production defect was found. The M1 transport fake is source-linked without changing its isolated prototype or SDK versions; browser/process gates and earlier counts remain separate evidence.
+
+**Limits.** This does not exercise Platform Link enrollment/signing, production DI/startup, BYOK/proxy routing, live providers, MySQL, deployment, MAF default cutover or model adherence. The explicit test-only MAF selection leaves the product legacy default and Python/write confirmation unchanged. Existing numerical evidence remains historical and is not summed into this stage.
