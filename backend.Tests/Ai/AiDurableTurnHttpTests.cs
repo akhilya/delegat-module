@@ -40,7 +40,7 @@ namespace Delegat.Tests;
 /// credential verification and the model/native transports are fakes - this is
 /// host recreation, not an OS process kill or production Program startup.
 /// </summary>
-[Collection("AiPlanSigningKey")]
+[Collection("EnvVars")]
 public class AiDurableTurnHttpTests
 {
     private const string AdminBearer = "fixture-admin";
