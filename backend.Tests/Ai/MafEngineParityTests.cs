@@ -10,6 +10,7 @@ using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Agent.Maf;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -712,6 +713,8 @@ public class MafEngineParityTests
     /// request so the scripted import plan quotes real artifact identity.</summary>
     private static object ImportArgsFromReview(CapturedRequest review)
     {
+        Assert.Contains(AssistantCapabilityContract.Guidance, review.System, StringComparison.Ordinal);
+        Assert.Contains(AiPrompts.PlanResultFollowup, review.System, StringComparison.Ordinal);
         var content = review.Messages.Last().Content;
         for (var i = 0; i < 5; i++)
         {

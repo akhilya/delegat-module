@@ -9,6 +9,7 @@ using Delegat.Models.Ai;
 using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -875,6 +876,8 @@ public class AiChatAgentEvaluationTests
     /// is only valid when it references the server-issued artifact identity.</summary>
     private static IReadOnlyList<AiStreamEvent> ImportPlanFromReview(CapturedRequest review, string id)
     {
+        Assert.Contains(AssistantCapabilityContract.Guidance, review.System, StringComparison.Ordinal);
+        Assert.Contains(AiPrompts.PlanResultFollowup, review.System, StringComparison.Ordinal);
         var content = review.Messages.Last().Content;
         // The outcome payload is nested inside several JSON string layers: peel
         // every level of quote escaping before matching the handle fields.
