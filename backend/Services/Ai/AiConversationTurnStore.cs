@@ -390,6 +390,8 @@ public static class AiConversationTurnStore
         int userId,
         CancellationToken ct)
     {
+        if (db.Database.CurrentTransaction != null)
+            return await ConsumePendingPlanAttemptAsync(db, sessionId, proposalId, storeId, userId, ct);
         var strategy = db.Database.CreateExecutionStrategy();
         var firstAttempt = true;
         return await strategy.ExecuteAsync(async () =>
@@ -435,7 +437,7 @@ public static class AiConversationTurnStore
             .FirstOrDefaultAsync(ct);
         if (!lastId.HasValue) return Rejected("conversation_empty");
 
-        var last = db.Database.IsRelational()
+        var last = db.Database.ProviderName?.Contains("MySql", StringComparison.OrdinalIgnoreCase) == true
             ? await db.aiConversationMessages
                 .FromSqlInterpolated($"SELECT * FROM aiConversationMessages WHERE Id = {lastId.Value} FOR UPDATE")
                 .FirstOrDefaultAsync(ct)

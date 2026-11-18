@@ -99,7 +99,8 @@ public class AiChatService
         string? sessionId = null,
         string? locale = null,
         [EnumeratorCancellation] CancellationToken ct = default,
-        bool planResultReview = false)
+        bool planResultReview = false,
+        string? runtimeOverride = null)
     {
         var localeCode = locale ?? ResolveLocale();
         {
@@ -117,7 +118,12 @@ public class AiChatService
             var model = _modelService.DecryptForUse(modelConfig);
             // Resolved once per StreamChatAsync call and pinned for this run; the
             // plan-review re-entry below resolves it again for that new run.
-            var useMaf = _mafEngine is { IsSelected: true };
+            if (runtimeOverride is not (null or "legacy" or "maf"))
+                throw new InvalidOperationException("Invalid pinned AI runtime.");
+            var useMaf = runtimeOverride == "maf"
+                || (runtimeOverride == null && _mafEngine is { IsSelected: true });
+            if (useMaf && _mafEngine == null)
+                throw new InvalidOperationException("Pinned AI runtime is unavailable.");
             using var turnTelemetry = new AiTurnTelemetry(
                 _logger, storeId, model.provider.ToString(), model.modelId,
                 AiPrompts.ChatPromptVersion,
@@ -848,7 +854,8 @@ public class AiChatService
     public async IAsyncEnumerable<AiTurnEvent> ExecutePlanEventsAsync(
         List<PlanStepInput> steps, int storeId, int userId, string proposalId,
         [EnumeratorCancellation] CancellationToken ct = default,
-        string? sessionId = null, string? locale = null)
+        string? sessionId = null, string? locale = null,
+        AiExecutionResume? resume = null, string? runtimeOverride = null)
     {
         var localeCode = AiPrompts.NormalizeLocale(locale ?? ResolveLocale());
         var followup = string.IsNullOrEmpty(sessionId) ? null
@@ -890,10 +897,34 @@ public class AiChatService
         var errors = new List<string>();
         // Per-step count evidence in executed order; verdicts stay readable for
         // the bounded review even when the raw result JSON is clipped.
-        var stepCounts = new List<AgentResultCounts>();
-
-        foreach (var step in steps)
+        var stepCounts = new List<object>();
+        var completed = resume?.Steps ?? [];
+        if (completed.Count > steps.Count)
+            throw new InvalidOperationException("Checkpoint exceeds the approved plan.");
+        for (var index = 0; index < completed.Count; index++)
         {
+            var saved = completed[index];
+            var name = steps[index].Tool;
+            if (name.StartsWith("functions.", StringComparison.OrdinalIgnoreCase))
+                name = name["functions.".Length..];
+            if (saved.Index != index || saved.Tool != name
+                || saved.Input != (steps[index].Args?.GetRawText() ?? "{}"))
+                throw new InvalidOperationException("Checkpoint does not match the approved plan.");
+            var state = saved.Outcome.GetProperty("status").GetString();
+            if (state is not ("completed" or "queued" or "failed") || errors.Count != 0)
+                throw new InvalidOperationException("Invalid execution checkpoint prefix.");
+            outcomes.Add(saved.Outcome.Clone());
+            stepCounts.Add(saved.Outcome.GetProperty("counts").Clone());
+            if (state == "failed") errors.Add(saved.Outcome.GetProperty("summary").GetString() ?? "Failed");
+            else ok++;
+            if (state == "queued") queued++;
+        }
+        if (resume?.ExecutionEnded == true && completed.Count < steps.Count && errors.Count == 0)
+            throw new InvalidOperationException("Terminal checkpoint is missing execution results.");
+
+        for (var stepIndex = completed.Count; stepIndex < steps.Count && errors.Count == 0; stepIndex++)
+        {
+            var step = steps[stepIndex];
             if (ct.IsCancellationRequested)
             {
                 cancelled = true;
@@ -905,7 +936,8 @@ public class AiChatService
                 tool = tool["functions.".Length..];
             var argsJson = step.Args.HasValue ? step.Args.Value.GetRawText() : "{}";
             var stepId = Guid.NewGuid().ToString("N")[..8];
-            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "running", input = argsJson });
+            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "running",
+                input = argsJson, stepIndex });
 
             string summary;
             bool failed;
@@ -953,7 +985,7 @@ public class AiChatService
 
             ToolEffects.TryGetValue(tool, out var effects);
             var resultElement = JsonSerializer.Deserialize<JsonElement>(resultJson);
-            outcomes.Add(new { step = outcomes.Count + 1, tool, description = step.Description,
+            var stepOutcome = JsonSerializer.SerializeToElement(new { step = outcomes.Count + 1, tool, description = step.Description,
                 status = failed ? "failed" : AgentToolResult.IsQueuedJob(resultElement) ? "queued" : "completed",
                 summary,
                 errorClass = resultElement.ValueKind == JsonValueKind.Object
@@ -962,9 +994,11 @@ public class AiChatService
                         ? errorClass.GetString()
                         : null,
                 result = resultElement,
-                counts });
+                counts }, _jsonOpts);
+            outcomes.Add(stepOutcome);
             stepCounts.Add(counts);
-            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary, result = resultJson, effects, counts });
+            yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary,
+                input = argsJson, result = resultJson, effects, counts, stepIndex, executionOutcome = stepOutcome });
             if (failed)
             {
                 errors.Add(summary);
@@ -980,7 +1014,7 @@ public class AiChatService
                 && a.summary.StartsWith($"proposal:{proposalId}:"))
             .OrderByDescending(a => a.createdAt)
             .FirstOrDefaultAsync(CancellationToken.None);
-        if (audit != null)
+        if (audit != null && resume?.ExecutionEnded != true)
         {
             var outcome = cancelled ? "cancelled"
                 : errors.Count == 0 ? (queued > 0 ? "queued" : "completed")
@@ -997,18 +1031,21 @@ public class AiChatService
         var status = cancelled ? "interrupted" : errors.Count == 0
             ? queued > 0 ? "queued" : "completed"
             : ok > 0 ? "partial" : "failed";
-        yield return Event(SseEventType.ExecutionStatus, new
+        if (resume?.ExecutionEnded != true)
         {
-            status,
-            succeeded = ok,
-            total = steps.Count,
-            queued,
-            failed = errors.Count,
-            skipped = steps.Count - outcomes.Count,
-            summary = text,
-            outcomeUnknown = cancelled || errors.Count > 0,
-        });
-        yield return Event(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count, cancelled });
+            yield return Event(SseEventType.ExecutionStatus, new
+            {
+                status,
+                succeeded = ok,
+                total = steps.Count,
+                queued,
+                failed = errors.Count,
+                skipped = steps.Count - outcomes.Count,
+                summary = text,
+                outcomeUnknown = cancelled || errors.Count > 0,
+            });
+            yield return Event(SseEventType.Done, new { ok = errors.Count == 0, failedCount = errors.Count, cancelled });
+        }
         if (cancelled || followup == null) yield break;
         ct.ThrowIfCancellationRequested();
         yield return Event(SseEventType.AssistantStart, new { executionProposalId = proposalId });
@@ -1022,7 +1059,7 @@ public class AiChatService
         }, _jsonOpts);
         await foreach (var item in StreamChatEventsAsync(
             [new ChatMessage { role = "user", content = JsonSerializer.SerializeToElement(review.GetRawText()) }], storeId, userId, followup.ModelId,
-            sessionId: sessionId, locale: localeCode, ct: ct, planResultReview: true))
+            sessionId: sessionId, locale: localeCode, ct: ct, planResultReview: true, runtimeOverride: runtimeOverride))
             yield return item;
     }
 

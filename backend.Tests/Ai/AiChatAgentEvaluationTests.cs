@@ -25,6 +25,95 @@ namespace Delegat.Tests;
 [Collection("AiPlanSigningKey")]
 public class AiChatAgentEvaluationTests
 {
+    [Fact]
+    public async Task ExecutionCheckpoint_AFreshExecutorSkipsTheCommittedWritePrefix()
+    {
+        var steps = new List<PlanStepInput>
+        {
+            new() { Tool = "platform_request", Description = "First",
+                Args = JsonSerializer.SerializeToElement(new
+                { method = "PATCH", path = "/products/1", body = new { name = "first" } }) },
+            new() { Tool = "platform_request", Description = "Second",
+                Args = JsonSerializer.SerializeToElement(new
+                { method = "PATCH", path = "/products/1", body = new { name = "second" } }) },
+        };
+        AiExecutionStepCheckpoint? saved = null;
+        await using (var first = await CreateFixtureAsync())
+        {
+            await using var stream = first.Chat.ExecutePlanEventsAsync(
+                steps, first.StoreId, first.UserId, "checkpoint", locale: "en").GetAsyncEnumerator();
+            while (await stream.MoveNextAsync())
+            {
+                var item = stream.Current;
+                if (item.Type != SseEventType.Tool || item.Data.GetProperty("status").GetString() != "done") continue;
+                Assert.Equal("completed", item.Data.GetProperty("executionOutcome").GetProperty("status").GetString());
+                saved = Checkpoint(item);
+                break;
+            }
+            Assert.Equal(1, first.Invoker.Calls);
+            Assert.Empty(first.Client.Requests);
+        }
+        Assert.NotNull(saved);
+        await using var restarted = await CreateFixtureAsync();
+        var events = new List<AiTurnEvent>();
+        await foreach (var item in restarted.Chat.ExecutePlanEventsAsync(
+            steps, restarted.StoreId, restarted.UserId, "checkpoint", locale: "en",
+            resume: new AiExecutionResume([saved], false)))
+            events.Add(item);
+        Assert.Equal(1, restarted.Invoker.Calls);
+        Assert.Equal("second", restarted.Invoker.LastBody!.Value.GetProperty("name").GetString());
+        var running = Assert.Single(events,
+            e => e.Type == SseEventType.Tool && e.Data.GetProperty("status").GetString() == "running");
+        Assert.Equal(1, running.Data.GetProperty("stepIndex").GetInt32());
+        Assert.Equal(2, Assert.Single(events, e => e.Type == SseEventType.ExecutionStatus)
+            .Data.GetProperty("succeeded").GetInt32());
+        Assert.Empty(restarted.Client.Requests);
+    }
+
+    [Fact]
+    public async Task ExecutionCheckpoint_CompletedPythonFeedsReviewWithoutASecondSandboxCall()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        var python = new ScriptedPythonHttp(new { exitCode = 0, stdout = "Frozen calculated value: 17", stderr = "" });
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [PythonPlan("print(17)", "calculate"), Text("The existing calculation reports 17.")], python);
+        var (proposal, steps) = await PrepareConfirmedPlanAsync(fixture, "checkpoint-python");
+        AiExecutionStepCheckpoint? saved = null;
+        await using (var stream = fixture.Chat.ExecutePlanEventsAsync(
+            steps, fixture.StoreId, fixture.UserId, proposal, sessionId: "checkpoint-python", locale: "en")
+            .GetAsyncEnumerator())
+        {
+            while (await stream.MoveNextAsync())
+            {
+                var item = stream.Current;
+                if (item.Type != SseEventType.Tool || item.Data.GetProperty("status").GetString() != "done") continue;
+                saved = Checkpoint(item);
+                break;
+            }
+        }
+        Assert.NotNull(saved);
+        Assert.Equal(1, python.Calls);
+        var chunks = new List<string>();
+        await foreach (var item in fixture.Chat.ExecutePlanEventsAsync(
+            steps, fixture.StoreId, fixture.UserId, proposal, sessionId: "checkpoint-python", locale: "en",
+            resume: new AiExecutionResume([saved], false)))
+        {
+            Assert.NotEqual(SseEventType.Tool, item.Type);
+            chunks.Add(item.ToSse());
+        }
+        Assert.Equal(1, python.Calls);
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains("Frozen calculated value: 17", fixture.Client.Requests[1].Messages.Last().Content);
+        Assert.Contains("The existing calculation reports 17.", AiSseTurnRecorder.FoldTurns(chunks)[1].Content);
+    }
+
+    private static AiExecutionStepCheckpoint Checkpoint(AiTurnEvent item) =>
+        new(item.Data.GetProperty("stepIndex").GetInt32(),
+            item.Data.GetProperty("name").GetString()!, item.Data.GetProperty("input").GetString()!,
+            item.Data.GetProperty("id").GetString()!, item.Data.GetProperty("executionOutcome").Clone());
+
     [Theory]
     [InlineData("ru", "перегенерируй штрихкоды выбранных товаров")]
     [InlineData("en", "regenerate barcodes for selected products")]

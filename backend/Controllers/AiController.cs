@@ -25,6 +25,13 @@ public class AiController : ControllerBase
     private readonly AiLiveTurnHub _liveTurns;
     private readonly AgentFileUploadService _uploads;
     private readonly IStorageService _storage;
+    private readonly AiDurableTurnStore? _durable;
+    private readonly IConfiguration? _configuration;
+    private AiDurableTurnStore Durable => _durable
+        ?? throw new InvalidOperationException("Durable AI turns are not registered.");
+    private string Runtime => string.Equals(
+        _configuration?[Services.Ai.Agent.Maf.MafChatEngine.RuntimeFlagKey],
+        "maf", StringComparison.OrdinalIgnoreCase) ? "maf" : "legacy";
 
     public AiController(
         AiChatService chatService,
@@ -32,7 +39,9 @@ public class AiController : ControllerBase
         ICurrentUserService currentUserService,
         AiLiveTurnHub liveTurns,
         AgentFileUploadService uploads,
-        IStorageService storage)
+        IStorageService storage,
+        AiDurableTurnStore? durable = null,
+        IConfiguration? configuration = null)
     {
         _chatService = chatService;
         _operationService = operationService;
@@ -40,6 +49,8 @@ public class AiController : ControllerBase
         _liveTurns = liveTurns;
         _uploads = uploads;
         _storage = storage;
+        _durable = durable;
+        _configuration = configuration;
     }
 
     // POST /api/ai/chat - start (or attach to) a live SSE turn
@@ -66,23 +77,13 @@ public class AiController : ControllerBase
             return new EmptyResult();
         }
 
-        var sessionId = request.SessionId;
-        var messages = request.Messages;
-        var modelId = request.ModelId;
-        var pageContext = request.PageContext;
-        var lastUser = LastPlainUser(messages);
-
-        _liveTurns.TryStart(
-            sessionId, storeId.Value, userId.Value, lastUser,
-            (sp, token) => sp.GetRequiredService<AiChatService>().StreamChatEventsAsync(
-                messages, storeId.Value, userId.Value, modelId, pageContext, sessionId, locale, token));
-
-        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
-        if (turn == null)
-            return NotFound();
+        var turn = await Durable.EnqueueAsync(
+            request.SessionId, storeId.Value, userId.Value, "chat", Runtime,
+            new AiDurableTurnRequest(request.Messages, request.ModelId, request.PageContext,
+                locale, null, []), LastPlainUser(request.Messages), ct);
 
         PrepareSseHeaders();
-        await WriteSseAsync(turn.Subscribe(ct), ct);
+        await WriteSseAsync(Durable.SubscribeAsync(turn, null, 0, ct), ct);
         return new EmptyResult();
     }
 
@@ -198,12 +199,12 @@ public class AiController : ControllerBase
         if (string.IsNullOrWhiteSpace(sessionId))
             return BadRequest("sessionId required");
 
-        var turn = _liveTurns.Find(sessionId, storeId.Value, userId.Value);
+        var turn = await Durable.FindLatestAsync(sessionId, storeId.Value, userId.Value, ct);
         if (turn == null)
             return NotFound();
 
         PrepareSseHeaders();
-        await WriteSseAsync(turn.Subscribe(ct, runId, afterSequence), ct);
+        await WriteSseAsync(Durable.SubscribeAsync(turn, runId, afterSequence, ct), ct);
         return new EmptyResult();
     }
 
@@ -223,48 +224,24 @@ public class AiController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.ProposalId))
             return BadRequest("proposalId required");
 
-        // Reserve the session slot BEFORE consuming the confirmation token: a busy
-        // session must reject here with the pending plan still consumable.
-        var reservation = _liveTurns.TryReserve(
-            request.SessionId, storeId.Value, userId.Value, request.ProposalId);
-        if (reservation == null)
-            throw ApiException.Conflict(
-                "Plan confirmation was rejected",
-                new { reason = "turn_running" },
-                code: "plan_not_pending_or_mismatched");
-
-        PlanConfirmationAttempt attempt;
+        AiTurnJob turn;
         try
         {
-            attempt = await _chatService.ConsumeConfirmedPlanDetailedAsync(
-                request.SessionId, request.ProposalId!, storeId.Value, userId.Value, ct);
+            turn = await Durable.EnqueueAsync(
+                request.SessionId, storeId.Value, userId.Value, "execution", Runtime,
+                new AiDurableTurnRequest([], null, null,
+                    Request.Headers["X-UI-Locale"].ToString(), request.ProposalId, []), null, ct);
         }
-        catch
+        catch (AiTurnAdmissionException ex)
         {
-            _liveTurns.ReleaseReservation(reservation);
-            throw;
-        }
-        if (attempt.Steps is not { } steps)
-        {
-            _liveTurns.ReleaseReservation(reservation);
             throw ApiException.Conflict(
                 "Plan confirmation was rejected",
-                new { reason = attempt.RejectionReason ?? "unknown" },
+                new { reason = ex.Reason },
                 code: "plan_not_pending_or_mismatched");
         }
 
-        var sessionId = request.SessionId;
-        var locale = Request.Headers["X-UI-Locale"].ToString();
-        // Generation runs on the hub CTS, independent of this HTTP request.
-        _liveTurns.StartReserved(
-            reservation, userMessage: null,
-            (sp, token) => sp.GetRequiredService<AiChatService>()
-                .ExecutePlanEventsAsync(steps.ToList(), storeId.Value, userId.Value, request.ProposalId, token, sessionId, locale));
-
-        var turn = reservation;
-
         PrepareSseHeaders();
-        await WriteSseAsync(turn.Subscribe(ct), ct);
+        await WriteSseAsync(Durable.SubscribeAsync(turn, null, 0, ct), ct);
         return new EmptyResult();
     }
 
@@ -279,7 +256,7 @@ public class AiController : ControllerBase
         var storeId = await _currentUserService.GetSelectedStoreIdAsync(ct);
         if (userId == null || storeId == null)
             return Unauthorized();
-        var stopped = _liveTurns.Stop(req.SessionId, storeId.Value, userId.Value);
+        var stopped = await Durable.RequestStopAsync(req.SessionId, storeId.Value, userId.Value, ct);
         return Ok(new { stopped });
     }
 

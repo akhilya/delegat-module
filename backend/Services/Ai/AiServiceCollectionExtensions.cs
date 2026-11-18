@@ -36,6 +36,9 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<IMcpToolGateway, McpToolGateway>();
         services.AddScoped<AiModelConfigService>();
         services.AddSingleton<AiLiveTurnHub>();
+        services.AddScoped<AiDurableTurnStore>();
+        services.AddScoped<IAiDurableTurnProducer, AiDurableTurnProducer>();
+        services.AddHostedService<AiDurableTurnWorker>();
         services.AddScoped<AiChatService>();
         // Microsoft Agent Framework engine; inert unless Ai:AgentRuntime=maf for the run.
         services.AddScoped<Agent.Maf.MafChatEngine>();
