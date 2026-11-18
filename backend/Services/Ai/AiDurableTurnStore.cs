@@ -47,8 +47,13 @@ public sealed class AiDurableTurnStore(DataContext db)
                     throw new AiTurnAdmissionException("turn_running");
                 }
                 if (kind == "chat")
+                {
+                    // Structured-only chats still need a conversation before admission.
+                    await AiConversationTurnStore.EnsureConversationAsync(
+                        db, sessionId, storeId, userId, ct);
                     await AiConversationTurnStore.AppendUserIfNeededAsync(
                         db, sessionId, storeId, userId, userMessage, ct);
+                }
                 var conversation = await db.aiConversations.AsNoTracking().SingleOrDefaultAsync(
                     c => c.sessionId == sessionId && c.storeId == storeId && c.userId == userId, ct)
                     ?? throw new AiTurnAdmissionException("conversation_missing");

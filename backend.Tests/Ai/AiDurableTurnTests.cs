@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
+using Delegat.Infrastructure.Middleware;
 using Delegat.Models.Ai;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
@@ -15,6 +16,94 @@ namespace Delegat.Tests;
 [Collection("AiPlanSigningKey")]
 public class AiDurableTurnTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FreshStructuredChat_IsAdmittedWithoutAPlainUserMessage(bool passStructuredUser)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var message = new ChatMessage
+        {
+            role = "user",
+            content = JsonSerializer.SerializeToElement(new[] { new { type = "text", text = "Hello" } }),
+        };
+        var request = Request() with { Messages = [message] };
+        var job = await new AiDurableTurnStore(fixture.Db).EnqueueAsync(
+            "fresh-blocks", 1, 2, "chat", "legacy", request, passStructuredUser ? message : null, default);
+        await using var inspect = fixture.Context();
+        var conversation = await inspect.aiConversations.SingleAsync();
+        var saved = await inspect.aiTurnJobs.SingleAsync();
+        Assert.Equal("fresh-blocks", conversation.sessionId);
+        Assert.Equal(1, conversation.storeId);
+        Assert.Equal(2, conversation.userId);
+        Assert.Equal(conversation.Id, saved.conversationId);
+        Assert.Equal(job.runId, saved.runId);
+        Assert.Equal("pending", saved.status);
+        Assert.Equal("fresh-blocks", saved.activeSessionId);
+        var storedRequest = JsonSerializer.Deserialize<AiDurableTurnRequest>(saved.requestJson, AiDurableTurnStore.Json)!;
+        var content = Assert.Single(storedRequest.Messages).content;
+        Assert.Equal(JsonValueKind.Array, content.ValueKind);
+        var block = Assert.Single(content.EnumerateArray());
+        Assert.Equal("text", block.GetProperty("type").GetString());
+        Assert.Equal("Hello", block.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task StructuredChat_CannotAdoptAnotherStoreConversation()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await AiConversationTurnStore.EnsureConversationAsync(fixture.Db, "scoped-blocks", 1, 2, default);
+        await using var other = fixture.Context();
+        var error = await Assert.ThrowsAsync<AiTurnAdmissionException>(() =>
+            new AiDurableTurnStore(other).EnqueueAsync(
+                "scoped-blocks", 999, 2, "chat", "legacy", BlockRequest(), null, default));
+        Assert.Equal("conversation_missing", error.Reason);
+        await using var inspect = fixture.Context();
+        Assert.Empty(await inspect.aiTurnJobs.ToListAsync());
+        var conversation = await inspect.aiConversations.SingleAsync();
+        Assert.Equal(1, conversation.storeId);
+        Assert.Equal(2, conversation.userId);
+    }
+
+    [Fact]
+    public async Task StructuredChat_CannotAdoptAnotherUsersConversation()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await AiConversationTurnStore.EnsureConversationAsync(fixture.Db, "user-blocks", 1, 2, default);
+        await using var other = fixture.Context();
+        var error = await Assert.ThrowsAsync<ApiException>(() =>
+            new AiDurableTurnStore(other).EnqueueAsync(
+                "user-blocks", 1, 999, "chat", "legacy", BlockRequest(), null, default));
+        Assert.Equal(403, error.StatusCode);
+        Assert.Equal("access_denied", error.Code);
+        await using var inspect = fixture.Context();
+        Assert.Empty(await inspect.aiTurnJobs.ToListAsync());
+        Assert.Equal(2, (await inspect.aiConversations.SingleAsync()).userId);
+    }
+
+    [Fact]
+    public async Task ExecutionAdmission_DoesNotCreateAMissingConversation()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var error = await Assert.ThrowsAsync<AiTurnAdmissionException>(() =>
+            new AiDurableTurnStore(fixture.Db).EnqueueAsync(
+                "missing-execution", 1, 2, "execution", "legacy", Request("not-issued"), null, default));
+        Assert.Equal("conversation_missing", error.Reason);
+        await using var inspect = fixture.Context();
+        Assert.Empty(await inspect.aiConversations.ToListAsync());
+        Assert.Empty(await inspect.aiTurnJobs.ToListAsync());
+        Assert.Empty(await inspect.aiAgentAudits.ToListAsync());
+    }
+
+    private static AiDurableTurnRequest BlockRequest() => Request() with
+    {
+        Messages = [new ChatMessage
+        {
+            role = "user",
+            content = JsonSerializer.SerializeToElement(new[] { new { type = "text", text = "Hello" } }),
+        }],
+    };
+
     [Fact]
     public async Task Admission_CommitsApprovalAndExactStepsTogether_AndRejectsAnotherExecution()
     {
