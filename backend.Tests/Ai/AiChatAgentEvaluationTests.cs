@@ -1153,6 +1153,21 @@ public class AiChatAgentEvaluationTests
         params IReadOnlyList<AiStreamEvent>[] responses)
         => await CreateFixtureCoreAsync(mcp, null, null, null, responses);
 
+    /// <summary>
+    /// Real shared executor for the local HTTP/Kestrel durable-turn harness: a
+    /// genuine AiChatService over the scripted model/native fakes. Only the
+    /// public surface leaves this class, so the fake internals stay private.
+    /// </summary>
+    internal static async Task<(AiChatService Chat, int UserId, int StoreId,
+        Func<int> ToolCalls, Func<JsonElement?> LastBody, Func<int> ModelCalls,
+        IAsyncDisposable Lifetime)> CreateDurableHttpRuntimeAsync()
+    {
+        var fixture = await CreateFixtureAsync(Text("HTTP reply"));
+        return (fixture.Chat, fixture.UserId, fixture.StoreId,
+            () => fixture.Invoker.Calls, () => fixture.Invoker.LastBody,
+            () => fixture.Client.Requests.Count, fixture);
+    }
+
     private static Task<ChatFixture> CreateFixtureWithAttachmentAsync(
         string sessionId,
         string fileName,
