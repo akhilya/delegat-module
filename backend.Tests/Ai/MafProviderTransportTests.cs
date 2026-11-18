@@ -363,7 +363,8 @@ public partial class MafEngineParityTests
     // branch; every byte still terminates in the scripted handler.
     // ------------------------------------------------------------------
 
-    private static IChatClient ProviderSdkClient(AiModelProvider provider, HttpClient http)
+    private static IChatClient ProviderSdkClient(AiModelProvider provider, HttpClient http,
+        string apiUrl = "https://api.example.test/v1")
     {
         var api = new AiApiClient(http, NullLogger<AiApiClient>.Instance,
             new ProviderHttpFactory(http));
@@ -373,7 +374,7 @@ public partial class MafEngineParityTests
             name = "scripted",
             provider = provider,
             modelId = "scripted-model",
-            apiUrl = "https://api.example.test/v1",
+            apiUrl = apiUrl,
             apiKeyEncrypted = "test-key",
             maxTokens = 1024,
             isEnabled = true,
