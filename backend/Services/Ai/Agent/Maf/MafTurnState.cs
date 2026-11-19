@@ -36,6 +36,9 @@ internal sealed class MafTurnState
     /// <summary>A plan was minted and the Plan SSE was written; the turn ends.</summary>
     public bool SawPlan { get; set; }
 
+    /// <summary>A valid ask_form was presented; the turn ends waiting for answers.</summary>
+    public bool SawForm { get; set; }
+
     /// <summary>The engine emitted a visible reply delta (mirrors legacy spoke).</summary>
     public bool Spoke { get; set; }
 
@@ -43,6 +46,9 @@ internal sealed class MafTurnState
 
     /// <summary>Current dispatch batch contains propose_plan; siblings defer.</summary>
     public bool WaitForPlan { get; set; }
+
+    /// <summary>Current dispatch batch contains ask_form; siblings defer to the form.</summary>
+    public bool WaitForForm { get; set; }
 
     /// <summary>Current dispatch batch contains read_chat_attachment.</summary>
     public bool AttachmentReadInBatch { get; set; }
@@ -70,9 +76,7 @@ internal sealed class MafTurnState
 
     /// <summary>Speak-only decision for the request about to be sent.</summary>
     public bool SpeakOnly =>
-        AnswerNow
-        || ToolRounds >= AgentChatTurnGate.RunawayToolRounds
-        || (ReviewMode && RequestsSent >= 2);
+        AnswerNow || ToolRounds >= AgentChatTurnGate.RunawayToolRounds;
 
     /// <summary>Request cap reached (review: 3 requests; normal: RunawayToolRounds + 2).</summary>
     public bool CapReached =>

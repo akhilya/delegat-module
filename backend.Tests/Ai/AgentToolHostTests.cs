@@ -238,6 +238,58 @@ public class AgentToolHostTests
     }
 
     [Fact]
+    public void AskForm_Questions_FollowUpToMissingKey_IsRejected()
+    {
+        var (result, _) = AgentToolHost.AskForm(
+            """{"kind":"questions","followUp":"Ship to {barcode}","questions":[{"key":"name","title":"Name?","type":"text"}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.False(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal("unknown_follow_up_fields",
+            json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("barcode", Assert.Single(
+            json.RootElement.GetProperty("unknownFields").EnumerateArray()).GetString());
+    }
+
+    [Fact]
+    public void AskForm_Fields_FollowUpToMissingKey_IsRejected()
+    {
+        var (result, _) = AgentToolHost.AskForm(
+            """{"kind":"fields","followUp":"Create {name} at {barcode}","fields":[{"key":"name","label":"Name","type":"text"}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.False(json.RootElement.GetProperty("form").GetBoolean());
+        Assert.Equal("unknown_follow_up_fields",
+            json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("barcode", Assert.Single(
+            json.RootElement.GetProperty("unknownFields").EnumerateArray()).GetString());
+    }
+
+    [Fact]
+    public void AskForm_Questions_FollowUpCannotReferenceCappedOrSecretSteps()
+    {
+        // The rendered keys are the authority: the 6th question is capped out and the
+        // password step is dropped, so a followUp referencing either never ships.
+        var steps = string.Join(",", Enumerable.Range(1, 7).Select(i =>
+            $$"""{"key":"q{{i}}","title":"Q{{i}}","type":"single","choices":[{"value":"a","label":"A"}]}"""));
+        var (result, _) = AgentToolHost.AskForm(
+            $$"""{"kind":"questions","followUp":"Use {q6} and {apiKey}","questions":[{"key":"apiKey","title":"Key","type":"password"},{{steps}}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.False(json.RootElement.GetProperty("form").GetBoolean());
+        var unknown = json.RootElement.GetProperty("unknownFields")
+            .EnumerateArray().Select(f => f.GetString()).ToList();
+        Assert.Contains("q6", unknown);
+        Assert.Contains("apiKey", unknown);
+    }
+
+    [Fact]
+    public void AskForm_Questions_FollowUpToPresentedKeys_StaysValid()
+    {
+        var (result, _) = AgentToolHost.AskForm(
+            """{"kind":"questions","followUp":"Use {adapter} then {notes}","questions":[{"key":"adapter","title":"Which marketplace?","type":"single","choices":[{"value":"ozon","label":"Ozon"}]},{"key":"notes","title":"Anything else?","type":"text","required":false}]}""");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.True(json.RootElement.GetProperty("form").GetBoolean());
+    }
+
+    [Fact]
     public void ToolCatalog_IncludesAskForm()
     {
         Assert.Contains(AgentToolCatalog.Build(), t => t.name == "ask_form");

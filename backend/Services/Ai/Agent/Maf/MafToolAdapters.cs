@@ -69,7 +69,18 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapt
         if (state.ReviewMode)
             return AgentChatTurnGate.ReviewToolNotRun;
 
+        // A presented form is turn-terminal: anything after it in the same batch,
+        // and any later batch, only gets the waiting text.
+        if (state.SawForm)
+            return AgentChatTurnGate.FormPresentedWaitingText;
+
+        // A form batch takes priority over a plan regardless of call order: every
+        // sibling - including propose_plan - defers until the user answers.
+        if (state.WaitForForm && !AgentChatTurnGate.IsAskForm(toolName))
+            return AgentChatTurnGate.DeferredForForm;
+
         if (state.WaitForPlan
+            && !state.WaitForForm
             && !(state.DeferPlanForAttachmentRead
                 && string.Equals(toolName, AgentChatTurnGate.ReadChatAttachmentTool, StringComparison.OrdinalIgnoreCase)))
             return AgentChatTurnGate.DeferredForPlan;
@@ -119,6 +130,8 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapt
         AiChatService.ToolEffects.TryGetValue(toolName, out var effects);
         state.Events.Writer.TryWrite(Sse(SseEventType.Tool,
             new { id = callId, name = toolName, status = "done", summary, result = resultJson, effects, counts }));
+        if (!toolFailed && AgentChatTurnGate.IsPresentedForm(toolName, result))
+            state.SawForm = true;
         return resultJson;
     }
 
@@ -144,6 +157,9 @@ internal sealed class MafProposePlanAdapter(
     {
         var argsJson = MafToolAdapterShared.SerializeArguments(arguments);
 
+        if (state.WaitForForm || state.SawForm)
+            return AgentChatTurnGate.DeferredForForm;
+
         if (state.SawPlan)
             return AgentChatTurnGate.AdditionalPlanDeferred;
 
@@ -152,16 +168,16 @@ internal sealed class MafProposePlanAdapter(
 
         var planInput = ProposePlanReader.Read(argsJson);
         if (!planInput.HasContent)
-            return AgentChatTurnGate.InvalidPlanText;
+            return Reject(AgentChatTurnGate.InvalidPlanText, "invalid_shape");
 
         var validation = await state.ToolHost.ValidatePlanAsync(
             planInput.Steps, state.StoreId, state.UserId, cancellationToken);
         if (validation.Rejection != null)
-            return validation.Rejection;
+            return Reject(validation.Rejection, "capability");
 
         var efficiencyReason = AgentPlanEfficiencyGuard.RejectionReason(planInput.Steps);
         if (efficiencyReason != null)
-            return efficiencyReason;
+            return Reject(efficiencyReason, "efficiency");
 
         var planCreatedAt = DateTime.UtcNow;
         var serializedSteps = JsonSerializer.Serialize(planInput.Steps, MafToolAdapterShared.JsonOpts);
@@ -189,5 +205,18 @@ internal sealed class MafProposePlanAdapter(
         }));
         state.SawPlan = true;
         return AgentChatTurnGate.PlanPresentedWaitingText;
+    }
+
+    /// <summary>
+    /// Review rejections carry only a content-free classification so the next incident
+    /// shows which boundary rejected the proposal without logging model arguments.
+    /// </summary>
+    private string Reject(string result, string reason)
+    {
+        if (state.ReviewMode)
+            state.Logger.LogWarning(
+                "AI review proposal rejected: Reason={Reason} RequestIndex={RequestIndex}",
+                reason, state.CurrentRequestIndex);
+        return result;
     }
 }

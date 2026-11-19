@@ -379,9 +379,7 @@ public partial class MafEngineParityTests
     [Fact]
     public async Task ReviewMode_CorrectedPlan_OnSecondRequest_IsNotStripped()
     {
-        // An invalid first proposal leaves requests 1 and 2 for recovery; the
-        // second request must still advertise propose_plan (speak-only starts
-        // at the third, legacy iteration >= 2).
+        // An invalid first proposal leaves the bounded review able to recover on either remaining request; propose_plan stays advertised.
         using var signingKey = SigningKey();
         await using var fixture = await CreateFixtureAsync(
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan"),
@@ -405,14 +403,16 @@ public partial class MafEngineParityTests
     }
 
     [Fact]
-    public async Task ReviewMode_ThirdRequest_StripsEvenValidRecoveryProposal()
+    public async Task ReviewMode_ThirdRequest_RetainsValidRecoveryProposal()
     {
+        // Every bounded review round advertises propose_plan, so a valid recovery
+        // proposal on the last attempt still mints a fresh confirmation card.
         using var signingKey = SigningKey();
         await using var fixture = await CreateFixtureAsync(
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-1"),
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-2"),
             ToolCall("propose_plan",
-                "{\"summary\":\"Too late\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
+                "{\"summary\":\"Retry the write\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
                 "late-plan"));
 
         var chunks = await Collect(fixture.Chat.StreamChatAsync(
@@ -420,12 +420,13 @@ public partial class MafEngineParityTests
             sessionId: "maf-review-third", locale: "en", planResultReview: true));
 
         Assert.Equal(3, fixture.Client.Requests.Count);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[0].ToolNames);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
-        Assert.Empty(fixture.Client.Requests[2].ToolNames);
+        Assert.All(fixture.Client.Requests,
+            request => Assert.Equal(["propose_plan"], request.ToolNames));
         var serialized = string.Concat(chunks);
-        Assert.DoesNotContain("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
-        Assert.Contains("\"type\":\"done\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("proposalNonce", serialized, StringComparison.Ordinal);
+        Assert.Contains("Retry the write", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"type\":\"error\"", serialized, StringComparison.Ordinal);
         Assert.Equal(0, fixture.Invoker.Calls);
     }
 

@@ -110,10 +110,11 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
     private (IEnumerable<FrameworkChatMessage> Messages, ChatOptions? Options, bool Forward) PrepareRequest(
         IEnumerable<FrameworkChatMessage> messages, ChatOptions? options)
     {
-        if (state.SawPlan)
+        if (state.SawPlan || state.SawForm)
         {
-            // The legacy loop breaks right after presenting a plan; FICC's next
-            // request becomes an empty terminal response instead of a provider call.
+            // The legacy loop breaks right after presenting a plan or a valid form;
+            // FICC's next request becomes an empty terminal response instead of a
+            // provider call.
             return (messages, options, false);
         }
 
@@ -169,6 +170,7 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
 
         state.LastRoundText = text.ToString();
         state.WaitForPlan = false;
+        state.WaitForForm = false;
         state.AttachmentReadInBatch = false;
 
         if (calls.Count == 0)
@@ -191,6 +193,8 @@ internal sealed class MafTurnGateChatClient(IChatClient inner, MafTurnState stat
 
         state.ToolRounds++;
         state.WaitForPlan = calls.Any(c => AgentChatTurnGate.IsProposePlan(c.Name));
+        state.WaitForForm = !state.ReviewMode
+            && calls.Any(c => AgentChatTurnGate.IsAskForm(c.Name));
         state.AttachmentReadInBatch = calls.Any(c =>
             string.Equals(c.Name, AgentChatTurnGate.ReadChatAttachmentTool, StringComparison.OrdinalIgnoreCase));
         state.Telemetry.RecordModelToolCalls(calls.Select(c => (c.Name, ArgsJson(c))));

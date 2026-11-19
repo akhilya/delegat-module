@@ -12,6 +12,13 @@ public static class AgentChatTurnGate
     public const string ProposePlanTool = "propose_plan";
     public const string PlatformRequestTool = "platform_request";
     public const string ReadChatAttachmentTool = "read_chat_attachment";
+    public const string AskFormTool = "ask_form";
+
+    public const string DeferredForForm =
+        "Not run. This batch requests user input. Present a valid ask_form and wait for the user's submitted answers. Do not infer answers from placeholders, examples, or defaults, or propose work before those answers arrive.";
+
+    public const string FormPresentedWaitingText =
+        "Form presented. Waiting for the user's answers. Do not call more tools or propose a plan in this turn.";
 
     public const string DeferredForPlan =
         "Not run. This tool batch includes propose_plan. Present the plan and wait for confirmation; do not run other tools from this batch. Required read-only lookups belong in an earlier model step.";
@@ -87,6 +94,28 @@ public static class AgentChatTurnGate
     {
         var parts = s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return string.Join(' ', parts);
+    }
+
+    /// <summary>
+    /// A bounded result review that produced neither a reply nor a valid proposal is
+    /// reported as incomplete; the completed execution is never restated as stopped.
+    /// </summary>
+    public static string ReviewIncompleteMessage(string? locale) =>
+        string.Equals(locale, "en", StringComparison.OrdinalIgnoreCase)
+            ? "Execution has already finished, but I could not complete the result review or prepare a follow-up plan. Do not repeat the completed steps. Ask me to continue from the existing results."
+            : "Выполнение плана уже завершено, но не удалось закончить проверку результата или подготовить следующий план. Не повторяйте выполненные шаги. Попросите продолжить с уже полученного результата.";
+
+    public static bool IsAskForm(string? toolName) =>
+        string.Equals(toolName, AskFormTool, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True only when an ask_form dispatch actually returned a valid form.</summary>
+    public static bool IsPresentedForm(string? toolName, object? result)
+    {
+        if (!IsAskForm(toolName) || result == null) return false;
+        var json = JsonSerializer.SerializeToElement(result);
+        return json.ValueKind == JsonValueKind.Object
+            && json.TryGetProperty("form", out var form)
+            && form.ValueKind == JsonValueKind.True;
     }
 
     public static bool IsProposePlan(string? toolName) =>

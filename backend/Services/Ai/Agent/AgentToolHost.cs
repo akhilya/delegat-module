@@ -636,13 +636,22 @@ public sealed class AgentToolHost
             var questions = ParseQuestionList(root);
             if (questions.Count == 0)
                 return (new { error = "questions_required", form = false }, "Need questions");
+            var questionFollowUp = Clip(root, "followUp", 400);
+            var unknownQuestionKeys = UnknownFollowUpFields(questionFollowUp, questions);
+            if (unknownQuestionKeys.Length > 0)
+                return (new
+                {
+                    error = "unknown_follow_up_fields",
+                    form = false,
+                    unknownFields = unknownQuestionKeys,
+                }, "Unknown form fields");
             return (new
             {
                 form = true,
                 kind = "questions",
                 title,
                 submitLabel,
-                followUp = Clip(root, "followUp", 400),
+                followUp = questionFollowUp,
                 questions,
             }, "Form");
         }
@@ -707,6 +716,14 @@ public sealed class AgentToolHost
             return (new { error = "fields_required", form = false }, "Need fields");
 
         var followUp = Clip(root, "followUp", 400);
+        var unknownFields = UnknownFollowUpFields(followUp, fields);
+        if (unknownFields.Length > 0)
+            return (new
+            {
+                error = "unknown_follow_up_fields",
+                form = false,
+                unknownFields,
+            }, "Unknown form fields");
         return (new
         {
             form = true,
@@ -716,6 +733,24 @@ public sealed class AgentToolHost
             followUp,
             fields,
         }, "Form");
+    }
+
+    // Same interpolation contract as the frontend followUp template: a placeholder
+    // may only reference a key the sanitized form actually presents.
+    private static readonly Regex FollowUpFieldRx =
+        new(@"\{([a-zA-Z][a-zA-Z0-9_]{0,39})\}",
+            RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+
+    private static string[] UnknownFollowUpFields(string followUp, List<object> fields)
+    {
+        var keys = JsonSerializer.SerializeToElement(fields).EnumerateArray()
+            .Select(f => f.GetProperty("key").GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+        return FollowUpFieldRx.Matches(followUp)
+            .Select(m => m.Groups[1].Value)
+            .Where(k => !keys.Contains(k))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static List<object> ParseQuestionList(JsonElement root)

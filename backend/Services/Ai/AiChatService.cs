@@ -147,12 +147,16 @@ public class AiChatService
             var toolRounds = 0;
             var spoke = false;
             var sawPlan = false;
+            var sawForm = false;
+            var hadProviderError = false;
             var nudgedSilence = false;
+            var requestsSent = 0;
 
             // Keep calling tools until the task is closed. A stuck loop still has to end in a sentence.
             for (var iteration = 0; iteration < (planResultReview ? 3 : AgentChatTurnGate.RunawayToolRounds + 2); iteration++)
             {
-                var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds) || (planResultReview && iteration >= 2);
+                requestsSent++;
+                var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds);
                 List<AiTool>? passTools = speakOnly ? null : tools;
 
                 var request = new AiRequest
@@ -246,6 +250,7 @@ public class AiChatService
 
                 if (gotApiError)
                 {
+                    hadProviderError = true;
                     modelTimer.Stop();
                     turnTelemetry.RecordModelRound(
                         modelTimer.ElapsedMilliseconds,
@@ -311,7 +316,7 @@ public class AiChatService
                         });
                         continue;
                     }
-                    if (!spoke && !sawPlan && !nudgedSilence)
+                    if (!spoke && !sawPlan && !sawForm && !nudgedSilence)
                     {
                         nudgedSilence = true;
                         if (finalText.Length > 0)
@@ -341,6 +346,8 @@ public class AiChatService
                 var toolResults = new List<object>();
                 var shouldBreak = false;
                 var waitForPlan = AgentChatTurnGate.BatchHasProposePlan(toolUses);
+                var waitForForm = !planResultReview
+                    && toolUses.Any(t => AgentChatTurnGate.IsAskForm(t.name));
                 var attachmentReadInBatch = toolUses.Any(t =>
                     string.Equals(t.name, AgentChatTurnGate.ReadChatAttachmentTool, StringComparison.OrdinalIgnoreCase));
                 var deferPlanForAttachmentRead = waitForPlan && attachmentReadInBatch;
@@ -350,6 +357,15 @@ public class AiChatService
                     {
                         toolResults.Add(new { type = "tool_result", tool_use_id = toolId,
                             content = AgentChatTurnGate.ReviewToolNotRun });
+                        continue;
+                    }
+                    // A form batch takes priority over a plan regardless of call
+                    // order; after a presented form every sibling only gets the
+                    // deferral so the turn waits for the user's answers.
+                    if (sawForm || (waitForForm && !AgentChatTurnGate.IsAskForm(toolName)))
+                    {
+                        toolResults.Add(new { type = "tool_result", tool_use_id = toolId,
+                            content = AgentChatTurnGate.DeferredForForm });
                         continue;
                     }
                     if (AgentChatTurnGate.IsProposePlan(toolName))
@@ -439,6 +455,7 @@ public class AiChatService
                     }
 
                     if (waitForPlan
+                        && !waitForForm
                         && !(deferPlanForAttachmentRead
                             && string.Equals(toolName, AgentChatTurnGate.ReadChatAttachmentTool, StringComparison.OrdinalIgnoreCase)))
                     {
@@ -501,6 +518,11 @@ public class AiChatService
                     ToolEffects.TryGetValue(toolName, out var effects);
                     yield return Event(SseEventType.Tool, new { id = toolId, name = toolName, status = "done", summary, result = resultJson, effects, counts });
                     toolResults.Add(new { type = "tool_result", tool_use_id = toolId, content = resultJson });
+                    if (!toolFailed && AgentChatTurnGate.IsPresentedForm(toolName, result))
+                    {
+                        sawForm = true;
+                        shouldBreak = true;
+                    }
                 }
 
                 messages.Add(new AiMessage { role = "user", content = toolResults });
@@ -517,9 +539,28 @@ public class AiChatService
             }
 
             ct.ThrowIfCancellationRequested();
-            turnTelemetry.CompleteIfUnset(sawPlan ? "plan_proposed" : "completed");
+            var reviewIncomplete = planResultReview && !spoke && !sawPlan && !hadProviderError;
+            turnTelemetry.CompleteIfUnset(sawPlan ? "plan_proposed"
+                : sawForm ? "awaiting_input"
+                : reviewIncomplete ? "review_incomplete"
+                : "completed");
 
-            if (!spoke && !sawPlan)
+            if (reviewIncomplete)
+            {
+                _logger.LogWarning(
+                    "AI result review ended without a reply or proposal after {Requests} model requests.",
+                    requestsSent);
+                yield return Event(SseEventType.Error, new
+                {
+                    code = "review_incomplete",
+                    message = AgentChatTurnGate.ReviewIncompleteMessage(localeCode),
+                });
+                yield return Event(SseEventType.Done,
+                    new { modelName = model.modelId, interrupted = true });
+                yield break;
+            }
+
+            if (!spoke && !sawPlan && !sawForm && !planResultReview)
             {
                 yield return Event(SseEventType.Text, new
                 {

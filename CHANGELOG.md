@@ -493,6 +493,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Align `System.IdentityModel.Tokens.Jwt` with Fido2's IdentityModel 8 stack so access-token validation sees `exp` again
 - Apply security headers before the rest of the pipeline so empty responses still get `X-Robots-Tag`
 - Sync `package-lock.json` with passkey/QR deps so frontend Docker `npm ci` succeeds
+- AI assistant: question forms now pause the turn until the user submits answers; later tools and plans cannot consume placeholders as answers. Form follow-up templates cannot reference fields that were removed or never presented. Result review can propose a freshly confirmed continuation on any of its three bounded attempts; an exhausted review is reported as incomplete without repeating or rewriting completed execution.
 
 ### Removed
 
