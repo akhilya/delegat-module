@@ -25,11 +25,13 @@ public static class AgentToolCatalog
                 items = new AiToolProperty
                 {
                     type = "object",
+                    additionalProperties = false,
+                    required = ["tool", "description", "args"],
                     properties = new Dictionary<string, AiToolProperty>
                     {
                         ["tool"] = Str("Internal tool name (not shown)"),
                         ["description"] = Str("User-visible step in store language (UI locale). No tool names, SQL, or HTTP."),
-                        ["args"] = new AiToolProperty { type = "object", description = "Exact arguments" },
+                        ["args"] = new AiToolProperty { type = "object", description = "Exact tool arguments. For run_python, put code and optional outputs inside args, never beside args." },
                     },
                 },
             }),

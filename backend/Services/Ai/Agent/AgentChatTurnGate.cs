@@ -41,7 +41,7 @@ public static class AgentChatTurnGate
         "Plan not presented. First read the attached file and use its actual contents; then propose the exact plan by itself.";
 
     public const string InvalidPlanText =
-        "Plan not presented: provide a nonempty summary and at least one step. Every step needs a tool other than propose_plan, a nonempty description in the store language, and an args object with exact arguments. For a named export, productIds must be nonempty, unique, and not combined with allMatching/where; affectedCount, if provided, must match the number of unique ids. Call propose_plan again by itself.";
+        "Plan not presented: provide a nonempty summary and at least one step. Every step needs a tool other than propose_plan, a nonempty description in the store language, and an args object with exact arguments. A step may contain only tool, description, and args. Put every tool argument, including run_python outputs, inside args; never beside args. For a named export, productIds must be nonempty, unique, and not combined with allMatching/where; affectedCount, if provided, must match the number of unique ids. Call propose_plan again by itself.";
 
     public const string PlanPresentedWaitingText =
         "Plan presented to user. Waiting for confirmation. Do not execute any operations until user confirms.";

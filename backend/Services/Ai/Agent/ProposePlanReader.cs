@@ -45,6 +45,7 @@ internal static class ProposePlanReader
 
     private static bool IsWellFormedStep(JsonElement step) =>
         step.ValueKind == JsonValueKind.Object
+        && step.EnumerateObject().All(property => property.Name is "tool" or "description" or "args")
         && HasText(step, "tool")
         && !string.Equals(step.GetProperty("tool").GetString(), "propose_plan", StringComparison.OrdinalIgnoreCase)
         && HasText(step, "description")

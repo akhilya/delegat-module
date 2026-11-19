@@ -6,6 +6,7 @@ import {
   generatedTemporaryDownloads,
 } from "./generatedFiles.js";
 import { mapStoredMessage, serializeToolCallsJson } from "./persist.js";
+import { generatedFileHistory } from "./chatHistory.js";
 
 // A realistic signed import step: server approval, exact signed args,
 // dispatched input and the typed service result all carry the same tuple.
@@ -1184,4 +1185,159 @@ describe("generatedTemporaryDownloads negatives", () => {
       assert.deepEqual(generatedTemporaryDownloads(p, t, o), []);
     });
   }
+});
+
+describe("generatedFileHistory", () => {
+  const hydrate = (message) =>
+    mapStoredMessage({
+      dbId: 9,
+      role: "assistant",
+      content: message.content ?? "",
+      toolCallsJson: serializeToolCallsJson(message),
+    });
+
+  it("preserves verified artifact metadata through serialize/hydrate", () => {
+    const message = {
+      role: "assistant",
+      content: "",
+      toolCalls: [tempTool()],
+      timeline: [{ type: "tool", id: "s1" }],
+      plan: tempPlan(),
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 0,
+    };
+    const history = generatedFileHistory(hydrate(message));
+    assert.ok(history);
+    assert.equal(history.savedFiles.length, 0);
+    const file = history.artifacts[0];
+    assert.equal(file.artifactId, TMP_ID);
+    assert.equal(file.sha256, TMP_SHA);
+    assert.equal(file.length, 3);
+    assert.equal(file.expiresAtUtc, TMP_EXPIRY);
+    assert.equal(file.downloadUrl, TMP_URL);
+    // The serialized handle carries metadata only - never stdout or code.
+    const serialized = JSON.stringify(history);
+    assert.equal(serialized.includes("stdout"), false);
+    assert.equal(serialized.includes("print("), false);
+  });
+
+  it("does not shift binding when a pre-proposal read precedes planExecStart", () => {
+    const proposalRead = {
+      id: "r0",
+      name: "platform_request",
+      status: "done",
+      input: JSON.stringify({ method: "GET", path: "/products/1" }),
+      summary: "200",
+      result: { status: 200 },
+    };
+    const message = {
+      role: "assistant",
+      content: "",
+      toolCalls: [proposalRead, tempTool()],
+      timeline: [
+        { type: "text", text: "prepared" },
+        { type: "tool", id: "r0" },
+        { type: "tool", id: "s1" },
+      ],
+      plan: tempPlan(),
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 2,
+    };
+    const history = generatedFileHistory(hydrate(message));
+    assert.ok(history);
+    assert.equal(history.artifacts[0].artifactId, TMP_ID);
+  });
+
+  it("returns null for unconfirmed, failed, or stopped turns", () => {
+    const base = {
+      role: "assistant",
+      content: "",
+      toolCalls: [tempTool()],
+      timeline: [{ type: "tool", id: "s1" }],
+      plan: tempPlan(),
+      planExecuted: true,
+      planExecStart: 0,
+    };
+    assert.equal(generatedFileHistory(hydrate(base)), null);
+    assert.equal(
+      generatedFileHistory(
+        hydrate({ ...base, planConfirmed: true, planFailed: true }),
+      ),
+      null,
+    );
+    assert.equal(
+      generatedFileHistory(
+        hydrate({ ...base, planConfirmed: true, turnStopped: true }),
+      ),
+      null,
+    );
+  });
+
+  it("returns null when planExecStart is missing or outside the timeline", () => {
+    const base = {
+      role: "assistant",
+      content: "",
+      toolCalls: [tempTool()],
+      timeline: [{ type: "tool", id: "s1" }],
+      plan: tempPlan(),
+      planConfirmed: true,
+      planExecuted: true,
+    };
+    assert.equal(generatedFileHistory(hydrate(base)), null);
+    assert.equal(
+      generatedFileHistory(hydrate({ ...base, planExecStart: 9 })),
+      null,
+    );
+  });
+
+  it("returns null for a foreign artifact URL", () => {
+    const message = {
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        tempTool({
+          result: {
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+            error: null,
+            artifacts: [
+              tempMeta({ downloadUrl: "https://evil.example/files/x" }),
+            ],
+          },
+        }),
+      ],
+      timeline: [{ type: "tool", id: "s1" }],
+      plan: tempPlan(),
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 0,
+    };
+    assert.equal(generatedFileHistory(hydrate(message)), null);
+  });
+
+  it("returns saved files without promoting a temporary artifact", () => {
+    const { plan } = makePlan();
+    const message = {
+      role: "assistant",
+      content: "",
+      toolCalls: [makeTool()],
+      timeline: [{ type: "tool", id: "s1" }],
+      plan,
+      planConfirmed: true,
+      planExecuted: true,
+      planExecStart: 0,
+    };
+    const history = generatedFileHistory(hydrate(message));
+    assert.ok(history);
+    assert.equal(history.artifacts.length, 0);
+    assert.equal(history.savedFiles.length, 1);
+    assert.equal(history.savedFiles[0].fileId, 42);
+    assert.equal(
+      history.savedFiles[0].downloadUrl,
+      "/api/store-storage/files/42/download",
+    );
+  });
 });

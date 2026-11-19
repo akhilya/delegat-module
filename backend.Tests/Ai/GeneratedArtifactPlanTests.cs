@@ -98,6 +98,35 @@ public class GeneratedArtifactPlanTests
     }
 
     [Fact]
+    public void Catalog_ProposePlanSteps_RejectUnknownStepLevelFields()
+    {
+        var tool = Assert.Single(
+            AgentToolCatalog.Build(includeGeneratedArtifacts: true), t => t.name == "propose_plan");
+        var step = tool.input_schema.properties!["steps"].items!;
+
+        // The step object is closed: tool arguments belong inside args, never beside it.
+        Assert.False(step.additionalProperties);
+        Assert.Equal(new[] { "tool", "description", "args" }, step.required);
+        // args keys stay unrestricted so run_python can nest code and outputs inside.
+        Assert.Null(step.properties!["args"].additionalProperties);
+    }
+
+    [Fact]
+    public void Catalog_OtherSchemas_OmitAdditionalProperties()
+    {
+        // Only propose_plan steps.items carries the closed-object keyword;
+        // every other schema property leaves it null so it is omitted from JSON.
+        var stepItem = AgentToolCatalog.Build(includeGeneratedArtifacts: true)
+            .Single(t => t.name == "propose_plan")
+            .input_schema.properties!["steps"].items!;
+        Assert.False(stepItem.additionalProperties);
+
+        Assert.All(AgentToolCatalog.Build(includeGeneratedArtifacts: true),
+            t => Assert.All(t.input_schema.properties!.Values,
+                p => Assert.Null(p.additionalProperties)));
+    }
+
+    [Fact]
     public async Task Dispatch_ImportTool_WithoutSignedExecutorFlag_Refused()
     {
         await using var db = TestDbFactory.CreateDb();

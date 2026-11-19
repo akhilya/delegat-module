@@ -63,6 +63,9 @@ public class AiToolProperty
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? required { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? additionalProperties { get; set; }
 }
 
 // ---- Response DTOs ----

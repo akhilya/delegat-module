@@ -68,7 +68,7 @@ public static class AiPrompts
     /// This identifier is logged instead of hashing the rendered prompt, which contains
     /// store/user-specific context.
     /// </summary>
-    public const string ChatPromptVersion = "chat-v19";
+    public const string ChatPromptVersion = "chat-v20";
 
     public record ConnectionInfo(int Id, string Name, string AdapterKey, bool IsActive, DateTime? LastSyncAt);
 

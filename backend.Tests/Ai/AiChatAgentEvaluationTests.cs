@@ -178,6 +178,52 @@ public class AiChatAgentEvaluationTests
     }
 
     [Fact]
+    public async Task StepLevelOutputsBesideArgs_IsRejected_ThenCorrectedInsideArgs()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var python = new ArtifactPythonHttp(
+            [("report.csv", "text/csv", Encoding.UTF8.GetBytes("a,b\n1,2\n"))], "ok");
+        const string malformed = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')"},"outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}]}
+            """;
+        const string corrected = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')","outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                ToolCall("propose_plan", malformed, "misplaced-outputs"),
+                ToolCall("propose_plan", corrected, "nested-outputs"),
+            ], python, artifacts: true);
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Generate report.csv")], fixture.StoreId, fixture.UserId,
+            sessionId: "legacy-misplaced-outputs", locale: "en"));
+
+        // The invalid proposal is sent back to the model once; exactly one
+        // signed plan with nested args.outputs is emitted.
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains(AgentChatTurnGate.InvalidPlanText,
+            fixture.Client.Requests[1].Messages.Last().Content, StringComparison.Ordinal);
+        Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        using var doc = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var step = Assert.Single(
+            doc.RootElement.GetProperty("plan").GetProperty("steps").EnumerateArray());
+        Assert.Equal("run_python", step.GetProperty("tool").GetString());
+        Assert.Equal("report.csv",
+            step.GetProperty("args").GetProperty("outputs")[0].GetProperty("fileName").GetString());
+        Assert.False(step.TryGetProperty("outputs", out _));
+        // Rejection happened before signing: nothing dispatched, nothing staged.
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Equal(0, python.Posts);
+        Assert.False(await fixture.Db.aiGeneratedArtifacts.AnyAsync());
+    }
+
+    [Fact]
     public async Task ReadToolResult_IsIncludedInNextModelRequestBeforeFinalAnswer()
     {
         await using var fixture = await CreateFixtureAsync(

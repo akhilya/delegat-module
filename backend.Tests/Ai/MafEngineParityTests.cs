@@ -710,6 +710,51 @@ public partial class MafEngineParityTests
         Assert.Equal(file.Id, receipt.fileId);
     }
 
+    [Fact]
+    public async Task StepLevelOutputsBesideArgs_IsRejected_ThenCorrectedInsideArgs()
+    {
+        using var key = SigningKey();
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var python = new ArtifactPythonHttp(
+            [("report.csv", "text/csv", Encoding.UTF8.GetBytes("a,b\n1,2\n"))], "ok");
+        const string malformed = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')"},"outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}]}
+            """;
+        const string corrected = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')","outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                ToolCall("propose_plan", malformed, "misplaced-outputs"),
+                ToolCall("propose_plan", corrected, "nested-outputs"),
+            ], artifacts: true, pythonHttp: python);
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Generate report.csv")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-misplaced-outputs", locale: "en"));
+
+        // The invalid proposal is sent back to the model once; exactly one
+        // signed plan with nested args.outputs is emitted.
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains(AgentChatTurnGate.InvalidPlanText,
+            fixture.Client.Requests[1].Messages.Last().Content, StringComparison.Ordinal);
+        Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        using var doc = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var step = Assert.Single(
+            doc.RootElement.GetProperty("plan").GetProperty("steps").EnumerateArray());
+        Assert.Equal("run_python", step.GetProperty("tool").GetString());
+        Assert.Equal("report.csv",
+            step.GetProperty("args").GetProperty("outputs")[0].GetProperty("fileName").GetString());
+        Assert.False(step.TryGetProperty("outputs", out _));
+        // Rejection happened before signing: nothing dispatched, nothing staged.
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Equal(0, python.Posts);
+        Assert.False(await fixture.Db.aiGeneratedArtifacts.AnyAsync());
+    }
+
     /// <summary>Extracts the exact server-issued handle fields from the review
     /// request so the scripted import plan quotes real artifact identity.</summary>
     private static object ImportArgsFromReview(CapturedRequest review)
