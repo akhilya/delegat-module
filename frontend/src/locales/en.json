@@ -919,7 +919,8 @@
       "skip": "Skip",
       "requiredAnswer": "Choose an answer to continue.",
       "optionalAnswer": "Choose an answer or skip this question.",
-      "otherPlaceholder": "Another answer…"
+      "otherPlaceholder": "Another answer…",
+      "inactive": "This form is no longer active. Continue from the latest message."
     },
     "attach": "Attach",
     "dropFilesTitle": "Drop files to attach",

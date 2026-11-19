@@ -1,5 +1,6 @@
 import { finalizeTurnTools } from "./persist.js";
 import { collectChatForms, timelineFromLegacy } from "./timeline.js";
+import { hasExecutionContext } from "./turnLifecycle.js";
 
 function isTerminalState(m) {
   return !!(m?.done || (m?.messageState && m.messageState !== "running"));
@@ -39,6 +40,10 @@ function mergeCanonicalTurn(local, incoming) {
       ...winner,
       id: local.id ?? incoming.id,
       dbId: incoming.dbId ?? local.dbId,
+      formReplies: {
+        ...(local.formReplies || {}),
+        ...(winner.formReplies || {}),
+      },
       planCancelled: keepDecisions
         ? incoming.planCancelled || local.planCancelled || undefined
         : winner.planCancelled,
@@ -255,13 +260,7 @@ function sameReviewIdentity(local, candidate, current, next) {
 }
 
 export function planHasExecutionStarted(message) {
-  return !!(
-    message?.planConfirmed ||
-    message?.planExecuted ||
-    message?.planFailed ||
-    Number.isInteger(message?.planExecStart) ||
-    message?.executionOutcome
-  );
+  return hasExecutionContext(message);
 }
 
 // A plan sharing a turn with a form predates its answers. Submitting the form

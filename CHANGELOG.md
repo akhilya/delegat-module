@@ -293,6 +293,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - AI assistant: new chats containing structured content blocks now create their owned conversation before queue admission, without requiring a plain-text user message. Existing store/user checks and signed-plan confirmation remain unchanged.
 
+- AI assistant: clarification forms remain available after recoverable tool errors and history synchronization. Form answers stay bound to their original turn, stale forms cannot submit into a newer conversation step, and interrupted replies no longer briefly expose plan confirmation.
+
 - Mapping canvas polish: block and pin selection no longer draws a glow ring, and the adapter-field inspector's group filter gained a "no group" entry so custom and hidden fields stay reachable while a group is selected. Pasting or importing a graph now also validates modifier parameters that reference adapter fields (such as value-map targets), and the block search indexes dictionary options once per menu instead of rescanning every option on each keystroke.
 - Mapping inspector responsiveness: the adapter-field list renders in pages instead of mounting every field at once, and clicking block controls (group headers, preview expand, "unconnected only") now selects the block so the inspector switches to it. An emptied List block serializes as empty instead of a literal "[]" value, and the dictionary auto-match no longer treats equal option ids with different labels as a match.
 - Extra mapping branches and parameter-pin consumers no longer disable a valid unit conversion. Chained conversions retain the intermediate unit established by a destination field or the next manual conversion.

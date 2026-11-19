@@ -32,6 +32,8 @@ const props = defineProps({
   form: { type: Object, required: true },
   submitted: { type: Boolean, default: false },
   answers: { type: Object, default: null },
+  disabled: { type: Boolean, default: false },
+  inactive: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["submit"]);
@@ -91,7 +93,8 @@ watch(
 );
 
 onMounted(() => {
-  if (props.form.kind === "connection") loadAdapters();
+  if (props.form.kind === "connection" && !props.inactive && !isSubmitted.value)
+    loadAdapters();
 });
 
 function loadAdapters() {
@@ -115,7 +118,8 @@ function onQuestionStatus(key, status) {
 
 function submitQuestions(event) {
   event.preventDefault();
-  if (submitting.value || isSubmitted.value) return;
+  if (submitting.value || isSubmitted.value || props.disabled || props.inactive)
+    return;
   const formEl = event.target;
   if (!(formEl instanceof HTMLFormElement)) return;
   const values = answersFromFormData(
@@ -123,8 +127,9 @@ function submitQuestions(event) {
     new FormData(formEl),
     skipped,
   );
+  // The parent accepts or rejects the reply; only its `submitted` prop turns
+  // this form into a read-only recap.
   localAnswers.value = values;
-  done.value = true;
   emit("submit", {
     formId: props.form.id,
     answers: values,
@@ -133,7 +138,8 @@ function submitQuestions(event) {
 }
 
 function submitConnection() {
-  if (submitting.value || isSubmitted.value) return;
+  if (submitting.value || isSubmitted.value || props.disabled || props.inactive)
+    return;
   const data = createForm.value?.payload?.();
   if (!data?.adapterKey || !createForm.value?.canSubmit) {
     error.value = t("marketplace.marketplacePage.enterCredentials");
@@ -171,14 +177,26 @@ function submitConnection() {
 </script>
 
 <template>
-  <div class="w-full min-w-0 rounded-xl bg-card p-3 ring-1 ring-inset ring-border">
+  <div
+    class="w-full min-w-0 rounded-xl bg-card p-3 ring-1 ring-inset ring-border"
+  >
     <p v-if="title" class="text-sm font-medium">{{ title }}</p>
-    <p v-if="form.kind === 'connection'" class="mt-1 text-xs text-muted-foreground">
+    <p
+      v-if="form.kind === 'connection'"
+      class="mt-1 text-xs text-muted-foreground"
+    >
       {{ t("ai.form.secretsStayInBrowser") }}
     </p>
 
+    <p
+      v-if="!isSubmitted && inactive"
+      class="mt-3 text-xs text-muted-foreground"
+    >
+      {{ t("ai.form.inactive") }}
+    </p>
+
     <form
-      v-if="form.kind === 'connection'"
+      v-else-if="form.kind === 'connection'"
       class="mt-3 flex flex-col gap-3"
       @submit.prevent="submitConnection"
     >
@@ -195,35 +213,25 @@ function submitConnection() {
         :initial-adapter-key="form.adapterKey"
         :initial-name="form.name"
         :lock-adapter="!!form.adapterKey"
-        :disabled="submitting || isSubmitted"
+        :disabled="submitting || isSubmitted || disabled"
       />
       <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
       <Button
         type="submit"
         size="sm"
         class="self-start"
-        :disabled="submitting || isSubmitted || loadingAdapters"
+        :disabled="submitting || isSubmitted || loadingAdapters || disabled"
       >
         {{ isSubmitted ? t("ai.form.connected") : submitLabel }}
       </Button>
     </form>
 
-    <div
-      v-else-if="isSubmitted"
-      class="mt-3 flex flex-col gap-3"
-    >
-      <div
-        v-for="row in recap"
-        :key="row.key"
-        class="min-w-0"
-      >
+    <div v-else-if="isSubmitted" class="mt-3 flex flex-col gap-3">
+      <div v-for="row in recap" :key="row.key" class="min-w-0">
         <p class="text-xs text-muted-foreground">{{ row.title }}</p>
         <p class="text-sm leading-snug">{{ row.answer }}</p>
       </div>
-      <p
-        v-if="!recap.length"
-        class="text-xs text-muted-foreground"
-      >
+      <p v-if="!recap.length" class="text-xs text-muted-foreground">
         {{ t("ai.form.answered") }}
       </p>
     </div>
@@ -235,7 +243,10 @@ function submitConnection() {
       :items="questionnaireItems"
       @submit="submitQuestions"
     >
-      <QuestionnaireProgress v-if="questions.length > 1" class="text-muted-foreground">
+      <QuestionnaireProgress
+        v-if="questions.length > 1"
+        class="text-muted-foreground"
+      >
         <template #default="{ current, total }">
           {{ t("ai.form.progress", { current, total }) }}
         </template>
@@ -289,7 +300,7 @@ function submitConnection() {
         <QuestionnaireNext size="sm">
           {{ t("ai.form.next") }}
         </QuestionnaireNext>
-        <QuestionnaireSubmit size="sm">
+        <QuestionnaireSubmit size="sm" :disabled="disabled">
           {{ submitLabel }}
         </QuestionnaireSubmit>
       </QuestionnaireActions>

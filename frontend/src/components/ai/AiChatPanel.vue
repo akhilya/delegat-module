@@ -107,10 +107,8 @@ import {
 import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
 import { planHasContent } from "@/lib/ai/planSteps";
-import {
-  planHasClarificationConflict,
-  planHasExecutionStarted,
-} from "@/lib/ai/planState";
+import { planHasClarificationConflict } from "@/lib/ai/planState";
+import { isCurrentFormOwner, visibleChatForms } from "@/lib/ai/turnLifecycle";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
@@ -519,19 +517,14 @@ function onChatAsk(prompt) {
 }
 
 function onFormSubmit(msg, payload) {
-  const prompt = payload?.prompt;
-  if (isLoading.value || !hasEnabledModels.value || !prompt) return;
-  store.commit("aiChat/setFormReply", {
+  if (!hasEnabledModels.value) return;
+  store.dispatch("aiChat/submitFormReply", {
+    sessionId: sessionId.value,
     messageId: msg.id,
-    formId: payload.formId,
-    answers: payload.answers || {},
-  });
-  store.dispatch("aiChat/sendMessage", {
-    content: prompt,
-    formReply: {
-      formId: payload.formId,
-      answers: payload.answers || {},
-    },
+    assistantMessageId: msg.messageId,
+    formId: payload?.formId,
+    answers: payload?.answers || {},
+    prompt: payload?.prompt,
   });
 }
 
@@ -749,19 +742,7 @@ function replyText(msg) {
 }
 
 function chatForms(msg) {
-  const layout = turnLayout(msg);
-  const proposalForms = (layout.proposal.forms || []).filter(
-    (form) =>
-      !planHasExecutionStarted(msg) || !!msg.formReplies?.[String(form.id)],
-  );
-  const forms = [...proposalForms, ...(layout.execution.forms || [])];
-  const seen = new Set();
-  return forms.filter((form) => {
-    const key = `${form.kind}|${form.adapterKey || ""}|${form.id || ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return visibleChatForms(msg);
 }
 
 function chatActions(msg) {
@@ -1238,6 +1219,8 @@ function isLatestTurn(msg) {
                       v-for="form in chatForms(msg)"
                       :key="form.id"
                       :form="form"
+                      :inactive="!isCurrentFormOwner(messages, msg)"
+                      :disabled="isLoading || !hasEnabledModels"
                       :submitted="!!msg.formReplies?.[String(form.id)]"
                       :answers="msg.formReplies?.[String(form.id)]?.answers"
                       @submit="onFormSubmit(msg, $event)"
