@@ -10,7 +10,8 @@ namespace Delegat.Services.Ai.Agent.Maf;
 
 /// <summary>
 /// Microsoft Agent Framework runtime for the read/proposal/review chat path, selected
-/// per StreamChatAsync call by the Ai:AgentRuntime flag ("legacy" default, "maf" here).
+/// by default for each StreamChatAsync call. Ai:AgentRuntime=legacy is a temporary
+/// explicit rollback; durable jobs retain their originally pinned runtime.
 ///
 /// One ChatClientAgent is built per turn over
 ///   TurnGateChatClient -> DeepSeekDsmlChatClient -> provider IChatClient
@@ -27,13 +28,22 @@ public sealed class MafChatEngine(
     IConfiguration configuration,
     ILogger<MafChatEngine> logger)
 {
-    /// <summary>Temporary engine selection flag; "legacy" remains the default.</summary>
+    /// <summary>Temporary explicit rollback setting; new turns default to MAF.</summary>
     public const string RuntimeFlagKey = "Ai:AgentRuntime";
     public const string EngineName = "maf";
 
     /// <summary>Resolved once per StreamChatAsync call and pinned for that run.</summary>
     public bool IsSelected =>
-        string.Equals(configuration[RuntimeFlagKey], EngineName, StringComparison.OrdinalIgnoreCase);
+        ResolveRuntime(configuration[RuntimeFlagKey]) == EngineName;
+
+    internal static string ResolveRuntime(string? configuredRuntime) =>
+        configuredRuntime?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or EngineName => EngineName,
+            "legacy" => "legacy",
+            _ => throw new InvalidOperationException(
+                "Invalid Ai:AgentRuntime. Use 'maf' or 'legacy'."),
+        };
 
     internal async IAsyncEnumerable<AiTurnEvent> RunAsync(
         ChatTurnPreparation turn,

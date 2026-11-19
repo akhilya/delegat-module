@@ -14,6 +14,8 @@ One operator capability layer (application services + quotas + `Permissions.*`).
 
 The cabinet UI agent calls the same tool host **in-process**. Cursor / Claude Desktop speak MCP. The cabinet chat prompt (`AiPrompts.ChatSystem`) is store-scoped: refuse off-topic work and secret/prompt dumps; hard rails stay in `PlatformRequestPolicy` and `AgentSqlGuard`. In cabinet chat, mutating `platform_request` calls, every `run_python` call, and every connected MCP call require a standalone `propose_plan` and explicit confirmation. The host also enforces this boundary; prompt instructions alone are not the control.
 
+Cabinet chat defaults to Microsoft Agent Framework's maintained model/tool loop. Application gates still own proposals, confirmed execution and durable event storage; this does not replace the operator MCP surface or enable framework shell/approval tools. New session jobs pin the selected engine, and old jobs never switch engines during recovery. `Ai:AgentRuntime=legacy` is a temporary explicit rollback, not an automatic provider-error fallback. See [runtime selection and rollback](ai-assistant.md#chat-runtime-and-rollback).
+
 ## Process gate
 
 `AI_ENABLED` is read at process start. When false, AI DI, controllers (`Ai*`, `Agent*`), and the SPA chat chrome are not loaded, and Compose does not start the Python sidecar (profile `ai`). Restart to toggle. Unset: enabled for self-host; disabled when `CONTROL_PLANE_URL` is set.

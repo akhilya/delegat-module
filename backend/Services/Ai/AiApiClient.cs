@@ -40,7 +40,7 @@ public class AiApiClient : IAiApiClient, IAiRuntimeClientFactory
     /// <summary>
     /// Microsoft.Extensions.AI adapter over the same provider construction used by the
     /// legacy transport (endpoint, credentials, proxy, hosted-link signing). Used by the
-    /// <c>Ai:AgentRuntime=maf</c> chat engine; both SDK adapters come from the official
+    /// default Microsoft Agent Framework chat engine; both SDK adapters come from the official
     /// packages (OpenAI via Microsoft.Extensions.AI.OpenAI, Anthropic via the SDK itself).
     /// </summary>
     public Microsoft.Extensions.AI.IChatClient CreateChatClient(AiModelConfig model) =>

@@ -9,12 +9,17 @@ using Delegat.Models.Ai;
 using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
+using Delegat.Services.Ai.Agent.Maf;
 using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ChatMessage = Delegat.Services.Ai.ChatMessage;
+using FrameworkChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Delegat.Tests;
 
@@ -1163,13 +1168,14 @@ public class AiChatAgentEvaluationTests
         IAsyncDisposable Lifetime)> CreateDurableHttpRuntimeAsync(
         string? sqliteDsn = null, Action<JsonElement?>? nativeCall = null, Action? modelCall = null)
     {
+        var runtimeClient = new DurableMafReplyClient(modelCall);
         var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
             [Text("HTTP reply")],
             database: sqliteDsn == null ? null : TestDbFactory.CreateSqliteContext(sqliteDsn),
-            nativeCall: nativeCall, modelCall: modelCall);
+            nativeCall: nativeCall, modelCall: modelCall, runtimeClient: runtimeClient);
         return (fixture.Chat, fixture.UserId, fixture.StoreId,
             () => fixture.Invoker.Calls, () => fixture.Invoker.LastBody,
-            () => fixture.Client.Requests.Count, fixture);
+            () => fixture.Client.Requests.Count + runtimeClient.Calls, fixture);
     }
 
     private static Task<ChatFixture> CreateFixtureWithAttachmentAsync(
@@ -1187,7 +1193,7 @@ public class AiChatAgentEvaluationTests
         object[] responses, IHttpClientFactory? pythonHttp = null,
         CabinetCapabilityIndex? capabilities = null, bool artifacts = false,
         DataContext? database = null, Action<JsonElement?>? nativeCall = null,
-        Action? modelCall = null)
+        Action? modelCall = null, IChatClient? runtimeClient = null)
     {
         var db = database ?? TestDbFactory.CreateDb();
         int userId;
@@ -1284,9 +1290,12 @@ public class AiChatAgentEvaluationTests
                 new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
                 new EncryptionService(encryptionKey));
             var logger = new CapturingLogger<AiChatService>();
+            var engine = runtimeClient == null ? null : new MafChatEngine(
+                new DurableMafClientFactory(runtimeClient), toolHost,
+                new ConfigurationBuilder().Build(), NullLogger<MafChatEngine>.Instance);
             var chat = new AiChatService(
                 modelService, client, db, toolHost, new HttpContextAccessor(), quota,
-                logger, mcp);
+                logger, mcp, engine);
 
             return new ChatFixture(db, chat, client, invoker, mcp, logger, userId, storeId);
         }
@@ -1501,6 +1510,59 @@ public class AiChatAgentEvaluationTests
             Exception? exception,
             Func<TState, Exception?, string> formatter) =>
             Messages.Add(formatter(state, exception));
+    }
+
+    /// <summary>Hands the supplied IChatClient to the MAF engine for every model
+    /// resolution; the HTTP fixture shares one scripted SDK stand-in.</summary>
+    private sealed class DurableMafClientFactory(IChatClient client) : IAiRuntimeClientFactory
+    {
+        public IChatClient CreateChatClient(AiModelConfig model) => client;
+    }
+
+    /// <summary>Scripted MAF provider for the durable HTTP harness: counts each
+    /// real engine request, fires the model callback once per request and replies
+    /// with the existing fixed "HTTP reply" text - no new prompt or eval content.</summary>
+    private sealed class DurableMafReplyClient(Action? onCall) : IChatClient
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<FrameworkChatMessage> messages,
+            ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Next(cancellationToken));
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<FrameworkChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var response = Next(cancellationToken);
+            foreach (var update in response.ToChatResponseUpdates())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Yield();
+                yield return update;
+            }
+        }
+
+        private ChatResponse Next(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            var call = Interlocked.Increment(ref _calls);
+            onCall?.Invoke();
+            if (call != 1)
+                throw new InvalidOperationException("No scripted model response remains.");
+            return new ChatResponse(new FrameworkChatMessage(ChatRole.Assistant, "HTTP reply"))
+            {
+                FinishReason = ChatFinishReason.Stop,
+            };
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose() { }
     }
 
     private sealed class TemporaryEnvironmentVariable : IDisposable

@@ -24,7 +24,7 @@ using FrameworkChatMessage = Microsoft.Extensions.AI.ChatMessage;
 namespace Delegat.Tests;
 
 /// <summary>
-/// M3 parity checks: the Microsoft Agent Framework engine (Ai:AgentRuntime=maf) must
+/// M3 parity checks: the default Microsoft Agent Framework engine must
 /// reproduce the legacy StreamChatAsync contract - batch-level plan gating, synthetic
 /// deferred results, attachment ordering, review mode, nudges, runaway protection, and
 /// the SSE stream shape. Fixtures mirror AiChatAgentEvaluationTests; the model is
@@ -779,7 +779,7 @@ public partial class MafEngineParityTests
         byte[]? attachmentBytes,
         object[] responses,
         ScriptedAiStreamingClient? legacyClient = null,
-        string runtime = "maf",
+        string? runtime = null,
         bool artifacts = false,
         IHttpClientFactory? pythonHttp = null,
         IChatClient? providerClient = null,
@@ -858,9 +858,11 @@ public partial class MafEngineParityTests
             db,
             new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
             new EncryptionService(encryptionKey));
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Ai:AgentRuntime"] = runtime })
-            .Build();
+        var configurationBuilder = new ConfigurationBuilder();
+        if (runtime != null)
+            configurationBuilder.AddInMemoryCollection(
+                new Dictionary<string, string?> { [MafChatEngine.RuntimeFlagKey] = runtime });
+        var configuration = configurationBuilder.Build();
         var engine = new MafChatEngine(factory, toolHost, configuration, NullLogger<MafChatEngine>.Instance);
         var logger = new CapturingLogger<AiChatService>();
         var chat = new AiChatService(

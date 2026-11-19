@@ -11,7 +11,7 @@ public static class AiServiceCollectionExtensions
     {
         services.AddHttpClient<AiApiClient>(c => c.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<IAiApiClient>(sp => sp.GetRequiredService<AiApiClient>());
-        // IChatClient adapter for the Ai:AgentRuntime=maf engine; shares AiApiClient's
+        // IChatClient adapter for the default MAF engine; shares AiApiClient's
         // endpoint/credential/proxy/hosted-signer construction.
         services.AddTransient<IAiRuntimeClientFactory>(sp => sp.GetRequiredService<AiApiClient>());
         services.AddTransient<PlatformLinkHostedAiSigningHandler>();
@@ -40,7 +40,7 @@ public static class AiServiceCollectionExtensions
         services.AddScoped<IAiDurableTurnProducer, AiDurableTurnProducer>();
         services.AddHostedService<AiDurableTurnWorker>();
         services.AddScoped<AiChatService>();
-        // Microsoft Agent Framework engine; inert unless Ai:AgentRuntime=maf for the run.
+        // Default chat runtime; explicit legacy rollback and pinned older jobs remain supported.
         services.AddScoped<Agent.Maf.MafChatEngine>();
         services.AddSingleton<CabinetCapabilityIndex>();
         services.AddSingleton<CabinetActionCatalog>();

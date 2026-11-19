@@ -29,9 +29,8 @@ public class AiController : ControllerBase
     private readonly IConfiguration? _configuration;
     private AiDurableTurnStore Durable => _durable
         ?? throw new InvalidOperationException("Durable AI turns are not registered.");
-    private string Runtime => string.Equals(
-        _configuration?[Services.Ai.Agent.Maf.MafChatEngine.RuntimeFlagKey],
-        "maf", StringComparison.OrdinalIgnoreCase) ? "maf" : "legacy";
+    private string Runtime => Services.Ai.Agent.Maf.MafChatEngine.ResolveRuntime(
+        _configuration?[Services.Ai.Agent.Maf.MafChatEngine.RuntimeFlagKey]);
 
     public AiController(
         AiChatService chatService,

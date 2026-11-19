@@ -81,7 +81,8 @@ public class AiDurableTurnHttpTests
         });
         Assert.Equal(1, hostA.ModelCalls());
         Assert.Equal(0, hostA.ToolCalls());
-        await WaitForJobStatusAsync(fixture, "http-structured", "completed", ct);
+        var completed = await WaitForJobStatusAsync(fixture, "http-structured", "completed", ct);
+        Assert.Equal("maf", completed.engine);
         var runId = framesA[0].Json.GetProperty("runId").GetString()!;
         await hostA.DisposeAsync();
 
