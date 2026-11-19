@@ -1,6 +1,8 @@
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Docs;
 using Delegat.Tests.Infrastructure;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Delegat.Tests;
@@ -84,15 +86,20 @@ public class KnowledgeIndexServiceTests
     [Fact]
     public async Task ReindexAsync_MakesEndOfLongRemotePageSearchableFromDatabase()
     {
+        using var canon = new IsolatedCanon();
         await using var db = TestDbFactory.CreateDb();
         var docs = new StubPublicDocs
         {
             NewBody = new string('a', 4_500) + "\nFulfillment reconciliation checkpoint.",
         };
+        // The remote-page regression must not rank against a changing checkout corpus.
         var index = new KnowledgeIndexService(db, new FakeStorage(),
-            NullLogger<KnowledgeIndexService>.Instance, publicDocs: docs);
+            NullLogger<KnowledgeIndexService>.Instance, env: canon.Environment, publicDocs: docs);
 
         await index.ReindexAsync();
+        Assert.DoesNotContain(db.aiKnowledgeChunks,
+            chunk => !chunk.sourcePath.StartsWith("product-docs/", StringComparison.Ordinal));
+        db.ChangeTracker.Clear();
         var hits = await index.SearchAsync("reconciliation checkpoint", 5, default);
 
         Assert.Contains(hits, hit => hit.SourcePath == "product-docs/en/workspace/products.md"
@@ -383,6 +390,35 @@ public class KnowledgeIndexServiceTests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 index.SearchAsync("Export products", 3, cancellation.Token));
         Assert.Equal(1, embeddings.Calls);
+    }
+
+    /// <summary>
+    /// Owns an empty canonical docs root so CandidateRoots never falls back to
+    /// the real checkout; only the GUID directory this fixture created is deleted.
+    /// </summary>
+    private sealed class IsolatedCanon : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "delegat-knowledge-test-" + Guid.NewGuid().ToString("N"));
+
+        public IWebHostEnvironment Environment { get; }
+
+        public IsolatedCanon()
+        {
+            Directory.CreateDirectory(Path.Combine(_root, "docs"));
+            Environment = new CanonEnvironment { ContentRootPath = _root };
+        }
+
+        public void Dispose() => Directory.Delete(_root, recursive: true);
+    }
+
+    private sealed class CanonEnvironment : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "Delegat.Tests";
+        public string EnvironmentName { get; set; } = "Testing";
+        public string ContentRootPath { get; set; } = string.Empty;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = string.Empty;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class StubPublicDocs : IPublicDocsClient
