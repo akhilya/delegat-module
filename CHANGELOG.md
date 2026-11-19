@@ -494,6 +494,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Apply security headers before the rest of the pipeline so empty responses still get `X-Robots-Tag`
 - Sync `package-lock.json` with passkey/QR deps so frontend Docker `npm ci` succeeds
 - AI assistant: question forms now pause the turn until the user submits answers; later tools and plans cannot consume placeholders as answers. Form follow-up templates cannot reference fields that were removed or never presented. Result review can propose a freshly confirmed continuation on any of its three bounded attempts; an exhausted review is reported as incomplete without repeating or rewriting completed execution.
+- AI assistant: clarification forms and plan confirmation no longer compete in one reply. Old drafts created before form answers cannot be confirmed, stale unanswered forms are hidden after execution, and incomplete reviews explain in both supported languages that completed steps must not be repeated.
 
 ### Removed
 

@@ -1,4 +1,5 @@
 import { finalizeTurnTools } from "./persist.js";
+import { collectChatForms, timelineFromLegacy } from "./timeline.js";
 
 function isTerminalState(m) {
   return !!(m?.done || (m?.messageState && m.messageState !== "running"));
@@ -216,7 +217,11 @@ export function reconcilePlanMessages(current, incoming) {
   // reviews can share one executed plan. Keep locals that no incoming row
   // proves to be the same review.
   for (const local of current.filter((m) => m.executionProposalId)) {
-    if (next.some((candidate) => sameReviewIdentity(local, candidate, current, next)))
+    if (
+      next.some((candidate) =>
+        sameReviewIdentity(local, candidate, current, next),
+      )
+    )
       continue;
     const later = local.dbId ? next.findIndex((m) => m.dbId > local.dbId) : -1;
     next.splice(later < 0 ? next.length : later, 0, local);
@@ -244,16 +249,36 @@ function sameReviewIdentity(local, candidate, current, next) {
     return !!localPlan && localPlan === candidatePlan;
   // Anonymous reviews only collapse onto a sole unambiguous counterpart.
   const anonymous = (list) =>
-    list.filter(
-      (m) => m.executionProposalId === parent && !m.plan?.proposalId,
-    ).length;
+    list.filter((m) => m.executionProposalId === parent && !m.plan?.proposalId)
+      .length;
   return anonymous(current) === 1 && anonymous(next) === 1;
+}
+
+export function planHasExecutionStarted(message) {
+  return !!(
+    message?.planConfirmed ||
+    message?.planExecuted ||
+    message?.planFailed ||
+    Number.isInteger(message?.planExecStart) ||
+    message?.executionOutcome
+  );
+}
+
+// A plan sharing a turn with a form predates its answers. Submitting the form
+// cannot make that draft safe: the fresh plan must arrive in a later turn.
+export function planHasClarificationConflict(message) {
+  if (!message?.plan || planHasExecutionStarted(message)) return false;
+  const timeline = message.timeline?.length
+    ? message.timeline
+    : timelineFromLegacy(message.content, message.toolCalls);
+  return collectChatForms(timeline).length > 0;
 }
 
 export function canConfirmPlan(message) {
   return !!(
     message?.plan &&
     message.done &&
+    !planHasClarificationConflict(message) &&
     // A canonical row interrupted by process loss cannot be confirmed: the
     // proposal may never have reached the server.
     message.messageState !== "interrupted" &&

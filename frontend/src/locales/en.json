@@ -602,6 +602,7 @@
     "internal_error": "Internal server error",
     "ai_api_key_invalid": "Could not decrypt the AI model API key. Open Settings → AI and re-enter the key.",
     "ai_disabled": "AI assistant is disabled for this instance",
+    "review_incomplete": "Execution has already finished, but the result review is incomplete. Do not repeat completed steps. Ask the assistant to continue from the existing results.",
     "hosted_ai_quota_exceeded": "Your organization's monthly platform AI allowance is used up. Switch to a connected model or try again next month.",
     "hosted_ai_usage_unavailable": "Platform AI is paused because usage could not be verified. Switch to a connected model or contact support.",
     "hosted_ai_not_entitled": "Platform AI is not included in this plan. You can use a connected model instead.",
@@ -980,6 +981,7 @@
       "unknown": "The server could not verify that this plan was still awaiting confirmation. This request did not start plan steps; check the conversation before trying again."
     },
     "requestFailedTitle": "The assistant request failed",
+    "reviewIncompleteTitle": "Result review incomplete",
     "requestStatusUnknown": "The assistant could not get a response from the server.",
     "requestNextStep": "Check whether a response appeared in the conversation before trying again.",
     "planExecutionStatusUnknownTitle": "Execution status is unknown",

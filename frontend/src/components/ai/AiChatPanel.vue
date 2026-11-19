@@ -107,6 +107,10 @@ import {
 import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
 import { planHasContent } from "@/lib/ai/planSteps";
+import {
+  planHasClarificationConflict,
+  planHasExecutionStarted,
+} from "@/lib/ai/planState";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
@@ -193,8 +197,9 @@ function planErrorText(message) {
 }
 
 function planErrorTitle(message) {
-  const stage =
-    message?.planConfirmationError?.stage || message?.requestError?.stage;
+  const error = message?.planConfirmationError || message?.requestError;
+  if (error?.code === "review_incomplete") return t("ai.reviewIncompleteTitle");
+  const stage = error?.stage;
   if (stage === "execution") return t("ai.planExecutionStatusUnknownTitle");
   if (stage === "confirmation") return t("ai.planConfirmationFailedTitle");
   return t("ai.requestFailedTitle");
@@ -202,6 +207,7 @@ function planErrorTitle(message) {
 
 function planErrorNextStep(message) {
   const error = message?.planConfirmationError || message?.requestError;
+  if (error?.code === "review_incomplete") return "";
   const stage = error?.stage;
   if (stage === "execution") return t("ai.planExecutionStatusUnknownNextStep");
   if (stage === "confirmation" && error?.reason === "already_processed")
@@ -733,6 +739,7 @@ function executionPart(msg) {
 }
 
 function replyText(msg) {
+  if (msg.requestError?.code === "review_incomplete") return "";
   const layout = turnLayout(msg);
   return hasPlanExec(msg)
     ? layout.execution.reply
@@ -743,10 +750,11 @@ function replyText(msg) {
 
 function chatForms(msg) {
   const layout = turnLayout(msg);
-  const forms = [
-    ...(layout.proposal.forms || []),
-    ...(layout.execution.forms || []),
-  ];
+  const proposalForms = (layout.proposal.forms || []).filter(
+    (form) =>
+      !planHasExecutionStarted(msg) || !!msg.formReplies?.[String(form.id)],
+  );
+  const forms = [...proposalForms, ...(layout.execution.forms || [])];
   const seen = new Set();
   return forms.filter((form) => {
     const key = `${form.kind}|${form.adapterKey || ""}|${form.id || ""}`;
@@ -1050,7 +1058,11 @@ function isLatestTurn(msg) {
               <Message v-else-if="msg.role === 'assistant'" align="start">
                 <MessageContent class="gap-3">
                   <div
-                    v-if="planHasContent(msg.plan) && legacyBoundaryless(msg)"
+                    v-if="
+                      planHasContent(msg.plan) &&
+                      legacyBoundaryless(msg) &&
+                      !planHasClarificationConflict(msg)
+                    "
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard
@@ -1088,7 +1100,11 @@ function isLatestTurn(msg) {
                   />
 
                   <MarkdownProse
-                    v-if="msg.plan && proposalView(msg).reply"
+                    v-if="
+                      msg.plan &&
+                      proposalView(msg).reply &&
+                      !planHasClarificationConflict(msg)
+                    "
                     density="compact"
                     :html="renderAiMarkdown(proposalView(msg).reply)"
                     class="min-w-0 w-full wrap-break-word"
@@ -1121,12 +1137,18 @@ function isLatestTurn(msg) {
                           })
                         }}
                       </p>
-                      <p class="mt-1">{{ planErrorNextStep(msg) }}</p>
+                      <p v-if="planErrorNextStep(msg)" class="mt-1">
+                        {{ planErrorNextStep(msg) }}
+                      </p>
                     </AlertDescription>
                   </Alert>
 
                   <div
-                    v-if="planHasContent(msg.plan) && !legacyBoundaryless(msg)"
+                    v-if="
+                      planHasContent(msg.plan) &&
+                      !legacyBoundaryless(msg) &&
+                      !planHasClarificationConflict(msg)
+                    "
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard

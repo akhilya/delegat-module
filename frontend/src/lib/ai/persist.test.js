@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canConfirmPlan, reconcilePlanMessages } from "./planState.js";
+import {
+  canConfirmPlan,
+  planHasClarificationConflict,
+  planHasExecutionStarted,
+  reconcilePlanMessages,
+} from "./planState.js";
 import { readSseEvents } from "./sse.js";
 import {
   apiHistoryFromBlocks,
@@ -1270,5 +1275,137 @@ describe("finalizeTurnTools", () => {
     const out = finalizeTurnTools(msg);
     assert.equal(out.toolCalls[0].status, "done");
     assert.equal(out.toolCalls[0].summary, "interrupted");
+  });
+});
+
+describe("clarification conflict", () => {
+  const formTool = {
+    id: "ask1",
+    name: "ask_form",
+    result: {
+      form: true,
+      kind: "fields",
+      fields: [{ key: "name", label: "Name" }],
+    },
+  };
+  const pendingPlan = {
+    proposalId: "p1",
+    summary: "Create Mug",
+    steps: [
+      {
+        description: "Create Mug",
+        tool: "platform_request",
+        args: { method: "POST", path: "/products" },
+      },
+    ],
+  };
+  const formTurn = (extra = {}) => ({
+    role: "assistant",
+    content: "",
+    plan: pendingPlan,
+    toolCalls: [formTool],
+    timeline: [{ type: "tool", id: "ask1" }],
+    ...extra,
+  });
+  const restore = (msg) =>
+    mapStoredMessage({
+      dbId: 2,
+      role: "assistant",
+      content: msg.content || "",
+      toolCallsJson: serializeToolCallsJson(msg),
+    });
+
+  it("blocks a pending plan that shares a turn with a presented form", () => {
+    const restored = restore(formTurn());
+    assert.equal(planHasClarificationConflict(restored), true);
+    assert.equal(canConfirmPlan(restored), false);
+  });
+
+  it("detects the conflict from raw tool calls when no timeline is stored", () => {
+    const raw = {
+      role: "assistant",
+      content: "",
+      done: true,
+      plan: pendingPlan,
+      toolCalls: [formTool],
+    };
+    assert.equal(raw.timeline, undefined);
+    assert.equal(planHasClarificationConflict(raw), true);
+    assert.equal(canConfirmPlan(raw), false);
+  });
+
+  it("does not revive the pre-answer draft after the form is submitted", () => {
+    const restored = restore(
+      formTurn({ formReplies: { ask1: { answers: { name: "Mug" } } } }),
+    );
+    assert.equal(restored.formReplies.ask1.answers.name, "Mug");
+    assert.equal(planHasClarificationConflict(restored), true);
+    assert.equal(canConfirmPlan(restored), false);
+
+    // A fresh plan arrives in its own later assistant turn and confirms.
+    const fresh = mapStoredMessage({
+      dbId: 4,
+      role: "assistant",
+      content: "",
+      toolCallsJson: serializeToolCallsJson({
+        role: "assistant",
+        content: "",
+        plan: { ...pendingPlan, proposalId: "p2" },
+        toolCalls: [],
+        timeline: [],
+      }),
+    });
+    assert.equal(planHasClarificationConflict(fresh), false);
+    assert.equal(canConfirmPlan(fresh), true);
+    assert.equal(canConfirmPlan(restored), false);
+  });
+
+  it("keeps confirmed execution evidence out of the conflict path", () => {
+    const executed = restore(
+      formTurn({
+        content: "Done.",
+        planConfirmed: true,
+        planExecuted: true,
+        planExecStart: 1,
+        executionOutcome: { status: "completed" },
+        toolCalls: [
+          formTool,
+          { id: "e1", name: "platform_request", status: "done" },
+        ],
+        timeline: [
+          { type: "tool", id: "ask1" },
+          { type: "tool", id: "e1" },
+        ],
+      }),
+    );
+    assert.equal(planHasExecutionStarted(executed), true);
+    assert.equal(planHasClarificationConflict(executed), false);
+    assert.equal(canConfirmPlan(executed), false);
+
+    // Legacy boundaryless row: confirmed and executed, no planExecStart.
+    const legacy = restore(
+      formTurn({ content: "Done.", planConfirmed: true, planExecuted: true }),
+    );
+    assert.equal(legacy.planExecStart, undefined);
+    assert.equal(planHasExecutionStarted(legacy), true);
+    assert.equal(planHasClarificationConflict(legacy), false);
+  });
+
+  it("ignores a form tool that never presented a valid form", () => {
+    for (const result of [
+      { form: false, error: "unknown_follow_up_fields" },
+      { form: true, kind: "fields", fields: [] },
+      "raw error text",
+    ]) {
+      const restored = restore({
+        role: "assistant",
+        content: "",
+        plan: pendingPlan,
+        toolCalls: [{ id: "ask1", name: "ask_form", result }],
+        timeline: [{ type: "tool", id: "ask1" }],
+      });
+      assert.equal(planHasClarificationConflict(restored), false);
+      assert.equal(canConfirmPlan(restored), true);
+    }
   });
 });

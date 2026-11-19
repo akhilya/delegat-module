@@ -21,6 +21,8 @@ const plan = {
 const sse = (type: string, data: unknown) =>
   `data: ${JSON.stringify({ type, data })}\n\n`;
 
+const REVIEW_SENTINEL = "UNTRUSTED_SERVER_REVIEW_TEXT";
+
 type Outcome =
   | "success"
   | "failed"
@@ -34,11 +36,12 @@ async function fixture(
   outcome: Outcome = "success",
   options: {
     staleHistory?: boolean;
-    review?: "success" | "recovery" | "disconnect";
+    review?: "success" | "recovery" | "disconnect" | "incomplete";
     generatedImports?: Array<Record<string, unknown>>;
     importPlan?: Record<string, unknown>;
     importResult?: Record<string, unknown>;
     stepCounts?: Record<string, unknown>;
+    locale?: "en" | "ru";
   } = {},
 ) {
   page.on("pageerror", (error) =>
@@ -104,8 +107,18 @@ async function fixture(
       : sse("assistant_start", { executionProposalId: proposalId }) +
         (options.review === "recovery"
           ? sse("plan", reviewPlan)
-          : sse("text", { delta: reviewText })) +
-        (options.review === "disconnect" ? "" : sse("done", {}));
+          : options.review === "incomplete"
+            ? sse("error", {
+                code: "review_incomplete",
+                message: REVIEW_SENTINEL,
+              })
+            : sse("text", { delta: reviewText })) +
+        (options.review === "disconnect"
+          ? ""
+          : sse(
+              "done",
+              options.review === "incomplete" ? { interrupted: true } : {},
+            ));
   const conversation = () => ({
     sessionId,
     title: "Проверка плана",
@@ -141,26 +154,45 @@ async function fixture(
             {
               dbId: 3,
               role: "assistant",
-              content: options.review === "recovery" ? "" : reviewText,
+              content:
+                options.review === "recovery"
+                  ? ""
+                  : options.review === "incomplete"
+                    ? REVIEW_SENTINEL
+                    : reviewText,
               toolCallsJson: JSON.stringify({
                 _ui: "assistantTurn",
                 executionProposalId: proposalId,
                 plan: options.review === "recovery" ? reviewPlan : null,
+                requestError:
+                  options.review === "incomplete"
+                    ? { code: "review_incomplete" }
+                    : undefined,
+                messageState:
+                  options.review === "incomplete" ? "interrupted" : undefined,
                 tools: [],
                 timeline:
                   options.review === "recovery"
                     ? []
-                    : [{ type: "text", text: reviewText }],
+                    : [
+                        {
+                          type: "text",
+                          text:
+                            options.review === "incomplete"
+                              ? REVIEW_SENTINEL
+                              : reviewText,
+                        },
+                      ],
               }),
             },
           ]
         : []),
     ],
   });
-  await page.addInitScript(() => {
-    localStorage.setItem("delegat.locale", "ru");
+  await page.addInitScript((locale) => {
+    localStorage.setItem("delegat.locale", locale);
     localStorage.setItem("mobile-warning-dismissed", "1");
-  });
+  }, options.locale || "ru");
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname
@@ -323,7 +355,10 @@ async function fixture(
     store.commit("aiChat/setOpen", true);
   }, sessionId);
   await expect(
-    page.getByRole("button", { name: "Выполнить", exact: true }),
+    page.getByRole("button", {
+      name: options.locale === "en" ? "Execute" : "Выполнить",
+      exact: true,
+    }),
   ).toBeEnabled();
   return {
     executions: () => executions,
@@ -2405,4 +2440,215 @@ test("temporary-output download aborts a late response on conversation switch", 
   ).toBe(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByTestId("ai-generated-file-download")).toHaveCount(0);
+});
+
+const staleFormTool = {
+  id: "ask1",
+  name: "ask_form",
+  status: "done",
+  result: {
+    form: true,
+    kind: "fields",
+    fields: [{ key: "name", label: "Name", type: "text" }],
+  },
+};
+
+for (const vp of [
+  { name: "desktop", width: 1280, height: 720 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`clarification focus: a presented form hides the stale plan until a fresh turn (${vp.name})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    const state = await fixture(page);
+
+    // The same assistant turn gains a presented ask_form ahead of its
+    // proposal prose; the pre-answer draft plan must stop competing with
+    // the form.
+    await page.evaluate((tool) => {
+      const store = (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store;
+      const msg = store.state.aiChat.messages.at(-1);
+      store.commit("aiChat/replaceLastAssistant", {
+        ...msg,
+        toolCalls: [tool, ...(msg.toolCalls || [])],
+        timeline: [
+          { type: "tool", id: tool.id, tool },
+          ...(msg.timeline || []),
+        ],
+      });
+    }, staleFormTool);
+    await expect(page.locator('input[aria-label="Name"]')).toBeVisible();
+    await expect(page.getByTestId("ai-plan")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText("Подготовил план.")).toHaveCount(0);
+
+    // The shared predicate also blocks a programmatic confirm of the draft.
+    await page.evaluate(
+      (pid) => (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store.dispatch("aiChat/confirmPlan", pid),
+      proposalId,
+    );
+    expect(state.executions()).toBe(0);
+
+    // Submitted answers never revive the pre-answer draft; the form becomes
+    // a read-only recap.
+    await page.evaluate(() => {
+      const store = (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store;
+      const msg = store.state.aiChat.messages.at(-1);
+      store.commit("aiChat/setFormReply", {
+        messageId: msg.id,
+        formId: "ask1",
+        answers: { name: "Ork mug" },
+      });
+    });
+    await expect(page.getByTestId("ai-plan")).toHaveCount(0);
+    await expect(page.locator('input[aria-label="Name"]')).toHaveCount(0);
+    await expect(page.getByText("Ork mug")).toBeVisible();
+
+    // The safe plan arrives in its own later assistant message.
+    await page.evaluate(() => {
+      (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store.commit("aiChat/addMessage", {
+        id: "fresh-turn",
+        role: "assistant",
+        content: "",
+        done: true,
+        plan: {
+          proposalId: "fresh-proposal",
+          summary: "Создать кружку",
+          steps: [
+            {
+              tool: "platform_request",
+              description: "Создать товар",
+              args: { method: "POST", path: "/products" },
+            },
+          ],
+        },
+        toolCalls: [],
+        timeline: [],
+        apiBlocks: [],
+      });
+    });
+    await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: "Выполнить", exact: true }),
+    ).toBeEnabled();
+    await expect(page.locator('input[aria-label="Name"]')).toHaveCount(0);
+    expect(state.executions()).toBe(0);
+  });
+}
+
+test("historical clarification: an executed plan keeps its card while an unanswered proposal form stays hidden", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await expect(page.getByText("Готово", { exact: true })).toBeVisible();
+  expect(state.executions()).toBe(1);
+  // The completed turn re-syncs history once; inject into the settled row.
+  await expect.poll(() => state.reads()).toBe(2);
+
+  // Malformed history: an unanswered form persisted before the execution
+  // boundary must not surface as an editable input next to a finished plan.
+  await page.evaluate((tool) => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store;
+    const msg = store.state.aiChat.messages.at(-1);
+    const start = msg.planExecStart;
+    const timeline = [...(msg.timeline || [])];
+    timeline.splice(start, 0, { type: "tool", id: tool.id, tool });
+    store.commit("aiChat/replaceLastAssistant", {
+      ...msg,
+      planExecStart: start + 1,
+      toolCalls: [tool, ...(msg.toolCalls || [])],
+      timeline,
+    });
+  }, staleFormTool);
+  await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+  await expect(page.getByText("Готово", { exact: true })).toBeVisible();
+  await expect(page.locator('input[aria-label="Name"]')).toHaveCount(0);
+  expect(state.executions()).toBe(1);
+
+  // A genuinely submitted answer still renders as a read-only recap, never
+  // as editable fields.
+  await page.evaluate(() => {
+    const store = (document.querySelector("#app") as any).__vue_app__.config
+        .globalProperties.$store;
+    const msg = store.state.aiChat.messages.at(-1);
+    store.commit("aiChat/setFormReply", {
+      messageId: msg.id,
+      formId: "ask1",
+      answers: { name: "Ork mug" },
+    });
+  });
+  await expect(page.getByText("Ork mug")).toBeVisible();
+  await expect(page.locator('input[aria-label="Name"]')).toHaveCount(0);
+  expect(state.executions()).toBe(1);
+});
+
+const reviewIncompleteAssertions = async (
+  page: Page,
+  locale: "en" | "ru",
+) => {
+  const title =
+    locale === "en" ? "Result review incomplete" : "Проверка результата не завершена";
+  const body =
+    locale === "en"
+      ? "Execution has already finished, but the result review is incomplete. Do not repeat completed steps. Ask the assistant to continue from the existing results."
+      : "Выполнение плана уже завершено, но проверка результата не закончена. Не повторяйте выполненные шаги. Попросите ассистента продолжить с уже полученного результата.";
+  const genericBody =
+    locale === "en"
+      ? "The assistant could not get a response from the server."
+      : "Ассистент не получил ответ от сервера.";
+  const genericStep =
+    locale === "en"
+      ? "Check whether a response appeared in the conversation before trying again."
+      : "Перед повторной отправкой проверьте, не появился ли ответ в диалоге.";
+  const alert = page.getByRole("alert");
+  await expect(alert).toHaveCount(1);
+  await expect(alert.getByText(title)).toBeVisible();
+  await expect(alert.getByText(body)).toBeVisible();
+  await expect(page.getByText(genericBody)).toHaveCount(0);
+  await expect(page.getByText(genericStep)).toHaveCount(0);
+  await expect(page.getByText(REVIEW_SENTINEL)).toHaveCount(0);
+  await expect(page.getByTestId("ai-plan")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: locale === "en" ? "Execute" : "Выполнить", exact: true }),
+  ).toHaveCount(0);
+};
+
+test("incomplete review explains itself instead of a generic request failure (en)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const state = await fixture(page, "success", {
+    review: "incomplete",
+    locale: "en",
+  });
+  await page.getByRole("button", { name: "Execute", exact: true }).click();
+  await reviewIncompleteAssertions(page, "en");
+  expect(state.executions()).toBe(1);
+
+  await reloadPlan(page);
+  await reviewIncompleteAssertions(page, "en");
+  expect(state.executions()).toBe(1);
+});
+
+test("incomplete review explains itself instead of a generic request failure (ru, mobile)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const state = await fixture(page, "success", { review: "incomplete" });
+  await page.getByRole("button", { name: "Выполнить", exact: true }).click();
+  await reviewIncompleteAssertions(page, "ru");
+  expect(state.executions()).toBe(1);
+
+  await reloadPlan(page);
+  await reviewIncompleteAssertions(page, "ru");
+  expect(state.executions()).toBe(1);
 });
