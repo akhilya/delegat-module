@@ -14,6 +14,9 @@ namespace Delegat.Infrastructure.Storage;
 /// </summary>
 public class MinIOStorageService : IStorageService
 {
+    /// <summary>Named HttpClient for user-supplied URLs; its handler pins connections to public addresses.</summary>
+    public const string ExternalDownloadHttpClientName = "MinIOExternalDownload";
+
     private readonly IMinioClient _client;
     private readonly IMinioClient _publicClient;
     private readonly string _bucket;
@@ -195,7 +198,7 @@ public class MinIOStorageService : IStorageService
             {
                 await EnsureBucketExistsAsync(ct);
 
-                using var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+                using var httpClient = _httpClientFactory.CreateClient(ExternalDownloadHttpClientName);
 
                 using var response = await httpClient.GetAsync(safeUri, ct);
 
@@ -228,7 +231,7 @@ public class MinIOStorageService : IStorageService
                 await _client.PutObjectAsync(request, ct);
                 return new FileUploadResult(contentType, contentLength);
             }
-            catch (HttpRequestException) when (attempt < maxRetries - 1)
+            catch (HttpRequestException ex) when (attempt < maxRetries - 1 && ex.InnerException is not UnsafeDestinationException)
             {
                 // Network error - retry with backoff
                 var delayMs = baseDelayMs * (int)Math.Pow(2, attempt);
@@ -266,7 +269,7 @@ public class MinIOStorageService : IStorageService
         const int maxRedirects = 5;
         try
         {
-            using var httpClient = _httpClientFactory.CreateClient("MinIOStorage");
+            using var httpClient = _httpClientFactory.CreateClient(ExternalDownloadHttpClientName);
             for (var redirect = 0; redirect <= maxRedirects; redirect++)
             {
                 // Validate every hop; the named client has automatic redirects disabled.

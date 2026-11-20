@@ -518,6 +518,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Security
 
+- Downloads of user-supplied media URLs connect only to the public address that was checked, so a hostname that re-resolves to a private or cloud-metadata address (DNS rebinding) is refused. These downloads ignore system HTTP proxy settings.
 - Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
 - Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.
 - Excel product import (`/products/import-preview`, `/products/import-apply`) rejects oversized workbooks before loading them: uploads are capped at 20 MB, decompressed content at 100 MB, archives at 1,000 entries, and sheets at 1,000,000 cells, 50,000 data rows and 1,000 columns. Crafted zip-bomb spreadsheets now return a 400 error instead of exhausting backend memory.
