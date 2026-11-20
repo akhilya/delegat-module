@@ -281,6 +281,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- AI assistant can create a category, its attributes, and related products in one confirmed plan, without asking for separate confirmation just to obtain new identifiers.
+
+- AI assistant now discovers all supported attribute types even in an empty catalog. Built-in read-only checks no longer need separate approval plans, and plan summaries are kept concise.
+
+- AI provider failures no longer display the generic "stopped without an answer" reply. Concurrent hosted requests have a separate temporary-busy message instead of incorrectly claiming that the monthly quota is exhausted.
+
 - Development: Vite dependency caches are now isolated per checkout, preventing linked node_modules in parallel worktrees from mixing Vue runtime chunks and breaking product forms.
 
 - AI assistant: plans no longer accept misplaced tool arguments that the executor would silently ignore. Generated-file metadata survives history reloads, so a later save request can reuse the existing artifact instead of asking for re-upload or recalculation; permanent saving still requires a separate confirmation.

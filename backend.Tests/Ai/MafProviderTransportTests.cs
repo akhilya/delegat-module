@@ -76,7 +76,9 @@ public partial class MafEngineParityTests
         var error = Assert.Single(events, e => e.Type == SseEventType.Error);
         Assert.Equal(AgentToolResult.ProviderErrorMessage,
             error.Data.GetProperty("message").GetString());
-        Assert.Single(events, e => e.Type == SseEventType.Done);
+        var done = Assert.Single(events, e => e.Type == SseEventType.Done);
+        Assert.True(done.Data.GetProperty("interrupted").GetBoolean());
+        Assert.DoesNotContain(events, e => e.Type == SseEventType.Text);
         var wire = string.Concat(events.Select(e => e.ToSse()));
         Assert.DoesNotContain("wire-secret", wire, StringComparison.Ordinal);
         Assert.DoesNotContain("api.example.test", wire, StringComparison.Ordinal);
@@ -117,7 +119,11 @@ public partial class MafEngineParityTests
         var error = Assert.Single(events, e => e.Type == SseEventType.Error);
         Assert.Equal(AgentToolResult.TurnInterruptedMessage,
             error.Data.GetProperty("message").GetString());
-        Assert.Single(events, e => e.Type == SseEventType.Done);
+        var done = Assert.Single(events, e => e.Type == SseEventType.Done);
+        Assert.True(done.Data.GetProperty("interrupted").GetBoolean());
+        Assert.DoesNotContain("stopped",
+            AiSseTurnRecorder.Fold(events.Select(e => e.ToSse()).ToList()).Content,
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("wire-secret",
             string.Concat(events.Select(e => e.ToSse())), StringComparison.Ordinal);
 

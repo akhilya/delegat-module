@@ -170,7 +170,7 @@ public partial class MafEngineParityTests
     }
 
     [Fact]
-    public async Task ReviewMode_AdvertisesOnlyProposePlan_AndNonPlanCallsGetNotRun()
+    public async Task ReviewMode_AdvertisesBuiltinReadsAndPlan_AndPythonGetsNotRun()
     {
         await using var fixture = await CreateFixtureAsync(
             ToolCall("run_python", "{\"code\":\"print(1)\"}", "python-read"),
@@ -180,7 +180,7 @@ public partial class MafEngineParityTests
             [UserMessage("Review the actual results")], fixture.StoreId, fixture.UserId,
             sessionId: "maf-review", locale: "en", planResultReview: true));
 
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[0].ToolNames);
+        AssertReviewToolNames(fixture.Client.Requests[0].ToolNames);
         Assert.Equal(2, fixture.Client.Requests.Count);
         Assert.Contains("Not run. Execution is already finished",
             LastToolResult(fixture.Client.Requests[1]), StringComparison.Ordinal);
@@ -392,7 +392,7 @@ public partial class MafEngineParityTests
             sessionId: "maf-review-retry", locale: "en", planResultReview: true));
 
         Assert.Equal(2, fixture.Client.Requests.Count);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
+        AssertReviewToolNames(fixture.Client.Requests[1].ToolNames);
         Assert.Contains(AgentChatTurnGate.InvalidPlanText,
             LastToolResult(fixture.Client.Requests[1]), StringComparison.Ordinal);
         var serialized = string.Concat(chunks);
@@ -421,7 +421,7 @@ public partial class MafEngineParityTests
 
         Assert.Equal(3, fixture.Client.Requests.Count);
         Assert.All(fixture.Client.Requests,
-            request => Assert.Equal(["propose_plan"], request.ToolNames));
+            request => AssertReviewToolNames(request.ToolNames));
         var serialized = string.Concat(chunks);
         Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
         Assert.Contains("proposalNonce", serialized, StringComparison.Ordinal);
@@ -829,7 +829,8 @@ public partial class MafEngineParityTests
         bool artifacts = false,
         IHttpClientFactory? pythonHttp = null,
         IChatClient? providerClient = null,
-        AiModelProvider modelProvider = AiModelProvider.Anthropic)
+        AiModelProvider modelProvider = AiModelProvider.Anthropic,
+        RecordingInvoker? requestInvoker = null)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -864,7 +865,7 @@ public partial class MafEngineParityTests
         });
         await db.SaveChangesAsync();
 
-        var invoker = new RecordingInvoker();
+        var invoker = requestInvoker ?? new RecordingInvoker();
         var mafClient = new ScriptedChatClient(responses);
         var factory = new ScriptedRuntimeClientFactory(providerClient ?? mafClient);
         legacyClient ??= new ScriptedAiStreamingClient();
@@ -1103,11 +1104,14 @@ public partial class MafEngineParityTests
         }
     }
 
-    private sealed class RecordingInvoker : ICabinetRequestInvoker
+    private sealed class RecordingInvoker(
+        Func<string, string, JsonElement?, (object Result, string Summary)>? respond = null)
+        : ICabinetRequestInvoker
     {
         public int Calls { get; private set; }
         public string? LastPath { get; private set; }
         public JsonElement? LastBody { get; private set; }
+        public List<(string Method, string Path, JsonElement? Body)> Requests { get; } = [];
 
         public Task<(object result, string summary)> InvokeAsync(
             int storeId,
@@ -1121,7 +1125,9 @@ public partial class MafEngineParityTests
             Calls++;
             LastPath = apiPath;
             LastBody = body?.Clone();
-            return Task.FromResult<(object, string)>((new { ok = true }, "called"));
+            Requests.Add((method, apiPath, body?.Clone()));
+            return Task.FromResult(respond?.Invoke(method, apiPath, LastBody)
+                ?? ((object)new { ok = true }, "called"));
         }
     }
 

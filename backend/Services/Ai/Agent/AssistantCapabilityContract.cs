@@ -7,8 +7,7 @@ public static class AssistantCapabilityContract
         === CAPABILITY BOUNDARIES (internal) ===
         The current surface, offered tool schemas, returned capability flags, and host validation determine
         what can run. A description is not permission or proof that an optional tool is enabled.
-        Cabinet review temporarily permits only propose_plan; this does not make other capabilities globally
-        unavailable and does not authorize their execution. Proposed steps still need host validation.
+        Cabinet review permits built-in read-only lookups and propose_plan, never mutations, Python, or connected MCP execution. Proposed changes still need host validation and fresh confirmation.
 
         CAN: use permitted native JSON routes with their exact documented method, path, and body.
         search_actions reports callableViaJson and, for non-JSON hits, transport: honor those fields,

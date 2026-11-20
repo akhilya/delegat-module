@@ -58,6 +58,21 @@ public partial class MafEngineParityTests
     [Theory]
     [InlineData(AiModelProvider.OpenAiCompatible)]
     [InlineData(AiModelProvider.Anthropic)]
+    public async Task SignedTransport_BusyError_PreservesCodeWithoutProviderRetry(
+        AiModelProvider provider)
+    {
+        var turn = await SignedRunAsync(provider, SignedApiUrl(provider),
+            [(HttpStatusCode.TooManyRequests, SignedBusyBody, "application/json")]);
+
+        Assert.Equal(1, turn.HttpCalls);
+        SignedAssertSnapshot(Assert.Single(turn.Sent), provider);
+        SignedAssertError(turn, "hosted_ai_request_in_progress", 429);
+        Assert.DoesNotContain(turn.Events, e => e.Type == SseEventType.Tool);
+    }
+
+    [Theory]
+    [InlineData(AiModelProvider.OpenAiCompatible)]
+    [InlineData(AiModelProvider.Anthropic)]
     public async Task SignedTransport_QuotaAfterRead_DoesNotRedispatchCompletedTool(
         AiModelProvider provider)
     {
@@ -124,6 +139,8 @@ public partial class MafEngineParityTests
     private const string SignedSecret = "signed-link-test-secret";
     private const string SignedQuotaBody =
         "{\"code\":\"hosted_ai_quota_exceeded\",\"message\":\"wire-secret\"}";
+    private const string SignedBusyBody =
+        "{\"code\":\"hosted_ai_request_in_progress\",\"message\":\"wire-secret\"}";
 
     private sealed record SignedSnapshot(
         string Method, Uri Uri, Dictionary<string, string[]> Headers, byte[] Body);

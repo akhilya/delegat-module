@@ -19,6 +19,8 @@ public static class AssistantBodySchema
         public bool Free { get; init; }
         public Dictionary<string, Shape> Properties { get; init; } = new(StringComparer.OrdinalIgnoreCase);
         public Shape? Item { get; init; }
+        /// <summary>Reflected enum members: name → numeric underlying value.</summary>
+        public IReadOnlyDictionary<string, long>? EnumValues { get; init; }
     }
 
     public sealed record Action(string Method, string Template, string Suffix, Type BodyType, Shape Body);
@@ -65,6 +67,26 @@ public static class AssistantBodySchema
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase);
         var list = string.Join(", ", names);
         return list.Length == 0 ? null : list;
+    }
+
+    /// <summary>
+    /// Deterministic enum member guidance for root body properties, e.g.
+    /// "Allowed type values: Text=0, Number=1, …, File=6." One clause per enum
+    /// property, in declaration order; null when the action has none.
+    /// </summary>
+    internal static string? EnumFieldGuidance(string method, string path)
+    {
+        var action = Match(method, path);
+        if (action == null)
+            return null;
+        var clauses = action.Body.Properties
+            .Where(p => p.Value.EnumValues is { Count: > 0 })
+            .Select(p => $"Allowed {p.Key} values: "
+                + string.Join(", ", p.Value.EnumValues!.Select(v =>
+                    $"{v.Key}={v.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}"))
+                + ".")
+            .ToList();
+        return clauses.Count == 0 ? null : string.Join(' ', clauses);
     }
 
     /// <summary>Bounded DTO field names, excluding selectors and nested item identifiers.</summary>
@@ -239,6 +261,8 @@ public static class AssistantBodySchema
         var itemType = ElementType(type);
         if (itemType != null)
             return new Shape { Item = Build(itemType, depth + 1, stack) };
+        if (type.IsEnum)
+            return new Shape { EnumValues = EnumShape(type) };
         if (depth > 4 || IsScalar(type) || !stack.Add(type))
             return new Shape();
 
@@ -257,6 +281,17 @@ public static class AssistantBodySchema
         }
         stack.Remove(type);
         return shape;
+    }
+
+    private static IReadOnlyDictionary<string, long> EnumShape(Type type)
+    {
+        var names = Enum.GetNames(type);
+        var values = Enum.GetValuesAsUnderlyingType(type);
+        var map = new Dictionary<string, long>(names.Length, StringComparer.Ordinal);
+        for (var i = 0; i < names.Length; i++)
+            map[names[i]] = Convert.ToInt64(
+                values.GetValue(i), System.Globalization.CultureInfo.InvariantCulture);
+        return map;
     }
 
     private static bool IsDictionary(Type type)

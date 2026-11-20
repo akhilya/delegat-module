@@ -65,8 +65,10 @@ internal sealed class MafToolAdapter(AiTool tool, MafTurnState state) : MafAdapt
         var toolName = tool.name;
         var callId = FunctionInvokingChatClient.CurrentContext?.CallContent?.CallId ?? "";
 
-        // Same decision order as the legacy dispatch loop.
-        if (state.ReviewMode)
+        // Same decision order as the legacy dispatch loop. Review admits
+        // built-in read-only lookups; mutations, Python, and connected MCP get
+        // the refusal without dispatching.
+        if (state.ReviewMode && !AgentChatTurnGate.IsReviewToolAllowed(toolName, argsJson))
             return AgentChatTurnGate.ReviewToolNotRun;
 
         // A presented form is turn-terminal: anything after it in the same batch,

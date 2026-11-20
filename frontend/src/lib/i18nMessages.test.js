@@ -382,6 +382,7 @@ describe("locale message catalogs", () => {
       "hosted_ai_unavailable",
       "hosted_ai_provider_unavailable",
       "hosted_ai_request_too_large",
+      "hosted_ai_request_in_progress",
       "review_incomplete",
     ];
 

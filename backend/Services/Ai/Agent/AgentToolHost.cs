@@ -328,7 +328,13 @@ public sealed class AgentToolHost
     internal async Task<GeneratedPlanValidation> ValidatePlanAsync(
         IReadOnlyList<JsonElement> steps, int storeId, int userId, CancellationToken ct)
     {
-        var rejection = Capabilities.PlanStepRejection(steps);
+        // The whole dependency graph is checked before any capability or
+        // side-effect validation; a malformed reference refuses the plan.
+        var referenceRejection = AgentPlanReferences.RejectionReason(steps);
+        if (referenceRejection != null)
+            return new GeneratedPlanValidation(referenceRejection, []);
+
+        var rejection = Capabilities.PlanStepRejection(AgentPlanReferences.ForValidation(steps));
         if (rejection != null)
             return new GeneratedPlanValidation(rejection, []);
 

@@ -61,14 +61,20 @@ public static class AiPrompts
         repeat a create/export, or automatically call Python/MCP/cabinet tools. If side effects or inputs are uncertain,
         explain what must be checked instead of guessing or retrying. Truncated results do not establish a complete list.
         A queued job is not finished work; distinguish enqueuing from completion and refer to Operations.
-        The ONLY permitted tool in this review is propose_plan. All other calls are blocked by the host.
+        Built-in read-only lookups (search_actions, search_knowledge, get_doc, search_catalog,
+        sql_readonly, memory_search, and platform_request GET/HEAD) may run directly in this bounded review.
+        Use only a missing prerequisite or necessary result check; never repeat an unchanged completed lookup.
+        Cabinet mutations, Python, and connected MCP calls still cannot run in review. A correction requires
+        propose_plan and fresh confirmation. Never propose an information-gathering plan when a built-in read exists.
+        If any part of the original request is unfinished, lead with that limitation, not "Done". Continue that
+        unfinished work when its prerequisites can be obtained here; do not ask the user to request it again.
         """;
     /// <summary>
     /// Bump when chat system instructions, tool policy, or tool descriptions/schemas change.
     /// This identifier is logged instead of hashing the rendered prompt, which contains
     /// store/user-specific context.
     /// </summary>
-    public const string ChatPromptVersion = "chat-v20";
+    public const string ChatPromptVersion = "chat-v21";
 
     public record ConnectionInfo(int Id, string Name, string AdapterKey, bool IsActive, DateTime? LastSyncAt);
 
@@ -353,9 +359,17 @@ public static class AiPrompts
         make only the minimum read-only lookup explicitly required by the relevant playbook,
         then call propose_plan by itself. Do not combine a plan with other tools.
         When the helper is on, calculations and computed writes follow the run_python line in TOOLS.
-        After confirm, a plan step may be run_python that applies the change.
+        After confirmation, native cabinet changes run through platform_request, never Python cabinet writes.
 
-        Prefer one required read and a single confirmed write step instead of repeating a write.
+        Gather missing built-in facts before proposing changes, then put the complete requested task in one concise plan.
+        Do not split dependent native creates into separate confirmations just because the new IDs are not known yet.
+        For platform_request steps, use the exact string $step:0.id (zero-based earlier step) as a complete path segment
+        or as an id/…Id body value to use that earlier native POST result's positive integer id. The host resolves only
+        these signed references after success. Example: POST /categories, then POST /categories/$step:0.id/attributes,
+        then POST /products with categoryId "$step:0.id" and attributeValues[].attributeId "$step:1.id".
+        Never invent future IDs, use references outside native request ID positions, or reference a failed/queued step.
+        Use search_actions to learn accepted fields and enum values; existing catalog rows are not the supported type list.
+        Use built-in reads directly, not Python plans for catalog/documentation discovery. Do not repeat an empty lookup.
         Chat attachments are already stored. Decide from
         the user request what to do (put on products, use another way, or ignore). Use the user's
         supplied product or the available catalog lookups to identify a target. If a requested
@@ -400,6 +414,10 @@ public static class AiPrompts
         or claim a value was checked if you did not inspect its source. Put exact identifiers
         and values in step args, not in the visible description. Each step still needs args:
         exact tool arguments (ids, keys, values).
+        Keep a plan summary to one or two short sentences describing the whole intended result; each step is one short sentence.
+        Do not repeat the investigation, quota totals, or identifiers in visible plan prose unless they explain a real blocker.
+        For sample products, omit optional barcodes unless the user requested them. For requested generated barcodes,
+        use the native bulk generator after creation; never guess an EAN checksum.
         After confirm the host runs those args — do not re-run the steps yourself.
         A pending plan is a proposal, not evidence of completion. Do not publish its calculated answer,
         table, counts, or claimed outcome before execution. The post-execution reply must use actual results.

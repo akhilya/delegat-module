@@ -156,7 +156,7 @@ public partial class MafEngineParityTests
             sessionId: "review-third-legacy", locale: "en", planResultReview: true));
 
         Assert.Equal(3, legacy.Requests.Count);
-        Assert.All(legacy.Requests, r => Assert.Equal(["propose_plan"], r.ToolNames));
+        Assert.All(legacy.Requests, r => AssertReviewToolNames(r.ToolNames));
         var wire = string.Concat(events.Select(e => e.ToSse()));
         Assert.Contains("\"type\":\"plan\"", wire, StringComparison.Ordinal);
         Assert.Contains("proposalNonce", wire, StringComparison.Ordinal);
@@ -171,12 +171,10 @@ public partial class MafEngineParityTests
     [InlineData("legacy")]
     public async Task ReviewMode_AllInvalidProposals_EndsAsReviewIncomplete(string? runtime)
     {
-        var responses = new object[]
-        {
-            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-1"),
-            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-2"),
-            ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-3"),
-        };
+        var responses = Enumerable.Range(1, AgentChatTurnGate.ReviewMaxRequests)
+            .Select(i => (object)ToolCall("propose_plan",
+                "{\"summary\":\"\",\"steps\":[]}", $"bad-plan-{i}"))
+            .ToArray();
         var legacy = new ScriptedAiStreamingClient(
             responses.Cast<ChatResponse>().Select(ToLegacyResponse).ToArray());
         await using var fixture = await CreateFixtureCoreAsync(
@@ -188,8 +186,8 @@ public partial class MafEngineParityTests
             sessionId: "review-incomplete", locale: "en", planResultReview: true));
 
         var requests = runtime == null ? fixture.Client.Requests : legacy.Requests;
-        Assert.Equal(3, requests.Count);
-        Assert.All(requests, r => Assert.Equal(["propose_plan"], r.ToolNames));
+        Assert.Equal(AgentChatTurnGate.ReviewMaxRequests, requests.Count);
+        Assert.All(requests, r => AssertReviewToolNames(r.ToolNames));
         Assert.DoesNotContain(events, e => e.Type == SseEventType.Plan);
         var error = Assert.Single(events, e => e.Type == SseEventType.Error);
         Assert.Equal("review_incomplete", error.Data.GetProperty("code").GetString());
@@ -233,7 +231,7 @@ public partial class MafEngineParityTests
             sessionId: "review-form-deferral", locale: "en", planResultReview: true));
         var requests = runtime == null ? fixture.Client.Requests : legacy.Requests;
         Assert.Single(requests);
-        Assert.Equal(["propose_plan"], requests[0].ToolNames);
+        AssertReviewToolNames(requests[0].ToolNames);
         Assert.Single(events, item => item.Type == SseEventType.Plan);
         Assert.DoesNotContain(events, item => item.Type == SseEventType.Tool || item.Type == SseEventType.Error);
         Assert.Equal(0, fixture.Invoker.Calls);
