@@ -49,6 +49,17 @@ public class IntegrationCoordinator
             ? null
             : request.RequestKey.Trim();
 
+        // The dedupe read and the admission transaction must run inside the
+        // execution strategy: retry-enabled providers reject work performed
+        // inside an unmanaged transaction.
+        return await _db.Database.CreateExecutionStrategy().ExecuteAsync(
+            _ => AdmitInnerAsync(request, scopeKey, requestKey, requestHash, ct), ct);
+    }
+
+    private async Task<IntegrationAdmitResult> AdmitInnerAsync(
+        IntegrationAdmitRequest request, string scopeKey, string? requestKey,
+        string requestHash, CancellationToken ct)
+    {
         if (requestKey != null)
         {
             var existing = await _db.integrationCommands

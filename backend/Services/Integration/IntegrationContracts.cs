@@ -100,7 +100,12 @@ public interface IIntegrationStageDispatcher
         DispatchStageRequest request, CancellationToken ct);
 }
 
-/// <summary>Dispatch input handed to the transport seam.</summary>
+/// <summary>
+/// Dispatch input handed to the transport seam. RequestKey is the stable
+/// per-stage idempotency key (command + stage identity): dispatch and the
+/// later confirmation present the same key, so a lost response reconciles
+/// the original request instead of a fresh one.
+/// </summary>
 public sealed record DispatchStageRequest(
     int CommandId,
     string CommandGuid,
@@ -113,7 +118,7 @@ public sealed record DispatchStageRequest(
     string? PayloadFileKey,
     string? ReceiptJson,
     int AttemptNumber,
-    string AttemptRequestKey);
+    string RequestKey);
 
 /// <summary>
 /// The single instance switch for the V1 executor. Bound from the

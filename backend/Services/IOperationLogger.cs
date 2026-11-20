@@ -9,5 +9,14 @@ public interface IOperationLogger
     Task LogAsync(string operationId, int storeId, string level, string message);
     Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed);
     Task FinishAsync(string operationId, int storeId, string status, string? summary = null);
+
+    /// <summary>
+    /// Emits the finish notification only, for callers that already persisted
+    /// the terminal projection themselves. <see cref="FinishAsync"/> sees the
+    /// terminal row and returns before publishing.
+    /// </summary>
+    Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null)
+        => Task.CompletedTask;
+
     Task UpdateStatusAsync(string operationId, int storeId, string status);
 }

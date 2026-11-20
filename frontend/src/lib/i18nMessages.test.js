@@ -323,6 +323,7 @@ describe("locale message catalogs", () => {
       "marketplace_link_not_found",
       "store_attribute_key_used",
       "operation_not_found",
+      "operation_command_unresolved",
       "group_member_not_found",
       "variant_not_found",
       "import_nothing_queued",
