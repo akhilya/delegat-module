@@ -390,6 +390,7 @@ builder.Services.AddSingleton(new Delegat.Services.Integration.IntegrationExecut
         StringComparison.OrdinalIgnoreCase)
 });
 builder.Services.AddScoped<Delegat.Services.Integration.IntegrationCoordinator>();
+builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationScopeAdmission>();
 builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationStageDispatcher,
     Delegat.Services.Integration.NotConfiguredStageDispatcher>();
 builder.Services.AddHostedService<Delegat.Services.Integration.IntegrationExecutionWorker>();

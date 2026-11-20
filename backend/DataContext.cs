@@ -56,6 +56,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<Models.Integration.IntegrationCommand> integrationCommands { get; set; }
     public DbSet<Models.Integration.IntegrationStage> integrationStages { get; set; }
     public DbSet<Models.Integration.IntegrationAttempt> integrationAttempts { get; set; }
+    public DbSet<Models.Integration.IntegrationScopeState> integrationScopeStates { get; set; }
 
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
@@ -275,6 +276,13 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             e.Property(a => a.effectCertainty).HasMaxLength(20);
             e.Property(a => a.responseSummary).HasColumnType("text");
             e.Property(a => a.issuesJson).HasColumnType("text");
+        });
+
+        builder.Entity<Models.Integration.IntegrationScopeState>(e =>
+        {
+            e.HasKey(s => s.scopeKey);
+            e.Property(s => s.scopeKey).HasMaxLength(64);
+            e.Property(s => s.leaseOwner).HasMaxLength(32);
         });
 
         // CategoryAttribute options - use LONGTEXT for large Ozon dictionaries

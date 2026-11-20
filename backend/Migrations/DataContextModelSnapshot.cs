@@ -1428,6 +1428,33 @@ namespace Delegat.Migrations
                     b.ToTable("integrationCommands");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Integration.IntegrationScopeState", b =>
+                {
+                    b.Property<string>("scopeKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("cooldownUntilTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("leaseOwner")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long>("leaseUntilTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("nextStartTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("revision")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("scopeKey");
+
+                    b.ToTable("integrationScopeStates");
+                });
+
             modelBuilder.Entity("Delegat.Models.Integration.IntegrationStage", b =>
                 {
                     b.Property<int>("Id")
