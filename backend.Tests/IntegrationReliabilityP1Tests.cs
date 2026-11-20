@@ -391,6 +391,59 @@ public sealed class IntegrationReliabilityP1Tests
         Assert.Equal(originalSku, reloaded.sku);
     }
 
+    [Fact]
+    public async Task RecreateRestore_CancelledDuringFinalExternalSkuSave_KeepsCommittedReplacement()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var dbGuard = db;
+        await using var keeperGuard = keeper;
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var category = data.AddCategory(store.Id);
+        var product = data.AddProduct(store.Id, categoryId: category.Id, price: 10m);
+        var connection = data.AddConnection(store.Id, adapterKey: "p1-fake");
+        var link = data.AddProductLink(connection.Id, product.Id, externalProductId: "remote-123");
+        await data.SaveAsync();
+        var originalSku = product.sku;
+
+        // Delete+sku and the replacement link already committed; cancellation
+        // interrupts only the final externalSku update save.
+        db.productMarketplaceLinks.Remove(link);
+        product.sku = "TEMP-SKU";
+        var newLink = new ProductMarketplaceLink
+        {
+            productId = product.Id,
+            connectionId = connection.Id,
+            externalProductId = "remote-999",
+            status = ProductMarketplaceStatus.Synced,
+            createdAt = DateTime.UtcNow
+        };
+        db.productMarketplaceLinks.Add(newLink);
+        await db.SaveChangesAsync();
+        product.sku = originalSku;
+        await db.SaveChangesAsync();
+
+        newLink.externalSku = "NEW-SKU";
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => db.SaveChangesAsync(new CancellationToken(canceled: true)));
+
+        var controller = CreateBareController(db, new NoopOperationLogger());
+        await controller.RestoreRecreateLocalStateAsync(
+            link.Id, product.Id, connection.Id, originalSku, "remote-123", link.externalSku);
+
+        var links = await db.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.productId == product.Id && l.connectionId == connection.Id)
+            .ToListAsync();
+        var restored = Assert.Single(links);
+        // The committed replacement stays authoritative; the lost pending
+        // externalSku update is a metadata gap, not a corrupted link.
+        Assert.Equal("remote-999", restored.externalProductId);
+        Assert.Null(restored.externalSku);
+        var reloaded = await db.products.AsNoTracking().SingleAsync(p => p.Id == product.Id);
+        Assert.Equal(originalSku, reloaded.sku);
+    }
+
     private static ProductSyncController CreateBareController(
         DataContext db, IOperationLogger operationLogger) =>
         new(
