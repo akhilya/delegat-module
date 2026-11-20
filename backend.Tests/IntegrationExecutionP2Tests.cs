@@ -3,7 +3,9 @@ using Delegat.Models.Integration;
 using Delegat.Services;
 using Delegat.Services.Integration;
 using Delegat.Tests.Infrastructure;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -132,6 +134,42 @@ public sealed class IntegrationExecutionP2Tests
             db.Entry(unrelated).State);
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.operations.CountAsync());
+    }
+
+    [Fact]
+    public async Task Admit_RestoresForeignPendingInsertAcrossCommitRetry()
+    {
+        // A commit failure after SaveChanges rolls back the transaction but
+        // leaves accepted tracked changes Unchanged. Admission must restore
+        // foreign pending work or the retry (and any later save) loses it.
+        var interceptor = new FailFirstCommitInterceptor();
+        var (db, keeper) = TestDbFactory.CreateSqliteDb(
+            retryingStrategy: true, interceptors: [interceptor]);
+        await using var _ = keeper;
+        var coordinator = CreateCoordinator(db);
+
+        var unrelated = new Delegat.Models.Operation
+        {
+            operationId = "op-unrelated",
+            storeId = 1,
+            authorUserId = 10,
+            type = "catalog-export",
+            title = "Unrelated op",
+            status = "running",
+            createdAt = DateTime.UtcNow
+        };
+        db.operations.Add(unrelated);
+        interceptor.Armed = true;
+
+        var result = await coordinator.AdmitAsync(
+            AdmitRequest(), v1Enabled: true, CancellationToken.None);
+
+        Assert.False(result.IsDuplicate);
+        Assert.Equal(1, await db.integrationCommands.AsNoTracking().CountAsync());
+        Assert.Equal(1, await db.integrationStages.AsNoTracking().CountAsync());
+        // Both the command projection and the foreign insert survived the
+        // first attempt's rollback.
+        Assert.Equal(2, await db.operations.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -695,6 +733,37 @@ public sealed class IntegrationExecutionP2Tests
     }
 
     [Fact]
+    public async Task Worker_LosingFinalizer_DoesNotReannounceFinish()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        var coordinator = CreateCoordinator(db);
+        await coordinator.AdmitAsync(AdmitRequest(), v1Enabled: true, CancellationToken.None);
+
+        var logger = new RecordingOperationLogger();
+        var dispatcher = new FakeDispatcher
+        {
+            // While our stage is still dispatching, a rival worker finalizes
+            // the same command. The loser owns no transition and must not
+            // publish a second finish.
+            DispatchBehavior = async (db2, req) =>
+            {
+                await db2.integrationCommands.ExecuteUpdateAsync(c => c
+                    .SetProperty(x => x.state, IntegrationCommandState.Completed)
+                    .SetProperty(x => x.finishedAt, DateTime.UtcNow));
+                return new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied);
+            },
+            Db = db
+        };
+        await CreateWorker(db, dispatcher, logger)
+            .ProcessDueStagesAsync(CancellationToken.None);
+
+        Assert.Equal("applied", (await db.integrationStages.AsNoTracking().SingleAsync()).state);
+        Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
+        Assert.Empty(logger.FinishedNotifications);
+    }
+
+    [Fact]
     public async Task Worker_StrandedCommand_SweepTransitionsItTerminal()
     {
         var (db, keeper) = TestDbFactory.CreateSqliteDb();
@@ -774,6 +843,31 @@ public sealed class IntegrationExecutionP2Tests
             return Task.CompletedTask;
         }
         public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;
+    }
+
+    /// <summary>Aborts the first transaction commit to simulate a post-accept
+    /// rollback inside a retried execution strategy.</summary>
+    private sealed class FailFirstCommitInterceptor : DbTransactionInterceptor
+    {
+        public bool Armed { get; set; }
+        private int _used;
+
+        public override InterceptionResult TransactionCommitting(
+            DbTransaction transaction, TransactionEventData eventData,
+            InterceptionResult result) => Fail(result);
+
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(
+            DbTransaction transaction, TransactionEventData eventData,
+            InterceptionResult result,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(Fail(result));
+
+        private InterceptionResult Fail(InterceptionResult result)
+        {
+            if (Armed && Interlocked.Exchange(ref _used, 1) == 0)
+                throw new InvalidOperationException("simulated commit failure");
+            return result;
+        }
     }
 
     private sealed class FakeDispatcher : IIntegrationStageDispatcher

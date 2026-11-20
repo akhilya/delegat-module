@@ -421,10 +421,10 @@ public class IntegrationExecutionWorker : BackgroundService
                 var transition = await TransitionCommandIfTerminalAsync(db, command, now, ct);
                 await tx.CommitAsync(ct);
 
-                if (previousState != newState || transition.TerminalState != null)
+                if (previousState != newState || transition?.TerminalState != null)
                     _logger.LogDebug(
                         "Integration stage {StageId} -> {State}, command {CommandId} -> {CommandState}",
-                        stage.Id, newState, command.commandId, transition.TerminalState ?? "open");
+                        stage.Id, newState, command.commandId, transition?.TerminalState ?? "open");
                 return transition;
             }, ct);
 
@@ -487,7 +487,8 @@ public class IntegrationExecutionWorker : BackgroundService
                 return transition;
             });
 
-        await EmitTransitionAsync(operationLogger, command, transition);
+        if (transition != null)
+            await EmitTransitionAsync(operationLogger, command, transition);
     }
 
     private static async Task EmitTransitionAsync(
@@ -523,7 +524,7 @@ public class IntegrationExecutionWorker : BackgroundService
     /// Aggregates item/command state and, on terminal transition, updates the
     /// operation projection inside the same transaction.
     /// </summary>
-    private async Task<CommandTransition> TransitionCommandIfTerminalAsync(
+    private async Task<CommandTransition?> TransitionCommandIfTerminalAsync(
         DataContext db,
         IntegrationCommand command,
         DateTime now,
@@ -598,26 +599,33 @@ public class IntegrationExecutionWorker : BackgroundService
         // All writes go through guarded ExecuteUpdate: the lambda may run inside
         // a retried execution strategy, and tracked mutations accepted by an
         // earlier SaveChanges would silently skip their writes after a rollback,
-        // publishing a finish the projection never committed.
+        // publishing a finish the projection never committed. A zero-row guard
+        // means another worker finalized the command first: it owns the
+        // projection and the finish notification, so the loser returns without
+        // writing or announcing anything.
         if (newState != null)
         {
-            await db.integrationCommands
+            var applied = await db.integrationCommands
                 .Where(c => c.Id == command.Id && OpenCommandStates.Contains(c.state))
                 .ExecuteUpdateAsync(c => c
                     .SetProperty(x => x.state, newState)
                     .SetProperty(x => x.summary, summary)
                     .SetProperty(x => x.finishedAt, (DateTime?)now)
                     .SetProperty(x => x.updatedAt, now), ct);
+            if (applied == 0)
+                return null;
         }
         else
         {
-            await db.integrationCommands
+            var touched = await db.integrationCommands
                 .Where(c => c.Id == command.Id && OpenCommandStates.Contains(c.state))
                 .ExecuteUpdateAsync(c => c
                     .SetProperty(x => x.state, x => x.state == IntegrationCommandState.Admitted
                         ? IntegrationCommandState.Executing
                         : x.state)
                     .SetProperty(x => x.updatedAt, now), ct);
+            if (touched == 0)
+                return null;
         }
 
         // Project into operations inside the same transaction. Counts update

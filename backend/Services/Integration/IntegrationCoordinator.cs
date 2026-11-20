@@ -61,10 +61,10 @@ public class IntegrationCoordinator
         IntegrationAdmitRequest request, string scopeKey, string? requestKey,
         string requestHash, List<object> priorGraph, CancellationToken ct)
     {
-        // A retried strategy attempt leaves its failed graph tracked as pending
-        // inserts; two graphs would race the same request key. Only our own
-        // leftovers are dropped - pending inserts owned by a shared caller
-        // context are not ours to discard.
+        // A retried strategy attempt leaves its failed graph tracked; two
+        // graphs would race the same request key. Only our own leftovers are
+        // dropped - pending inserts owned by a shared caller context are not
+        // ours to discard.
         foreach (var entity in priorGraph)
             _db.Entry(entity).State = EntityState.Detached;
         priorGraph.Clear();
@@ -145,6 +145,13 @@ public class IntegrationCoordinator
         priorGraph.Add(command);
         priorGraph.AddRange(stageEntities);
         priorGraph.Add(operation);
+
+        // Foreign pending changes on a shared context must commit before our
+        // transaction opens. SaveChanges accepts them before commit, so inside
+        // our transaction a rolled-back commit would leave them Unchanged with
+        // no row - and a retry would never rewrite them. Flushed here they
+        // commit under their own implicit transaction instead.
+        await _db.SaveChangesAsync(ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         _db.integrationCommands.Add(command);
