@@ -287,6 +287,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 - AI provider failures no longer display the generic "stopped without an answer" reply. Concurrent hosted requests have a separate temporary-busy message instead of incorrectly claiming that the monthly quota is exhausted.
 
+- AI plans containing malformed Unicode now fail validation safely instead of interrupting the assistant request.
+
 - Development: Vite dependency caches are now isolated per checkout, preventing linked node_modules in parallel worktrees from mixing Vue runtime chunks and breaking product forms.
 
 - AI assistant: plans no longer accept misplaced tool arguments that the executor would silently ignore. Generated-file metadata survives history reloads, so a later save request can reuse the existing artifact instead of asking for re-upload or recalculation; permanent saving still requires a separate confirmation.

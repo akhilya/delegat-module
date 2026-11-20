@@ -306,6 +306,72 @@ public class AgentPlanReferencesTests
                 1, [Result(new { id = 5 })]));
     }
 
+    /// <summary>
+    /// JsonDocument stores escaped lone surrogates but GetString throws while
+    /// scanning; the graph check must fail closed with the same structured
+    /// artifact code the dispatch guard produces, not escape the validation.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"tool":"run_python","args":{"code":"print(1)","outputs":[{"fileName":"\ud800.csv"}]}}""")]
+    [InlineData("""{"tool":"platform_request","args":{"method":"GET","path":"/products/\ud800"}}""")]
+    [InlineData("""{"tool":"\ud800x","args":{"method":"GET","path":"/products"}}""")]
+    [InlineData("""{"tool":"run_python","description":"note \ud800","args":{"code":"x"}}""")]
+    [InlineData("""{"tool":"run_python","args":{"code":"x","tag":"\udc00"}}""")]
+    public void RejectionReason_LoneSurrogate_ReturnsStructuredRejection(string stepJson)
+    {
+        var steps = new List<JsonElement>
+        {
+            JsonDocument.Parse(stepJson).RootElement.Clone(),
+        };
+        var rejection = AgentPlanReferences.RejectionReason(steps);
+        Assert.NotNull(rejection);
+        Assert.Contains("ai_artifact_invalid_request", rejection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PairedSurrogateTextAndEscapedMarker_StillValidateAndResolve()
+    {
+        var steps = new List<JsonElement>
+        {
+            JsonDocument.Parse(
+                """{"tool":"platform_request","args":{"method":"POST","path":"/categories","body":{"name":"Café 😀"}}}""")
+                .RootElement.Clone(),
+            JsonDocument.Parse(
+                """{"tool":"platform_request","args":{"method":"POST","path":"/products","body":{"name":"ok 😀","categoryId":"$step:0.id"}}}""")
+                .RootElement.Clone(),
+        };
+
+        // A $ written as the JSON escape \u0024 decodes to the same marker.
+        var escapedSteps = new List<JsonElement>
+        {
+            steps[0].Clone(),
+            JsonDocument.Parse(
+                """{"tool":"platform_request","args":{"method":"POST","path":"/products","body":{"categoryId":"\u0024step:0.id"}}}""")
+                .RootElement.Clone(),
+        };
+        Assert.Null(AgentPlanReferences.RejectionReason(escapedSteps));
+        var escapedResolved = AgentPlanReferences.ResolveArguments(
+            "platform_request",
+            escapedSteps[1].GetProperty("args").GetRawText(),
+            1, [Result(new { id = 7 })]);
+        using var escapedDoc = JsonDocument.Parse(escapedResolved);
+        Assert.Equal(7, escapedDoc.RootElement.GetProperty("body")
+            .GetProperty("categoryId").GetInt32());
+
+        Assert.Null(AgentPlanReferences.RejectionReason(steps));
+        var forValidation = AgentPlanReferences.ForValidation(steps);
+        Assert.Equal(1, forValidation[1].GetProperty("args").GetProperty("body")
+            .GetProperty("categoryId").GetInt32());
+
+        var resolved = AgentPlanReferences.ResolveArguments(
+            "platform_request",
+            steps[1].GetProperty("args").GetRawText(),
+            1, [Result(new { id = 7 })]);
+        using var doc = JsonDocument.Parse(resolved);
+        Assert.Equal(7, doc.RootElement.GetProperty("body").GetProperty("categoryId").GetInt32());
+        Assert.Equal("ok \U0001F600", doc.RootElement.GetProperty("body").GetProperty("name").GetString());
+    }
+
     [Fact]
     public void ResolveArguments_MalformedMarkerRefuses()
     {
