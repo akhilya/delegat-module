@@ -25,6 +25,7 @@ If sources disagree, trust verified implementation and its contract tests; updat
 - [Product files and marketplace media](platform/media.md) — File attributes, mixed galleries, Yandex durable video grants, and adapter verification status
 - [Releasing](platform/releasing.md) — `VERSION`, `CHANGELOG.md`, SemVer, release process
 - [Adapter HTTP log operations](operations/adapter-http-logs.md) — retention policy, performance/root-cause review, deployment verification, and safe space reclamation
+- [Integration reliability audit (2026-11-20)](architecture/integration-reliability-audit.md) — source-reviewed failure paths, verification evidence, and a proposed remediation sequence; not a live incident attribution
 - [Catalog database operations](operations/catalog-database.md) — query shape, transaction boundaries, index rollout, and latency verification under background load
 - [SaaS distribution architecture](architecture/saas-architecture.md) — **technical draft**; provisioning and Control Plane product decisions are maintained in the sibling repo
 - [Platform Link](platform/platform-link.md) — instance client notes; Control Plane contract is maintained in the sibling repo
