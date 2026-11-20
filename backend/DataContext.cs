@@ -52,6 +52,11 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<MarketplaceOrder> marketplaceOrders { get; set; }
     public DbSet<MarketplaceOrderSyncState> marketplaceOrderSyncStates { get; set; }
 
+    // Durable integration executor (V1)
+    public DbSet<Models.Integration.IntegrationCommand> integrationCommands { get; set; }
+    public DbSet<Models.Integration.IntegrationStage> integrationStages { get; set; }
+    public DbSet<Models.Integration.IntegrationAttempt> integrationAttempts { get; set; }
+
     // Auth
     public DbSet<RefreshToken> refreshTokens { get; set; }
     public DbSet<UserApiKey> userApiKeys { get; set; }
@@ -211,6 +216,65 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         // Index for COUNT(*) per categoryMappingId in GetMappings - without this EF does a full table scan per mapping
         builder.Entity<ProductMarketplaceLink>()
             .HasIndex(l => l.categoryMappingId);
+
+        // Durable integration executor (V1)
+        builder.Entity<Models.Integration.IntegrationCommand>(e =>
+        {
+            e.HasIndex(c => c.commandId).IsUnique();
+            e.HasIndex(c => c.operationId);
+            // Request keys deduplicate inside one admission scope; multiple NULLs allowed
+            e.HasIndex(c => new { c.scopeKey, c.requestKey }).IsUnique();
+            e.HasIndex(c => new { c.storeId, c.state });
+            e.Property(c => c.commandId).HasMaxLength(64);
+            e.Property(c => c.operationId).HasMaxLength(64);
+            e.Property(c => c.scopeKey).HasMaxLength(200);
+            e.Property(c => c.kind).HasMaxLength(50);
+            e.Property(c => c.requestKey).HasMaxLength(200);
+            e.Property(c => c.requestHash).HasMaxLength(64);
+            e.Property(c => c.state).HasMaxLength(20);
+            e.Property(c => c.inputJson).HasColumnType("longtext");
+            e.Property(c => c.summary).HasColumnType("text");
+        });
+
+        builder.Entity<Models.Integration.IntegrationStage>(e =>
+        {
+            e.HasIndex(s => new { s.commandId, s.itemKey, s.stageKey }).IsUnique();
+            // Worker polling: due ready/deferred stages and confirmation follow-ups
+            e.HasIndex(s => new { s.state, s.nextCheckAt });
+            e.HasIndex(s => s.claimedUntil);
+            e.Property(s => s.itemKey).HasMaxLength(200);
+            e.Property(s => s.stageKey).HasMaxLength(200);
+            e.Property(s => s.kind).HasMaxLength(50);
+            e.Property(s => s.batchKey).HasMaxLength(200);
+            e.Property(s => s.state).HasMaxLength(20);
+            e.Property(s => s.claimedBy).HasMaxLength(100);
+            e.Property(s => s.payloadJson).HasColumnType("longtext");
+            e.Property(s => s.payloadFileKey).HasMaxLength(500);
+            e.Property(s => s.dependsOnJson).HasColumnType("text");
+            e.Property(s => s.receiptJson).HasColumnType("text");
+            e.Property(s => s.evidenceJson).HasColumnType("text");
+            e.Property(s => s.issuesJson).HasColumnType("text");
+            e.HasOne(s => s.command)
+                .WithMany()
+                .HasForeignKey(s => s.commandId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Models.Integration.IntegrationAttempt>(e =>
+        {
+            e.HasIndex(a => a.requestKey).IsUnique();
+            e.HasIndex(a => new { a.stageId, a.attemptNumber }).IsUnique();
+            e.HasIndex(a => a.commandId);
+            e.HasIndex(a => a.dispatchId);
+            e.Property(a => a.stageKey).HasMaxLength(200);
+            e.Property(a => a.dispatchId).HasMaxLength(64);
+            e.Property(a => a.requestKey).HasMaxLength(200);
+            e.Property(a => a.requestHash).HasMaxLength(64);
+            e.Property(a => a.outcome).HasMaxLength(30);
+            e.Property(a => a.effectCertainty).HasMaxLength(20);
+            e.Property(a => a.responseSummary).HasColumnType("text");
+            e.Property(a => a.issuesJson).HasColumnType("text");
+        });
 
         // CategoryAttribute options - use LONGTEXT for large Ozon dictionaries
         builder.Entity<CategoryAttribute>()
