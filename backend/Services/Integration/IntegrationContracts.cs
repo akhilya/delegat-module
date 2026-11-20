@@ -118,7 +118,10 @@ public sealed record DispatchStageRequest(
     string? PayloadFileKey,
     string? ReceiptJson,
     int AttemptNumber,
-    string RequestKey);
+    string RequestKey)
+{
+    internal IntegrationTransportAttempt? TransportAttempt { get; init; }
+}
 
 /// <summary>
 /// The single instance switch for the V1 executor. Bound from the
@@ -130,8 +133,8 @@ public sealed class IntegrationExecutionOptions
 }
 
 /// <summary>
-/// P2 placeholder dispatcher: transport is wired in P3. Reports Unknown so an
-/// effect is never presumed, and never sends HTTP. Nothing admits commands
+/// Placeholder for stages without a bound adapter recipe. Reports Unknown so
+/// an effect is never presumed, and never sends HTTP. Nothing admits commands
 /// while IntegrationExecutionV1 is off, so this is unreachable in production.
 /// </summary>
 public sealed class NotConfiguredStageDispatcher : IIntegrationStageDispatcher

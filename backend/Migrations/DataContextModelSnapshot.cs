@@ -1304,6 +1304,9 @@ namespace Delegat.Migrations
                     b.Property<string>("responseSummary")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("sendAuthorizedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("stageId")
                         .HasColumnType("int");
 

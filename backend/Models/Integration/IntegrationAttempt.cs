@@ -27,6 +27,9 @@ public class IntegrationAttempt
     /// <summary>Hash of the exact payload sent.</summary>
     public string requestHash { get; set; } = null!;
 
+    /// <summary>Durable permission consumed before one effectful send. Does not prove delivery.</summary>
+    public DateTime? sendAuthorizedAt { get; set; }
+
     /// <summary>
     /// Recorded outcome kind, or null while the dispatch result is not yet
     /// recorded (crash or lost response). Never treat null as "not sent".

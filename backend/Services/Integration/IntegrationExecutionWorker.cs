@@ -258,7 +258,11 @@ public class IntegrationExecutionWorker : BackgroundService
             command.Id, command.commandId, command.kind,
             stage.Id, stage.itemKey, stage.stageKey, stage.kind,
             stage.payloadJson, stage.payloadFileKey, stage.receiptJson,
-            attemptNumber, dispatchId);
+            attemptNumber, dispatchId)
+        {
+            TransportAttempt = new(command.Id, stage.Id, attempt.Id, expectedClaimVersion + 1,
+                isDispatch && stage.isEffectful, new DateTimeOffset(now + ClaimLease))
+        };
 
         IntegrationDispatchResult result;
         try

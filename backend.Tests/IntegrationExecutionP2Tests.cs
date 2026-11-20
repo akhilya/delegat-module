@@ -235,9 +235,14 @@ public sealed class IntegrationExecutionP2Tests
             DispatchBehavior = async (db2, req) =>
             {
                 // Attempt evidence must be committed before the provider call.
-                var attemptExists = await db2.integrationAttempts
-                    .AnyAsync(a => a.requestKey == req.RequestKey);
-                Assert.True(attemptExists, "attempt row must exist before dispatch");
+                var attempt = await db2.integrationAttempts.AsNoTracking()
+                    .SingleAsync(a => a.requestKey == req.RequestKey);
+                var stage = await db2.integrationStages.AsNoTracking()
+                    .SingleAsync(s => s.Id == attempt.stageId);
+                Assert.NotNull(req.TransportAttempt);
+                Assert.Equal(attempt.Id, req.TransportAttempt.AttemptId);
+                Assert.Equal(stage.claimVersion, req.TransportAttempt.ClaimVersion);
+                Assert.True(req.TransportAttempt.AllowEffects);
                 return new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied);
             },
             Db = db

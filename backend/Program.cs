@@ -391,6 +391,16 @@ builder.Services.AddSingleton(new Delegat.Services.Integration.IntegrationExecut
 });
 builder.Services.AddScoped<Delegat.Services.Integration.IntegrationCoordinator>();
 builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationScopeAdmission>();
+builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationHttpTransport>();
+builder.Services.AddHttpClient(Delegat.Services.Integration.IntegrationHttpTransport.ClientName,
+        client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        ActivityHeadersPropagator = null
+    })
+    .RemoveAllLoggers();
 builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationStageDispatcher,
     Delegat.Services.Integration.NotConfiguredStageDispatcher>();
 builder.Services.AddHostedService<Delegat.Services.Integration.IntegrationExecutionWorker>();
