@@ -281,6 +281,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Marketplace export operations no longer finish early while item retries are still pending, combine queued products from different operations into one adapter call, report a successful product export when a follow-up price or stock update was rejected, or accept missing, duplicate, or foreign bulk item results as authoritative.
+
 - AI assistant can create a category, its attributes, and related products in one confirmed plan, without asking for separate confirmation just to obtain new identifiers.
 
 - AI assistant now discovers all supported attribute types even in an empty catalog. Built-in read-only checks no longer need separate approval plans, and plan summaries are kept concise.
@@ -517,6 +519,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Unused `PageHeader` primitive — page titles are the navbar trail
 
 ### Security
+
+- Adapter HTTP diagnostics now mask `X-Delegat-Api-Key` at both the SDK capture boundary and host persistence boundary, matching the existing handling of `Authorization` and other credential headers.
 
 - Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
 - Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.

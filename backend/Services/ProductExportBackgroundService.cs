@@ -67,7 +67,7 @@ public class ProductExportBackgroundService : BackgroundService
         _logger.LogInformation("ProductExportBackgroundService stopped");
     }
 
-    private async Task ProcessPendingExportsAsync(CancellationToken ct)
+    internal async Task ProcessPendingExportsAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<DataContext>();
@@ -95,16 +95,25 @@ public class ProductExportBackgroundService : BackgroundService
             pendingExports.Count,
             string.Join(", ", pendingExports.Select(p => $"{p.Id}:{p.productId}")));
 
-        // Group pending items by connectionId
-        var grouped = pendingExports.GroupBy(p => p.connectionId).ToList();
+        // Rows from different operations must not share one adapter call or one
+        // finalization path. Unbatched rows are an operation of their own.
+        var grouped = pendingExports
+            .GroupBy(p => new { p.connectionId, BatchKey = p.batchId ?? $"queue:{p.Id}" })
+            .ToList();
 
         foreach (var group in grouped)
         {
             if (ct.IsCancellationRequested)
                 break;
 
-            var connectionId = group.Key;
-            var groupItems = group.ToList();
+            var connectionId = group.Key.connectionId;
+            var groupItems = group
+                .Where(p => p.status == ProductExportStatus.Pending
+                    || p.status == ProductExportStatus.InProgress
+                    || (p.status == ProductExportStatus.Failed && p.retryCount < PendingProductExport.MAX_RETRIES))
+                .ToList();
+            if (groupItems.Count == 0)
+                continue;
 
             var batchId = groupItems.FirstOrDefault(i => i.batchId != null)?.batchId;
             if (batchId != null
@@ -192,8 +201,10 @@ public class ProductExportBackgroundService : BackgroundService
         }
         await context.SaveChangesAsync(ct);
 
-        var productIds = pendingItems.Select(p => p.productId).ToList();
-        var pendingByProductId = pendingItems.ToDictionary(p => p.productId, p => p);
+        var productIds = pendingItems.Select(p => p.productId).Distinct().ToList();
+        var pendingByProductId = pendingItems
+            .GroupBy(p => p.productId)
+            .ToDictionary(g => g.Key, g => g.ToList());
         var firstItem = pendingItems.First();
 
         _logger.LogInformation(
@@ -237,57 +248,64 @@ public class ProductExportBackgroundService : BackgroundService
                 .GroupBy(r => r.ProductId)
                 .Select(g => g.FirstOrDefault(x => x.IsSuccess) ?? g.Last()))
             {
-                if (!pendingByProductId.TryGetValue(itemResult.ProductId, out var pending))
+                if (!pendingByProductId.TryGetValue(itemResult.ProductId, out var matchingItems))
                     continue;
 
-                if (itemResult.IsSuccess)
+                foreach (var pending in matchingItems)
                 {
-                    pending.status = ProductExportStatus.Completed;
-                    pending.completedAt = DateTime.UtcNow;
-                    pending.externalProductId = itemResult.ExternalProductId;
-                    pending.lastError = null;
-
-                    _logger.LogDebug(
-                        "Bulk: exported product {ProductId} -> External={ExternalId}",
-                        pending.productId, itemResult.ExternalProductId);
-
-                    if (pending.batchId != null)
+                    if (itemResult.IsSuccess)
                     {
-                        var line = $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}";
-                        if (string.IsNullOrWhiteSpace(itemResult.ErrorMessage))
-                            await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success", line);
-                        else
-                            await _operationLogger.LogAsync(pending.batchId, pending.storeId, "warning",
-                                $"{line}. {itemResult.ErrorMessage}");
+                        pending.status = ProductExportStatus.Completed;
+                        pending.completedAt = DateTime.UtcNow;
+                        pending.externalProductId = itemResult.ExternalProductId;
+                        pending.lastError = null;
+
+                        _logger.LogDebug(
+                            "Bulk: exported product {ProductId} -> External={ExternalId}",
+                            pending.productId, itemResult.ExternalProductId);
+
+                        if (pending.batchId != null)
+                        {
+                            var line = $"Exported: {OperationProductRef.Format(pending.productId, pending.productName)}";
+                            if (string.IsNullOrWhiteSpace(itemResult.ErrorMessage))
+                                await _operationLogger.LogAsync(pending.batchId, pending.storeId, "success", line);
+                            else
+                                await _operationLogger.LogAsync(pending.batchId, pending.storeId, "warning",
+                                    $"{line}. {itemResult.ErrorMessage}");
+                        }
                     }
-                }
-                else
-                {
-                    pending.status = ProductExportStatus.Failed;
-                    pending.lastError = itemResult.ErrorMessage ?? "Unknown error";
-
-                    if (!itemResult.Retryable || IsPermanentError(pending.lastError))
+                    else
                     {
-                        pending.retryCount = PendingProductExport.MAX_RETRIES;
-                        if (IsPermanentError(pending.lastError))
-                            await CancelRemainingExportsAsync(context, pending, ct);
-                    }
+                        pending.status = ProductExportStatus.Failed;
+                        pending.lastError = itemResult.ErrorMessage ?? "Unknown error";
 
-                    _logger.LogWarning(
-                        "Bulk: failed to export product {ProductId}: {Error}",
-                        pending.productId, pending.lastError);
+                        if (!itemResult.Retryable || IsPermanentError(pending.lastError))
+                        {
+                            pending.retryCount = PendingProductExport.MAX_RETRIES;
+                            if (IsPermanentError(pending.lastError))
+                                await CancelRemainingExportsAsync(context, pending, ct);
+                        }
 
-                    if (pending.batchId != null)
-                    {
-                        var subject = OperationProductRef.Format(pending.productId, pending.productName);
-                        var line = itemResult.Retryable
-                            ? $"Error: {subject} - {pending.lastError}"
-                            : $"{subject} - {pending.lastError}";
-                        await _operationLogger.LogAsync(
-                            pending.batchId, pending.storeId, itemResult.Retryable ? "error" : "warning", line);
+                        _logger.LogWarning(
+                            "Bulk: failed to export product {ProductId}: {Error}",
+                            pending.productId, pending.lastError);
+
+                        if (pending.batchId != null)
+                        {
+                            var subject = OperationProductRef.Format(pending.productId, pending.productName);
+                            var line = itemResult.Retryable
+                                ? $"Error: {subject} - {pending.lastError}"
+                                : $"{subject} - {pending.lastError}";
+                            await _operationLogger.LogAsync(
+                                pending.batchId, pending.storeId, itemResult.Retryable ? "error" : "warning", line);
+                        }
                     }
                 }
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -327,16 +345,27 @@ public class ProductExportBackgroundService : BackgroundService
                 .ToListAsync(ct);
             var total = batchItems.Count;
             var completed = batchItems.Count(p => p.status == ProductExportStatus.Completed);
-            var failed = batchItems.Count(p => p.status == ProductExportStatus.Failed);
+            var failed = batchItems.Count(IsTerminalFailure);
+            var cancelled = batchItems.Count(p => p.status == ProductExportStatus.Cancelled);
             await _operationLogger.ProgressAsync(firstItem.batchId, firstItem.storeId, total, completed, failed);
 
-            var pending = total - completed - failed;
+            var pending = total - completed - failed - cancelled;
             if (pending == 0)
-                await _operationLogger.FinishAsync(firstItem.batchId, firstItem.storeId,
-                    failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+            {
+                var status = failed > 0
+                    ? (completed == 0 && cancelled == 0 ? "failed" : "partial")
+                    : (cancelled > 0
+                        ? (completed == 0 ? "cancelled" : "partial")
+                        : "completed");
+                await _operationLogger.FinishAsync(firstItem.batchId, firstItem.storeId, status,
                     $"Exported: {completed} succeeded, {failed} failed");
+            }
         }
     }
+
+    private static bool IsTerminalFailure(PendingProductExport item) =>
+        item.status == ProductExportStatus.Failed &&
+        item.retryCount >= PendingProductExport.MAX_RETRIES;
 
     private async Task CancelRemainingExportsAsync(
         DataContext context,
@@ -458,13 +487,20 @@ public class ProductExportBackgroundService : BackgroundService
                     .ToListAsync(ct);
                 var total = batchItems.Count;
                 var completed = batchItems.Count(p => p.status == ProductExportStatus.Completed);
-                var failed = batchItems.Count(p => p.status == ProductExportStatus.Failed);
+                var failed = batchItems.Count(IsTerminalFailure);
+                var cancelled = batchItems.Count(p => p.status == ProductExportStatus.Cancelled);
                 await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
-                if (total == completed + failed)
-                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
-                        failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+                if (total == completed + failed + cancelled)
+                {
+                    var status = failed > 0
+                        ? (completed == 0 && cancelled == 0 ? "failed" : "partial")
+                        : (cancelled > 0
+                            ? (completed == 0 ? "cancelled" : "partial")
+                            : "completed");
+                    await _operationLogger.FinishAsync(pending.batchId, pending.storeId, status,
                         $"Exported: {completed} succeeded, {failed} failed");
+                }
             }
 
             _logger.LogInformation(
@@ -472,6 +508,10 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.Id, pending.productId, pending.status);
 
             return IsPermanentError(pending.lastError);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
