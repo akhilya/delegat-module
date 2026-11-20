@@ -382,6 +382,18 @@ builder.Services.AddHostedService<QueueCleanupBackgroundService>();
 builder.Services.AddHostedService<Delegat.Services.ScheduledTasks.ScheduledTaskBackgroundService>();
 builder.Services.AddHostedService<OrderSyncBackgroundService>();
 
+// Durable integration executor (V1). Admission stays disabled until
+// IntegrationExecutionV1 is enabled; the worker is a no-op while no commands exist.
+builder.Services.AddSingleton(new Delegat.Services.Integration.IntegrationExecutionOptions
+{
+    Enabled = string.Equals(builder.Configuration["IntegrationExecutionV1"], "true",
+        StringComparison.OrdinalIgnoreCase)
+});
+builder.Services.AddScoped<Delegat.Services.Integration.IntegrationCoordinator>();
+builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationStageDispatcher,
+    Delegat.Services.Integration.NotConfiguredStageDispatcher>();
+builder.Services.AddHostedService<Delegat.Services.Integration.IntegrationExecutionWorker>();
+
 if (builder.Environment.IsDevelopment())
     builder.Services.AddHostedService<ViteDevServerHostedService>();
 

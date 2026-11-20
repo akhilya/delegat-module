@@ -16,17 +16,20 @@ public class OperationsController : ControllerBase
     private readonly ICurrentUserService _currentUserService;
     private readonly IOperationLogger _operationLogger;
     private readonly IStorageService _storageService;
+    private readonly Delegat.Services.Integration.IntegrationCoordinator _integrationCoordinator;
 
     public OperationsController(
         DataContext context,
         ICurrentUserService currentUserService,
         IOperationLogger operationLogger,
-        IStorageService storageService)
+        IStorageService storageService,
+        Delegat.Services.Integration.IntegrationCoordinator integrationCoordinator)
     {
         _context = context;
         _currentUserService = currentUserService;
         _operationLogger = operationLogger;
         _storageService = storageService;
+        _integrationCoordinator = integrationCoordinator;
     }
 
     [HttpGet]
@@ -284,6 +287,15 @@ public class OperationsController : ControllerBase
         if (op == null) return NotFound();
         if (!OperationLifecycle.IsActive(op.status))
             return BadRequest(new { message = "Operation has already finished" });
+
+        // Coordinator-owned operations stop through the durable executor:
+        // the flag prevents new stage writes while in-flight effects are
+        // still confirmed. The cancelled projection stays sticky.
+        if (await _integrationCoordinator.RequestStopByOperationIdAsync(operationId, ct))
+        {
+            await _operationLogger.FinishAsync(operationId, op.storeId, "cancelled", "Stopped");
+            return Ok(new { status = "cancelled" });
+        }
 
         var summary = op.totalItems is > 0
             ? $"Stopped. Completed: {op.completedItems}, errors: {op.failedItems}"
@@ -649,6 +661,11 @@ public class OperationsController : ControllerBase
             .Select(x => x.operationId)
             .ToListAsync(ct);
 
+        // Projections of unresolved durable commands survive history clears.
+        var blocked = await _integrationCoordinator.GetUnresolvedOperationIdsAsync(operationIds, ct);
+        if (blocked.Count > 0)
+            operationIds = operationIds.Where(id => !blocked.Contains(id)).ToList();
+
         if (operationIds.Count == 0) return 0;
 
         await _context.operationLogEntries
@@ -725,6 +742,15 @@ public class OperationsController : ControllerBase
         if (op == null)
             return NotFound();
 
+        // An unresolved durable command owns its projection; deleting it would
+        // hide live effect evidence from operators.
+        if (await _integrationCoordinator.IsUnresolvedCommandOperationAsync(operationId, ct))
+            return Conflict(new
+            {
+                message = "Operation is backed by an unresolved integration command and cannot be deleted",
+                code = "operation_command_unresolved"
+            });
+
         // Delete logs first (FK)
         await _context.operationLogEntries
             .Where(e => e.operationId == operationId)
@@ -747,13 +773,19 @@ public class OperationsController : ControllerBase
         if (operationIds == null || operationIds.Count == 0)
             return NoContent();
 
+        // Projections of unresolved durable commands survive bulk history deletes.
+        var blocked = await _integrationCoordinator.GetUnresolvedOperationIdsAsync(operationIds, ct);
+        var deletable = operationIds.Where(id => !blocked.Contains(id)).ToList();
+        if (deletable.Count == 0)
+            return NoContent();
+
         // Delete logs first (FK)
         await _context.operationLogEntries
-            .Where(e => operationIds.Contains(e.operationId))
+            .Where(e => deletable.Contains(e.operationId))
             .ExecuteDeleteAsync(ct);
 
         await _context.operations
-            .Where(o => operationIds.Contains(o.operationId) && o.storeId == storeId.Value)
+            .Where(o => deletable.Contains(o.operationId) && o.storeId == storeId.Value)
             .ExecuteDeleteAsync(ct);
 
         return NoContent();

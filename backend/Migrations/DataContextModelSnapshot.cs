@@ -1255,6 +1255,273 @@ namespace Delegat.Migrations
                     b.ToTable("instancePublicApiSettings");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Integration.IntegrationAttempt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("attemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int>("commandId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("completedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("dispatchId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("effectCertainty")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("issuesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("outcome")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("requestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("requestKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("responseSummary")
+                        .HasColumnType("text");
+
+                    b.Property<int>("stageId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("stageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("commandId");
+
+                    b.HasIndex("dispatchId");
+
+                    b.HasIndex("requestKey")
+                        .IsUnique();
+
+                    b.HasIndex("stageId", "attemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("integrationAttempts");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Integration.IntegrationCommand", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("authorApiKeyId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("authorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("commandId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int?>("connectionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("inputJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("inputVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("kind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("operationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("recipeVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("requestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("requestKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("scopeKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("state")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<bool>("stopRequested")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("summary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("title")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("commandId")
+                        .IsUnique();
+
+                    b.HasIndex("operationId");
+
+                    b.HasIndex("scopeKey", "requestKey")
+                        .IsUnique();
+
+                    b.HasIndex("storeId", "state");
+
+                    b.ToTable("integrationCommands");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Integration.IntegrationStage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("attemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("batchKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("claimVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("claimedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("claimedUntil")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("commandId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("dependsOnJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("evidenceJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("finishedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("isEffectful")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("issuesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("itemKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("kind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("nextCheckAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("payloadFileKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("payloadJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("position")
+                        .HasColumnType("int");
+
+                    b.Property<string>("receiptJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("stageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("state")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime>("updatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("claimedUntil");
+
+                    b.HasIndex("state", "nextCheckAt");
+
+                    b.HasIndex("commandId", "itemKey", "stageKey")
+                        .IsUnique();
+
+                    b.ToTable("integrationStages");
+                });
+
             modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
                 {
                     b.Property<int>("Id")
@@ -4095,6 +4362,17 @@ namespace Delegat.Migrations
                     b.Navigation("file");
 
                     b.Navigation("product");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Integration.IntegrationStage", b =>
+                {
+                    b.HasOne("Delegat.Models.Integration.IntegrationCommand", "command")
+                        .WithMany()
+                        .HasForeignKey("commandId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("command");
                 });
 
             modelBuilder.Entity("Delegat.Models.InvitationToken", b =>
