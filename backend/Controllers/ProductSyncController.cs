@@ -277,7 +277,7 @@ public class ProductSyncController : ControllerBase
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             await _operationLogger.FinishAsync(operationId, storeId, "failed",
-                "Export was interrupted before the marketplace responded; the remote outcome is unknown - verify the product before retrying.");
+                "Export was interrupted before it finished; the remote outcome is unknown - verify the product before retrying.");
             throw;
         }
 
@@ -2990,7 +2990,8 @@ public class ProductSyncController : ControllerBase
         {
             // Restore local state with an uncancelled token, then let the
             // cancellation propagate instead of turning it into a 400.
-            await RestoreLocalStateAsync();
+            await RestoreRecreateLocalStateAsync(
+                linkId, productId, connectionId, originalSku, oldExternalProductId, oldExternalSku);
             throw;
         }
         catch (ApiException)
@@ -3001,39 +3002,56 @@ public class ProductSyncController : ControllerBase
         {
             // Critical failure - try to restore
             _logger.LogError(ex, "Recreate product failed for link {LinkId}", linkId);
-            await RestoreLocalStateAsync();
+            await RestoreRecreateLocalStateAsync(
+                linkId, productId, connectionId, originalSku, oldExternalProductId, oldExternalSku);
             throw ApiException.BadRequest($"Failed to recreate: {ex.Message}");
         }
+    }
 
-        async Task RestoreLocalStateAsync()
+    /// <summary>
+    /// Best-effort restore of local state after a failed or cancelled recreate.
+    /// Changes from an interrupted save stay tracked by the request context
+    /// (e.g. a link deletion that never committed); without clearing them the
+    /// recovery save would flush the pending delete/insert and could erase the
+    /// link it is meant to restore or collide on the unique index.
+    /// </summary>
+    internal async Task RestoreRecreateLocalStateAsync(
+        int linkId,
+        int productId,
+        int connectionId,
+        string? originalSku,
+        string oldExternalProductId,
+        string? oldExternalSku)
+    {
+        try
         {
-            try
+            _context.ChangeTracker.Clear();
+
+            var product = await _context.products.FindAsync(new object[] { productId }, CancellationToken.None);
+            if (product != null && originalSku != null && product.sku != originalSku)
             {
-                var product = await _context.products.FindAsync(new object[] { productId }, CancellationToken.None);
-                if (product != null && product.sku != originalSku)
-                {
-                    product.sku = originalSku;
-                }
-                // Check if the old link was lost
-                var existingLink = await _context.productMarketplaceLinks
-                    .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, CancellationToken.None);
-                if (!existingLink)
-                {
-                    _context.productMarketplaceLinks.Add(new ProductMarketplaceLink
-                    {
-                        productId = productId,
-                        connectionId = connectionId,
-                        externalProductId = oldExternalProductId,
-                        externalSku = oldExternalSku,
-                        status = ProductMarketplaceStatus.SyncError
-                    });
-                }
-                await _context.SaveChangesAsync(CancellationToken.None);
+                product.sku = originalSku;
             }
-            catch (Exception rollbackEx)
+            // Reconstruct the original link only when the committed state lacks one
+            var existingLink = await _context.productMarketplaceLinks
+                .AnyAsync(l => l.productId == productId && l.connectionId == connectionId,
+                    CancellationToken.None);
+            if (!existingLink)
             {
-                _logger.LogError(rollbackEx, "Rollback also failed for link {LinkId}", linkId);
+                _context.productMarketplaceLinks.Add(new ProductMarketplaceLink
+                {
+                    productId = productId,
+                    connectionId = connectionId,
+                    externalProductId = oldExternalProductId,
+                    externalSku = oldExternalSku,
+                    status = ProductMarketplaceStatus.SyncError
+                });
             }
+            await _context.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception rollbackEx)
+        {
+            _logger.LogError(rollbackEx, "Rollback also failed for link {LinkId}", linkId);
         }
     }
 

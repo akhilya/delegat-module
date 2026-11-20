@@ -1,10 +1,12 @@
 using System.Net;
 using System.Reflection;
 using Delegat.Controllers;
+using Delegat.Enums;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Infrastructure.Storage;
 using Delegat.Models;
+using Delegat.Models.Marketplace;
 using Delegat.Models.Marketplace.DTOs;
 using Delegat.Services;
 using Delegat.Services.Marketplace;
@@ -277,19 +279,7 @@ public sealed class IntegrationReliabilityP1Tests
     public async Task InteractiveExport_RequestCancelledDuringAdapterCall_FinishesOperationAsFailed()
     {
         var operationLogger = new RecordingOperationLogger();
-        var controller = new ProductSyncController(
-            currentUserService: null!,
-            unitOfWork: null!,
-            serviceProvider: null!,
-            adapterRegistry: null!,
-            productSyncService: null!,
-            priceSyncService: null!,
-            context: null!,
-            logger: NullLogger<ProductSyncController>.Instance,
-            operationLogger: operationLogger,
-            categoryImportQueue: null!,
-            quotaService: null!,
-            linkVerifyQueue: null!);
+        var controller = CreateBareController(null!, operationLogger);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -308,19 +298,7 @@ public sealed class IntegrationReliabilityP1Tests
     public async Task InteractiveExport_ServiceResult_FinishesOperationWithMatchingStatus()
     {
         var operationLogger = new RecordingOperationLogger();
-        var controller = new ProductSyncController(
-            currentUserService: null!,
-            unitOfWork: null!,
-            serviceProvider: null!,
-            adapterRegistry: null!,
-            productSyncService: null!,
-            priceSyncService: null!,
-            context: null!,
-            logger: NullLogger<ProductSyncController>.Instance,
-            operationLogger: operationLogger,
-            categoryImportQueue: null!,
-            quotaService: null!,
-            linkVerifyQueue: null!);
+        var controller = CreateBareController(null!, operationLogger);
 
         var result = await controller.RunExportOperationAsync("op-failed", 1,
             _ => Task.FromResult(ProductExportResult.Failure("provider rejected")),
@@ -331,6 +309,103 @@ public sealed class IntegrationReliabilityP1Tests
         Assert.Equal("op-failed", finish.OperationId);
         Assert.Equal("failed", finish.Status);
     }
+
+    [Fact]
+    public async Task RecreateRestore_CancelledBeforeInitialDeleteCommit_KeepsOriginalLink()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var dbGuard = db;
+        await using var keeperGuard = keeper;
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var category = data.AddCategory(store.Id);
+        var product = data.AddProduct(store.Id, categoryId: category.Id, price: 10m);
+        var connection = data.AddConnection(store.Id, adapterKey: "p1-fake");
+        var link = data.AddProductLink(connection.Id, product.Id, externalProductId: "remote-123");
+        await data.SaveAsync();
+        var originalSku = product.sku;
+
+        // Cancellation interrupts the delete+sku save before it commits; EF keeps
+        // the pending changes tracked while the committed row still exists.
+        db.productMarketplaceLinks.Remove(link);
+        product.sku = "TEMP-SKU";
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => db.SaveChangesAsync(new CancellationToken(canceled: true)));
+
+        var controller = CreateBareController(db, new NoopOperationLogger());
+        await controller.RestoreRecreateLocalStateAsync(
+            link.Id, product.Id, connection.Id, originalSku, "remote-123", link.externalSku);
+
+        var links = await db.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.productId == product.Id && l.connectionId == connection.Id)
+            .ToListAsync();
+        var restored = Assert.Single(links);
+        Assert.Equal("remote-123", restored.externalProductId);
+        var reloaded = await db.products.AsNoTracking().SingleAsync(p => p.Id == product.Id);
+        Assert.Equal(originalSku, reloaded.sku);
+    }
+
+    [Fact]
+    public async Task RecreateRestore_CancelledBeforeReplacementInsertCommit_RestoresOriginalLink()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var dbGuard = db;
+        await using var keeperGuard = keeper;
+        var data = new TestDataBuilder(db);
+        var user = data.AddUser();
+        var store = data.AddStore(members: [user]);
+        var category = data.AddCategory(store.Id);
+        var product = data.AddProduct(store.Id, categoryId: category.Id, price: 10m);
+        var connection = data.AddConnection(store.Id, adapterKey: "p1-fake");
+        var link = data.AddProductLink(connection.Id, product.Id, externalProductId: "remote-123");
+        await data.SaveAsync();
+        var originalSku = product.sku;
+
+        // The delete+sku save committed; the adapter's replacement link insert is
+        // still pending when cancellation interrupts its save.
+        db.productMarketplaceLinks.Remove(link);
+        product.sku = "TEMP-SKU";
+        await db.SaveChangesAsync();
+        db.productMarketplaceLinks.Add(new ProductMarketplaceLink
+        {
+            productId = product.Id,
+            connectionId = connection.Id,
+            externalProductId = "remote-999",
+            status = ProductMarketplaceStatus.Synced,
+            createdAt = DateTime.UtcNow
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => db.SaveChangesAsync(new CancellationToken(canceled: true)));
+
+        var controller = CreateBareController(db, new NoopOperationLogger());
+        await controller.RestoreRecreateLocalStateAsync(
+            link.Id, product.Id, connection.Id, originalSku, "remote-123", link.externalSku);
+
+        var links = await db.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.productId == product.Id && l.connectionId == connection.Id)
+            .ToListAsync();
+        var restored = Assert.Single(links);
+        Assert.Equal("remote-123", restored.externalProductId);
+        var reloaded = await db.products.AsNoTracking().SingleAsync(p => p.Id == product.Id);
+        Assert.Equal(originalSku, reloaded.sku);
+    }
+
+    private static ProductSyncController CreateBareController(
+        DataContext db, IOperationLogger operationLogger) =>
+        new(
+            currentUserService: null!,
+            unitOfWork: null!,
+            serviceProvider: null!,
+            adapterRegistry: null!,
+            productSyncService: null!,
+            priceSyncService: null!,
+            context: db,
+            logger: NullLogger<ProductSyncController>.Instance,
+            operationLogger: operationLogger,
+            categoryImportQueue: null!,
+            quotaService: null!,
+            linkVerifyQueue: null!);
 
     private static async Task<(DataContext Db, Models.Products.Product Product, Delegat.Models.Marketplace.MarketplaceConnection Connection, P1AdapterProxy Adapter)>
         CreateScenarioAsync()
