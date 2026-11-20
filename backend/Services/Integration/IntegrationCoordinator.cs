@@ -39,9 +39,9 @@ public class IntegrationCoordinator
     /// <remarks>
     /// Shared-context boundary: pending changes already tracked by the caller's
     /// DataContext are flushed and committed before the admission transaction
-    /// opens, so caller writes survive admission failures (including a lost
-    /// command insert). Callers that require their writes to be atomic with
-    /// admission must commit them first themselves or use a dedicated context.
+    /// opens. They stay committed even when admission fails or is deduplicated:
+    /// admission offers no atomicity with caller-owned writes, and callers must
+    /// treat it as an independent unit of work.
     /// </remarks>
     public async Task<IntegrationAdmitResult> AdmitAsync(
         IntegrationAdmitRequest request, bool v1Enabled, CancellationToken ct)

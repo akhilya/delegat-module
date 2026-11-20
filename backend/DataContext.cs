@@ -232,6 +232,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             e.Property(c => c.requestKey).HasMaxLength(200);
             e.Property(c => c.requestHash).HasMaxLength(64);
             e.Property(c => c.state).HasMaxLength(20);
+            e.Property(c => c.finalizedBy).HasMaxLength(100);
             e.Property(c => c.inputJson).HasColumnType("longtext");
             e.Property(c => c.summary).HasColumnType("text");
         });

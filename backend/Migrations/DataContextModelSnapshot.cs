@@ -1352,6 +1352,10 @@ namespace Delegat.Migrations
                     b.Property<DateTime>("createdAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("finalizedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<DateTime?>("finishedAt")
                         .HasColumnType("datetime(6)");
 

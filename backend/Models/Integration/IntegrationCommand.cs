@@ -50,6 +50,13 @@ public class IntegrationCommand
     /// <summary>User stop flag: prevents new writes, not in-flight confirmation.</summary>
     public bool stopRequested { get; set; }
 
+    /// <summary>
+    /// Worker identity that committed the terminal transition. Set by the
+    /// finisher so a retried commit after a lost acknowledgment can prove the
+    /// transition was its own - timestamps cannot identify a finalizer.
+    /// </summary>
+    public string? finalizedBy { get; set; }
+
     public string? title { get; set; }
     public string? summary { get; set; }
 

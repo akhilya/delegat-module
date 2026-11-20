@@ -618,20 +618,19 @@ public class IntegrationExecutionWorker : BackgroundService
         // writing or announcing anything.
         if (newState != null)
         {
-            // Match also a row already carrying our intended outcome with our
-            // own timestamp: `now` is shared across strategy retries, so that
-            // combination proves our earlier commit landed while its
-            // acknowledgment was lost - skipping it would lose the finish
-            // event. A terminal row stamped differently belongs to a rival
-            // worker, which owns the announcement.
+            // The finisher stamps its worker identity so commit retries after
+            // a lost acknowledgment can prove the terminal row is their own
+            // (a timestamp cannot identify a finalizer). A terminal row owned
+            // by a rival loses the guard and announces nothing.
             var applied = await db.integrationCommands
                 .Where(c => c.Id == command.Id
                     && (OpenCommandStates.Contains(c.state)
-                        || (c.state == newState && c.updatedAt == now)))
+                        || (c.state == newState && c.finalizedBy == _workerId)))
                 .ExecuteUpdateAsync(c => c
                     .SetProperty(x => x.state, newState)
                     .SetProperty(x => x.summary, summary)
                     .SetProperty(x => x.finishedAt, (DateTime?)now)
+                    .SetProperty(x => x.finalizedBy, _workerId)
                     .SetProperty(x => x.updatedAt, now), ct);
             if (applied == 0)
                 return null;
