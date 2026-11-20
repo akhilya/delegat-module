@@ -31,6 +31,20 @@ internal static class AgentPlanReferences
     /// </summary>
     internal static string? RejectionReason(IReadOnlyList<JsonElement> steps)
     {
+        try
+        {
+            return RejectionReasonCore(steps);
+        }
+        catch (InvalidOperationException)
+        {
+            // JsonDocument permits escaped lone surrogates; decoding must fail closed.
+            return JsonSerializer.Serialize(
+                GeneratedFileContract.ErrorResult("ai_artifact_invalid_request"));
+        }
+    }
+
+    private static string? RejectionReasonCore(IReadOnlyList<JsonElement> steps)
+    {
         for (var i = 0; i < steps.Count; i++)
         {
             if (!TryReadStep(steps[i], out var tool, out var args))
