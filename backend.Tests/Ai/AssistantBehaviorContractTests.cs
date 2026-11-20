@@ -119,7 +119,9 @@ public class AssistantBehaviorContractTests
         Assert.Contains("Do not claim nothing changed from an exit code", review);
         Assert.Contains("Never replay successful steps, broaden targets", review);
         Assert.Contains("requires a NEW explicit confirmation", review);
-        Assert.Contains("The ONLY permitted tool in this review is propose_plan", review);
+        Assert.Contains("may run directly in this bounded review", review);
+        Assert.Contains("connected MCP calls still cannot run in review", review);
+        Assert.Contains("propose_plan and fresh confirmation", review);
         Assert.Contains("A new plan discards preceding review draft text", review);
         Assert.Contains("Put a short verified bridge in its summary: what completed, what remains", review);
         Assert.Contains("Do not claim the proposed step has already run", review);

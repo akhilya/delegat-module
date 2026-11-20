@@ -10,7 +10,7 @@ public class AiPromptsChatTests
     [Fact]
     public void ChatPromptVersion_IsBumpedForPlanShapeValidation()
     {
-        Assert.Equal("chat-v20", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v21", AiPrompts.ChatPromptVersion);
     }
 
     [Fact]

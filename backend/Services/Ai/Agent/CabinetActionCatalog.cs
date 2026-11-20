@@ -22,7 +22,8 @@ public sealed class CabinetActionCatalog
         string Keywords,
         string Capabilities = "",
         bool CallableViaJson = true,
-        string Transport = "json");
+        string Transport = "json",
+        bool RequireKeywordMatch = false);
 
     private readonly CabinetCapabilityIndex _index;
     private readonly Lazy<IReadOnlyList<ActionHit>> _all;
@@ -86,6 +87,9 @@ public sealed class CabinetActionCatalog
         if (action?.Body.Properties.TryGetValue("updates", out var updates) == true)
             note += " Accepted updates fields (DTO shape; use the supported semantics above): "
                 + string.Join(", ", updates.Properties.Keys.OrderBy(k => k, StringComparer.Ordinal)) + ".";
+        var enums = AssistantBodySchema.EnumFieldGuidance(hit.Method, hit.Path);
+        if (!string.IsNullOrEmpty(enums) && !note.Contains(enums, StringComparison.Ordinal))
+            note += " " + enums;
         return hit with { Note = note };
     }
 
@@ -131,12 +135,20 @@ public sealed class CabinetActionCatalog
         new("GET", "/store-attributes/summary", false,
             "Lightweight store-wide attribute definitions, including unitCode, without option dictionaries or editor payloads. Prefer this when reading characteristic units.",
             "global store-wide глобальный глобальная глобальные глобальных общая общие общих общими характеристики атрибуты свойства единица единицу единицы измерения измерений unit units measurement summary"),
+        new("POST", "/categories/{categoryId}/attributes", true,
+            "Create one category attribute definition; type takes a listed numeric or named value.",
+            "create создать добавить attribute атрибут атрибуты характеристика характеристики категория категории supported available types тип типы типов список доступных доступные поддерживаемые полей fields characteristic типы атрибутов",
+            RequireKeywordMatch: true),
+        new("POST", "/store-attributes", true,
+            "Create one store-wide attribute definition; type takes a listed numeric or named value.",
+            "create создать добавить attribute атрибут атрибуты характеристика global store-wide глобальный глобальные общий общие supported available types тип типы типов список доступных доступные поддерживаемые полей fields characteristic типы атрибутов",
+            RequireKeywordMatch: true),
         new("PATCH", "/categories/{categoryId}/attributes/{attributeId}", true,
             "Update one category attribute definition, including unitCode. Changing unit metadata does not convert stored product values.",
-            "категория категории категорий характеристика характеристики атрибут атрибуты единица единицу единицы измерения измерений unit units measurement"),
+            "категория категории категорий характеристика характеристики атрибут атрибуты единица единицу единицы измерения измерений unit units measurement supported available types тип типы типов список доступных полей fields"),
         new("PATCH", "/store-attributes/{attributeId}", true,
             "Update one store-wide attribute definition, including unitCode. Changing unit metadata does not convert stored product values.",
-            "global store-wide глобальный глобальная глобальные глобальных общая общие общих общими характеристики атрибуты свойства единица единицу единицы измерения измерений unit units measurement"),
+            "global store-wide глобальный глобальная глобальные глобальных общая общие общих общими характеристики атрибуты свойства единица единицу единицы измерения измерений unit units measurement supported available types тип типы типов список доступных полей fields"),
         new("PATCH", "/products/{id}/group", true,
             "Move a card into a group (groupId null removes).",
             "group группа productgroups"),
@@ -228,6 +240,8 @@ public sealed class CabinetActionCatalog
             || hit.Path.Contains("store-attributes", StringComparison.OrdinalIgnoreCase);
         var readIntent = tokens.Any(ReadIntentWords.Contains);
         var writeIntent = tokens.Any(WriteIntentWords.Contains);
+        var createIntent = tokens.Any(CreateIntentWords.Contains);
+        var matchedText = false;
         foreach (var t in tokens)
         {
             // Concrete DTO fields and their translations outweigh generic verbs
@@ -237,20 +251,41 @@ public sealed class CabinetActionCatalog
             else if (fieldWords.Any(word => RelatedWord(t, word)))
                 score += 9;
             else if (pathWords.Contains(t))
+            {
                 score += 5;
+                matchedText = true;
+            }
             else if (keywordWords.Contains(t))
+            {
                 score += 3;
+                matchedText = true;
+            }
             else if (pathWords.Any(word => RelatedWord(t, word)))
+            {
                 score += 3;
+                matchedText = true;
+            }
             else if (keywordWords.Any(word => RelatedWord(t, word)))
+            {
                 score += 2;
+                matchedText = true;
+            }
         }
 
+        // Curated create entries answer alias/discovery queries; shared DTO
+        // fields (name, unitCode) alone must not surface them for unrelated
+        // edit or mapping questions.
+        if (hit.RequireKeywordMatch && !matchedText)
+            return 0;
         if (score > 0 && attributeUnitAction
             && hit.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
             && (readIntent || !writeIntent))
             score += 20;
-        if (score > 0 && attributeUnitAction && PlatformRequestPolicy.IsMutating(hit.Method) && writeIntent)
+        // POST defines a new attribute; an update-intent query without create
+        // verbs prefers the PATCH edit route.
+        if (score > 0 && attributeUnitAction && PlatformRequestPolicy.IsMutating(hit.Method)
+            && (writeIntent || createIntent)
+            && (createIntent || !hit.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)))
             score += 20;
 
         return score;
@@ -282,6 +317,12 @@ public sealed class CabinetActionCatalog
         "change", "update", "edit", "patch", "set", "modify", "alter",
         "измени", "изменить", "обнови", "обновить", "поменяй", "поменять",
         "установи", "установить", "поставь", "поставить", "задать", "задай", "сменить",
+    };
+
+    private static readonly HashSet<string> CreateIntentWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "create", "add", "new", "define",
+        "создай", "создать", "добавь", "добавить", "новый", "новая", "новое", "заведи", "определи",
     };
 
     private static bool RelatedWord(string query, string word) =>

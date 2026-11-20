@@ -1,9 +1,33 @@
+using Delegat.Enums;
 using Delegat.Services.Ai.Agent;
 
 namespace Delegat.Tests;
 
 public class CabinetActionCatalogTests
 {
+    [Theory]
+    [InlineData("список доступных типов атрибутов")]
+    [InlineData("supported attribute types for a category")]
+    public void Search_AttributeTypeDiscovery_ReturnsDefinitionActionsWithEveryEnumValue(string query)
+    {
+        var hits = new CabinetActionCatalog().Search(query);
+
+        var define = Assert.Single(hits, h => h.Method == "POST"
+            && h.Path == "/categories/{categoryId}/attributes");
+        AssertEnumGuidance(define);
+        var update = Assert.Single(hits, h => h.Method == "PATCH"
+            && h.Path == "/categories/{categoryId}/attributes/{attributeId}");
+        AssertEnumGuidance(update);
+        return;
+
+        static void AssertEnumGuidance(CabinetActionCatalog.ActionHit hit)
+        {
+            Assert.Contains("Allowed type values:", hit.Note);
+            foreach (var name in Enum.GetNames<AttributeType>())
+                Assert.Contains($"{name}={(int)Enum.Parse<AttributeType>(name)}", hit.Note);
+        }
+    }
+
     [Theory]
     [InlineData("перегенерируй штрихкоды этих товаров")]
     [InlineData("обновить товар, изменить штрихкод карточки")]

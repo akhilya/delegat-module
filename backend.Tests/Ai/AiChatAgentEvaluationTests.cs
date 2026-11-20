@@ -747,7 +747,11 @@ public class AiChatAgentEvaluationTests
             proposalId, sessionId: "python-failure", locale: "en"));
         Assert.Equal(1, python.Calls);
         Assert.Equal(0, fixture.Invoker.Calls);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
+        Assert.Equal(
+            new[] { "search_actions", "search_knowledge", "get_doc", "search_catalog",
+                "sql_readonly", "memory_search", "platform_request", "propose_plan" }
+                .OrderBy(n => n, StringComparer.Ordinal),
+            fixture.Client.Requests[1].ToolNames.OrderBy(n => n, StringComparer.Ordinal));
         var reviewContext = fixture.Client.Requests[1].Messages.Last().Content;
         Assert.Contains("AttributeError", reviewContext);
         Assert.Contains("unverified partial output", reviewContext);

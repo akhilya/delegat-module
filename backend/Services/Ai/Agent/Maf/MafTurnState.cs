@@ -78,9 +78,9 @@ internal sealed class MafTurnState
     public bool SpeakOnly =>
         AnswerNow || ToolRounds >= AgentChatTurnGate.RunawayToolRounds;
 
-    /// <summary>Request cap reached (review: 3 requests; normal: RunawayToolRounds + 2).</summary>
+    /// <summary>Request cap reached (review: <see cref="AgentChatTurnGate.ReviewMaxRequests"/> requests; normal: RunawayToolRounds + 2).</summary>
     public bool CapReached =>
-        RequestsSent >= (ReviewMode ? 3 : AgentChatTurnGate.RunawayToolRounds + 2);
+        RequestsSent >= (ReviewMode ? AgentChatTurnGate.ReviewMaxRequests : AgentChatTurnGate.RunawayToolRounds + 2);
 
     // ----- tool surface for FunctionInvokingChatClient dispatch -----
 

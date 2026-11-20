@@ -153,7 +153,7 @@ public class AiChatService
             var requestsSent = 0;
 
             // Keep calling tools until the task is closed. A stuck loop still has to end in a sentence.
-            for (var iteration = 0; iteration < (planResultReview ? 3 : AgentChatTurnGate.RunawayToolRounds + 2); iteration++)
+            for (var iteration = 0; iteration < (planResultReview ? AgentChatTurnGate.ReviewMaxRequests : AgentChatTurnGate.RunawayToolRounds + 2); iteration++)
             {
                 requestsSent++;
                 var speakOnly = AgentChatTurnGate.SpeakOnly(answerNow, toolRounds);
@@ -353,7 +353,7 @@ public class AiChatService
                 var deferPlanForAttachmentRead = waitForPlan && attachmentReadInBatch;
                 foreach (var (toolId, toolName, toolInputJson) in toolUses)
                 {
-                    if (planResultReview && !AgentChatTurnGate.IsProposePlan(toolName))
+                    if (planResultReview && !AgentChatTurnGate.IsReviewToolAllowed(toolName, toolInputJson))
                     {
                         toolResults.Add(new { type = "tool_result", tool_use_id = toolId,
                             content = AgentChatTurnGate.ReviewToolNotRun });
@@ -560,7 +560,7 @@ public class AiChatService
                 yield break;
             }
 
-            if (!spoke && !sawPlan && !sawForm && !planResultReview)
+            if (!spoke && !sawPlan && !sawForm && !planResultReview && !hadProviderError)
             {
                 yield return Event(SseEventType.Text, new
                 {
@@ -568,7 +568,10 @@ public class AiChatService
                 });
             }
 
-            yield return Event(SseEventType.Done, new { modelName = model.modelId });
+            if (hadProviderError)
+                yield return Event(SseEventType.Done, new { modelName = model.modelId, interrupted = true });
+            else
+                yield return Event(SseEventType.Done, new { modelName = model.modelId });
         }
     }
 
@@ -675,7 +678,7 @@ public class AiChatService
         var allTools = AgentToolCatalog.Build(includeGeneratedArtifacts: true);
         allTools.AddRange(extraMcp);
         var tools = planResultReview
-            ? allTools.Where(t => t.name == AgentChatTurnGate.ProposePlanTool).ToList()
+            ? allTools.Where(t => AgentChatTurnGate.IsReviewToolAdvertised(t.name)).ToList()
             : allTools;
         var answerNow = AgentChatTurnGate.AsksToAnswerNow(TurnText(userMessages));
         return new ChatTurnPreparation
@@ -932,10 +935,21 @@ public class AiChatService
         if (hasOutputCapture && steps.Count != 1)
             foreach (var name in stepTools)
                 forbidden.Add(name);
+        // The signed dependency graph is re-checked before any call; a caller
+        // bypassing proposal validation gets every step refused up front.
+        var referenceRejection = AgentPlanReferences.RejectionReason(steps
+            .Select(s => JsonSerializer.SerializeToElement(
+                new { tool = s.Tool ?? "", args = s.Args }, _jsonOpts))
+            .ToList());
         var ok = 0;
         var queued = 0;
         var cancelled = false;
         var errors = new List<string>();
+        if (referenceRejection != null)
+            errors.Add(referenceRejection);
+        // Raw earlier results in step order; resolved `$step:N.id` references read
+        // only completed native POST outcomes (queued or failed entries stay empty).
+        var previousResults = new List<JsonElement>();
         // Per-step count evidence in executed order; verdicts stay readable for
         // the bounded review even when the raw result JSON is clipped.
         var stepCounts = new List<object>();
@@ -956,6 +970,10 @@ public class AiChatService
                 throw new InvalidOperationException("Invalid execution checkpoint prefix.");
             outcomes.Add(saved.Outcome.Clone());
             stepCounts.Add(saved.Outcome.GetProperty("counts").Clone());
+            previousResults.Add(state == "completed"
+                && saved.Outcome.TryGetProperty("result", out var savedResult)
+                    ? savedResult.Clone()
+                    : default);
             if (state == "failed") errors.Add(saved.Outcome.GetProperty("summary").GetString() ?? "Failed");
             else ok++;
             if (state == "queued") queued++;
@@ -984,18 +1002,25 @@ public class AiChatService
             bool failed;
             string resultJson;
             var counts = AgentResultCounts.Unknown;
+            string? resolvedInput = null;
             if (forbidden.Contains(tool))
             {
                 summary = "Tool is not allowed inside a plan";
                 failed = true;
                 resultJson = "{}";
+                previousResults.Add(default);
             }
             else
             {
                 try
                 {
+                    // Signed `$step:N.id` templates resolve here, inside the step
+                    // guard; the dispatched request still passes every normal
+                    // body/permission/store/route check.
+                    resolvedInput = AgentPlanReferences.ResolveArguments(
+                        tool, argsJson, stepIndex, previousResults);
                     var (result, s) = await _toolHost.DispatchAsync(
-                        tool, argsJson, storeId, userId, ct,
+                        tool, resolvedInput, storeId, userId, ct,
                         allowConnectedMcp: true, allowGeneratedArtifacts: true);
                     summary = s;
                     failed = AgentToolResult.IsFailure(result, s);
@@ -1003,7 +1028,11 @@ public class AiChatService
                         queued++;
                     counts = failed
                         ? AgentResultCounts.Unknown
-                        : AgentResultCounts.Observe(tool, argsJson, result);
+                        : AgentResultCounts.Observe(tool, resolvedInput, result);
+                    // Live references need the untruncated result; the model copy
+                    // may clip the id out of a large payload.
+                    previousResults.Add(failed || AgentToolResult.IsQueuedJob(result) ? default
+                        : JsonSerializer.SerializeToElement(result, _jsonOpts));
                     resultJson = AgentToolResult.TruncateForModel(JsonSerializer.Serialize(result, _jsonOpts));
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -1013,6 +1042,7 @@ public class AiChatService
                     failed = true;
                     resultJson = JsonSerializer.Serialize(new { error = summary }, _jsonOpts);
                     counts = AgentResultCounts.Unknown;
+                    previousResults.Add(default);
                 }
                 catch (Exception ex)
                 {
@@ -1021,6 +1051,7 @@ public class AiChatService
                     failed = true;
                     resultJson = JsonSerializer.Serialize(new { error = ex.Message }, _jsonOpts);
                     counts = AgentResultCounts.Unknown;
+                    previousResults.Add(default);
                 }
             }
 
@@ -1039,7 +1070,8 @@ public class AiChatService
             outcomes.Add(stepOutcome);
             stepCounts.Add(counts);
             yield return Event(SseEventType.Tool, new { id = stepId, name = tool, status = "done", summary,
-                input = argsJson, result = resultJson, effects, counts, stepIndex, executionOutcome = stepOutcome });
+                input = argsJson, resolvedInput = resolvedInput == argsJson ? null : resolvedInput,
+                result = resultJson, effects, counts, stepIndex, executionOutcome = stepOutcome });
             if (failed)
             {
                 errors.Add(summary);

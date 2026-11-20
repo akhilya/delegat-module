@@ -143,6 +143,7 @@ public sealed class MafChatEngine(
 
             if (providerFailure != null)
             {
+                state.ProviderError = true;
                 yield return providerFailure is PlatformHostedAiRequestException hosted
                     ? Sse(SseEventType.Error, new { code = hosted.Code, status = hosted.StatusCode })
                     : Sse(SseEventType.Error, new
@@ -205,7 +206,8 @@ public sealed class MafChatEngine(
             yield break;
         }
 
-        if (!state.Spoke && !state.SawPlan && !state.SawForm && !turn.PlanResultReview)
+        if (!state.Spoke && !state.SawPlan && !state.SawForm && !turn.PlanResultReview
+            && !state.ProviderError)
         {
             yield return Sse(SseEventType.Text, new
             {
@@ -213,7 +215,10 @@ public sealed class MafChatEngine(
             });
         }
 
-        yield return Sse(SseEventType.Done, new { modelName = turn.Model.modelId });
+        if (state.ProviderError)
+            yield return Sse(SseEventType.Done, new { modelName = turn.Model.modelId, interrupted = true });
+        else
+            yield return Sse(SseEventType.Done, new { modelName = turn.Model.modelId });
     }
 
     private static IEnumerable<AiTurnEvent> MapUpdate(
@@ -243,9 +248,10 @@ public sealed class MafChatEngine(
             .Where(t => adapters.ContainsKey(t.name))
             .Select(t => (AITool)adapters[t.name])
             .ToList();
-        // Review mode advertises propose_plan only; the rest of the catalog still
-        // resolves so an off-script call gets the deterministic "Not run" result
-        // (the same text the legacy loop synthesizes for any non-plan call).
+        // Review mode advertises propose_plan plus the built-in read-only lookup
+        // surface; the rest of the catalog still resolves so an off-script call
+        // gets the deterministic "Not run" result (mutations, Python, and
+        // connected MCP are refused by the adapter, never dispatched).
         var additional = adapters.Values
             .Where(a => turn.Tools.All(t =>
                 !string.Equals(t.name, a.Name, StringComparison.OrdinalIgnoreCase)))

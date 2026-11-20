@@ -32,9 +32,30 @@ public static class AgentChatTurnGate
     public const string ExternalCapabilityNeedsPlan =
         "Not run. Python code and connected external tools may cause side effects, so they only run as steps in a standalone propose_plan after user confirmation. If facts are missing, use only the minimum required built-in read-only lookup(s) first, then propose_plan by itself. Do not retry this call.";
 
-    /// <summary>Review turns allow propose_plan only; every other call gets this refusal.</summary>
+    /// <summary>Review turns allow built-in read-only lookups and propose_plan; mutations, Python, and connected MCP get this refusal.</summary>
     public const string ReviewToolNotRun =
-        "Not run. Execution is already finished. Review the actual results and answer, or propose a corrected plan for fresh user confirmation. No tool may execute during this review.";
+        "Not run. Execution is already finished. Review the actual results and answer, run a built-in read-only lookup, or propose a corrected plan for fresh user confirmation. Mutations, Python, and connected MCP calls cannot run during this review.";
+
+    /// <summary>Review rounds get a bounded request count independent of chat rounds.</summary>
+    public const int ReviewMaxRequests = 6;
+
+    /// <summary>
+    /// Post-execution review may run built-in read-only lookups and propose_plan —
+    /// never mutations, Python, or connected MCP execution.
+    /// </summary>
+    public static bool IsReviewToolAllowed(string? toolName, string? inputJson) =>
+        IsProposePlan(toolName)
+        || toolName is "search_actions" or "search_knowledge" or "get_doc"
+            or "search_catalog" or "sql_readonly" or "memory_search"
+        || (string.Equals(toolName, PlatformRequestTool, StringComparison.OrdinalIgnoreCase)
+            && ReadMethod(inputJson).ToUpperInvariant() is "GET" or "HEAD");
+
+    /// <summary>Tools advertised to the model while a review round is open.</summary>
+    public static bool IsReviewToolAdvertised(string? toolName) =>
+        IsProposePlan(toolName)
+        || string.Equals(toolName, PlatformRequestTool, StringComparison.OrdinalIgnoreCase)
+        || toolName is "search_actions" or "search_knowledge" or "get_doc"
+            or "search_catalog" or "sql_readonly" or "memory_search";
 
     /// <summary>A plan batched together with an attachment read waits for the real file data.</summary>
     public const string AttachmentDeferralPlanText =

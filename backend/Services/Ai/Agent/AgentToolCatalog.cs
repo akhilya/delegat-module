@@ -15,13 +15,13 @@ public static class AgentToolCatalog
         List<AiTool> tools =
         [
         Prop("propose_plan",
-            "Use for every cabinet change and before every run_python or connected MCP call. Python and connected MCP calls must be proposed by themselves and wait for confirmation because external capabilities are not guaranteed to be read-only. For a cabinet change, if the request and CURRENT PAGE provide all required facts, call this as the first and only tool; if an exact current state or required value is missing, do only the minimum required built-in read-only lookup(s) first, then call propose_plan by itself. The user-visible plan must state the exact intended effect. Operations run only after confirmation.",
+            "Use for every cabinet change and before every run_python or connected MCP call. Python and connected MCP calls must be proposed by themselves and wait for confirmation because external capabilities are not guaranteed to be read-only. For a cabinet change, if the request and CURRENT PAGE provide all required facts, call this as the first and only tool; if an exact current state or required value is missing, do only the minimum required built-in read-only lookup(s) first, then call propose_plan by itself. The user-visible plan must state the exact intended effect. Operations run only after confirmation. Combine dependent native creates in one plan using $step:0.id references to earlier native POST result IDs. Keep the summary to one or two short sentences. Run built-in read-only discovery directly before planning, not as approval steps.",
             Req(["summary", "steps"]),
             ("summary", Str("User-visible summary in store language (UI locale). No tool names, SQL, or HTTP.")),
             ("steps", new AiToolProperty
             {
                 type = "array",
-                description = "Steps with tool + args. Use platform_request for cabinet API mutations, including POST /products/{id}/files with attachmentIds for staged chat files. Connected MCP tools and run_python may only appear inside a plan. Each description is shown to the user in store language and must state the exact intended effect.",
+                description = "Steps with tool + args. Use platform_request for cabinet API mutations, including POST /products/{id}/files with attachmentIds for staged chat files. Connected MCP tools and run_python may only appear inside a plan. Each description is shown to the user in store language and must state the exact intended effect. For platform_request only, a complete path segment or id/…Id body value may be $step:0.id, referring to a positive integer id from an earlier native POST result (zero-based index).",
                 items = new AiToolProperty
                 {
                     type = "object",
