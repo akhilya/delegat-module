@@ -41,6 +41,13 @@ public class IntegrationExecutionWorker : BackgroundService
         IntegrationStageState.Unknown,
         IntegrationStageState.CancelledBeforeEffect
     ];
+    private static readonly string[] OperationTerminalStates =
+    [
+        OperationLifecycle.Completed,
+        OperationLifecycle.Failed,
+        OperationLifecycle.Partial,
+        OperationLifecycle.Cancelled
+    ];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IntegrationExecutionWorker> _logger;
@@ -168,13 +175,15 @@ public class IntegrationExecutionWorker : BackgroundService
             return;
 
         var stage = await db.integrationStages
-            .Include(s => s.command)
             .FirstAsync(s => s.Id == stageId, ct);
-        // The claim above bypassed change tracking; mirror its post-claim values
-        // so tracked writes stay consistent with the leased row.
-        stage.claimedBy = _workerId;
-        stage.claimedUntil = now + ClaimLease;
-        stage.claimVersion = expectedClaimVersion + 1;
+        // Committed state, not tracked state: ExecuteUpdate writes (claim and
+        // earlier finalizations on a shared context) leave stale in-memory
+        // values that would misroute the dispatch/confirm branch below and
+        // renumber attempts wrongly. Reload also refreshes the snapshot, so
+        // the attempt-before-send SaveChanges diffs against the real row.
+        await db.Entry(stage).ReloadAsync(ct);
+        await db.Entry(stage).Reference(s => s.command).LoadAsync(ct);
+        await db.Entry(stage.command).ReloadAsync(ct);
         var command = stage.command;
 
         if (stage.state == IntegrationStageState.Ready)
@@ -409,26 +418,13 @@ public class IntegrationExecutionWorker : BackgroundService
                     return null;
                 }
 
-                // Mirror the committed values for the aggregate read below.
-                stage.state = newState;
-                stage.nextCheckAt = nextCheckAt;
-                stage.receiptJson = mergedReceipt;
-                stage.evidenceJson = mergedEvidence;
-                stage.issuesJson = mergedIssues;
-                if (terminal)
-                    stage.finishedAt = now;
-                stage.claimedBy = null;
-                stage.claimedUntil = null;
-                stage.claimVersion = releasedVersion;
-
                 var transition = await TransitionCommandIfTerminalAsync(db, command, now, ct);
-                await db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
 
                 if (previousState != newState || transition.TerminalState != null)
                     _logger.LogDebug(
                         "Integration stage {StageId} -> {State}, command {CommandId} -> {CommandState}",
-                        stage.Id, newState, command.commandId, transition.TerminalState ?? command.state);
+                        stage.Id, newState, command.commandId, transition.TerminalState ?? "open");
                 return transition;
             }, ct);
 
@@ -476,6 +472,9 @@ public class IntegrationExecutionWorker : BackgroundService
         DateTime now,
         CancellationToken ct)
     {
+        // The sweep query may return a stale tracked instance; the terminal
+        // check must see committed state.
+        await db.Entry(command).ReloadAsync(ct);
         if (IntegrationCommandState.IsTerminal(command.state))
             return;
 
@@ -484,7 +483,6 @@ public class IntegrationExecutionWorker : BackgroundService
             {
                 await using var tx = await db.Database.BeginTransactionAsync(ct);
                 var transition = await TransitionCommandIfTerminalAsync(db, command, now, ct);
-                await db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
                 return transition;
             });
@@ -539,9 +537,6 @@ public class IntegrationExecutionWorker : BackgroundService
             .ToListAsync(ct);
 
         var allTerminal = stages.All(s => IntegrationStageState.IsTerminal(s.state));
-        if (command.state == IntegrationCommandState.Admitted)
-            command.state = IntegrationCommandState.Executing;
-        command.updatedAt = now;
 
         // Per-item projection counts.
         var items = stages.GroupBy(s => s.itemKey).Select(g => new
@@ -598,30 +593,55 @@ public class IntegrationExecutionWorker : BackgroundService
                 newState = IntegrationCommandState.Partial;
                 summary = $"{completedItems} item(s) completed, {failedItems} failed";
             }
-
-            command.state = newState;
-            command.summary = summary;
-            command.finishedAt = now;
         }
 
-        // Project into operations inside the same transaction.
-        var operation = await db.operations
-            .FirstOrDefaultAsync(o => o.operationId == command.operationId, ct);
-        if (operation != null)
+        // All writes go through guarded ExecuteUpdate: the lambda may run inside
+        // a retried execution strategy, and tracked mutations accepted by an
+        // earlier SaveChanges would silently skip their writes after a rollback,
+        // publishing a finish the projection never committed.
+        if (newState != null)
         {
-            operation.totalItems = items.Count;
-            operation.completedItems = completedItems;
-            operation.failedItems = failedItems;
-            if (newState != null)
-            {
-                var opStatus = MapCommandToOperationStatus(newState);
-                if (OperationLifecycle.ShouldApplyFinish(operation.status, opStatus))
-                {
-                    operation.status = opStatus;
-                    operation.summary = summary;
-                    operation.finishedAt = now;
-                }
-            }
+            await db.integrationCommands
+                .Where(c => c.Id == command.Id && OpenCommandStates.Contains(c.state))
+                .ExecuteUpdateAsync(c => c
+                    .SetProperty(x => x.state, newState)
+                    .SetProperty(x => x.summary, summary)
+                    .SetProperty(x => x.finishedAt, (DateTime?)now)
+                    .SetProperty(x => x.updatedAt, now), ct);
+        }
+        else
+        {
+            await db.integrationCommands
+                .Where(c => c.Id == command.Id && OpenCommandStates.Contains(c.state))
+                .ExecuteUpdateAsync(c => c
+                    .SetProperty(x => x.state, x => x.state == IntegrationCommandState.Admitted
+                        ? IntegrationCommandState.Executing
+                        : x.state)
+                    .SetProperty(x => x.updatedAt, now), ct);
+        }
+
+        // Project into operations inside the same transaction. Counts update
+        // unconditionally; the finish follows ShouldApplyFinish as a predicate:
+        // a non-cancelled finish applies only over non-terminal statuses, while
+        // cancelled is sticky-safe to (re)apply.
+        await db.operations
+            .Where(o => o.operationId == command.operationId)
+            .ExecuteUpdateAsync(o => o
+                .SetProperty(x => x.totalItems, items.Count)
+                .SetProperty(x => x.completedItems, completedItems)
+                .SetProperty(x => x.failedItems, failedItems), ct);
+
+        if (newState != null)
+        {
+            var opStatus = MapCommandToOperationStatus(newState);
+            await db.operations
+                .Where(o => o.operationId == command.operationId
+                    && (opStatus == OperationLifecycle.Cancelled
+                        || !OperationTerminalStates.Contains(o.status)))
+                .ExecuteUpdateAsync(o => o
+                    .SetProperty(x => x.status, opStatus)
+                    .SetProperty(x => x.summary, summary)
+                    .SetProperty(x => x.finishedAt, (DateTime?)now), ct);
         }
         return new CommandTransition(
             newState,

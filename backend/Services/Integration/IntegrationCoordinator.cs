@@ -52,19 +52,22 @@ public class IntegrationCoordinator
         // The dedupe read and the admission transaction must run inside the
         // execution strategy: retry-enabled providers reject work performed
         // inside an unmanaged transaction.
+        var priorGraph = new List<object>();
         return await _db.Database.CreateExecutionStrategy().ExecuteAsync(
-            _ => AdmitInnerAsync(request, scopeKey, requestKey, requestHash, ct), ct);
+            _ => AdmitInnerAsync(request, scopeKey, requestKey, requestHash, priorGraph, ct), ct);
     }
 
     private async Task<IntegrationAdmitResult> AdmitInnerAsync(
         IntegrationAdmitRequest request, string scopeKey, string? requestKey,
-        string requestHash, CancellationToken ct)
+        string requestHash, List<object> priorGraph, CancellationToken ct)
     {
-        // A retried strategy attempt can leave the failed graph tracked as
-        // pending inserts; two graphs would race the same request key.
-        foreach (var entry in _db.ChangeTracker.Entries()
-            .Where(e => e.State == EntityState.Added).ToList())
-            entry.State = EntityState.Detached;
+        // A retried strategy attempt leaves its failed graph tracked as pending
+        // inserts; two graphs would race the same request key. Only our own
+        // leftovers are dropped - pending inserts owned by a shared caller
+        // context are not ours to discard.
+        foreach (var entity in priorGraph)
+            _db.Entry(entity).State = EntityState.Detached;
+        priorGraph.Clear();
 
         if (requestKey != null)
         {
@@ -137,7 +140,12 @@ public class IntegrationCoordinator
             createdAt = now
         };
 
-        // Command + stages + projection are one atomic admission.
+        // Command + stages + projection are one atomic admission. The graph is
+        // recorded so a retried attempt can drop exactly these inserts.
+        priorGraph.Add(command);
+        priorGraph.AddRange(stageEntities);
+        priorGraph.Add(operation);
+
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         _db.integrationCommands.Add(command);
         _db.integrationStages.AddRange(stageEntities);
@@ -154,14 +162,36 @@ public class IntegrationCoordinator
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.scopeKey == scopeKey && c.requestKey == requestKey, CancellationToken.None);
             if (winner == null)
+            {
+                DetachFailedGraph();
                 throw;
+            }
             if (winner.requestHash != requestHash)
+            {
+                DetachFailedGraph();
                 throw new IntegrationRequestConflictException(
                     $"Request key '{requestKey}' was already used with a different body in this scope");
+            }
+            // The failed insert graph must not linger on a shared context: a
+            // caller's later SaveChanges would otherwise replay our inserts.
+            DetachFailedGraph();
             return new IntegrationAdmitResult(winner.commandId, winner.operationId, IsDuplicate: true);
+        }
+        catch
+        {
+            DetachFailedGraph();
+            throw;
         }
 
         return new IntegrationAdmitResult(commandId, operationId, IsDuplicate: false);
+
+        // Drops only this attempt's own pending inserts; unrelated tracked
+        // entities owned by a shared caller context are left alone.
+        void DetachFailedGraph()
+        {
+            foreach (var entity in priorGraph)
+                _db.Entry(entity).State = EntityState.Detached;
+        }
     }
 
     /// <summary>

@@ -103,6 +103,38 @@ public sealed class IntegrationExecutionP2Tests
     }
 
     [Fact]
+    public async Task Admit_PreservesUnrelatedPendingInsertsOnSharedContext()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        var coordinator = CreateCoordinator(db);
+
+        // An unrelated pending insert owned by the caller's context: admission
+        // cleanup must scope itself to its own failed graph, never to foreign
+        // tracked inserts.
+        var unrelated = new Delegat.Models.Operation
+        {
+            operationId = "op-unrelated",
+            storeId = 1,
+            authorUserId = 10,
+            type = "catalog-export",
+            title = "Unrelated op",
+            status = "running",
+            createdAt = DateTime.UtcNow
+        };
+        db.operations.Add(unrelated);
+
+        await coordinator.AdmitAsync(AdmitRequest(), v1Enabled: true, CancellationToken.None);
+
+        // Not discarded: the foreign insert is either still pending or was
+        // committed by admission's SaveChanges - never silently detached.
+        Assert.NotEqual(Microsoft.EntityFrameworkCore.EntityState.Detached,
+            db.Entry(unrelated).State);
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.operations.CountAsync());
+    }
+
+    [Fact]
     public async Task Admit_SameKeyDifferentBody_ConflictsBeforeAnyEffect()
     {
         var (db, keeper) = TestDbFactory.CreateSqliteDb();
@@ -184,11 +216,11 @@ public sealed class IntegrationExecutionP2Tests
         Assert.Equal(IntegrationEffectCertainty.Applied, attempt.effectCertainty);
         Assert.NotNull(attempt.completedAt);
 
-        var stage = await db.integrationStages.SingleAsync();
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("applied", stage.state);
-        var command = await db.integrationCommands.SingleAsync();
+        var command = await db.integrationCommands.AsNoTracking().SingleAsync();
         Assert.Equal("completed", command.state);
-        var op = await db.operations.SingleAsync();
+        var op = await db.operations.AsNoTracking().SingleAsync();
         Assert.Equal("completed", op.status);
     }
 
@@ -232,9 +264,9 @@ public sealed class IntegrationExecutionP2Tests
         // Confirmation must present the original attempt's dispatch identity,
         // never a freshly derived key.
         Assert.Equal("original-dispatch-77", dispatcher.LastConfirmRequest!.RequestKey);
-        Assert.Equal("applied", (await db.integrationStages.SingleAsync()).state);
+        Assert.Equal("applied", (await db.integrationStages.AsNoTracking().SingleAsync()).state);
         Assert.Equal("""{"externalId":"r-1"}""",
-            (await db.integrationStages.SingleAsync()).receiptJson);
+            (await db.integrationStages.AsNoTracking().SingleAsync()).receiptJson);
     }
 
     [Fact]
@@ -253,22 +285,22 @@ public sealed class IntegrationExecutionP2Tests
         var worker = CreateWorker(db, dispatcher);
 
         await worker.ProcessDueStagesAsync(CancellationToken.None);
-        var stage = await db.integrationStages.SingleAsync();
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("ready", stage.state); // retryable before-effect: requeued with backoff
         Assert.NotNull(stage.nextCheckAt);
 
         // Retry budget exhausted -> terminal, no false success.
         dispatcher.DispatchResult = new IntegrationDispatchResult(
             IntegrationDispatchOutcome.Rejected, Retryable: false);
-        stage.nextCheckAt = null;
-        await db.SaveChangesAsync();
+        await db.integrationStages.ExecuteUpdateAsync(s =>
+            s.SetProperty(x => x.nextCheckAt, (DateTime?)null));
         await worker.ProcessDueStagesAsync(CancellationToken.None);
 
-        stage = await db.integrationStages.SingleAsync();
+        stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("rejected", stage.state);
-        var command = await db.integrationCommands.SingleAsync();
+        var command = await db.integrationCommands.AsNoTracking().SingleAsync();
         Assert.Equal("failed", command.state);
-        Assert.Equal("failed", (await db.operations.SingleAsync()).status);
+        Assert.Equal("failed", (await db.operations.AsNoTracking().SingleAsync()).status);
         Assert.Equal(IntegrationEffectCertainty.None,
             (await db.integrationAttempts.AsNoTracking()
                 .OrderByDescending(a => a.Id).FirstAsync()).effectCertainty);
@@ -304,20 +336,19 @@ public sealed class IntegrationExecutionP2Tests
         await worker.ProcessDueStagesAsync(CancellationToken.None);
         Assert.Equal(1, dispatcher.DispatchCalls); // only "create" dispatched
 
-        var stages = await db.integrationStages.OrderBy(s => s.position).ToListAsync();
+        var stages = await db.integrationStages.AsNoTracking().OrderBy(s => s.position).ToListAsync();
         Assert.Equal("accepted", stages[0].state);
         Assert.Equal("ready", stages[1].state); // blocked, not sent out of order
 
         // The provider wait and the dependency wait elapse.
-        stages[0].nextCheckAt = DateTime.UtcNow.AddSeconds(-1);
-        stages[1].nextCheckAt = DateTime.UtcNow.AddSeconds(-1);
-        await db.SaveChangesAsync();
+        await db.integrationStages.ExecuteUpdateAsync(s =>
+            s.SetProperty(x => x.nextCheckAt, DateTime.UtcNow.AddSeconds(-1)));
 
         await worker.ProcessDueStagesAsync(CancellationToken.None);
         Assert.Equal(1, dispatcher.ConfirmCalls);
         Assert.Equal(2, dispatcher.DispatchCalls); // "price" continues in order
-        Assert.Equal("applied", (await db.integrationStages.OrderBy(s => s.position).LastAsync()).state);
-        Assert.Equal("completed", (await db.integrationCommands.SingleAsync()).state);
+        Assert.Equal("applied", (await db.integrationStages.AsNoTracking().OrderBy(s => s.position).LastAsync()).state);
+        Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
@@ -349,10 +380,10 @@ public sealed class IntegrationExecutionP2Tests
         await worker.ProcessDueStagesAsync(CancellationToken.None);
 
         Assert.Equal(1, dispatcher.DispatchCalls); // dependent stage never sent
-        var stages = await db.integrationStages.OrderBy(s => s.position).ToListAsync();
+        var stages = await db.integrationStages.AsNoTracking().OrderBy(s => s.position).ToListAsync();
         Assert.Equal("rejected", stages[0].state);
         Assert.Equal("cancelled", stages[1].state);
-        Assert.Equal("failed", (await db.integrationCommands.SingleAsync()).state);
+        Assert.Equal("failed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
@@ -384,7 +415,7 @@ public sealed class IntegrationExecutionP2Tests
 
         Assert.Equal(1, dispatcherA.DispatchCalls + dispatcherB.DispatchCalls);
         Assert.Equal(1, await db.integrationAttempts.CountAsync());
-        Assert.Equal("applied", (await db.integrationStages.SingleAsync()).state);
+        Assert.Equal("applied", (await db.integrationStages.AsNoTracking().SingleAsync()).state);
     }
 
     // ---------- Stop semantics (A07) ----------
@@ -403,11 +434,11 @@ public sealed class IntegrationExecutionP2Tests
         await CreateWorker(db, dispatcher).ProcessDueStagesAsync(CancellationToken.None);
 
         Assert.Equal(0, dispatcher.DispatchCalls);
-        var stage = await db.integrationStages.SingleAsync();
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("cancelled", stage.state);
-        var command = await db.integrationCommands.SingleAsync();
+        var command = await db.integrationCommands.AsNoTracking().SingleAsync();
         Assert.Equal("cancelled", command.state);
-        Assert.Equal("cancelled", (await db.operations.SingleAsync()).status);
+        Assert.Equal("cancelled", (await db.operations.AsNoTracking().SingleAsync()).status);
     }
 
     [Fact]
@@ -427,21 +458,21 @@ public sealed class IntegrationExecutionP2Tests
         var worker = CreateWorker(db, dispatcher);
 
         await worker.ProcessDueStagesAsync(CancellationToken.None);
-        var acceptedStage = await db.integrationStages.SingleAsync();
+        var acceptedStage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("accepted", acceptedStage.state);
 
         // The provider wait elapses; the stage is due for confirmation.
-        acceptedStage.nextCheckAt = DateTime.UtcNow.AddSeconds(-1);
-        await db.SaveChangesAsync();
+        await db.integrationStages.ExecuteUpdateAsync(s =>
+            s.SetProperty(x => x.nextCheckAt, DateTime.UtcNow.AddSeconds(-1)));
 
         await coordinator.RequestStopByOperationIdAsync(admitted.OperationId, CancellationToken.None);
         await worker.ProcessDueStagesAsync(CancellationToken.None);
 
         // Stop must not claim remote rollback: the accepted effect is confirmed.
         Assert.Equal(1, dispatcher.ConfirmCalls);
-        var stage = await db.integrationStages.SingleAsync();
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("applied", stage.state);
-        var command = await db.integrationCommands.SingleAsync();
+        var command = await db.integrationCommands.AsNoTracking().SingleAsync();
         Assert.Equal("partial", command.state); // stopped after partial application
     }
 
@@ -462,11 +493,11 @@ public sealed class IntegrationExecutionP2Tests
         };
         await CreateWorker(db, dispatcher).ProcessDueStagesAsync(CancellationToken.None);
 
-        var stage = await db.integrationStages.SingleAsync();
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("unknown", stage.state);
-        var command = await db.integrationCommands.SingleAsync();
+        var command = await db.integrationCommands.AsNoTracking().SingleAsync();
         Assert.Equal("unknown", command.state);
-        var op = await db.operations.SingleAsync();
+        var op = await db.operations.AsNoTracking().SingleAsync();
         Assert.Equal("failed", op.status); // honest terminal, never silent success
 
         // Evidence retained: unresolved-projection guard sees it as terminal,
@@ -533,7 +564,7 @@ public sealed class IntegrationExecutionP2Tests
         Assert.Equal(2, dispatcher.DispatchCalls); // both "create" stages went out
 
         // Blocked price stages carry a persisted wait, not an every-poll spin.
-        var prices = await db.integrationStages.Where(s => s.stageKey == "price").ToListAsync();
+        var prices = await db.integrationStages.AsNoTracking().Where(s => s.stageKey == "price").ToListAsync();
         Assert.All(prices, s => Assert.NotNull(s.nextCheckAt));
 
         await db.integrationStages.ExecuteUpdateAsync(s =>
@@ -556,7 +587,6 @@ public sealed class IntegrationExecutionP2Tests
             string.Join("\n", workerLogger.Entries));
         Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
         Assert.Equal("completed", (await db.operations.AsNoTracking().SingleAsync()).status);
-        Assert.Equal("completed", (await db.operations.SingleAsync()).status);
     }
 
     [Fact]
@@ -585,14 +615,14 @@ public sealed class IntegrationExecutionP2Tests
 
         await worker.ProcessDueStagesAsync(CancellationToken.None);
 
-        var stages = await db.integrationStages
+        var stages = await db.integrationStages.AsNoTracking()
             .OrderBy(s => s.itemKey).ThenBy(s => s.position).ToListAsync();
         Assert.Equal("rejected", stages[0].state);   // itemA create
         Assert.Equal("cancelled", stages[1].state);  // itemA price: own dep failed
         Assert.Equal("applied", stages[2].state);    // itemB create
         Assert.Equal("applied", stages[3].state);    // itemB price: unaffected
         Assert.Equal(3, dispatcher.DispatchCalls);   // itemA price never sent
-        Assert.Equal("partial", (await db.integrationCommands.SingleAsync()).state);
+        Assert.Equal("partial", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
@@ -624,10 +654,10 @@ public sealed class IntegrationExecutionP2Tests
         await CreateWorker(db, dispatcher).ProcessDueStagesAsync(CancellationToken.None);
 
         Assert.Equal(1, dispatcher.DispatchCalls);
-        var stages = await db.integrationStages.OrderBy(s => s.itemKey).ToListAsync();
+        var stages = await db.integrationStages.AsNoTracking().OrderBy(s => s.itemKey).ToListAsync();
         Assert.Equal("applied", stages[0].state);
         Assert.Equal("cancelled", stages[1].state);
-        Assert.Equal("partial", (await db.integrationCommands.SingleAsync()).state);
+        Assert.Equal("partial", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
@@ -690,8 +720,8 @@ public sealed class IntegrationExecutionP2Tests
         await CreateWorker(db, new FakeDispatcher(), logger)
             .ProcessDueStagesAsync(CancellationToken.None);
 
-        Assert.Equal("completed", (await db.integrationCommands.SingleAsync()).state);
-        Assert.Equal("completed", (await db.operations.SingleAsync()).status);
+        Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
+        Assert.Equal("completed", (await db.operations.AsNoTracking().SingleAsync()).status);
         Assert.Single(logger.FinishedNotifications);
         Assert.Equal("completed", logger.FinishedNotifications[0].Status);
     }
