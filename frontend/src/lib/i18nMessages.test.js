@@ -382,11 +382,23 @@ describe("locale message catalogs", () => {
       "hosted_ai_unavailable",
       "hosted_ai_provider_unavailable",
       "hosted_ai_request_too_large",
+      "review_incomplete",
     ];
 
     for (const code of codes) {
       assert.equal(typeof en.errors[code], "string", `en.errors.${code}`);
       assert.equal(typeof ru.errors[code], "string", `ru.errors.${code}`);
+    }
+  });
+
+  it("localizes the incomplete review title in both supported languages", () => {
+    for (const messages of [en, ru]) {
+      assert.equal(
+        typeof messages.ai.reviewIncompleteTitle,
+        "string",
+        "ai.reviewIncompleteTitle",
+      );
+      assert.ok(messages.ai.reviewIncompleteTitle.trim());
     }
   });
 });

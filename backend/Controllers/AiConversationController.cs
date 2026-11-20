@@ -47,8 +47,11 @@ public class AiConversationController : ControllerBase
                     .Select(m => m.toolCallsJson).FirstOrDefault() })
             .ToListAsync(ct);
 
+        var active = await _context.aiTurnJobs.AsNoTracking()
+            .Where(j => j.storeId == storeId.Value && j.userId == userId.Value && j.activeSessionId != null)
+            .Select(j => j.sessionId).ToListAsync(ct);
         return Ok(convs.Select(c => new { c.sessionId, c.title, c.messageCount, c.lastMessageAt,
-            generating = _liveTurns.IsGenerating(c.sessionId, storeId.Value, userId.Value),
+            generating = active.Contains(c.sessionId) || _liveTurns.IsGenerating(c.sessionId, storeId.Value, userId.Value),
             stopped = AiConversationTurnStore.HasStoppedTurn(c.lastAssistantMeta) }));
     }
 
@@ -67,7 +70,7 @@ public class AiConversationController : ControllerBase
 
         if (conv == null) return NotFound();
 
-        return Ok(ConversationDto(conv, storeId.Value, userId.Value));
+        return Ok(await ConversationDtoAsync(conv, storeId.Value, userId.Value, ct));
     }
 
     // PATCH /api/ai/conversations/{sessionId} - rename conversation
@@ -105,7 +108,7 @@ public class AiConversationController : ControllerBase
 
         if (conv == null) return Ok(null);
 
-        return Ok(ConversationDto(conv, storeId.Value, userId.Value));
+        return Ok(await ConversationDtoAsync(conv, storeId.Value, userId.Value, ct));
     }
 
     // POST /api/ai/conversations/{sessionId}/generate-title
@@ -475,12 +478,16 @@ public class AiConversationController : ControllerBase
         return Ok(new { success = true });
     }
 
-    private object ConversationDto(AiConversation conv, int storeId, int userId)
+    private async Task<object> ConversationDtoAsync(AiConversation conv, int storeId, int userId, CancellationToken ct)
     {
-        // A row still marked running is live only while its run is active in
-        // this process; orphaned rows project as interrupted (read-only).
+        // Durable ownership survives process restarts. Only legacy rows without a job
+        // use the process-local compatibility path.
+        var durableRunId = await _context.aiTurnJobs.AsNoTracking()
+            .Where(j => j.sessionId == conv.sessionId && j.storeId == storeId && j.userId == userId
+                && j.activeSessionId != null)
+            .Select(j => j.runId).SingleOrDefaultAsync(ct);
         var live = _liveTurns?.Find(conv.sessionId, storeId, userId);
-        var activeRunId = live is { IsCompleted: false } ? live.RunId : null;
+        var activeRunId = durableRunId ?? (live is { IsCompleted: false } ? live.RunId : null);
         return new
         {
             sessionId = conv.sessionId,

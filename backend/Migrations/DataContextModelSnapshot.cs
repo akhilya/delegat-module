@@ -597,6 +597,142 @@ namespace Delegat.Migrations
                     b.ToTable("aiStoreSettings");
                 });
 
+            modelBuilder.Entity("Delegat.Models.Ai.AiTurnJob", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("activeSessionId")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.Property<int>("attempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("bindingJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("cancelRequested")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("checkpointsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("conversationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("createdAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("engine")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<bool>("executionEnded")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("lastEventType")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long>("lastSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("leaseExpiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("leaseOwner")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<int>("payloadVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("phase")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("requestJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("runId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("sessionId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.Property<int?>("startedStep")
+                        .HasColumnType("int");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("storeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("updatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("userId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("activeSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("conversationId");
+
+                    b.HasIndex("runId")
+                        .IsUnique();
+
+                    b.HasIndex("status", "leaseExpiresAtUtc", "Id");
+
+                    b.HasIndex("sessionId", "storeId", "userId", "Id");
+
+                    b.ToTable("aiTurnJobs");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiTurnJournalEvent", b =>
+                {
+                    b.Property<long>("jobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("sequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("eventJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("jobId", "sequence");
+
+                    b.ToTable("aiTurnJournalEvents");
+                });
+
             modelBuilder.Entity("Delegat.Models.ApiRequestLog", b =>
                 {
                     b.Property<int>("Id")
@@ -3807,6 +3943,28 @@ namespace Delegat.Migrations
                         .IsRequired();
 
                     b.Navigation("conversation");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiTurnJob", b =>
+                {
+                    b.HasOne("Delegat.Models.Ai.AiConversation", "conversation")
+                        .WithMany()
+                        .HasForeignKey("conversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("conversation");
+                });
+
+            modelBuilder.Entity("Delegat.Models.Ai.AiTurnJournalEvent", b =>
+                {
+                    b.HasOne("Delegat.Models.Ai.AiTurnJob", "job")
+                        .WithMany()
+                        .HasForeignKey("jobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("job");
                 });
 
             modelBuilder.Entity("Delegat.Models.Category", b =>

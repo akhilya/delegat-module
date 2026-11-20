@@ -199,6 +199,187 @@ public class AiLiveTurnHubTests
     }
 
     [Fact]
+    public void Recorder_ChatPhaseToolErrors_DoNotBecomeAPlanOutcome()
+    {
+        // The repaired-form incident shape: a canonical chat segment carries a
+        // rejected read and an invalid draft form before the repaired valid
+        // form. All three stay tool evidence; no plan outcome is invented.
+        var snapshot = AiSseTurnRecorder.FoldEvents(RepairedFormChatEvents());
+        using var json = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var root = json.RootElement;
+        Assert.Equal("chat", root.GetProperty("phase").GetString());
+        Assert.Equal("completed", root.GetProperty("messageState").GetString());
+        Assert.False(root.TryGetProperty("planFailed", out _));
+        Assert.False(root.TryGetProperty("planExecuted", out _));
+        var tools = root.GetProperty("tools").EnumerateArray().ToList();
+        Assert.Equal(3, tools.Count);
+        Assert.Equal(
+            "ORDER BY column is not allowlisted",
+            tools[0].GetProperty("result").GetProperty("error").GetString());
+        Assert.Equal(
+            "unknown_follow_up_fields",
+            tools[1].GetProperty("result").GetProperty("error").GetString());
+        Assert.False(tools[1].GetProperty("result").GetProperty("form").GetBoolean());
+        Assert.True(tools[2].GetProperty("result").GetProperty("form").GetBoolean());
+        Assert.Equal(
+            5,
+            tools[2].GetProperty("result").GetProperty("questions").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("chat", true)]
+    [InlineData("chat", false)]
+    [InlineData("review", true)]
+    [InlineData("review", false)]
+    public void Recorder_NonExecutionPhaseStrayOk_NeverSetsPlanOutcome(
+        string phase, bool ok)
+    {
+        var events = new List<AiTurnEvent>
+        {
+            AiTurnEvent.Create(SseEventType.Text, new { delta = "note" }),
+            AiTurnEvent.Create(SseEventType.Done, new { ok }),
+        };
+        if (phase == "review")
+            events.Insert(0, AiTurnEvent.Create(
+                SseEventType.AssistantStart, new { executionProposalId = "parent" }));
+        var snapshot = AiSseTurnRecorder.FoldEvents(events.Select((item, i) => item with
+        {
+            RunId = "run-phase",
+            MessageId = "msg-phase",
+            Sequence = i + 1,
+            Phase = phase,
+        }));
+        using var json = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var root = json.RootElement;
+        Assert.Equal(phase, root.GetProperty("phase").GetString());
+        Assert.False(root.TryGetProperty("planFailed", out _));
+        Assert.False(root.TryGetProperty("planExecuted", out _));
+        if (phase == "review")
+        {
+            Assert.Equal("parent", root.GetProperty("executionProposalId").GetString());
+            Assert.Equal("msg-phase", root.GetProperty("messageId").GetString());
+        }
+    }
+
+    [Fact]
+    public void Recorder_ExecutionPhaseFailedTool_WithoutOk_FailsButDoesNotExecute()
+    {
+        var snapshot = AiSseTurnRecorder.FoldEvents([
+            Stamp(AiTurnEvent.Create(SseEventType.Tool, new
+            {
+                id = "t1",
+                name = "platform_request",
+                status = "done",
+                summary = "HTTP 400",
+                result = """{"error":"bad_request","status":400}""",
+            }), 1),
+            Stamp(AiTurnEvent.Create(SseEventType.Done, new { }), 2),
+        ]);
+        using var json = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var root = json.RootElement;
+        Assert.True(root.GetProperty("planFailed").GetBoolean());
+        Assert.False(root.TryGetProperty("planExecuted", out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Recorder_ExecutionPhaseTerminalOk_ScopesPlanOutcome(bool ok)
+    {
+        var snapshot = AiSseTurnRecorder.FoldEvents([
+            Stamp(AiTurnEvent.Create(SseEventType.Tool, new
+            {
+                id = "t1",
+                name = "platform_request",
+                status = "done",
+                summary = "ok",
+                result = """{"success":true}""",
+            }), 1),
+            Stamp(AiTurnEvent.Create(SseEventType.Done, new { ok }), 2),
+        ]);
+        using var json = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var root = json.RootElement;
+        Assert.True(root.GetProperty("planExecuted").GetBoolean());
+        Assert.Equal(!ok, root.TryGetProperty("planFailed", out var flag) && flag.GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatPhaseWithRepairedForm_PersistsNoPlanFailure()
+    {
+        using var hub = CreateHub(out var db);
+        Assert.True(hub.TryStart("s", 1, 1,
+            User("Create a product, fill its attributes, then generate a table with its data."),
+            RepairedFormChat));
+        await WaitUntil(() => !hub.IsGenerating("s", 1, 1));
+        var row = db.aiConversationMessages.Single(m => m.role == "assistant");
+        using var json = JsonDocument.Parse(row.toolCallsJson!);
+        var root = json.RootElement;
+        Assert.Equal("chat", root.GetProperty("phase").GetString());
+        Assert.Equal("completed", root.GetProperty("messageState").GetString());
+        Assert.False(root.TryGetProperty("planFailed", out _));
+        Assert.False(root.TryGetProperty("planExecuted", out _));
+        var tools = root.GetProperty("tools").EnumerateArray().ToList();
+        Assert.Equal(3, tools.Count);
+        Assert.True(tools.Last().GetProperty("result").GetProperty("form").GetBoolean());
+    }
+
+    private static AiTurnEvent Stamp(AiTurnEvent item, long sequence) => item with
+    {
+        RunId = "run-exec",
+        MessageId = "msg-exec",
+        Sequence = sequence,
+        Phase = "execution",
+    };
+
+    private static AiTurnEvent[] RepairedFormChatEvents(int firstSequence = 1)
+    {
+        var raw = new[]
+        {
+            AiTurnEvent.Create(SseEventType.Tool, new
+            {
+                id = "sql-1",
+                name = "sql_readonly",
+                status = "done",
+                summary = "Query rejected",
+                result = """{"error":"ORDER BY column is not allowlisted"}""",
+            }),
+            AiTurnEvent.Create(SseEventType.Tool, new
+            {
+                id = "form-1",
+                name = "ask_form",
+                status = "done",
+                summary = "Form rejected",
+                result = """{"error":"unknown_follow_up_fields","form":false,"unknownFields":["sku","price","quantity"]}""",
+            }),
+            AiTurnEvent.Create(SseEventType.Tool, new
+            {
+                id = "form-2",
+                name = "ask_form",
+                status = "done",
+                summary = "Form presented",
+                result = """{"form":true,"kind":"questions","title":"New product","followUp":"Create product in {category} named {name}, SKU {sku}, price {price}, quantity {quantity}. Then generate its data table.","questions":[{"key":"category","title":"Category","type":"single","choices":[{"value":"figure","label":"Figure"},{"value":"accessory","label":"Accessory"}]},{"key":"name","title":"Product name","type":"text"},{"key":"sku","title":"SKU","type":"text"},{"key":"price","title":"Price","type":"text"},{"key":"quantity","title":"Quantity","type":"text"}]}""",
+            }),
+            AiTurnEvent.Create(SseEventType.Done, new { modelName = "m" }),
+        };
+        return raw.Select((item, i) => item with
+        {
+            RunId = "run-chat",
+            MessageId = "msg-chat",
+            Sequence = firstSequence + i,
+            Phase = "chat",
+        }).ToArray();
+    }
+
+    private static async IAsyncEnumerable<AiTurnEvent> RepairedFormChat(
+        IServiceProvider _,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var item in RepairedFormChatEvents())
+            yield return new AiTurnEvent(item.Type, item.Data);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
     public async Task Subscribe_ReplaysThenTails()
     {
         var turn = new AiLiveTurn("s", 1, 1);

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canConfirmPlan, reconcilePlanMessages } from "./planState.js";
+import {
+  canConfirmPlan,
+  planHasClarificationConflict,
+  planHasExecutionStarted,
+  reconcilePlanMessages,
+} from "./planState.js";
 import { readSseEvents } from "./sse.js";
 import {
   apiHistoryFromBlocks,
@@ -998,7 +1003,21 @@ describe("form replies", () => {
     assert.equal(user.formReply.formId, "ask1");
     assert.equal(isHiddenUserMessage(user), true);
     const messages = applyFormReplies([
-      { role: "assistant", formReplies: {} },
+      {
+        role: "assistant",
+        toolCalls: [
+          {
+            id: "ask1",
+            name: "ask_form",
+            result: {
+              form: true,
+              kind: "questions",
+              questions: [{ key: "q" }],
+            },
+          },
+        ],
+        formReplies: {},
+      },
       user,
     ]);
     assert.equal(messages[0].formReplies.ask1.answers.adapter, "ozon");
@@ -1012,7 +1031,17 @@ describe("form replies", () => {
         content: "Which marketplace?",
         toolCallsJson: JSON.stringify({
           _ui: "assistantTurn",
-          tools: [{ id: "ask1", name: "ask_form" }],
+          tools: [
+            {
+              id: "ask1",
+              name: "ask_form",
+              result: {
+                form: true,
+                kind: "questions",
+                questions: [{ key: "q" }],
+              },
+            },
+          ],
           timeline: [{ type: "tool", id: "ask1" }],
         }),
       },
@@ -1029,6 +1058,213 @@ describe("form replies", () => {
     ]);
     assert.equal(messages[0].formReplies.ask1.answers.adapter, "ozon");
     assert.equal(messages[1].formReply.formId, "ask1");
+  });
+
+  const formTool = (id, key = "q") => ({
+    id,
+    name: "ask_form",
+    result: { form: true, kind: "questions", questions: [{ key }] },
+  });
+  const ownerRow = (extra = {}) => ({
+    role: "assistant",
+    toolCalls: [formTool("ask1")],
+    formReplies: {},
+    ...extra,
+  });
+  const replyRow = (reply) => ({
+    role: "user",
+    formReply: { formId: "ask1", answers: { name: "Mug" }, ...reply },
+  });
+
+  it("round-trips the bound owner metadata on a form reply", () => {
+    const json = serializeToolCallsJson({
+      formReply: {
+        formId: "ask1",
+        answers: { name: "Mug" },
+        assistantMessageId: "srv-a",
+        assistantDbId: 7,
+      },
+    });
+    const parsed = JSON.parse(json);
+    assert.equal(parsed.assistantMessageId, "srv-a");
+    assert.equal(parsed.assistantDbId, 7);
+    const user = mapStoredMessage({
+      dbId: 9,
+      role: "user",
+      content: "answered",
+      toolCallsJson: json,
+    });
+    assert.equal(user.formReply.assistantMessageId, "srv-a");
+    assert.equal(user.formReply.assistantDbId, 7);
+  });
+
+  it("binds an explicit owner among repeated form ids", () => {
+    const earlier = ownerRow({ messageId: "srv-a" });
+    const later = ownerRow({ messageId: "srv-b" });
+    const messages = applyFormReplies([
+      earlier,
+      later,
+      replyRow({ assistantMessageId: "srv-a" }),
+    ]);
+    assert.equal(messages[0].formReplies.ask1.answers.name, "Mug");
+    assert.equal(messages[1].formReplies.ask1, undefined);
+  });
+
+  it("binds an explicit dbId owner and an unknown owner is not guessed", () => {
+    const earlier = ownerRow({ dbId: 3 });
+    const messages = applyFormReplies([
+      earlier,
+      replyRow({ assistantDbId: 3 }),
+    ]);
+    assert.equal(messages[0].formReplies.ask1.answers.name, "Mug");
+    const missing = applyFormReplies([
+      ownerRow({ messageId: "srv-a", dbId: 3 }),
+      replyRow({ assistantMessageId: "srv-gone" }),
+    ]);
+    assert.equal(missing[0].formReplies.ask1, undefined);
+    // An explicit canonical owner never falls back, even when the paired
+    // dbId points at a real assistant row.
+    const noDbFallback = applyFormReplies([
+      ownerRow({ messageId: "srv-a", dbId: 3 }),
+      replyRow({ assistantMessageId: "srv-gone", assistantDbId: 3 }),
+    ]);
+    assert.equal(noDbFallback[0].formReplies.ask1, undefined);
+  });
+
+  it("does not fabricate a recap on ambiguous or unrelated legacy rows", () => {
+    const ambiguous = applyFormReplies([
+      ownerRow(),
+      ownerRow(),
+      replyRow(),
+    ]);
+    assert.equal(ambiguous[0].formReplies.ask1, undefined);
+    assert.equal(ambiguous[1].formReplies.ask1, undefined);
+    const unrelated = applyFormReplies([
+      { role: "assistant", content: "no form here" },
+      replyRow(),
+    ]);
+    assert.equal(unrelated[0].formReplies.ask1, undefined);
+  });
+
+  it("normalizes a chat-phase plan failure without losing the repaired form", () => {
+    const restored = mapStoredMessage({
+      dbId: 2,
+      role: "assistant",
+      content: "",
+      toolCallsJson: JSON.stringify({
+        _ui: "assistantTurn",
+        phase: "chat",
+        plan: null,
+        planFailed: true,
+        tools: [
+          { id: "sql-1", name: "sql_readonly", status: "done", result: { error: "x" } },
+          formTool("ask1"),
+        ],
+        timeline: [
+          { type: "tool", id: "sql-1" },
+          { type: "tool", id: "ask1" },
+        ],
+        messageState: "completed",
+      }),
+    });
+    assert.equal(restored.planFailed, false);
+    assert.equal(restored.planExecuted, false);
+    assert.equal(restored.toolCalls.length, 2);
+    // The cleared flags are the serialized view too — stored JSON untouched.
+    const reserialized = JSON.parse(serializeToolCallsJson(restored));
+    assert.equal(reserialized.planFailed, undefined);
+    assert.equal(reserialized.planExecuted, undefined);
+    assert.equal(reserialized.phase, "chat");
+  });
+
+  it("keeps accepted form answers when a same-owner history read omits them", () => {
+    const local = {
+      id: "ui-1",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-1",
+      lastEventSequence: 4,
+      done: true,
+      toolCalls: [formTool("ask1")],
+      timeline: [{ type: "tool", id: "ask1" }],
+      formReplies: { ask1: { answers: { name: "Mug" } } },
+    };
+    const incoming = mapStoredMessage({
+      dbId: 8,
+      role: "assistant",
+      content: "",
+      toolCallsJson: JSON.stringify({
+        _ui: "assistantTurn",
+        messageId: "srv-a",
+        runId: "run-1",
+        lastEventSequence: 4,
+        messageState: "completed",
+        tools: [formTool("ask1")],
+        timeline: [{ type: "tool", id: "ask1" }],
+      }),
+    });
+    // Same run and sequence: the terminal server snapshot wins every field,
+    // yet recorded answers are never revoked by the omission.
+    const merged = reconcilePlanMessages([local], [incoming]);
+    assert.equal(merged[0].dbId, 8);
+    assert.equal(merged[0].formReplies.ask1.answers.name, "Mug");
+  });
+
+  it("merges formReplies per owner key: server wins, omitted keys stay", () => {
+    const local = {
+      id: "ui-1",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-1",
+      lastEventSequence: 4,
+      done: true,
+      toolCalls: [formTool("ask1"), formTool("ask2")],
+      timeline: [
+        { type: "tool", id: "ask1" },
+        { type: "tool", id: "ask2" },
+      ],
+      formReplies: {
+        ask1: { answers: { name: "Mug" } },
+        ask2: { answers: { color: "red" } },
+      },
+    };
+    const incoming = {
+      ...local,
+      id: "ui-2",
+      dbId: 8,
+      formReplies: { ask1: { answers: { name: "Bowl" } } },
+    };
+    const [merged] = reconcilePlanMessages([local], [incoming]);
+    assert.equal(merged.formReplies.ask1.answers.name, "Bowl");
+    assert.equal(merged.formReplies.ask2.answers.color, "red");
+  });
+
+  it("never carries form answers onto a different canonical owner", () => {
+    const localA = {
+      id: "ui-1",
+      role: "assistant",
+      messageId: "srv-a",
+      runId: "run-1",
+      lastEventSequence: 4,
+      done: true,
+      toolCalls: [formTool("ask1")],
+      timeline: [{ type: "tool", id: "ask1" }],
+      formReplies: { ask1: { answers: { name: "Mug" } } },
+    };
+    const localB = {
+      ...localA,
+      id: "ui-2",
+      messageId: "srv-b",
+      formReplies: {},
+    };
+    const incomingA = { ...localA, id: "srvrow-a", dbId: 8, formReplies: {} };
+    const incomingB = { ...localB, id: "srvrow-b", dbId: 9, formReplies: {} };
+    const [mergedA, mergedB] = reconcilePlanMessages(
+      [localA, localB],
+      [incomingA, incomingB],
+    );
+    assert.equal(mergedA.formReplies.ask1.answers.name, "Mug");
+    assert.equal(mergedB.formReplies.ask1, undefined);
   });
 });
 
@@ -1270,5 +1506,137 @@ describe("finalizeTurnTools", () => {
     const out = finalizeTurnTools(msg);
     assert.equal(out.toolCalls[0].status, "done");
     assert.equal(out.toolCalls[0].summary, "interrupted");
+  });
+});
+
+describe("clarification conflict", () => {
+  const formTool = {
+    id: "ask1",
+    name: "ask_form",
+    result: {
+      form: true,
+      kind: "fields",
+      fields: [{ key: "name", label: "Name" }],
+    },
+  };
+  const pendingPlan = {
+    proposalId: "p1",
+    summary: "Create Mug",
+    steps: [
+      {
+        description: "Create Mug",
+        tool: "platform_request",
+        args: { method: "POST", path: "/products" },
+      },
+    ],
+  };
+  const formTurn = (extra = {}) => ({
+    role: "assistant",
+    content: "",
+    plan: pendingPlan,
+    toolCalls: [formTool],
+    timeline: [{ type: "tool", id: "ask1" }],
+    ...extra,
+  });
+  const restore = (msg) =>
+    mapStoredMessage({
+      dbId: 2,
+      role: "assistant",
+      content: msg.content || "",
+      toolCallsJson: serializeToolCallsJson(msg),
+    });
+
+  it("blocks a pending plan that shares a turn with a presented form", () => {
+    const restored = restore(formTurn());
+    assert.equal(planHasClarificationConflict(restored), true);
+    assert.equal(canConfirmPlan(restored), false);
+  });
+
+  it("detects the conflict from raw tool calls when no timeline is stored", () => {
+    const raw = {
+      role: "assistant",
+      content: "",
+      done: true,
+      plan: pendingPlan,
+      toolCalls: [formTool],
+    };
+    assert.equal(raw.timeline, undefined);
+    assert.equal(planHasClarificationConflict(raw), true);
+    assert.equal(canConfirmPlan(raw), false);
+  });
+
+  it("does not revive the pre-answer draft after the form is submitted", () => {
+    const restored = restore(
+      formTurn({ formReplies: { ask1: { answers: { name: "Mug" } } } }),
+    );
+    assert.equal(restored.formReplies.ask1.answers.name, "Mug");
+    assert.equal(planHasClarificationConflict(restored), true);
+    assert.equal(canConfirmPlan(restored), false);
+
+    // A fresh plan arrives in its own later assistant turn and confirms.
+    const fresh = mapStoredMessage({
+      dbId: 4,
+      role: "assistant",
+      content: "",
+      toolCallsJson: serializeToolCallsJson({
+        role: "assistant",
+        content: "",
+        plan: { ...pendingPlan, proposalId: "p2" },
+        toolCalls: [],
+        timeline: [],
+      }),
+    });
+    assert.equal(planHasClarificationConflict(fresh), false);
+    assert.equal(canConfirmPlan(fresh), true);
+    assert.equal(canConfirmPlan(restored), false);
+  });
+
+  it("keeps confirmed execution evidence out of the conflict path", () => {
+    const executed = restore(
+      formTurn({
+        content: "Done.",
+        planConfirmed: true,
+        planExecuted: true,
+        planExecStart: 1,
+        executionOutcome: { status: "completed" },
+        toolCalls: [
+          formTool,
+          { id: "e1", name: "platform_request", status: "done" },
+        ],
+        timeline: [
+          { type: "tool", id: "ask1" },
+          { type: "tool", id: "e1" },
+        ],
+      }),
+    );
+    assert.equal(planHasExecutionStarted(executed), true);
+    assert.equal(planHasClarificationConflict(executed), false);
+    assert.equal(canConfirmPlan(executed), false);
+
+    // Legacy boundaryless row: confirmed and executed, no planExecStart.
+    const legacy = restore(
+      formTurn({ content: "Done.", planConfirmed: true, planExecuted: true }),
+    );
+    assert.equal(legacy.planExecStart, undefined);
+    assert.equal(planHasExecutionStarted(legacy), true);
+    assert.equal(planHasClarificationConflict(legacy), false);
+  });
+
+  it("ignores a form tool that never presented a valid form", () => {
+    for (const result of [
+      { form: false, error: "unknown_follow_up_fields" },
+      { form: true, kind: "fields", fields: [] },
+      "raw error text",
+    ]) {
+      const restored = restore({
+        role: "assistant",
+        content: "",
+        plan: pendingPlan,
+        toolCalls: [{ id: "ask1", name: "ask_form", result }],
+        timeline: [{ type: "tool", id: "ask1" }],
+      });
+      assert.equal(planHasClarificationConflict(restored), false);
+      assert.equal(canConfirmPlan(restored), true);
+    }
   });
 });

@@ -8,9 +8,9 @@ namespace Delegat.Tests;
 public class AiPromptsChatTests
 {
     [Fact]
-    public void ChatPromptVersion_IsBumpedForGroundedDocumentationAnswers()
+    public void ChatPromptVersion_IsBumpedForPlanShapeValidation()
     {
-        Assert.Equal("chat-v18", AiPrompts.ChatPromptVersion);
+        Assert.Equal("chat-v20", AiPrompts.ChatPromptVersion);
     }
 
     [Fact]

@@ -5,8 +5,8 @@ namespace Delegat.Services.Ai;
 /// <summary>
 /// Everything the chat turn loop needs after the shared StreamChatAsync preamble ran:
 /// resolved+decrypted model, system prompt, trimmed history, tool surface, and per-turn
-/// policy flags. Produced once per StreamChatAsync call; consumed by the legacy loop or
-/// the MAF engine depending on the Ai:AgentRuntime flag.
+/// policy flags. Produced once per StreamChatAsync call; consumed by the default MAF
+/// engine or the temporary explicit-legacy rollback loop.
 /// </summary>
 internal sealed class ChatTurnPreparation
 {

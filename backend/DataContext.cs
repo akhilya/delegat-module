@@ -111,6 +111,8 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
     public DbSet<ReferenceTimezone> referenceTimezones { get; set; }
     public DbSet<ReferencePlugin> referencePlugins { get; set; }
     public DbSet<AiConversationMessage> aiConversationMessages { get; set; }
+    public DbSet<AiTurnJob> aiTurnJobs { get; set; }
+    public DbSet<AiTurnJournalEvent> aiTurnJournalEvents { get; set; }
     public DbSet<AiKnowledgeChunk> aiKnowledgeChunks { get; set; }
     public DbSet<AiSandboxRun> aiSandboxRuns { get; set; }
     public DbSet<AiAgentAudit> aiAgentAudits { get; set; }
@@ -620,6 +622,17 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
         builder.Entity<AiConversationMessage>()
             .Property(m => m.toolCallsJson)
             .IsConcurrencyToken();
+        builder.Entity<AiTurnJob>().HasIndex(j => j.runId).IsUnique();
+        builder.Entity<AiTurnJob>().HasIndex(j => j.activeSessionId).IsUnique();
+        builder.Entity<AiTurnJob>().HasIndex(j => new { j.status, j.leaseExpiresAtUtc, j.Id });
+        builder.Entity<AiTurnJob>().HasIndex(j => new { j.sessionId, j.storeId, j.userId, j.Id });
+        builder.Entity<AiTurnJob>().Property(j => j.revision).IsConcurrencyToken();
+        builder.Entity<AiTurnJob>().Property(j => j.leaseOwner).IsConcurrencyToken();
+        builder.Entity<AiTurnJob>().HasOne(j => j.conversation).WithMany()
+            .HasForeignKey(j => j.conversationId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<AiTurnJournalEvent>().HasKey(e => new { e.jobId, e.sequence });
+        builder.Entity<AiTurnJournalEvent>().HasOne(e => e.job).WithMany()
+            .HasForeignKey(e => e.jobId).OnDelete(DeleteBehavior.Cascade);
 
         // AiStoreSettings - one row per store
         builder.Entity<AiStoreSettings>()

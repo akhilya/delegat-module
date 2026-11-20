@@ -10,6 +10,7 @@ using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
 using Delegat.Services.Ai.Agent.Maf;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -23,14 +24,14 @@ using FrameworkChatMessage = Microsoft.Extensions.AI.ChatMessage;
 namespace Delegat.Tests;
 
 /// <summary>
-/// M3 parity checks: the Microsoft Agent Framework engine (Ai:AgentRuntime=maf) must
+/// M3 parity checks: the default Microsoft Agent Framework engine must
 /// reproduce the legacy StreamChatAsync contract - batch-level plan gating, synthetic
 /// deferred results, attachment ordering, review mode, nudges, runaway protection, and
 /// the SSE stream shape. Fixtures mirror AiChatAgentEvaluationTests; the model is
 /// driven through a scripted Microsoft.Extensions.AI IChatClient.
 /// </summary>
 [Collection("EnvVars")]
-public class MafEngineParityTests
+public partial class MafEngineParityTests
 {
     [Fact]
     public async Task PlanInMixedBatch_DefersEverySiblingTool_AndStopsAtOneProviderRequest()
@@ -378,9 +379,7 @@ public class MafEngineParityTests
     [Fact]
     public async Task ReviewMode_CorrectedPlan_OnSecondRequest_IsNotStripped()
     {
-        // An invalid first proposal leaves requests 1 and 2 for recovery; the
-        // second request must still advertise propose_plan (speak-only starts
-        // at the third, legacy iteration >= 2).
+        // An invalid first proposal leaves the bounded review able to recover on either remaining request; propose_plan stays advertised.
         using var signingKey = SigningKey();
         await using var fixture = await CreateFixtureAsync(
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan"),
@@ -404,14 +403,16 @@ public class MafEngineParityTests
     }
 
     [Fact]
-    public async Task ReviewMode_ThirdRequest_StripsEvenValidRecoveryProposal()
+    public async Task ReviewMode_ThirdRequest_RetainsValidRecoveryProposal()
     {
+        // Every bounded review round advertises propose_plan, so a valid recovery
+        // proposal on the last attempt still mints a fresh confirmation card.
         using var signingKey = SigningKey();
         await using var fixture = await CreateFixtureAsync(
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-1"),
             ToolCall("propose_plan", "{\"summary\":\"\",\"steps\":[]}", "bad-plan-2"),
             ToolCall("propose_plan",
-                "{\"summary\":\"Too late\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
+                "{\"summary\":\"Retry the write\",\"steps\":[{\"description\":\"Retry\",\"tool\":\"platform_request\",\"args\":{\"method\":\"POST\",\"path\":\"/products\",\"body\":{\"name\":\"Retry\"}}}]}",
                 "late-plan"));
 
         var chunks = await Collect(fixture.Chat.StreamChatAsync(
@@ -419,12 +420,13 @@ public class MafEngineParityTests
             sessionId: "maf-review-third", locale: "en", planResultReview: true));
 
         Assert.Equal(3, fixture.Client.Requests.Count);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[0].ToolNames);
-        Assert.Equal(["propose_plan"], fixture.Client.Requests[1].ToolNames);
-        Assert.Empty(fixture.Client.Requests[2].ToolNames);
+        Assert.All(fixture.Client.Requests,
+            request => Assert.Equal(["propose_plan"], request.ToolNames));
         var serialized = string.Concat(chunks);
-        Assert.DoesNotContain("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
-        Assert.Contains("\"type\":\"done\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"plan\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("proposalNonce", serialized, StringComparison.Ordinal);
+        Assert.Contains("Retry the write", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"type\":\"error\"", serialized, StringComparison.Ordinal);
         Assert.Equal(0, fixture.Invoker.Calls);
     }
 
@@ -708,10 +710,57 @@ public class MafEngineParityTests
         Assert.Equal(file.Id, receipt.fileId);
     }
 
+    [Fact]
+    public async Task StepLevelOutputsBesideArgs_IsRejected_ThenCorrectedInsideArgs()
+    {
+        using var key = SigningKey();
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var python = new ArtifactPythonHttp(
+            [("report.csv", "text/csv", Encoding.UTF8.GetBytes("a,b\n1,2\n"))], "ok");
+        const string malformed = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')"},"outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}]}
+            """;
+        const string corrected = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')","outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                ToolCall("propose_plan", malformed, "misplaced-outputs"),
+                ToolCall("propose_plan", corrected, "nested-outputs"),
+            ], artifacts: true, pythonHttp: python);
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Generate report.csv")], fixture.StoreId, fixture.UserId,
+            sessionId: "maf-misplaced-outputs", locale: "en"));
+
+        // The invalid proposal is sent back to the model once; exactly one
+        // signed plan with nested args.outputs is emitted.
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains(AgentChatTurnGate.InvalidPlanText,
+            fixture.Client.Requests[1].Messages.Last().Content, StringComparison.Ordinal);
+        Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        using var doc = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var step = Assert.Single(
+            doc.RootElement.GetProperty("plan").GetProperty("steps").EnumerateArray());
+        Assert.Equal("run_python", step.GetProperty("tool").GetString());
+        Assert.Equal("report.csv",
+            step.GetProperty("args").GetProperty("outputs")[0].GetProperty("fileName").GetString());
+        Assert.False(step.TryGetProperty("outputs", out _));
+        // Rejection happened before signing: nothing dispatched, nothing staged.
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Equal(0, python.Posts);
+        Assert.False(await fixture.Db.aiGeneratedArtifacts.AnyAsync());
+    }
+
     /// <summary>Extracts the exact server-issued handle fields from the review
     /// request so the scripted import plan quotes real artifact identity.</summary>
     private static object ImportArgsFromReview(CapturedRequest review)
     {
+        Assert.Contains(AssistantCapabilityContract.Guidance, review.System, StringComparison.Ordinal);
+        Assert.Contains(AiPrompts.PlanResultFollowup, review.System, StringComparison.Ordinal);
         var content = review.Messages.Last().Content;
         for (var i = 0; i < 5; i++)
         {
@@ -776,9 +825,11 @@ public class MafEngineParityTests
         byte[]? attachmentBytes,
         object[] responses,
         ScriptedAiStreamingClient? legacyClient = null,
-        string runtime = "maf",
+        string? runtime = null,
         bool artifacts = false,
-        IHttpClientFactory? pythonHttp = null)
+        IHttpClientFactory? pythonHttp = null,
+        IChatClient? providerClient = null,
+        AiModelProvider modelProvider = AiModelProvider.Anthropic)
     {
         var db = TestDbFactory.CreateDb();
         var data = new TestDataBuilder(db);
@@ -808,14 +859,14 @@ public class MafEngineParityTests
             modelId = "scripted-model",
             isDefault = true,
             isEnabled = true,
-            provider = AiModelProvider.Anthropic,
+            provider = modelProvider,
             maxTokens = 1024,
         });
         await db.SaveChangesAsync();
 
         var invoker = new RecordingInvoker();
         var mafClient = new ScriptedChatClient(responses);
-        var factory = new ScriptedRuntimeClientFactory(mafClient);
+        var factory = new ScriptedRuntimeClientFactory(providerClient ?? mafClient);
         legacyClient ??= new ScriptedAiStreamingClient();
         var uow = TestDbFactory.CreateUnitOfWork(db);
         var quota = new QuotaService(uow, db);
@@ -853,9 +904,11 @@ public class MafEngineParityTests
             db,
             new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
             new EncryptionService(encryptionKey));
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Ai:AgentRuntime"] = runtime })
-            .Build();
+        var configurationBuilder = new ConfigurationBuilder();
+        if (runtime != null)
+            configurationBuilder.AddInMemoryCollection(
+                new Dictionary<string, string?> { [MafChatEngine.RuntimeFlagKey] = runtime });
+        var configuration = configurationBuilder.Build();
         var engine = new MafChatEngine(factory, toolHost, configuration, NullLogger<MafChatEngine>.Instance);
         var logger = new CapturingLogger<AiChatService>();
         var chat = new AiChatService(

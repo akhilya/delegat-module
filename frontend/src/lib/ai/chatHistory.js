@@ -1,3 +1,9 @@
+import {
+  generatedFileDownloads,
+  generatedTemporaryDownloads,
+} from "./generatedFiles.js";
+import { timelineFromLegacy } from "./timeline.js";
+
 /** Append assistant protocol blocks without crossing a tool-result boundary. */
 export function appendAssistantApiBlock(apiBlocks, block) {
   let assistantBlock = apiBlocks.at(-1);
@@ -45,4 +51,33 @@ export function apiHistoryFromBlocks(apiBlocks) {
 
   flushToolResults();
   return history;
+}
+
+export function generatedFileHistory(message) {
+  if (
+    !message?.planConfirmed ||
+    !message.planExecuted ||
+    message.planFailed ||
+    message.turnStopped
+  )
+    return null;
+  const timeline = message.timeline?.length
+    ? message.timeline
+    : timelineFromLegacy(message.content, message.toolCalls);
+  const start = message.planExecStart;
+  if (!Number.isInteger(start) || start < 0 || start > timeline.length)
+    return null;
+  const tools = timeline
+    .slice(start)
+    .filter((item) => item.type === "tool" && item.tool)
+    .map((item) => item.tool);
+  const artifacts = generatedTemporaryDownloads(message.plan, tools, {
+    confirmed: true,
+  });
+  const savedFiles = generatedFileDownloads(message.plan, tools, {
+    confirmed: true,
+  });
+  return artifacts.length || savedFiles.length
+    ? { artifacts, savedFiles }
+    : null;
 }

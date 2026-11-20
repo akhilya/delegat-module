@@ -11,7 +11,9 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Added
 
-- AI assistant: added an opt-in Microsoft Agent Framework runtime for the in-cabinet chat engine, selected per chat turn by `Ai:AgentRuntime` (`legacy` stays the default; `maf` enables the maintained framework loop). The signed plan-approval flow, deterministic confirmed-step execution, tool batching/deferral policy, attachment ordering, review mode, and the SSE contract are unchanged under either engine; turn telemetry now tags the engine used (`ai.engine` / `Engine=legacy|maf`).
+- AI assistant: session-bound chat and confirmed plans now use a durable database queue and ordered replay journal. Confirmation and admission commit together, reconnects survive API restarts, and execution can continue after a committed step without repeating it. An in-flight step without a durable result is reported as unknown rather than retried; interrupted model/review streams are not silently restarted. Requires the `AddAiDurableTurns` migration before running the updated API. Python confirmation remains required, and accepted jobs retain their originally selected runtime.
+
+- AI assistant: added a maintained Microsoft Agent Framework runtime for the in-cabinet chat engine. The signed plan-approval flow, deterministic confirmed-step execution, tool batching/deferral policy, attachment ordering, review mode, and the SSE contract remain application-controlled; turn telemetry tags the engine used (`ai.engine` / `Engine=legacy|maf`).
 
 - AI assistant: generated-file capture and signed import. A confirmed `run_python` plan may declare up to four output files; the sandbox sidecar captures them immutably (verified filename, type, byte length and SHA-256, 24-hour expiry) and returns metadata-only handles. Saving one requires a new, separately confirmed `import_generated_file` plan bound to the exact artifact metadata and an explicit store or product destination — cabinet chat only; the tool is unavailable to external MCP, Agent HTTP, and Python itself, and generation+import in one plan is rejected. Imports re-verify the bytes, write a private file under the existing authenticated download routes, respect storage/file quotas, and are fenced by a durable receipt: replaying a completed import returns the same file (`writtenCount: 0`) and an interrupted import reports `outcomeUnknown` instead of silently re-uploading. Deploying requires the new sandbox sidecar (`/health` advertises `artifactProtocol:1`), a configured `SANDBOX_SECRET`, and the `AddAiGeneratedArtifacts` migration; staged artifacts and in-progress imports count toward storage quota. Once an import finishes, the plan card shows a persistent Download control for the saved file — downloads retry without re-importing, use the existing authenticated store/product routes (current store access is re-checked per download), and the download control uses server-owned URLs rather than model prose.
 
@@ -108,6 +110,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet assistant can also save small generated text into a product's private files: `POST /products/{productId}/files/from-text` accepts the same bounded body and returns the file's authenticated `/api/files/{id}/download` link. The file stays private and is not attached to the gallery or characteristics; `files.manage` and a confirmed plan still apply.
 
 ### Changed
+
+- AI assistant: new cabinet turns and durable jobs now default to Microsoft Agent Framework without an opt-in flag. Remove any existing `Ai:AgentRuntime=legacy` override to adopt the default; that value remains an explicit temporary rollback for new jobs only, while accepted jobs and their result reviews retain their pinned engine across restarts. Unrecognized runtime values are rejected instead of silently selecting another engine. The required durable-turn migration and Python/write confirmation boundaries are unchanged; this code-default change is not a production deployment.
 
 - Platform AI usage is shown as a compact percentage beside the selected chat model and in administration, without raw token counts or accounting details. The administration model lists now include the platform-provided model as read-only. The usage panel shares the inset section frame used throughout administration.
 
@@ -277,6 +281,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Development: Vite dependency caches are now isolated per checkout, preventing linked node_modules in parallel worktrees from mixing Vue runtime chunks and breaking product forms.
+
+- AI assistant: plans no longer accept misplaced tool arguments that the executor would silently ignore. Generated-file metadata survives history reloads, so a later save request can reuse the existing artifact instead of asking for re-upload or recalculation; permanent saving still requires a separate confirmation.
+
 - Deleting a connected AI model now honors confirmation with mouse or keyboard, preserves the model-management dialog, and refreshes model pickers. Platform-provided model rows keep the same compact height as other models, with their origin badge outside the status column.
 
 - AI assistant turns now run through a single canonical event writer. Streamed events carry stable run/message identity and monotonic sequence numbers, so reconnecting or reloading replays an in-flight reply in order and deduplicates it instead of duplicating text, tools, or plan cards (ordered replay plus idempotent client dedup within the process lifetime; not a distributed exactly-once guarantee); a recovery plan proposed after a failed execution stays a separate confirmable message and can no longer be merged into its parent execution or lost on reload. Client history sync can only merge metadata (such as form replies) onto server-produced assistant rows — it cannot rewrite their text, tools, plan, or lifecycle — and stale syncs cannot reopen or erase a completed execution. Plan execution reports an honest localized status (completed, queued, partial, failed, interrupted) below the execution process instead of unverified prose. An assistant row left running by an API restart now reads as interrupted instead of staying in progress forever. Disconnecting the browser stream no longer stops generation. Note: live-turn replay state is process-local — restarting the API loses in-flight turns while persisted history survives.
@@ -284,6 +292,12 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Opt-in Agent Framework chat keeps corrected recovery plans confirmable on the second review request and accepts provider tool names prefixed with `functions.`. Anthropic tool-prefix caching now retains its five-minute breakpoint when the existing feature flag and endpoint-origin allowlist permit it; legacy remains the default runtime.
 
 - AI assistant history sync no longer copies an executed plan and its confirmation/execution flags into anonymous review messages, and review follow-ups that propose their own corrected plan stay distinct and confirmable instead of being merged or lost across reloads.
+
+- AI assistant: result-review instructions now prefer reusing generated files instead of repeating calculations or pasting their contents, distinguish temporary output from saved files, and explain completed versus pending work in a follow-up plan. Capability guidance separates JSON actions, multipart/binary limitations, and cabinet-only artifact support; missing resources are no longer described as invented routes solely because HTTP returned 404. Confirmation and execution protections are unchanged; real-model adherence is not guaranteed.
+
+- AI assistant: new chats containing structured content blocks now create their owned conversation before queue admission, without requiring a plain-text user message. Existing store/user checks and signed-plan confirmation remain unchanged.
+
+- AI assistant: clarification forms remain available after recoverable tool errors and history synchronization. Form answers stay bound to their original turn, stale forms cannot submit into a newer conversation step, and interrupted replies no longer briefly expose plan confirmation.
 
 - Mapping canvas polish: block and pin selection no longer draws a glow ring, and the adapter-field inspector's group filter gained a "no group" entry so custom and hidden fields stay reachable while a group is selected. Pasting or importing a graph now also validates modifier parameters that reference adapter fields (such as value-map targets), and the block search indexes dictionary options once per menu instead of rescanning every option on each keystroke.
 - Mapping inspector responsiveness: the adapter-field list renders in pages instead of mounting every field at once, and clicking block controls (group headers, preview expand, "unconnected only") now selects the block so the inspector switches to it. An emptied List block serializes as empty instead of a literal "[]" value, and the dictionary auto-match no longer treats equal option ids with different labels as a match.
@@ -485,6 +499,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Align `System.IdentityModel.Tokens.Jwt` with Fido2's IdentityModel 8 stack so access-token validation sees `exp` again
 - Apply security headers before the rest of the pipeline so empty responses still get `X-Robots-Tag`
 - Sync `package-lock.json` with passkey/QR deps so frontend Docker `npm ci` succeeds
+- AI assistant: question forms now pause the turn until the user submits answers; later tools and plans cannot consume placeholders as answers. Form follow-up templates cannot reference fields that were removed or never presented. Result review can propose a freshly confirmed continuation on any of its three bounded attempts; an exhausted review is reported as incomplete without repeating or rewriting completed execution.
+- AI assistant: clarification forms and plan confirmation no longer compete in one reply. Old drafts created before form answers cannot be confirmed, stale unanswered forms are hidden after execution, and incomplete reviews explain in both supported languages that completed steps must not be repeated.
 
 ### Removed
 

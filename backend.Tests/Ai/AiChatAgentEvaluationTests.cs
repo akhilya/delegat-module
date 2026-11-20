@@ -9,11 +9,17 @@ using Delegat.Models.Ai;
 using Delegat.Services;
 using Delegat.Services.Ai;
 using Delegat.Services.Ai.Agent;
+using Delegat.Services.Ai.Agent.Maf;
+using Delegat.Services.Ai.Prompts;
 using Delegat.Tests.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ChatMessage = Delegat.Services.Ai.ChatMessage;
+using FrameworkChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Delegat.Tests;
 
@@ -24,6 +30,95 @@ namespace Delegat.Tests;
 [Collection("AiPlanSigningKey")]
 public class AiChatAgentEvaluationTests
 {
+    [Fact]
+    public async Task ExecutionCheckpoint_AFreshExecutorSkipsTheCommittedWritePrefix()
+    {
+        var steps = new List<PlanStepInput>
+        {
+            new() { Tool = "platform_request", Description = "First",
+                Args = JsonSerializer.SerializeToElement(new
+                { method = "PATCH", path = "/products/1", body = new { name = "first" } }) },
+            new() { Tool = "platform_request", Description = "Second",
+                Args = JsonSerializer.SerializeToElement(new
+                { method = "PATCH", path = "/products/1", body = new { name = "second" } }) },
+        };
+        AiExecutionStepCheckpoint? saved = null;
+        await using (var first = await CreateFixtureAsync())
+        {
+            await using var stream = first.Chat.ExecutePlanEventsAsync(
+                steps, first.StoreId, first.UserId, "checkpoint", locale: "en").GetAsyncEnumerator();
+            while (await stream.MoveNextAsync())
+            {
+                var item = stream.Current;
+                if (item.Type != SseEventType.Tool || item.Data.GetProperty("status").GetString() != "done") continue;
+                Assert.Equal("completed", item.Data.GetProperty("executionOutcome").GetProperty("status").GetString());
+                saved = Checkpoint(item);
+                break;
+            }
+            Assert.Equal(1, first.Invoker.Calls);
+            Assert.Empty(first.Client.Requests);
+        }
+        Assert.NotNull(saved);
+        await using var restarted = await CreateFixtureAsync();
+        var events = new List<AiTurnEvent>();
+        await foreach (var item in restarted.Chat.ExecutePlanEventsAsync(
+            steps, restarted.StoreId, restarted.UserId, "checkpoint", locale: "en",
+            resume: new AiExecutionResume([saved], false)))
+            events.Add(item);
+        Assert.Equal(1, restarted.Invoker.Calls);
+        Assert.Equal("second", restarted.Invoker.LastBody!.Value.GetProperty("name").GetString());
+        var running = Assert.Single(events,
+            e => e.Type == SseEventType.Tool && e.Data.GetProperty("status").GetString() == "running");
+        Assert.Equal(1, running.Data.GetProperty("stepIndex").GetInt32());
+        Assert.Equal(2, Assert.Single(events, e => e.Type == SseEventType.ExecutionStatus)
+            .Data.GetProperty("succeeded").GetInt32());
+        Assert.Empty(restarted.Client.Requests);
+    }
+
+    [Fact]
+    public async Task ExecutionCheckpoint_CompletedPythonFeedsReviewWithoutASecondSandboxCall()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        var python = new ScriptedPythonHttp(new { exitCode = 0, stdout = "Frozen calculated value: 17", stderr = "" });
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [PythonPlan("print(17)", "calculate"), Text("The existing calculation reports 17.")], python);
+        var (proposal, steps) = await PrepareConfirmedPlanAsync(fixture, "checkpoint-python");
+        AiExecutionStepCheckpoint? saved = null;
+        await using (var stream = fixture.Chat.ExecutePlanEventsAsync(
+            steps, fixture.StoreId, fixture.UserId, proposal, sessionId: "checkpoint-python", locale: "en")
+            .GetAsyncEnumerator())
+        {
+            while (await stream.MoveNextAsync())
+            {
+                var item = stream.Current;
+                if (item.Type != SseEventType.Tool || item.Data.GetProperty("status").GetString() != "done") continue;
+                saved = Checkpoint(item);
+                break;
+            }
+        }
+        Assert.NotNull(saved);
+        Assert.Equal(1, python.Calls);
+        var chunks = new List<string>();
+        await foreach (var item in fixture.Chat.ExecutePlanEventsAsync(
+            steps, fixture.StoreId, fixture.UserId, proposal, sessionId: "checkpoint-python", locale: "en",
+            resume: new AiExecutionResume([saved], false)))
+        {
+            Assert.NotEqual(SseEventType.Tool, item.Type);
+            chunks.Add(item.ToSse());
+        }
+        Assert.Equal(1, python.Calls);
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains("Frozen calculated value: 17", fixture.Client.Requests[1].Messages.Last().Content);
+        Assert.Contains("The existing calculation reports 17.", AiSseTurnRecorder.FoldTurns(chunks)[1].Content);
+    }
+
+    private static AiExecutionStepCheckpoint Checkpoint(AiTurnEvent item) =>
+        new(item.Data.GetProperty("stepIndex").GetInt32(),
+            item.Data.GetProperty("name").GetString()!, item.Data.GetProperty("input").GetString()!,
+            item.Data.GetProperty("id").GetString()!, item.Data.GetProperty("executionOutcome").Clone());
+
     [Theory]
     [InlineData("ru", "перегенерируй штрихкоды выбранных товаров")]
     [InlineData("en", "regenerate barcodes for selected products")]
@@ -80,6 +175,52 @@ public class AiChatAgentEvaluationTests
         Assert.Contains("/products/bulk", presented);
         Assert.Contains("\"affectedCountAccuracy\":\"unknown\"", presented);
         Assert.Equal(0, fixture.Invoker.Calls);
+    }
+
+    [Fact]
+    public async Task StepLevelOutputsBesideArgs_IsRejected_ThenCorrectedInsideArgs()
+    {
+        using var key = new TemporaryEnvironmentVariable("ENCRYPTION_KEY",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+        using var sandbox = new TemporaryEnvironmentVariable("SANDBOX_URL", "http://sandbox.example.test");
+        using var secret = new TemporaryEnvironmentVariable("SANDBOX_SECRET", "capture-secret");
+        using var enabled = new TemporaryEnvironmentVariable("AI_ENABLED", "true");
+        var python = new ArtifactPythonHttp(
+            [("report.csv", "text/csv", Encoding.UTF8.GetBytes("a,b\n1,2\n"))], "ok");
+        const string malformed = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')"},"outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}]}
+            """;
+        const string corrected = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')","outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}}]}
+            """;
+        await using var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [
+                ToolCall("propose_plan", malformed, "misplaced-outputs"),
+                ToolCall("propose_plan", corrected, "nested-outputs"),
+            ], python, artifacts: true);
+
+        var chunks = await Collect(fixture.Chat.StreamChatAsync(
+            [UserMessage("Generate report.csv")], fixture.StoreId, fixture.UserId,
+            sessionId: "legacy-misplaced-outputs", locale: "en"));
+
+        // The invalid proposal is sent back to the model once; exactly one
+        // signed plan with nested args.outputs is emitted.
+        Assert.Equal(2, fixture.Client.Requests.Count);
+        Assert.Contains(AgentChatTurnGate.InvalidPlanText,
+            fixture.Client.Requests[1].Messages.Last().Content, StringComparison.Ordinal);
+        Assert.Single(chunks, c => c.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        var snapshot = AiSseTurnRecorder.Fold(chunks);
+        using var doc = JsonDocument.Parse(snapshot.ToolCallsJson!);
+        var step = Assert.Single(
+            doc.RootElement.GetProperty("plan").GetProperty("steps").EnumerateArray());
+        Assert.Equal("run_python", step.GetProperty("tool").GetString());
+        Assert.Equal("report.csv",
+            step.GetProperty("args").GetProperty("outputs")[0].GetProperty("fileName").GetString());
+        Assert.False(step.TryGetProperty("outputs", out _));
+        // Rejection happened before signing: nothing dispatched, nothing staged.
+        Assert.Equal(0, fixture.Invoker.Calls);
+        Assert.Equal(0, python.Posts);
+        Assert.False(await fixture.Db.aiGeneratedArtifacts.AnyAsync());
     }
 
     [Fact]
@@ -875,6 +1016,8 @@ public class AiChatAgentEvaluationTests
     /// is only valid when it references the server-issued artifact identity.</summary>
     private static IReadOnlyList<AiStreamEvent> ImportPlanFromReview(CapturedRequest review, string id)
     {
+        Assert.Contains(AssistantCapabilityContract.Guidance, review.System, StringComparison.Ordinal);
+        Assert.Contains(AiPrompts.PlanResultFollowup, review.System, StringComparison.Ordinal);
         var content = review.Messages.Last().Content;
         // The outcome payload is nested inside several JSON string layers: peel
         // every level of quote escaping before matching the handle fields.
@@ -1061,6 +1204,26 @@ public class AiChatAgentEvaluationTests
         params IReadOnlyList<AiStreamEvent>[] responses)
         => await CreateFixtureCoreAsync(mcp, null, null, null, responses);
 
+    /// <summary>
+    /// Real shared executor for the local HTTP/Kestrel durable-turn harness: a
+    /// genuine AiChatService over the scripted model/native fakes. Only the
+    /// public surface leaves this class, so the fake internals stay private.
+    /// </summary>
+    internal static async Task<(AiChatService Chat, int UserId, int StoreId,
+        Func<int> ToolCalls, Func<JsonElement?> LastBody, Func<int> ModelCalls,
+        IAsyncDisposable Lifetime)> CreateDurableHttpRuntimeAsync(
+        string? sqliteDsn = null, Action<JsonElement?>? nativeCall = null, Action? modelCall = null)
+    {
+        var runtimeClient = new DurableMafReplyClient(modelCall);
+        var fixture = await CreateFixtureCoreAsync(new EmptyMcpGateway(), null, null, null,
+            [Text("HTTP reply")],
+            database: sqliteDsn == null ? null : TestDbFactory.CreateSqliteContext(sqliteDsn),
+            nativeCall: nativeCall, modelCall: modelCall, runtimeClient: runtimeClient);
+        return (fixture.Chat, fixture.UserId, fixture.StoreId,
+            () => fixture.Invoker.Calls, () => fixture.Invoker.LastBody,
+            () => fixture.Client.Requests.Count + runtimeClient.Calls, fixture);
+    }
+
     private static Task<ChatFixture> CreateFixtureWithAttachmentAsync(
         string sessionId,
         string fileName,
@@ -1074,88 +1237,119 @@ public class AiChatAgentEvaluationTests
         string? attachmentFileName,
         byte[]? attachmentBytes,
         object[] responses, IHttpClientFactory? pythonHttp = null,
-        CabinetCapabilityIndex? capabilities = null, bool artifacts = false)
+        CabinetCapabilityIndex? capabilities = null, bool artifacts = false,
+        DataContext? database = null, Action<JsonElement?>? nativeCall = null,
+        Action? modelCall = null, IChatClient? runtimeClient = null)
     {
-        var db = TestDbFactory.CreateDb();
-        var data = new TestDataBuilder(db);
-        var user = data.AddUser("agent-eval");
-        var store = data.AddStore("Eval store", "RUB", "UTC", user);
-        data.AddProduct(store.Id, name: "Ceramic Mug", sku: "SKU-42");
-        if (attachmentSessionId != null && attachmentFileName != null && attachmentBytes != null)
+        var db = database ?? TestDbFactory.CreateDb();
+        int userId;
+        int storeId;
+        try
         {
-            db.aiChatAttachments.Add(new AiChatAttachment
+            if (database != null && await db.Users.AnyAsync())
             {
-                Id = 71,
-                sessionId = attachmentSessionId,
-                storeId = store.Id,
-                userId = user.Id,
-                fileName = attachmentFileName,
-                contentType = "text/csv",
-                length = attachmentBytes.Length,
-                storageKey = "staged/" + attachmentFileName,
-                createdAt = DateTime.UtcNow,
-            });
-        }
-        var otherStore = data.AddStore("Other eval store", "RUB", "UTC", user);
-        data.AddProduct(otherStore.Id, name: "Private Product", sku: "PRIVATE-OTHER-STORE");
-        db.aiModelConfigs.Add(new AiModelConfig
-        {
-            name = "scripted",
-            apiUrl = "https://api.example.test",
-            apiKeyEncrypted = "test-key",
-            modelId = "scripted-model",
-            isDefault = true,
-            isEnabled = true,
-            provider = AiModelProvider.Anthropic,
-            maxTokens = 1024,
-        });
-        await db.SaveChangesAsync();
+                // The durable file database keeps its earlier seed: only
+                // resolve the deterministic catalog identities, never reseed.
+                userId = await db.Users
+                    .Where(u => u.UserName == "agent-eval")
+                    .Select(u => u.Id).SingleAsync();
+                storeId = await db.stores
+                    .Where(s => s.name == "Eval store")
+                    .Select(s => s.Id).SingleAsync();
+            }
+            else
+            {
+                var data = new TestDataBuilder(db);
+                var user = data.AddUser("agent-eval");
+                var store = data.AddStore("Eval store", "RUB", "UTC", user);
+                data.AddProduct(store.Id, name: "Ceramic Mug", sku: "SKU-42");
+                if (attachmentSessionId != null && attachmentFileName != null && attachmentBytes != null)
+                {
+                    db.aiChatAttachments.Add(new AiChatAttachment
+                    {
+                        Id = 71,
+                        sessionId = attachmentSessionId,
+                        storeId = store.Id,
+                        userId = user.Id,
+                        fileName = attachmentFileName,
+                        contentType = "text/csv",
+                        length = attachmentBytes.Length,
+                        storageKey = "staged/" + attachmentFileName,
+                        createdAt = DateTime.UtcNow,
+                    });
+                }
+                var otherStore = data.AddStore("Other eval store", "RUB", "UTC", user);
+                data.AddProduct(otherStore.Id, name: "Private Product", sku: "PRIVATE-OTHER-STORE");
+                db.aiModelConfigs.Add(new AiModelConfig
+                {
+                    name = "scripted",
+                    apiUrl = "https://api.example.test",
+                    apiKeyEncrypted = "test-key",
+                    modelId = "scripted-model",
+                    isDefault = true,
+                    isEnabled = true,
+                    provider = AiModelProvider.Anthropic,
+                    maxTokens = 1024,
+                });
+                await db.SaveChangesAsync();
+                userId = user.Id;
+                storeId = store.Id;
+            }
 
-        var invoker = new RecordingInvoker();
-        var client = new ScriptedAiStreamingClient(responses);
-        var uow = TestDbFactory.CreateUnitOfWork(db);
-        var quota = new QuotaService(uow, db);
-        var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
-        IStorageService storage = artifacts
-            ? new MemoryStorage()
-            : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
-        GeneratedArtifactService? artifactService = artifacts
-            ? new GeneratedArtifactService(
+            var invoker = new RecordingInvoker(nativeCall);
+            var client = new ScriptedAiStreamingClient(responses, modelCall);
+            var uow = TestDbFactory.CreateUnitOfWork(db);
+            var quota = new QuotaService(uow, db);
+            var uploads = new AgentFileUploadService(db, uow, new FakeStorage(), quota);
+            IStorageService storage = artifacts
+                ? new MemoryStorage()
+                : attachmentBytes == null ? new FakeStorage() : new AttachmentStorage(attachmentBytes);
+            GeneratedArtifactService? artifactService = artifacts
+                ? new GeneratedArtifactService(
+                    db,
+                    storage,
+                    quota,
+                    new AgentSessionResolver(
+                        new FakeCurrentUserService(), new GrantAllPermissions(), db,
+                        new HttpContextAccessor()),
+                    NullLogger<GeneratedArtifactService>.Instance)
+                : null;
+            var python = new PythonSandboxClient(
+                db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
+                new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
+            var toolHost = new AgentToolHost(
+                new CatalogSearchService(db),
+                new SqlReadonlyService(db),
+                new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
+                new AgentPlatformGateway(uploads, invoker, capabilities),
+                python,
+                new GrantAllPermissions(),
                 db,
-                storage,
-                quota,
-                new AgentSessionResolver(
-                    new FakeCurrentUserService(), new GrantAllPermissions(), db,
-                    new HttpContextAccessor()),
-                NullLogger<GeneratedArtifactService>.Instance)
-            : null;
-        var python = new PythonSandboxClient(
-            db, pythonHttp ?? new ThrowingHttpFactory(), NullLogger<PythonSandboxClient>.Instance,
-            new HttpContextAccessor(), new FakeJwt(), artifacts: artifactService);
-        var toolHost = new AgentToolHost(
-            new CatalogSearchService(db),
-            new SqlReadonlyService(db),
-            new KnowledgeIndexService(db, storage, NullLogger<KnowledgeIndexService>.Instance),
-            new AgentPlatformGateway(uploads, invoker, capabilities),
-            python,
-            new GrantAllPermissions(),
-            db,
-            NullLogger<AgentToolHost>.Instance,
-            mcp,
-            actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
-            chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
-            artifacts: artifactService);
-        var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
-        var modelService = new AiModelConfigService(
-            db,
-            new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
-            new EncryptionService(encryptionKey));
-        var logger = new CapturingLogger<AiChatService>();
-        var chat = new AiChatService(
-            modelService, client, db, toolHost, new HttpContextAccessor(), quota,
-            logger, mcp);
+                NullLogger<AgentToolHost>.Instance,
+                mcp,
+                actions: capabilities != null ? new CabinetActionCatalog(index: capabilities) : null,
+                chatAttachments: attachmentBytes == null ? null : new ChatAttachmentReadService(db, storage),
+                artifacts: artifactService);
+            var encryptionKey = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
+            var modelService = new AiModelConfigService(
+                db,
+                new AiApiClient(new HttpClient(), NullLogger<AiApiClient>.Instance),
+                new EncryptionService(encryptionKey));
+            var logger = new CapturingLogger<AiChatService>();
+            var engine = runtimeClient == null ? null : new MafChatEngine(
+                new DurableMafClientFactory(runtimeClient), toolHost,
+                new ConfigurationBuilder().Build(), NullLogger<MafChatEngine>.Instance);
+            var chat = new AiChatService(
+                modelService, client, db, toolHost, new HttpContextAccessor(), quota,
+                logger, mcp, engine);
 
-        return new ChatFixture(db, chat, client, invoker, mcp, logger, user.Id, store.Id);
+            return new ChatFixture(db, chat, client, invoker, mcp, logger, userId, storeId);
+        }
+        catch
+        {
+            await db.DisposeAsync();
+            throw;
+        }
     }
 
     private static ChatMessage UserMessage(string text)
@@ -1266,7 +1460,8 @@ public class AiChatAgentEvaluationTests
         IReadOnlyList<CapturedMessage> Messages,
         IReadOnlyList<string> ToolNames);
 
-    private sealed class ScriptedAiStreamingClient(params object[] responses)
+    private sealed class ScriptedAiStreamingClient(
+        object[] responses, Action? modelCall = null)
         : IAiApiClient
     {
         private readonly Queue<object> _responses = new(responses);
@@ -1280,6 +1475,9 @@ public class AiChatAgentEvaluationTests
             AiRequest request,
             [EnumeratorCancellation] CancellationToken ct)
         {
+            // Record the attempt before the queue check so even unscripted
+            // model calls land in the invocation ledger.
+            modelCall?.Invoke();
             if (_responses.Count == 0)
                 throw new InvalidOperationException("No scripted model response remains.");
 
@@ -1321,7 +1519,8 @@ public class AiChatAgentEvaluationTests
         }
     }
 
-    private sealed class RecordingInvoker : ICabinetRequestInvoker
+    private sealed class RecordingInvoker(Action<JsonElement?>? nativeCall = null)
+        : ICabinetRequestInvoker
     {
         public int Calls { get; private set; }
         public string? LastPath { get; private set; }
@@ -1339,6 +1538,7 @@ public class AiChatAgentEvaluationTests
             Calls++;
             LastPath = apiPath;
             LastBody = body?.Clone();
+            nativeCall?.Invoke(LastBody);
             return Task.FromResult<(object, string)>((new { ok = true }, "called"));
         }
     }
@@ -1356,6 +1556,59 @@ public class AiChatAgentEvaluationTests
             Exception? exception,
             Func<TState, Exception?, string> formatter) =>
             Messages.Add(formatter(state, exception));
+    }
+
+    /// <summary>Hands the supplied IChatClient to the MAF engine for every model
+    /// resolution; the HTTP fixture shares one scripted SDK stand-in.</summary>
+    private sealed class DurableMafClientFactory(IChatClient client) : IAiRuntimeClientFactory
+    {
+        public IChatClient CreateChatClient(AiModelConfig model) => client;
+    }
+
+    /// <summary>Scripted MAF provider for the durable HTTP harness: counts each
+    /// real engine request, fires the model callback once per request and replies
+    /// with the existing fixed "HTTP reply" text - no new prompt or eval content.</summary>
+    private sealed class DurableMafReplyClient(Action? onCall) : IChatClient
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<FrameworkChatMessage> messages,
+            ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Next(cancellationToken));
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<FrameworkChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var response = Next(cancellationToken);
+            foreach (var update in response.ToChatResponseUpdates())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Yield();
+                yield return update;
+            }
+        }
+
+        private ChatResponse Next(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            var call = Interlocked.Increment(ref _calls);
+            onCall?.Invoke();
+            if (call != 1)
+                throw new InvalidOperationException("No scripted model response remains.");
+            return new ChatResponse(new FrameworkChatMessage(ChatRole.Assistant, "HTTP reply"))
+            {
+                FinishReason = ChatFinishReason.Stop,
+            };
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose() { }
     }
 
     private sealed class TemporaryEnvironmentVariable : IDisposable

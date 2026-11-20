@@ -132,6 +132,7 @@ public static class AiSseTurnRecorder
         string? requestErrorCode = null;
         int? requestErrorStatus = null;
         var planFailed = false;
+        var hadToolErrors = false;
         var turnEnded = false;
         var planExecuted = false;
         var turnStopped = false;
@@ -181,7 +182,7 @@ public static class AiSseTurnRecorder
                 case SseEventType.Tool:
                     ApplyTool(data, tools, toolById, timeline);
                     if (ToolDataFailed(data))
-                        planFailed = true;
+                        hadToolErrors = true;
                     break;
                 case SseEventType.Plan:
                     if (data.ValueKind == JsonValueKind.Object)
@@ -268,6 +269,16 @@ public static class AiSseTurnRecorder
 
         if (turnEnded)
             MarkInterruptedTools(tools, turnStopped);
+
+        // Plan outcome flags are meaningful only on a real execution segment:
+        // the canonical execution phase or an explicit terminal ok on a legacy
+        // unphased execution. Chat/review tool errors stay tool evidence, not a
+        // plan outcome, and a canonical execution can fail a step without
+        // claiming planExecuted.
+        var isExecutionSegment = string.Equals(phase, "execution", StringComparison.Ordinal)
+            || (phase == null && executionProposalId == null && planExecuted);
+        planFailed = isExecutionSegment && (planFailed || hadToolErrors);
+        planExecuted = isExecutionSegment && planExecuted;
 
         var identified = messageId != null || runId != null;
         string? toolCallsJson = null;

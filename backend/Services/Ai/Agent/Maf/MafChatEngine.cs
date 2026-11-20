@@ -10,7 +10,8 @@ namespace Delegat.Services.Ai.Agent.Maf;
 
 /// <summary>
 /// Microsoft Agent Framework runtime for the read/proposal/review chat path, selected
-/// per StreamChatAsync call by the Ai:AgentRuntime flag ("legacy" default, "maf" here).
+/// by default for each StreamChatAsync call. Ai:AgentRuntime=legacy is a temporary
+/// explicit rollback; durable jobs retain their originally pinned runtime.
 ///
 /// One ChatClientAgent is built per turn over
 ///   TurnGateChatClient -> DeepSeekDsmlChatClient -> provider IChatClient
@@ -27,13 +28,22 @@ public sealed class MafChatEngine(
     IConfiguration configuration,
     ILogger<MafChatEngine> logger)
 {
-    /// <summary>Temporary engine selection flag; "legacy" remains the default.</summary>
+    /// <summary>Temporary explicit rollback setting; new turns default to MAF.</summary>
     public const string RuntimeFlagKey = "Ai:AgentRuntime";
     public const string EngineName = "maf";
 
     /// <summary>Resolved once per StreamChatAsync call and pinned for that run.</summary>
     public bool IsSelected =>
-        string.Equals(configuration[RuntimeFlagKey], EngineName, StringComparison.OrdinalIgnoreCase);
+        ResolveRuntime(configuration[RuntimeFlagKey]) == EngineName;
+
+    internal static string ResolveRuntime(string? configuredRuntime) =>
+        configuredRuntime?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or EngineName => EngineName,
+            "legacy" => "legacy",
+            _ => throw new InvalidOperationException(
+                "Invalid Ai:AgentRuntime. Use 'maf' or 'legacy'."),
+        };
 
     internal async IAsyncEnumerable<AiTurnEvent> RunAsync(
         ChatTurnPreparation turn,
@@ -144,7 +154,8 @@ public sealed class MafChatEngine(
                 break;
             }
 
-            if (state.SawPlan || state.TerminalByCap || state.LastRoundStrippedCalls)
+            if (state.SawPlan || state.SawForm
+                || state.TerminalByCap || state.LastRoundStrippedCalls)
                 break;
 
             var lastText = state.LastRoundText;
@@ -162,7 +173,7 @@ public sealed class MafChatEngine(
                 input = [new FrameworkChatMessage(ChatRole.User, AgentChatTurnGate.ContinueAfterIntentNudge)];
                 continue;
             }
-            if (!state.Spoke && !state.SawPlan && !nudgedSilence)
+            if (!state.Spoke && !state.SawPlan && !state.SawForm && !nudgedSilence)
             {
                 nudgedSilence = true;
                 input = [new FrameworkChatMessage(ChatRole.User, AgentChatTurnGate.SilentTurnNudge)];
@@ -172,9 +183,29 @@ public sealed class MafChatEngine(
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        turn.Telemetry.CompleteIfUnset(state.SawPlan ? "plan_proposed" : "completed");
+        var reviewIncomplete = turn.PlanResultReview
+            && !state.Spoke && !state.SawPlan && !state.ProviderError;
+        turn.Telemetry.CompleteIfUnset(state.SawPlan ? "plan_proposed"
+            : state.SawForm ? "awaiting_input"
+            : reviewIncomplete ? "review_incomplete"
+            : "completed");
 
-        if (!state.Spoke && !state.SawPlan)
+        if (reviewIncomplete)
+        {
+            logger.LogWarning(
+                "AI result review ended without a reply or proposal after {Requests} model requests.",
+                state.RequestsSent);
+            yield return Sse(SseEventType.Error, new
+            {
+                code = "review_incomplete",
+                message = AgentChatTurnGate.ReviewIncompleteMessage(turn.LocaleCode),
+            });
+            yield return Sse(SseEventType.Done,
+                new { modelName = turn.Model.modelId, interrupted = true });
+            yield break;
+        }
+
+        if (!state.Spoke && !state.SawPlan && !state.SawForm && !turn.PlanResultReview)
         {
             yield return Sse(SseEventType.Text, new
             {

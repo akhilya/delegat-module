@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Delegat.AiHttpTestHost" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.20" />
@@ -47,6 +48,11 @@
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
     <ProjectReference Include="..\plugins\Delegat.Marketplace.Medusa\Delegat.Marketplace.Medusa.csproj"
                       AdditionalProperties="DelegatSdkProject=$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\sdk\Delegat.Marketplace.SDK\Delegat.Marketplace.SDK.csproj'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reuse the no-network M1 transport fake; the isolated prototype has no production reference. -->
+    <Compile Include="..\backend.AiRuntime.Tests\Support\ScriptedHttpMessageHandler.cs" Link="Ai\Support\ScriptedHttpMessageHandler.cs" />
   </ItemGroup>
 
   <ItemGroup>

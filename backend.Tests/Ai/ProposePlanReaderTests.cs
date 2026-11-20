@@ -89,4 +89,35 @@ public class ProposePlanReaderTests
             """);
         Assert.False(plan.HasContent);
     }
+
+    // A step may carry only tool, description, and args. Extra step-level
+    // fields (like the real model's outputs beside args) must be rejected
+    // before signing, never silently dropped by the executor.
+    [Theory]
+    [InlineData("outputs", "[{\"fileName\":\"report.csv\",\"contentType\":\"text/csv\"}]")]
+    [InlineData("code", "\"print('ok')\"")]
+    [InlineData("body", "{}")]
+    [InlineData("artifactId", "\"63b2101f95c742febc235f67bba05bba\"")]
+    public void StepLevelFieldsBesideArgsAreRejected(string field, string value)
+    {
+        var json = $$"""
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')"},"{{field}}":{{value}}}]}
+            """;
+        Assert.False(ProposePlanReader.Read(json).HasContent);
+    }
+
+    [Fact]
+    public void NestedArgsOutputsStaysByteIdentical()
+    {
+        var json = """
+            {"summary":"Generate CSV","steps":[{"tool":"run_python","description":"Generate CSV","args":{"code":"print('ok')","outputs":[{"fileName":"report.csv","contentType":"text/csv"}]}}]}
+            """;
+        var plan = ProposePlanReader.Read(json);
+
+        Assert.True(plan.HasContent);
+        var outputs = plan.Steps[0].GetProperty("args").GetProperty("outputs").GetRawText();
+        Assert.Equal(
+            """[{"fileName":"report.csv","contentType":"text/csv"}]""",
+            outputs);
+    }
 }

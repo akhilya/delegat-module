@@ -107,6 +107,8 @@ import {
 import { isHiddenUserMessage } from "@/lib/ai/persist";
 import { renderAiMarkdown } from "@/lib/ai/markdown";
 import { planHasContent } from "@/lib/ai/planSteps";
+import { planHasClarificationConflict } from "@/lib/ai/planState";
+import { isCurrentFormOwner, visibleChatForms } from "@/lib/ai/turnLifecycle";
 import { MarkdownProse } from "@/components/ui/markdown-prose";
 import "./aiMessage.css";
 
@@ -193,8 +195,9 @@ function planErrorText(message) {
 }
 
 function planErrorTitle(message) {
-  const stage =
-    message?.planConfirmationError?.stage || message?.requestError?.stage;
+  const error = message?.planConfirmationError || message?.requestError;
+  if (error?.code === "review_incomplete") return t("ai.reviewIncompleteTitle");
+  const stage = error?.stage;
   if (stage === "execution") return t("ai.planExecutionStatusUnknownTitle");
   if (stage === "confirmation") return t("ai.planConfirmationFailedTitle");
   return t("ai.requestFailedTitle");
@@ -202,6 +205,7 @@ function planErrorTitle(message) {
 
 function planErrorNextStep(message) {
   const error = message?.planConfirmationError || message?.requestError;
+  if (error?.code === "review_incomplete") return "";
   const stage = error?.stage;
   if (stage === "execution") return t("ai.planExecutionStatusUnknownNextStep");
   if (stage === "confirmation" && error?.reason === "already_processed")
@@ -513,19 +517,14 @@ function onChatAsk(prompt) {
 }
 
 function onFormSubmit(msg, payload) {
-  const prompt = payload?.prompt;
-  if (isLoading.value || !hasEnabledModels.value || !prompt) return;
-  store.commit("aiChat/setFormReply", {
+  if (!hasEnabledModels.value) return;
+  store.dispatch("aiChat/submitFormReply", {
+    sessionId: sessionId.value,
     messageId: msg.id,
-    formId: payload.formId,
-    answers: payload.answers || {},
-  });
-  store.dispatch("aiChat/sendMessage", {
-    content: prompt,
-    formReply: {
-      formId: payload.formId,
-      answers: payload.answers || {},
-    },
+    assistantMessageId: msg.messageId,
+    formId: payload?.formId,
+    answers: payload?.answers || {},
+    prompt: payload?.prompt,
   });
 }
 
@@ -733,6 +732,7 @@ function executionPart(msg) {
 }
 
 function replyText(msg) {
+  if (msg.requestError?.code === "review_incomplete") return "";
   const layout = turnLayout(msg);
   return hasPlanExec(msg)
     ? layout.execution.reply
@@ -742,18 +742,7 @@ function replyText(msg) {
 }
 
 function chatForms(msg) {
-  const layout = turnLayout(msg);
-  const forms = [
-    ...(layout.proposal.forms || []),
-    ...(layout.execution.forms || []),
-  ];
-  const seen = new Set();
-  return forms.filter((form) => {
-    const key = `${form.kind}|${form.adapterKey || ""}|${form.id || ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return visibleChatForms(msg);
 }
 
 function chatActions(msg) {
@@ -1050,7 +1039,11 @@ function isLatestTurn(msg) {
               <Message v-else-if="msg.role === 'assistant'" align="start">
                 <MessageContent class="gap-3">
                   <div
-                    v-if="planHasContent(msg.plan) && legacyBoundaryless(msg)"
+                    v-if="
+                      planHasContent(msg.plan) &&
+                      legacyBoundaryless(msg) &&
+                      !planHasClarificationConflict(msg)
+                    "
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard
@@ -1088,7 +1081,11 @@ function isLatestTurn(msg) {
                   />
 
                   <MarkdownProse
-                    v-if="msg.plan && proposalView(msg).reply"
+                    v-if="
+                      msg.plan &&
+                      proposalView(msg).reply &&
+                      !planHasClarificationConflict(msg)
+                    "
                     density="compact"
                     :html="renderAiMarkdown(proposalView(msg).reply)"
                     class="min-w-0 w-full wrap-break-word"
@@ -1121,12 +1118,18 @@ function isLatestTurn(msg) {
                           })
                         }}
                       </p>
-                      <p class="mt-1">{{ planErrorNextStep(msg) }}</p>
+                      <p v-if="planErrorNextStep(msg)" class="mt-1">
+                        {{ planErrorNextStep(msg) }}
+                      </p>
                     </AlertDescription>
                   </Alert>
 
                   <div
-                    v-if="planHasContent(msg.plan) && !legacyBoundaryless(msg)"
+                    v-if="
+                      planHasContent(msg.plan) &&
+                      !legacyBoundaryless(msg) &&
+                      !planHasClarificationConflict(msg)
+                    "
                     :class="isLatestTurn(msg) && 'ai-block-in'"
                   >
                     <AiPlanCard
@@ -1216,6 +1219,8 @@ function isLatestTurn(msg) {
                       v-for="form in chatForms(msg)"
                       :key="form.id"
                       :form="form"
+                      :inactive="!isCurrentFormOwner(messages, msg)"
+                      :disabled="isLoading || !hasEnabledModels"
                       :submitted="!!msg.formReplies?.[String(form.id)]"
                       :answers="msg.formReplies?.[String(form.id)]?.answers"
                       @submit="onFormSubmit(msg, $event)"

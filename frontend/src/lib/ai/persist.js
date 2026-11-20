@@ -1,6 +1,11 @@
-import { hydrateTimeline, timelineFromLegacy } from "./timeline.js";
+import {
+  collectChatForms,
+  hydrateTimeline,
+  timelineFromLegacy,
+} from "./timeline.js";
 import { attachmentMetaList } from "./attachments.js";
 import { normalizeCopiedPlans } from "./turnIdentity.js";
+import { normalizeTurnLifecycle } from "./turnLifecycle.js";
 
 /** Model-facing control messages — always English (system prompts are English). */
 export const AI_CONFIRM_PLAN = "Confirmed, proceed";
@@ -108,6 +113,15 @@ export function parsePersistedMessageMeta(toolCallsJson) {
             parsed.answers && typeof parsed.answers === "object"
               ? parsed.answers
               : {},
+          assistantMessageId:
+            typeof parsed.assistantMessageId === "string" &&
+            parsed.assistantMessageId
+              ? parsed.assistantMessageId
+              : undefined,
+          assistantDbId:
+            Number.isInteger(parsed.assistantDbId) && parsed.assistantDbId > 0
+              ? parsed.assistantDbId
+              : undefined,
         },
       };
     }
@@ -229,7 +243,7 @@ export function mapStoredMessage(m) {
   const timeline = storedTimeline?.length
     ? storedTimeline
     : timelineFromLegacy(executionOutcome ? "" : content, toolCalls);
-  return {
+  return normalizeTurnLifecycle({
     id: m.dbId,
     dbId: m.dbId,
     role: m.role,
@@ -264,15 +278,22 @@ export function mapStoredMessage(m) {
     messageState,
     executionOutcome,
     feedbackRating: m.feedbackRating ?? null,
-  };
+  });
 }
 
 export function serializeToolCallsJson(m) {
+  m = normalizeTurnLifecycle(m);
   if (m.formReply) {
     return JSON.stringify({
       _ui: "formReply",
       formId: m.formReply.formId == null ? "" : String(m.formReply.formId),
       answers: m.formReply.answers || {},
+      assistantMessageId: m.formReply.assistantMessageId || undefined,
+      assistantDbId:
+        Number.isInteger(m.formReply.assistantDbId) &&
+        m.formReply.assistantDbId > 0
+          ? m.formReply.assistantDbId
+          : undefined,
     });
   }
   const attachments = attachmentMetaList(m.attachments);
@@ -355,7 +376,19 @@ export function isHiddenUserMessage(msg) {
   return isAiControlMessage(msg) || !!msg.formReply;
 }
 
-/** Stamp questionnaire answers from a hidden user turn onto the previous assistant card. */
+/** The form ids an assistant row actually presented, proposal and execution. */
+function messageFormIds(message) {
+  const timeline = message?.timeline?.length
+    ? message.timeline
+    : timelineFromLegacy(message?.content, message?.toolCalls);
+  return new Set(collectChatForms(timeline).map((form) => String(form.id)));
+}
+
+/**
+ * Stamp questionnaire answers from a hidden user turn onto its owner. An
+ * explicit assistantMessageId/assistantDbId binding wins with no fallback;
+ * legacy replies without it apply only to a uniquely identifiable owner row.
+ */
 export function applyFormReplies(messages) {
   const next = messages.map((m) => ({
     ...m,
@@ -366,16 +399,25 @@ export function applyFormReplies(messages) {
     if (next[i]?.role !== "user" || !reply) continue;
     const formId = String(reply.formId || "");
     if (!formId) continue;
-    for (let j = i - 1; j >= 0; j--) {
-      if (next[j].role !== "assistant") continue;
-      next[j].formReplies[formId] = {
-        answers:
-          reply.answers && typeof reply.answers === "object"
-            ? reply.answers
-            : {},
-      };
-      break;
+    const before = next.slice(0, i).filter((m) => m.role === "assistant");
+    const ownerMessageId = String(reply.assistantMessageId || "");
+    let owner = null;
+    if (ownerMessageId) {
+      owner = before.find((m) => m.messageId === ownerMessageId) || null;
+    } else if (
+      Number.isInteger(reply.assistantDbId) &&
+      reply.assistantDbId > 0
+    ) {
+      owner = before.find((m) => m.dbId === reply.assistantDbId) || null;
+    } else {
+      const candidates = before.filter((m) => messageFormIds(m).has(formId));
+      if (candidates.length === 1) owner = candidates[0];
     }
+    if (!owner || !messageFormIds(owner).has(formId)) continue;
+    owner.formReplies[formId] = {
+      answers:
+        reply.answers && typeof reply.answers === "object" ? reply.answers : {},
+    };
   }
   return next;
 }

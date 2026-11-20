@@ -217,6 +217,8 @@ export default defineConfig(({ command }) => {
   }
 
   return {
+    // Keep optimizer output local when worktrees share node_modules.
+    cacheDir: path.resolve(__dirname, ".vite"),
     plugins: [vue(), tailwindcss(), docsRuntimeConfigPlugin(), apiBootGatePlugin()],
     resolve: {
       alias: {

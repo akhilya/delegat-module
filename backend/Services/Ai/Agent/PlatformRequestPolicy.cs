@@ -103,7 +103,8 @@ public static class PlatformRequestPolicy
         same /api paths as the cabinet. Prefer small pageSize.
         """;
 
-    public static readonly string SurfaceDescription = SurfaceBody + "\n" + AssistantWriteContract.AllText;
+    public static readonly string SurfaceDescription = AssistantCapabilityContract.Guidance + "\n"
+        + SurfaceBody + "\n" + AssistantWriteContract.AllText;
 
     private static readonly Regex PermanentDelete = new(
         @"/(bulk-)?permanent(-delete)?$",
