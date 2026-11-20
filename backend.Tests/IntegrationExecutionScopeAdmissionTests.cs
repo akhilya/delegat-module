@@ -172,15 +172,19 @@ public sealed class IntegrationExecutionScopeAdmissionTests
                 : ValueTask.FromResult(result);
     }
 
-    private sealed class FailOnceCommitInterceptor : DbTransactionInterceptor
+    private sealed class FailOnceCommitInterceptor(Func<Task>? afterCommit = null) : DbTransactionInterceptor
     {
         private int _armed = 1;
-        public override Task TransactionCommittedAsync(
+        public override async Task TransactionCommittedAsync(
             DbTransaction transaction, TransactionEndEventData eventData,
-            CancellationToken cancellationToken = default) =>
-            Interlocked.Exchange(ref _armed, 0) == 1
-                ? Task.FromException(new InvalidOperationException("simulated lost commit acknowledgement"))
-                : Task.CompletedTask;
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _armed, 0) != 1)
+                return;
+            if (afterCommit is not null)
+                await afterCommit();
+            throw new InvalidOperationException("simulated lost commit acknowledgement");
+        }
     }
 
     [Fact]
@@ -208,6 +212,40 @@ public sealed class IntegrationExecutionScopeAdmissionTests
         Assert.Equal(2, rows.Count);
         Assert.All(rows, r => Assert.Equal(1, r.revision));
         Assert.All(rows, r => Assert.Equal(result.Lease!.Owner, r.leaseOwner));
+    }
+
+    [Fact]
+    public async Task CommitAcknowledgementLost_DefersForCooldownRecordedAfterCommit()
+    {
+        var clock = new ManualClock();
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+        await using var otherProvider = BuildProvider(() => TestDbFactory.CreateSqliteContext(dsn), clock);
+        var other = otherProvider.GetRequiredService<IntegrationScopeAdmission>();
+        var a = new IntegrationScope("scope-a", TimeSpan.Zero);
+        var b = new IntegrationScope("scope-b", TimeSpan.Zero);
+        var previous = await other.TryReserveAsync([a], LeaseTtl, CancellationToken.None);
+        Assert.NotNull(previous.Lease);
+        clock.Now = previous.Lease!.ExpiresAt;
+        var cooldown = clock.Now.AddSeconds(30); // Shorter than the unpublished replacement lease.
+        var failOnce = new FailOnceCommitInterceptor(
+            () => other.CompleteAsync(previous.Lease!, cooldown, CancellationToken.None));
+        await using var provider = BuildProvider(
+            () => TestDbFactory.CreateSqliteContext(dsn, retryingStrategy: true, interceptors: [failOnce]),
+            clock);
+        var admission = provider.GetRequiredService<IntegrationScopeAdmission>();
+
+        var result = await admission.TryReserveAsync([a, b], LeaseTtl, CancellationToken.None);
+
+        Assert.Null(result.Lease);
+        Assert.Equal(cooldown, result.RetryAt);
+        var unrelatedToCooldown = await other.TryReserveAsync([b], LeaseTtl, CancellationToken.None);
+        Assert.NotNull(unrelatedToCooldown.Lease);
+        await other.CompleteAsync(unrelatedToCooldown.Lease!, null, CancellationToken.None);
+        clock.Now = cooldown;
+        Assert.NotNull((await other.TryReserveAsync([a, b], LeaseTtl, CancellationToken.None)).Lease);
     }
 
     [LocalMySqlFact]

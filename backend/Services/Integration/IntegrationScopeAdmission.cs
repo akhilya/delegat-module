@@ -48,7 +48,19 @@ internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactor
                 await using var tx = await db.Database.BeginTransactionAsync(token);
                 var rows = await states.AsNoTracking().Where(s => keys.Contains(s.scopeKey)).ToDictionaryAsync(s => s.scopeKey, token);
                 if (rows.Count == keys.Length && rows.Values.All(s => s.leaseOwner == lease.Owner && s.leaseUntilTicks == expires))
-                    return new(lease, null); // The previous commit landed before its acknowledgement was lost.
+                {
+                    // Our commit landed, but a late provider response can have extended a cooldown since then.
+                    if (!rows.Values.Any(s => s.cooldownUntilTicks > now.UtcTicks))
+                        return new(lease, null);
+
+                    var blockedUntil = rows.Values.Max(s => Math.Max(s.nextStartTicks, s.cooldownUntilTicks));
+                    // No lease was handed out; free all of its scopes without refunding their spacing.
+                    foreach (var key in keys)
+                        await ReleaseScopeAsync(states.Where(s => s.scopeKey == key), lease.Owner, token);
+
+                    await tx.CommitAsync(token);
+                    return new(null, new DateTimeOffset(blockedUntil, TimeSpan.Zero));
+                }
 
                 var retryTicks = rows.Values.Select(s => Math.Max(s.leaseUntilTicks, Math.Max(s.nextStartTicks, s.cooldownUntilTicks)))
                     .DefaultIfEmpty().Max();
@@ -121,11 +133,7 @@ internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactor
             foreach (var key in lease.ScopeKeys)
             {
                 var state = db.integrationScopeStates.Where(s => s.scopeKey == key);
-                await state.Where(s => s.leaseOwner == lease.Owner)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(x => x.revision, x => x.revision + 1)
-                        .SetProperty(x => x.leaseUntilTicks, 0L)
-                        .SetProperty(x => x.leaseOwner, (string?)null), token);
+                await ReleaseScopeAsync(state, lease.Owner, token);
 
                 // A late response can extend cooldown but cannot release a successor's lease.
                 if (cooldown > 0)
@@ -139,4 +147,11 @@ internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactor
             await tx.CommitAsync(token);
         }, ct);
     }
+
+    private static Task<int> ReleaseScopeAsync(IQueryable<IntegrationScopeState> state, string owner, CancellationToken ct) =>
+        state.Where(s => s.leaseOwner == owner)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.revision, x => x.revision + 1)
+                .SetProperty(x => x.leaseUntilTicks, 0L)
+                .SetProperty(x => x.leaseOwner, (string?)null), ct);
 }
