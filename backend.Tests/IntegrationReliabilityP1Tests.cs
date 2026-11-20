@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using Delegat.Controllers;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Infrastructure.Storage;
@@ -272,6 +273,65 @@ public sealed class IntegrationReliabilityP1Tests
             row => Assert.Equal(ProductExportStatus.Completed, row.status));
     }
 
+    [Fact]
+    public async Task InteractiveExport_RequestCancelledDuringAdapterCall_FinishesOperationAsFailed()
+    {
+        var operationLogger = new RecordingOperationLogger();
+        var controller = new ProductSyncController(
+            currentUserService: null!,
+            unitOfWork: null!,
+            serviceProvider: null!,
+            adapterRegistry: null!,
+            productSyncService: null!,
+            priceSyncService: null!,
+            context: null!,
+            logger: NullLogger<ProductSyncController>.Instance,
+            operationLogger: operationLogger,
+            categoryImportQueue: null!,
+            quotaService: null!,
+            linkVerifyQueue: null!);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            controller.RunExportOperationAsync("op-cancelled", 1,
+                token => Task.FromCanceled<ProductExportResult>(token),
+                cts.Token));
+
+        var finish = Assert.Single(operationLogger.Finishes);
+        Assert.Equal("op-cancelled", finish.OperationId);
+        Assert.Equal("failed", finish.Status);
+        Assert.Contains("remote outcome is unknown", finish.Summary);
+    }
+
+    [Fact]
+    public async Task InteractiveExport_ServiceResult_FinishesOperationWithMatchingStatus()
+    {
+        var operationLogger = new RecordingOperationLogger();
+        var controller = new ProductSyncController(
+            currentUserService: null!,
+            unitOfWork: null!,
+            serviceProvider: null!,
+            adapterRegistry: null!,
+            productSyncService: null!,
+            priceSyncService: null!,
+            context: null!,
+            logger: NullLogger<ProductSyncController>.Instance,
+            operationLogger: operationLogger,
+            categoryImportQueue: null!,
+            quotaService: null!,
+            linkVerifyQueue: null!);
+
+        var result = await controller.RunExportOperationAsync("op-failed", 1,
+            _ => Task.FromResult(ProductExportResult.Failure("provider rejected")),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        var finish = Assert.Single(operationLogger.Finishes);
+        Assert.Equal("op-failed", finish.OperationId);
+        Assert.Equal("failed", finish.Status);
+    }
+
     private static async Task<(DataContext Db, Models.Products.Product Product, Delegat.Models.Marketplace.MarketplaceConnection Connection, P1AdapterProxy Adapter)>
         CreateScenarioAsync()
     {
@@ -426,7 +486,7 @@ public sealed class IntegrationReliabilityP1Tests
 
     private sealed class RecordingOperationLogger : IOperationLogger
     {
-        public List<(string OperationId, string Status)> Finishes { get; } = [];
+        public List<(string OperationId, string Status, string? Summary)> Finishes { get; } = [];
 
         public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
             int? connectionId = null, string? connectionName = null,
@@ -436,7 +496,7 @@ public sealed class IntegrationReliabilityP1Tests
         public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed) => Task.CompletedTask;
         public Task FinishAsync(string operationId, int storeId, string status, string? summary = null)
         {
-            Finishes.Add((operationId, status));
+            Finishes.Add((operationId, status, summary));
             return Task.CompletedTask;
         }
         public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;

@@ -281,7 +281,7 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
-- Marketplace export operations no longer finish early while item retries are still pending, combine queued products from different operations into one adapter call, report a successful product export when a follow-up price or stock update was rejected, or accept missing, duplicate, or foreign bulk item results as authoritative.
+- Marketplace export operations no longer finish early while item retries are still pending, combine queued products from different operations into one adapter call, report a successful product export when a follow-up price or stock update was rejected, accept missing, duplicate, or foreign bulk item results as authoritative, or stay "running" forever when an interactive export request is cancelled or times out (the operation now finishes as failed with an explicit unknown-outcome message).
 
 - AI assistant can create a category, its attributes, and related products in one confirmed plan, without asking for separate confirmation just to obtain new identifiers.
 

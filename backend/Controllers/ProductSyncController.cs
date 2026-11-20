@@ -235,13 +235,11 @@ public class ProductSyncController : ControllerBase
             await _operationLogger.StartAsync(operationId, storeId, userId, "single-export",
                 $"Export product #{productId}", connectionId: connectionId, connectionName: connection.name);
 
-        var result = await _productSyncService.ExportProductAsync(
-            productId, connectionId, ct,
-            operationId: operationId, operationStoreId: storeId);
-
-        await _operationLogger.FinishAsync(operationId, storeId,
-            result.IsSuccess ? "completed" : "failed",
-            result.IsSuccess ? result.Message : result.ErrorMessage);
+        var result = await RunExportOperationAsync(operationId, storeId,
+            token => _productSyncService.ExportProductAsync(
+                productId, connectionId, token,
+                operationId: operationId, operationStoreId: storeId),
+            ct);
 
         if (!result.IsSuccess)
             throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
@@ -254,6 +252,39 @@ public class ProductSyncController : ControllerBase
             isNewProduct = result.IsNewProduct,
             message = result.Message
         });
+    }
+
+    /// <summary>
+    /// Runs an interactive single-product export and persists a terminal operation
+    /// outcome on every exit path. Interactive exports create no resumable queue
+    /// work, so a cancelled or timed-out request must not leave the operation
+    /// running until the stale-operation cleanup. The remote outcome is unknown
+    /// in that case, so the operation finishes as failed with an explicit
+    /// verify-before-retry message rather than "cancelled", which would imply the
+    /// remote write was undone.
+    /// </summary>
+    internal async Task<ProductExportResult> RunExportOperationAsync(
+        string operationId,
+        int storeId,
+        Func<CancellationToken, Task<ProductExportResult>> export,
+        CancellationToken ct)
+    {
+        ProductExportResult result;
+        try
+        {
+            result = await export(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await _operationLogger.FinishAsync(operationId, storeId, "failed",
+                "Export was interrupted before the marketplace responded; the remote outcome is unknown - verify the product before retrying.");
+            throw;
+        }
+
+        await _operationLogger.FinishAsync(operationId, storeId,
+            result.IsSuccess ? "completed" : "failed",
+            result.IsSuccess ? (result.Message ?? "Product exported") : result.ErrorMessage);
+        return result;
     }
 
     /// <summary>
@@ -2825,13 +2856,11 @@ public class ProductSyncController : ControllerBase
                 connectionId: link.connectionId, connectionName: link.connection.name);
 
         // Export through the service
-        var result = await _productSyncService.ExportProductAsync(
-            link.productId, link.connectionId, ct,
-            operationId: operationId, operationStoreId: storeId);
-
-        await _operationLogger.FinishAsync(operationId, storeId,
-            result.IsSuccess ? "completed" : "failed",
-            result.IsSuccess ? (result.Message ?? "Product exported") : result.ErrorMessage);
+        var result = await RunExportOperationAsync(operationId, storeId,
+            token => _productSyncService.ExportProductAsync(
+                link.productId, link.connectionId, token,
+                operationId: operationId, operationStoreId: storeId),
+            ct);
 
         if (!result.IsSuccess)
             throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
@@ -2957,6 +2986,13 @@ public class ProductSyncController : ControllerBase
                 archiveError
             });
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Restore local state with an uncancelled token, then let the
+            // cancellation propagate instead of turning it into a 400.
+            await RestoreLocalStateAsync();
+            throw;
+        }
         catch (ApiException)
         {
             throw; // re-throw API exceptions
@@ -2965,17 +3001,22 @@ public class ProductSyncController : ControllerBase
         {
             // Critical failure - try to restore
             _logger.LogError(ex, "Recreate product failed for link {LinkId}", linkId);
+            await RestoreLocalStateAsync();
+            throw ApiException.BadRequest($"Failed to recreate: {ex.Message}");
+        }
 
+        async Task RestoreLocalStateAsync()
+        {
             try
             {
-                var product = await _context.products.FindAsync(new object[] { productId }, ct);
+                var product = await _context.products.FindAsync(new object[] { productId }, CancellationToken.None);
                 if (product != null && product.sku != originalSku)
                 {
                     product.sku = originalSku;
                 }
                 // Check if the old link was lost
                 var existingLink = await _context.productMarketplaceLinks
-                    .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+                    .AnyAsync(l => l.productId == productId && l.connectionId == connectionId, CancellationToken.None);
                 if (!existingLink)
                 {
                     _context.productMarketplaceLinks.Add(new ProductMarketplaceLink
@@ -2987,14 +3028,12 @@ public class ProductSyncController : ControllerBase
                         status = ProductMarketplaceStatus.SyncError
                     });
                 }
-                await _context.SaveChangesAsync(ct);
+                await _context.SaveChangesAsync(CancellationToken.None);
             }
             catch (Exception rollbackEx)
             {
                 _logger.LogError(rollbackEx, "Rollback also failed for link {LinkId}", linkId);
             }
-
-            throw ApiException.BadRequest($"Failed to recreate: {ex.Message}");
         }
     }
 
