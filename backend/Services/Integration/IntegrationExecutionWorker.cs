@@ -408,14 +408,27 @@ public class IntegrationExecutionWorker : BackgroundService
 
                 if (updated == 0)
                 {
-                    // Lease lost: another worker owns this stage now. Only our
-                    // attempt evidence was persisted (the dispatch really
-                    // happened); any tracked mutations left over from a prior
-                    // strategy attempt must not flush into a row we no longer
-                    // own, so nothing is saved through the change tracker.
-                    db.ChangeTracker.Clear();
-                    await tx.CommitAsync(ct);
-                    return null;
+                    // A zero-row guard is ambiguous under commit retries: a rival
+                    // may own the stage, or our own previous attempt may have
+                    // committed while its acknowledgment was lost. The row
+                    // carrying exactly our outcome and our released lease means
+                    // the earlier commit landed - the transition below must
+                    // still run so the finish event is not lost.
+                    var alreadyFinalizedByUs = await db.integrationStages
+                        .AsNoTracking()
+                        .AnyAsync(s => s.Id == stage.Id
+                            && s.state == newState
+                            && s.claimVersion == releasedVersion, ct);
+                    if (!alreadyFinalizedByUs)
+                    {
+                        // Lease lost: another worker owns this stage now. Only
+                        // our attempt evidence was persisted (the dispatch
+                        // really happened); tracked leftovers must not flush
+                        // into a row we no longer own.
+                        db.ChangeTracker.Clear();
+                        await tx.CommitAsync(ct);
+                        return null;
+                    }
                 }
 
                 var transition = await TransitionCommandIfTerminalAsync(db, command, now, ct);
@@ -605,8 +618,16 @@ public class IntegrationExecutionWorker : BackgroundService
         // writing or announcing anything.
         if (newState != null)
         {
+            // Match also a row already carrying our intended outcome with our
+            // own timestamp: `now` is shared across strategy retries, so that
+            // combination proves our earlier commit landed while its
+            // acknowledgment was lost - skipping it would lose the finish
+            // event. A terminal row stamped differently belongs to a rival
+            // worker, which owns the announcement.
             var applied = await db.integrationCommands
-                .Where(c => c.Id == command.Id && OpenCommandStates.Contains(c.state))
+                .Where(c => c.Id == command.Id
+                    && (OpenCommandStates.Contains(c.state)
+                        || (c.state == newState && c.updatedAt == now)))
                 .ExecuteUpdateAsync(c => c
                     .SetProperty(x => x.state, newState)
                     .SetProperty(x => x.summary, summary)

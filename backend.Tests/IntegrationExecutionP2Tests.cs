@@ -764,6 +764,41 @@ public sealed class IntegrationExecutionP2Tests
     }
 
     [Fact]
+    public async Task Worker_FinalizeCommitAckLost_RetryStillEmitsFinish()
+    {
+        // The finalization commit lands but its acknowledgment is lost; the
+        // retried attempt must recognize its own committed outcome instead of
+        // silently dropping the finish event.
+        var interceptor = new FailFirstCommitInterceptor { AfterCommit = true };
+        var (db, keeper) = TestDbFactory.CreateSqliteDb(
+            retryingStrategy: true, interceptors: [interceptor]);
+        await using var _ = keeper;
+        var coordinator = CreateCoordinator(db);
+        await coordinator.AdmitAsync(AdmitRequest(), v1Enabled: true, CancellationToken.None);
+
+        var logger = new RecordingOperationLogger();
+        var dispatcher = new FakeDispatcher
+        {
+            // Armed after the attempt-before-send commit so the failing commit
+            // is the finalization transaction.
+            DispatchBehavior = (db2, req) =>
+            {
+                interceptor.Armed = true;
+                return Task.FromResult(
+                    new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied));
+            },
+            Db = db
+        };
+        await CreateWorker(db, dispatcher, logger)
+            .ProcessDueStagesAsync(CancellationToken.None);
+
+        Assert.Equal("applied", (await db.integrationStages.AsNoTracking().SingleAsync()).state);
+        Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
+        var notification = Assert.Single(logger.FinishedNotifications);
+        Assert.Equal("completed", notification.Status);
+    }
+
+    [Fact]
     public async Task Worker_StrandedCommand_SweepTransitionsItTerminal()
     {
         var (db, keeper) = TestDbFactory.CreateSqliteDb();
@@ -793,6 +828,35 @@ public sealed class IntegrationExecutionP2Tests
         Assert.Equal("completed", (await db.operations.AsNoTracking().SingleAsync()).status);
         Assert.Single(logger.FinishedNotifications);
         Assert.Equal("completed", logger.FinishedNotifications[0].Status);
+    }
+
+    [Fact]
+    public async Task Worker_SweepCommitAckLost_RetryStillEmitsFinish()
+    {
+        // Same lost-acknowledgment ambiguity one level up: the sweep's commit
+        // lands, the retry sees an already-terminal command, and the finish
+        // event must still publish exactly once.
+        var interceptor = new FailFirstCommitInterceptor { AfterCommit = true };
+        var (db, keeper) = TestDbFactory.CreateSqliteDb(
+            retryingStrategy: true, interceptors: [interceptor]);
+        await using var _ = keeper;
+        var coordinator = CreateCoordinator(db);
+        await coordinator.AdmitAsync(AdmitRequest(), v1Enabled: true, CancellationToken.None);
+
+        await db.integrationStages.ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.state, IntegrationStageState.Applied)
+            .SetProperty(x => x.finishedAt, DateTime.UtcNow));
+        await db.integrationCommands.ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.state, IntegrationCommandState.Executing));
+
+        var logger = new RecordingOperationLogger();
+        interceptor.Armed = true;
+        await CreateWorker(db, new FakeDispatcher(), logger)
+            .ProcessDueStagesAsync(CancellationToken.None);
+
+        Assert.Equal("completed", (await db.integrationCommands.AsNoTracking().SingleAsync()).state);
+        var notification = Assert.Single(logger.FinishedNotifications);
+        Assert.Equal("completed", notification.Status);
     }
 
     [Fact]
@@ -845,28 +909,47 @@ public sealed class IntegrationExecutionP2Tests
         public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;
     }
 
-    /// <summary>Aborts the first transaction commit to simulate a post-accept
-    /// rollback inside a retried execution strategy.</summary>
+    /// <summary>Aborts the first armed transaction commit to simulate a
+    /// post-accept rollback - or, with <see cref="AfterCommit"/>, a commit that
+    /// landed while its acknowledgment was lost.</summary>
     private sealed class FailFirstCommitInterceptor : DbTransactionInterceptor
     {
         public bool Armed { get; set; }
+        public bool AfterCommit { get; set; }
         private int _used;
 
         public override InterceptionResult TransactionCommitting(
             DbTransaction transaction, TransactionEventData eventData,
-            InterceptionResult result) => Fail(result);
+            InterceptionResult result) => AfterCommit ? result : Fail(result);
 
         public override ValueTask<InterceptionResult> TransactionCommittingAsync(
             DbTransaction transaction, TransactionEventData eventData,
             InterceptionResult result,
             CancellationToken cancellationToken = default)
-            => ValueTask.FromResult(Fail(result));
+            => ValueTask.FromResult(AfterCommit ? result : Fail(result));
+
+        public override void TransactionCommitted(
+            DbTransaction transaction, TransactionEndEventData eventData) => FailAfterCommit();
+
+        public override Task TransactionCommittedAsync(
+            DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            FailAfterCommit();
+            return Task.CompletedTask;
+        }
 
         private InterceptionResult Fail(InterceptionResult result)
         {
             if (Armed && Interlocked.Exchange(ref _used, 1) == 0)
                 throw new InvalidOperationException("simulated commit failure");
             return result;
+        }
+
+        private void FailAfterCommit()
+        {
+            if (Armed && AfterCommit && Interlocked.Exchange(ref _used, 1) == 0)
+                throw new InvalidOperationException("simulated lost commit acknowledgment");
         }
     }
 

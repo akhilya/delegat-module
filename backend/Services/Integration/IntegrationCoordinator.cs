@@ -36,6 +36,13 @@ public class IntegrationCoordinator
     /// same command; the same key with a different body conflicts before any
     /// effect. Command, stages and the operation projection commit atomically.
     /// </summary>
+    /// <remarks>
+    /// Shared-context boundary: pending changes already tracked by the caller's
+    /// DataContext are flushed and committed before the admission transaction
+    /// opens, so caller writes survive admission failures (including a lost
+    /// command insert). Callers that require their writes to be atomic with
+    /// admission must commit them first themselves or use a dedicated context.
+    /// </remarks>
     public async Task<IntegrationAdmitResult> AdmitAsync(
         IntegrationAdmitRequest request, bool v1Enabled, CancellationToken ct)
     {
