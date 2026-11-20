@@ -204,7 +204,7 @@ public class IntegrationExecutionWorker : BackgroundService
                         IssuesJson: blockedBy == DependencyBlocking.Failed
                             ? "[{\"code\":\"dependency_failed\",\"message\":\"A required stage did not complete\"}]"
                             : "[{\"code\":\"stopped\",\"message\":\"Operation stopped before this stage was sent\"}]"),
-                    now, ct);
+                    now, ct, expectedClaimVersion + 1);
                 return;
             }
         }
@@ -272,7 +272,7 @@ public class IntegrationExecutionWorker : BackgroundService
         }
 
         await FinalizeStageAsync(db, operationLogger, stage, command, result,
-            DateTime.UtcNow, ct, attempt);
+            DateTime.UtcNow, ct, expectedClaimVersion + 1, attempt);
     }
 
     private enum DependencyBlocking { None, Waiting, Failed }
@@ -335,6 +335,7 @@ public class IntegrationExecutionWorker : BackgroundService
         IntegrationDispatchResult result,
         DateTime now,
         CancellationToken ct,
+        int claimedVersion,
         IntegrationAttempt? attempt = null)
     {
         var transition = await db.Database.CreateExecutionStrategy().ExecuteAsync<CommandTransition?>(
@@ -346,16 +347,18 @@ public class IntegrationExecutionWorker : BackgroundService
                 var (newState, nextCheckAt, terminal) = MapOutcome(result, stage, now);
 
                 // Guarded stage write: applies only while our lease still owns
-                // the row. An expired worker whose result arrives late cannot
-                // overwrite a newer reconciliation outcome.
-                var guardVersion = stage.claimVersion;
-                var releasedVersion = guardVersion + 1;
+                // the row. The guard checks the version our claim acquired -
+                // an immutable local, never the tracked entity, so a strategy
+                // retry after rollback re-checks the same lease rather than a
+                // released version. An expired worker cannot overwrite a newer
+                // reconciliation outcome.
+                var releasedVersion = claimedVersion + 1;
                 var mergedReceipt = result.ReceiptJson ?? stage.receiptJson;
                 var mergedEvidence = result.EvidenceJson ?? stage.evidenceJson;
                 var mergedIssues = result.IssuesJson ?? stage.issuesJson;
                 var newFinishedAt = terminal ? (DateTime?)now : stage.finishedAt;
                 var updated = await db.integrationStages
-                    .Where(s => s.Id == stage.Id && s.claimVersion == guardVersion)
+                    .Where(s => s.Id == stage.Id && s.claimVersion == claimedVersion)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(x => x.state, newState)
                         .SetProperty(x => x.receiptJson, mergedReceipt)
@@ -370,8 +373,8 @@ public class IntegrationExecutionWorker : BackgroundService
 
                 if (attempt != null)
                 {
-                    attempt.outcome = result.Outcome.ToString().ToLowerInvariant();
-                    attempt.effectCertainty = result.Outcome switch
+                    var outcome = result.Outcome.ToString().ToLowerInvariant();
+                    var certainty = result.Outcome switch
                     {
                         IntegrationDispatchOutcome.Applied or IntegrationDispatchOutcome.PartiallyApplied
                             => IntegrationEffectCertainty.Applied,
@@ -379,17 +382,29 @@ public class IntegrationExecutionWorker : BackgroundService
                             => IntegrationEffectCertainty.None,
                         _ => IntegrationEffectCertainty.Possible
                     };
-                    attempt.responseSummary = result.ResponseSummary;
-                    attempt.issuesJson = result.IssuesJson;
-                    attempt.completedAt = now;
+                    // The attempt row was committed before dispatch; evidence is
+                    // written directly so a lost lease or a strategy retry never
+                    // flushes stale tracked state on top of a newer owner. The
+                    // tracked entity stays untouched and clean, so the later
+                    // SaveChanges cannot rewrite it either.
+                    await db.integrationAttempts
+                        .Where(a => a.Id == attempt.Id)
+                        .ExecuteUpdateAsync(a => a
+                            .SetProperty(x => x.outcome, outcome)
+                            .SetProperty(x => x.effectCertainty, certainty)
+                            .SetProperty(x => x.responseSummary, result.ResponseSummary)
+                            .SetProperty(x => x.issuesJson, result.IssuesJson)
+                            .SetProperty(x => x.completedAt, (DateTime?)now), ct);
                 }
 
                 if (updated == 0)
                 {
-                    // Lease lost: another worker owns this stage now. Persist
-                    // only our attempt evidence (the dispatch really happened);
-                    // stage and command belong to the newer owner.
-                    await db.SaveChangesAsync(ct);
+                    // Lease lost: another worker owns this stage now. Only our
+                    // attempt evidence was persisted (the dispatch really
+                    // happened); any tracked mutations left over from a prior
+                    // strategy attempt must not flush into a row we no longer
+                    // own, so nothing is saved through the change tracker.
+                    db.ChangeTracker.Clear();
                     await tx.CommitAsync(ct);
                     return null;
                 }
@@ -488,7 +503,8 @@ public class IntegrationExecutionWorker : BackgroundService
         if (transition.TerminalState != null && transition.OperationStatus != null)
         {
             await operationLogger.NotifyFinishedAsync(command.operationId, command.storeId,
-                transition.OperationStatus, transition.Summary);
+                transition.OperationStatus, transition.Summary,
+                transition.TotalItems, transition.CompletedItems, transition.FailedItems);
         }
         else
         {

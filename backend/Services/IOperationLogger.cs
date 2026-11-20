@@ -13,9 +13,11 @@ public interface IOperationLogger
     /// <summary>
     /// Emits the finish notification only, for callers that already persisted
     /// the terminal projection themselves. <see cref="FinishAsync"/> sees the
-    /// terminal row and returns before publishing.
+    /// terminal row and returns before publishing. Item counts ride along so
+    /// live views settle on the final numbers, not the last progress tick.
     /// </summary>
-    Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null)
+    Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null,
+        int? totalItems = null, int? completedItems = null, int? failedItems = null)
         => Task.CompletedTask;
 
     Task UpdateStatusAsync(string operationId, int storeId, string status);

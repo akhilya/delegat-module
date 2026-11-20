@@ -186,7 +186,8 @@ public class OperationLogger : IOperationLogger
     }
 
     /// <inheritdoc />
-    public async Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null)
+    public async Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null,
+        int? totalItems = null, int? completedItems = null, int? failedItems = null)
     {
         await _hub.Clients.Group($"store-{storeId}")
             .SendAsync("OperationFinished", new
@@ -194,6 +195,9 @@ public class OperationLogger : IOperationLogger
                 operationId,
                 status,
                 summary,
+                total = totalItems,
+                completed = completedItems,
+                failed = failedItems,
                 timestamp = DateTime.UtcNow
             });
     }

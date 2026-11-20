@@ -60,6 +60,12 @@ public class IntegrationCoordinator
         IntegrationAdmitRequest request, string scopeKey, string? requestKey,
         string requestHash, CancellationToken ct)
     {
+        // A retried strategy attempt can leave the failed graph tracked as
+        // pending inserts; two graphs would race the same request key.
+        foreach (var entry in _db.ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Added).ToList())
+            entry.State = EntityState.Detached;
+
         if (requestKey != null)
         {
             var existing = await _db.integrationCommands

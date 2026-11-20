@@ -173,11 +173,14 @@ public sealed class IntegrationExecutionP2Tests
             Db = db
         };
 
-        await CreateWorker(db, dispatcher).ProcessDueStagesAsync(CancellationToken.None);
+        var workerLogger = new ListLogger<IntegrationExecutionWorker>();
+        await CreateWorker(db, dispatcher, logger: workerLogger)
+            .ProcessDueStagesAsync(CancellationToken.None);
 
         Assert.Equal(1, dispatcher.DispatchCalls);
-        var attempt = await db.integrationAttempts.SingleAsync();
-        Assert.Equal("applied", attempt.outcome);
+        var attempt = await db.integrationAttempts.AsNoTracking().SingleAsync();
+        Assert.True(attempt.outcome == "applied",
+            $"outcome={attempt.outcome} :: {string.Join("\n", workerLogger.Entries)}");
         Assert.Equal(IntegrationEffectCertainty.Applied, attempt.effectCertainty);
         Assert.NotNull(attempt.completedAt);
 
@@ -267,7 +270,8 @@ public sealed class IntegrationExecutionP2Tests
         Assert.Equal("failed", command.state);
         Assert.Equal("failed", (await db.operations.SingleAsync()).status);
         Assert.Equal(IntegrationEffectCertainty.None,
-            (await db.integrationAttempts.OrderByDescending(a => a.Id).FirstAsync()).effectCertainty);
+            (await db.integrationAttempts.AsNoTracking()
+                .OrderByDescending(a => a.Id).FirstAsync()).effectCertainty);
     }
 
     // ---------- Ordering / ownership (A08) ----------
@@ -467,7 +471,7 @@ public sealed class IntegrationExecutionP2Tests
 
         // Evidence retained: unresolved-projection guard sees it as terminal,
         // but the attempt stays for reconciliation.
-        var attempt = await db.integrationAttempts.SingleAsync();
+        var attempt = await db.integrationAttempts.AsNoTracking().SingleAsync();
         Assert.Equal("unknown", attempt.outcome);
         Assert.Equal(IntegrationEffectCertainty.Possible, attempt.effectCertainty);
         Assert.False(await coordinator.IsUnresolvedCommandOperationAsync(
@@ -653,7 +657,7 @@ public sealed class IntegrationExecutionP2Tests
 
         // Our attempt evidence is kept - the dispatch really happened - but the
         // stage state belongs to the newer owner and is not overwritten.
-        var attempt = await db.integrationAttempts.SingleAsync();
+        var attempt = await db.integrationAttempts.AsNoTracking().SingleAsync();
         Assert.Equal("applied", attempt.outcome);
         var stage = await db.integrationStages.AsNoTracking().SingleAsync();
         Assert.Equal("inflight", stage.state);
@@ -705,15 +709,21 @@ public sealed class IntegrationExecutionP2Tests
             .ProcessDueStagesAsync(CancellationToken.None);
 
         // The projection row is already terminal when the event goes out, so
-        // the notification must not route through FinishAsync.
+        // the notification must not route through FinishAsync. Final item
+        // counts ride along so live views do not keep stale progress.
         Assert.Single(logger.FinishedNotifications);
-        Assert.Equal("completed", logger.FinishedNotifications[0].Status);
+        var notice = logger.FinishedNotifications[0];
+        Assert.Equal("completed", notice.Status);
+        Assert.Equal(1, notice.Total);
+        Assert.Equal(1, notice.Completed);
+        Assert.Equal(0, notice.Failed);
         Assert.Empty(logger.FinishCalls);
     }
 
     private sealed class RecordingOperationLogger : IOperationLogger
     {
-        public List<(string OperationId, string Status, string? Summary)> FinishedNotifications { get; } = [];
+        public List<(string OperationId, string Status, string? Summary,
+            int? Total, int? Completed, int? Failed)> FinishedNotifications { get; } = [];
         public List<(string OperationId, string Status)> FinishCalls { get; } = [];
 
         public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
@@ -727,9 +737,10 @@ public sealed class IntegrationExecutionP2Tests
             FinishCalls.Add((operationId, status));
             return Task.CompletedTask;
         }
-        public Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null)
+        public Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null,
+            int? totalItems = null, int? completedItems = null, int? failedItems = null)
         {
-            FinishedNotifications.Add((operationId, status, summary));
+            FinishedNotifications.Add((operationId, status, summary, totalItems, completedItems, failedItems));
             return Task.CompletedTask;
         }
         public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;
