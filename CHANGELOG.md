@@ -281,6 +281,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 
 ### Fixed
 
+- Development: Vite dependency caches are now isolated per checkout, preventing linked node_modules in parallel worktrees from mixing Vue runtime chunks and breaking product forms.
+
 - AI assistant: plans no longer accept misplaced tool arguments that the executor would silently ignore. Generated-file metadata survives history reloads, so a later save request can reuse the existing artifact instead of asking for re-upload or recalculation; permanent saving still requires a separate confirmation.
 
 - Deleting a connected AI model now honors confirmation with mouse or keyboard, preserves the model-management dialog, and refreshes model pickers. Platform-provided model rows keep the same compact height as other models, with their origin badge outside the status column.
