@@ -214,8 +214,11 @@ public sealed class IntegrationExecutionScopeAdmissionTests
         Assert.All(rows, r => Assert.Equal(result.Lease!.Owner, r.leaseOwner));
     }
 
-    [Fact]
-    public async Task CommitAcknowledgementLost_DefersForCooldownRecordedAfterCommit()
+    [Theory]
+    [InlineData(20, 30)] // Cooldown ends last.
+    [InlineData(45, 45)] // Reservation spacing ends last.
+    public async Task CommitAcknowledgementLost_DefersForCooldownRecordedAfterCommit(
+        int spacingSeconds, int retryAfterSeconds)
     {
         var clock = new ManualClock();
         var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
@@ -225,11 +228,13 @@ public sealed class IntegrationExecutionScopeAdmissionTests
         await using var otherProvider = BuildProvider(() => TestDbFactory.CreateSqliteContext(dsn), clock);
         var other = otherProvider.GetRequiredService<IntegrationScopeAdmission>();
         var a = new IntegrationScope("scope-a", TimeSpan.Zero);
-        var b = new IntegrationScope("scope-b", TimeSpan.Zero);
+        var b = new IntegrationScope("scope-b", TimeSpan.FromSeconds(spacingSeconds));
         var previous = await other.TryReserveAsync([a], LeaseTtl, CancellationToken.None);
         Assert.NotNull(previous.Lease);
         clock.Now = previous.Lease!.ExpiresAt;
         var cooldown = clock.Now.AddSeconds(30); // Shorter than the unpublished replacement lease.
+        var spacingUntil = clock.Now.AddSeconds(spacingSeconds);
+        var expectedRetryAt = clock.Now.AddSeconds(retryAfterSeconds);
         var failOnce = new FailOnceCommitInterceptor(
             () => other.CompleteAsync(previous.Lease!, cooldown, CancellationToken.None));
         await using var provider = BuildProvider(
@@ -240,11 +245,19 @@ public sealed class IntegrationExecutionScopeAdmissionTests
         var result = await admission.TryReserveAsync([a, b], LeaseTtl, CancellationToken.None);
 
         Assert.Null(result.Lease);
-        Assert.Equal(cooldown, result.RetryAt);
-        var unrelatedToCooldown = await other.TryReserveAsync([b], LeaseTtl, CancellationToken.None);
-        Assert.NotNull(unrelatedToCooldown.Lease);
-        await other.CompleteAsync(unrelatedToCooldown.Lease!, null, CancellationToken.None);
-        clock.Now = cooldown;
+        Assert.Equal(expectedRetryAt, result.RetryAt);
+
+        // B has no provider cooldown; the released lease must still leave its spacing in force.
+        var bOnly = await other.TryReserveAsync([b], LeaseTtl, CancellationToken.None);
+        Assert.Null(bOnly.Lease);
+        Assert.Equal(spacingUntil, bOnly.RetryAt);
+
+        clock.Now = expectedRetryAt.AddTicks(-1);
+        var stillBlocked = await other.TryReserveAsync([a, b], LeaseTtl, CancellationToken.None);
+        Assert.Null(stillBlocked.Lease);
+        Assert.Equal(expectedRetryAt, stillBlocked.RetryAt);
+
+        clock.Now = expectedRetryAt;
         Assert.NotNull((await other.TryReserveAsync([a, b], LeaseTtl, CancellationToken.None)).Lease);
     }
 
