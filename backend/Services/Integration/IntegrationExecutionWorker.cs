@@ -51,14 +51,17 @@ public class IntegrationExecutionWorker : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IntegrationExecutionWorker> _logger;
+    private readonly TimeProvider _clock;
     private readonly string _workerId = $"worker-{Guid.NewGuid():N}";
 
     public IntegrationExecutionWorker(
         IServiceScopeFactory scopeFactory,
-        ILogger<IntegrationExecutionWorker> logger)
+        ILogger<IntegrationExecutionWorker> logger,
+        TimeProvider? clock = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -89,14 +92,14 @@ public class IntegrationExecutionWorker : BackgroundService
         var dispatcher = scope.ServiceProvider.GetRequiredService<IIntegrationStageDispatcher>();
         var operationLogger = scope.ServiceProvider.GetRequiredService<IOperationLogger>();
 
-        var now = DateTime.UtcNow;
+        var queryNow = _clock.GetUtcNow().UtcDateTime;
 
         // Candidates: open commands, unexpired claims excluded, eligible now.
         var candidates = await db.integrationStages
             .AsNoTracking()
             .Where(s => ActiveStageStates.Contains(s.state)
-                && (s.nextCheckAt == null || s.nextCheckAt <= now)
-                && (s.claimedUntil == null || s.claimedUntil <= now)
+                && (s.nextCheckAt == null || s.nextCheckAt <= queryNow)
+                && (s.claimedUntil == null || s.claimedUntil <= queryNow)
                 && OpenCommandStates.Contains(s.command.state))
             .OrderBy(s => s.Id)
             .Select(s => new { s.Id, s.claimVersion })
@@ -109,7 +112,10 @@ public class IntegrationExecutionWorker : BackgroundService
                 break;
             try
             {
-                await ProcessStageAsync(db, dispatcher, operationLogger, candidate.Id, candidate.claimVersion, now, ct);
+                // Fresh clock per stage so a slow earlier stage in the same batch
+                // never shortens or expires the claim lease of later stages.
+                var stageNow = _clock.GetUtcNow();
+                await ProcessStageAsync(db, dispatcher, operationLogger, candidate.Id, candidate.claimVersion, stageNow, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -140,7 +146,7 @@ public class IntegrationExecutionWorker : BackgroundService
                 break;
             try
             {
-                await FinalizeCommandAsync(db, operationLogger, command, DateTime.UtcNow, ct);
+                await FinalizeCommandAsync(db, operationLogger, command, _clock.GetUtcNow().UtcDateTime, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -160,16 +166,21 @@ public class IntegrationExecutionWorker : BackgroundService
         IOperationLogger operationLogger,
         int stageId,
         int expectedClaimVersion,
-        DateTime now,
+        DateTimeOffset stageNow,
         CancellationToken ct)
     {
+        var now = stageNow.UtcDateTime;
+        var claimExpiresAt = stageNow + ClaimLease;
+        var claimExpiresUtc = claimExpiresAt.UtcDateTime;
+        var claimedVersion = expectedClaimVersion + 1;
+
         // Optimistic lease; only one worker wins.
         var claimed = await db.integrationStages
             .Where(s => s.Id == stageId && s.claimVersion == expectedClaimVersion)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.claimedBy, _workerId)
-                .SetProperty(x => x.claimedUntil, now + ClaimLease)
-                .SetProperty(x => x.claimVersion, expectedClaimVersion + 1)
+                .SetProperty(x => x.claimedUntil, claimExpiresUtc)
+                .SetProperty(x => x.claimVersion, claimedVersion)
                 .SetProperty(x => x.updatedAt, now), ct);
         if (claimed == 0)
             return;
@@ -179,8 +190,7 @@ public class IntegrationExecutionWorker : BackgroundService
         // Committed state, not tracked state: ExecuteUpdate writes (claim and
         // earlier finalizations on a shared context) leave stale in-memory
         // values that would misroute the dispatch/confirm branch below and
-        // renumber attempts wrongly. Reload also refreshes the snapshot, so
-        // the attempt-before-send SaveChanges diffs against the real row.
+        // renumber attempts wrongly. Reload also refreshes the snapshot.
         await db.Entry(stage).ReloadAsync(ct);
         await db.Entry(stage).Reference(s => s.command).LoadAsync(ct);
         await db.Entry(stage.command).ReloadAsync(ct);
@@ -188,12 +198,12 @@ public class IntegrationExecutionWorker : BackgroundService
 
         if (stage.state == IntegrationStageState.Ready)
         {
-            var blockedBy = await GetBlockingDependencyAsync(db, stage, ct);
+            var blockedBy = await GetBlockingDependencyAsync(db, stage, command, ct);
             if (blockedBy == DependencyBlocking.Waiting)
             {
                 // Persisted wait: the stage is not eligible again until the delay
                 // passes, so blocked stages cannot monopolize the polling batch.
-                await ReleaseClaimAsync(db, stage, now + DependencyWaitDelay, ct);
+                await ReleaseClaimAsync(db, stage, claimedVersion, now + DependencyWaitDelay, ct);
                 return;
             }
 
@@ -205,20 +215,26 @@ public class IntegrationExecutionWorker : BackgroundService
                 .Select(c => c.stopRequested)
                 .FirstAsync(ct);
 
-            if (blockedBy == DependencyBlocking.Failed || stopRequested)
+            if (blockedBy is DependencyBlocking.Failed or DependencyBlocking.PriorEntityUnknown || stopRequested)
             {
+                var issueJson = blockedBy switch
+                {
+                    DependencyBlocking.Failed => "[{\"code\":\"dependency_failed\",\"message\":\"A required stage did not complete\"}]",
+                    DependencyBlocking.PriorEntityUnknown => "[{\"code\":\"prior_entity_effect_unknown\",\"message\":\"A prior write for this entity has an unknown outcome and blocks new writes\"}]",
+                    _ => "[{\"code\":\"stopped\",\"message\":\"Operation stopped before this stage was sent\"}]"
+                };
                 await FinalizeStageAsync(db, operationLogger, stage, command,
                     new IntegrationDispatchResult(
                         IntegrationDispatchOutcome.Cancelled,
-                        IssuesJson: blockedBy == DependencyBlocking.Failed
-                            ? "[{\"code\":\"dependency_failed\",\"message\":\"A required stage did not complete\"}]"
-                            : "[{\"code\":\"stopped\",\"message\":\"Operation stopped before this stage was sent\"}]"),
-                    now, ct, expectedClaimVersion + 1);
+                        IssuesJson: issueJson),
+                    _clock.GetUtcNow().UtcDateTime, ct, claimedVersion,
+                    isDispatch: true, priorStageState: IntegrationStageState.Ready);
                 return;
             }
         }
 
-        var isDispatch = stage.state == IntegrationStageState.Ready;
+        var priorStageState = stage.state;
+        var isDispatch = priorStageState == IntegrationStageState.Ready;
         var attemptNumber = stage.attemptCount + 1;
         // dispatchId is the stable per-stage idempotency window the provider
         // sees; requestKey uniquely identifies this attempt for evidence.
@@ -247,12 +263,20 @@ public class IntegrationExecutionWorker : BackgroundService
             createdAt = now
         };
 
-        // Attempt-before-send: committed so a lost response is never read as "not sent".
+        // Attempt-before-send: committed atomically under our claim lease guard
+        // so a stale claimant can never alter a successor's stage/attempt state
+        // and a lost response is never read as "not sent".
+        var attemptCommitted = await CommitAttemptBeforeSendAsync(
+            db, stage, attempt, claimedVersion, priorStageState, now, ct);
+        if (!attemptCommitted)
+        {
+            db.ChangeTracker.Clear();
+            return;
+        }
+
         stage.state = IntegrationStageState.InFlight;
         stage.attemptCount = attemptNumber;
         stage.updatedAt = now;
-        db.integrationAttempts.Add(attempt);
-        await db.SaveChangesAsync(ct);
 
         var request = new DispatchStageRequest(
             command.Id, command.commandId, command.kind,
@@ -260,8 +284,8 @@ public class IntegrationExecutionWorker : BackgroundService
             stage.payloadJson, stage.payloadFileKey, stage.receiptJson,
             attemptNumber, dispatchId)
         {
-            TransportAttempt = new(command.Id, stage.Id, attempt.Id, expectedClaimVersion + 1,
-                isDispatch && stage.isEffectful, new DateTimeOffset(now + ClaimLease))
+            TransportAttempt = new(command.Id, stage.Id, attempt.Id, claimedVersion,
+                isDispatch && stage.isEffectful, claimExpiresAt)
         };
 
         IntegrationDispatchResult result;
@@ -275,6 +299,16 @@ public class IntegrationExecutionWorker : BackgroundService
         {
             throw;
         }
+        catch (IntegrationTransportBlockedException ex)
+            when (ex.Code == "transport_admission_deferred" && ex.RetryAt is { } retryAt)
+        {
+            // Explicit pre-send admission denial; FinalizeStageAsync verifies in DB
+            // that no effectful send was authorized before allowing dispatch re-entry.
+            result = new IntegrationDispatchResult(
+                IntegrationDispatchOutcome.DeferredBeforeSend,
+                NextCheckAt: retryAt.UtcDateTime,
+                ResponseSummary: ex.Code);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -285,55 +319,148 @@ public class IntegrationExecutionWorker : BackgroundService
         }
 
         await FinalizeStageAsync(db, operationLogger, stage, command, result,
-            DateTime.UtcNow, ct, expectedClaimVersion + 1, attempt);
+            _clock.GetUtcNow().UtcDateTime, ct, claimedVersion,
+            isDispatch: isDispatch, priorStageState: priorStageState, attempt: attempt);
     }
 
-    private enum DependencyBlocking { None, Waiting, Failed }
+    private async Task<bool> CommitAttemptBeforeSendAsync(
+        DataContext db,
+        IntegrationStage stage,
+        IntegrationAttempt attempt,
+        int claimedVersion,
+        string expectedPriorState,
+        DateTime now,
+        CancellationToken ct)
+    {
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async token =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(token);
+            var updated = await db.integrationStages
+                .Where(s => s.Id == stage.Id
+                    && s.claimVersion == claimedVersion
+                    && s.claimedUntil > now
+                    && s.state == expectedPriorState)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.state, IntegrationStageState.InFlight)
+                    .SetProperty(x => x.attemptCount, attempt.attemptNumber)
+                    .SetProperty(x => x.updatedAt, now), token);
+            if (updated == 0)
+            {
+                // Under a lost commit acknowledgement retry, our own attempt row may
+                // already be committed under this exact claim lease.
+                var existing = await db.integrationAttempts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.stageId == stage.Id
+                        && a.attemptNumber == attempt.attemptNumber
+                        && a.requestKey == attempt.requestKey, token);
+                if (existing != null)
+                {
+                    var stillOwned = await db.integrationStages
+                        .AsNoTracking()
+                        .AnyAsync(s => s.Id == stage.Id
+                            && s.claimVersion == claimedVersion
+                            && s.claimedUntil > now
+                            && s.state == IntegrationStageState.InFlight, token);
+                    if (stillOwned)
+                    {
+                        attempt.Id = existing.Id;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Detach tracked stage so SaveChanges only inserts the attempt row.
+            db.Entry(stage).State = EntityState.Detached;
+            db.integrationAttempts.Add(attempt);
+            try
+            {
+                await db.SaveChangesAsync(token);
+                await tx.CommitAsync(token);
+                return true;
+            }
+            catch
+            {
+                db.Entry(attempt).State = EntityState.Detached;
+                throw;
+            }
+        }, ct);
+    }
+
+    private enum DependencyBlocking { None, Waiting, Failed, PriorEntityUnknown }
 
     private static async Task<DependencyBlocking> GetBlockingDependencyAsync(
-        DataContext db, IntegrationStage stage, CancellationToken ct)
+        DataContext db, IntegrationStage stage, IntegrationCommand command, CancellationToken ct)
     {
         var deps = JsonSerializer.Deserialize<List<string>>(stage.dependsOnJson) ?? [];
-        if (deps.Count == 0)
-            return DependencyBlocking.None;
+        var waitingOnLocalDep = false;
+        if (deps.Count > 0)
+        {
+            // Dependency edges are item-local: the same stageKey repeats across
+            // items, so matching only on command+stageKey would let one item's
+            // failure cancel the others.
+            var depStates = await db.integrationStages
+                .AsNoTracking()
+                .Where(s => s.commandId == stage.commandId
+                    && s.itemKey == stage.itemKey
+                    && deps.Contains(s.stageKey))
+                .Select(s => s.state)
+                .ToListAsync(ct);
 
-        // Dependency edges are item-local: the same stageKey repeats across
-        // items, so matching only on command+stageKey would let one item's
-        // failure cancel the others.
-        var depStates = await db.integrationStages
-            .AsNoTracking()
-            .Where(s => s.commandId == stage.commandId
-                && s.itemKey == stage.itemKey
-                && deps.Contains(s.stageKey))
-            .Select(s => s.state)
-            .ToListAsync(ct);
+            if (depStates.Count < deps.Count || depStates.Any(s =>
+                    s is IntegrationStageState.RejectedBeforeEffect
+                        or IntegrationStageState.Unknown
+                        or IntegrationStageState.CancelledBeforeEffect))
+                return DependencyBlocking.Failed;
+            if (!depStates.All(IntegrationStageState.SatisfiesDependency))
+                waitingOnLocalDep = true;
+        }
 
-        if (depStates.Count < deps.Count || depStates.Any(s =>
-                s is IntegrationStageState.RejectedBeforeEffect
-                    or IntegrationStageState.Unknown
-                    or IntegrationStageState.CancelledBeforeEffect))
-            return DependencyBlocking.Failed;
-        return depStates.All(IntegrationStageState.SatisfiesDependency)
-            ? DependencyBlocking.None
-            : DependencyBlocking.Waiting;
+        // Cross-command same-entity ordering: an earlier command's unresolved or
+        // unknown effectful write for the same (store, connection, itemKey) blocks
+        // scheduling a new effectful write.
+        if (stage.isEffectful)
+        {
+            var priorEntityStates = await db.integrationStages
+                .AsNoTracking()
+                .Where(s => s.commandId < stage.commandId
+                    && s.itemKey == stage.itemKey
+                    && s.isEffectful
+                    && s.command.storeId == command.storeId
+                    && s.command.connectionId == command.connectionId
+                    && (ActiveStageStates.Contains(s.state) || s.state == IntegrationStageState.Unknown))
+                .Select(s => s.state)
+                .ToListAsync(ct);
+
+            if (priorEntityStates.Any(s => s == IntegrationStageState.Unknown))
+                return DependencyBlocking.PriorEntityUnknown;
+            if (priorEntityStates.Count > 0)
+                return DependencyBlocking.Waiting;
+        }
+
+        return waitingOnLocalDep ? DependencyBlocking.Waiting : DependencyBlocking.None;
     }
 
     /// <summary>
-    /// Releases a claim unconditionally. Claims are acquired through
-    /// ExecuteUpdate (bypassing change tracking), so tracked net-diff writes
-    /// can silently drop the release; it must go through ExecuteUpdate too.
+    /// Releases a claim only while our claim version still owns the stage.
+    /// A stale claimant can never release a successor's dependency-wait claim.
     /// </summary>
     private static async Task ReleaseClaimAsync(
-        DataContext db, IntegrationStage stage, DateTime nextCheckAt, CancellationToken ct)
+        DataContext db, IntegrationStage stage, int expectedClaimVersion, DateTime nextCheckAt, CancellationToken ct)
     {
-        var releasedVersion = stage.claimVersion + 1;
-        await db.integrationStages
-            .Where(s => s.Id == stage.Id)
+        var releasedVersion = expectedClaimVersion + 1;
+        var updated = await db.integrationStages
+            .Where(s => s.Id == stage.Id && s.claimVersion == expectedClaimVersion)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.claimedBy, (string?)null)
                 .SetProperty(x => x.claimedUntil, (DateTime?)null)
                 .SetProperty(x => x.claimVersion, releasedVersion)
                 .SetProperty(x => x.nextCheckAt, nextCheckAt), ct);
+        if (updated == 0)
+        {
+            db.ChangeTracker.Clear();
+            return;
+        }
         stage.claimedBy = null;
         stage.claimedUntil = null;
         stage.claimVersion = releasedVersion;
@@ -349,6 +476,8 @@ public class IntegrationExecutionWorker : BackgroundService
         DateTime now,
         CancellationToken ct,
         int claimedVersion,
+        bool isDispatch,
+        string priorStageState,
         IntegrationAttempt? attempt = null)
     {
         var transition = await db.Database.CreateExecutionStrategy().ExecuteAsync<CommandTransition?>(
@@ -357,7 +486,19 @@ public class IntegrationExecutionWorker : BackgroundService
                 await using var tx = await db.Database.BeginTransactionAsync(ct);
 
                 var previousState = stage.state;
-                var (newState, nextCheckAt, terminal) = MapOutcome(result, stage, now);
+                var sendWasAuthorized = attempt != null && await db.integrationAttempts
+                    .AsNoTracking()
+                    .AnyAsync(a => a.Id == attempt.Id && a.sendAuthorizedAt != null, ct);
+
+                var actualSendAttempts = result.Outcome == IntegrationDispatchOutcome.Rejected
+                    ? await db.integrationAttempts
+                        .AsNoTracking()
+                        .CountAsync(a => a.stageId == stage.Id
+                            && a.outcome != IntegrationAttemptOutcome.DeferredBeforeSend, ct)
+                    : stage.attemptCount;
+
+                var (newState, nextCheckAt, terminal, attemptOutcome, certainty) = MapOutcome(
+                    result, stage, now, isDispatch, priorStageState, sendWasAuthorized, actualSendAttempts);
 
                 // Guarded stage write: applies only while our lease still owns
                 // the row. The guard checks the version our claim acquired -
@@ -386,15 +527,6 @@ public class IntegrationExecutionWorker : BackgroundService
 
                 if (attempt != null)
                 {
-                    var outcome = result.Outcome.ToString().ToLowerInvariant();
-                    var certainty = result.Outcome switch
-                    {
-                        IntegrationDispatchOutcome.Applied or IntegrationDispatchOutcome.PartiallyApplied
-                            => IntegrationEffectCertainty.Applied,
-                        IntegrationDispatchOutcome.Rejected or IntegrationDispatchOutcome.Cancelled
-                            => IntegrationEffectCertainty.None,
-                        _ => IntegrationEffectCertainty.Possible
-                    };
                     // The attempt row was committed before dispatch; evidence is
                     // written directly so a lost lease or a strategy retry never
                     // flushes stale tracked state on top of a newer owner. The
@@ -403,7 +535,7 @@ public class IntegrationExecutionWorker : BackgroundService
                     await db.integrationAttempts
                         .Where(a => a.Id == attempt.Id)
                         .ExecuteUpdateAsync(a => a
-                            .SetProperty(x => x.outcome, outcome)
+                            .SetProperty(x => x.outcome, attemptOutcome)
                             .SetProperty(x => x.effectCertainty, certainty)
                             .SetProperty(x => x.responseSummary, result.ResponseSummary)
                             .SetProperty(x => x.issuesJson, result.IssuesJson)
@@ -450,31 +582,73 @@ public class IntegrationExecutionWorker : BackgroundService
         await EmitTransitionAsync(operationLogger, command, transition);
     }
 
-    private static (string State, DateTime? NextCheckAt, bool Terminal) MapOutcome(
-        IntegrationDispatchResult result, IntegrationStage stage, DateTime now)
+    private static (string State, DateTime? NextCheckAt, bool Terminal, string AttemptOutcome, string EffectCertainty) MapOutcome(
+        IntegrationDispatchResult result,
+        IntegrationStage stage,
+        DateTime now,
+        bool isDispatch,
+        string priorStageState,
+        bool sendWasAuthorized,
+        int actualSendAttempts)
     {
         switch (result.Outcome)
         {
+            case IntegrationDispatchOutcome.DeferredBeforeSend:
+                if (isDispatch && !sendWasAuthorized && stage.receiptJson == null && result.NextCheckAt != null)
+                {
+                    // Proven pre-send denial: re-enter first dispatch at exact RetryAt
+                    // without consuming the actual-send retry budget.
+                    return (IntegrationStageState.Ready, result.NextCheckAt.Value, false,
+                        IntegrationAttemptOutcome.DeferredBeforeSend, IntegrationEffectCertainty.None);
+                }
+                if (!isDispatch)
+                {
+                    // Admission-denied confirmation stays on confirmation and preserves receipts.
+                    var confirmState = priorStageState == IntegrationStageState.Accepted
+                        ? IntegrationStageState.Accepted
+                        : IntegrationStageState.Deferred;
+                    return (confirmState, result.NextCheckAt ?? now + TimeSpan.FromSeconds(15), false,
+                        sendWasAuthorized ? IntegrationAttemptOutcome.Pending : IntegrationAttemptOutcome.DeferredBeforeSend,
+                        sendWasAuthorized ? IntegrationEffectCertainty.Possible : IntegrationEffectCertainty.None);
+                }
+                // A send was authorized (or receipt/ambiguity already exists): never turn back into first dispatch.
+                if (result.NextCheckAt != null)
+                {
+                    return (IntegrationStageState.Deferred, result.NextCheckAt.Value, false,
+                        IntegrationAttemptOutcome.Pending, IntegrationEffectCertainty.Possible);
+                }
+                return (IntegrationStageState.Unknown, null, true,
+                    IntegrationAttemptOutcome.Unknown, IntegrationEffectCertainty.Possible);
+
             case IntegrationDispatchOutcome.Applied:
-                return (IntegrationStageState.Applied, null, true);
+                return (IntegrationStageState.Applied, null, true,
+                    IntegrationAttemptOutcome.Applied, IntegrationEffectCertainty.Applied);
             case IntegrationDispatchOutcome.PartiallyApplied:
-                return (IntegrationStageState.PartiallyApplied, null, true);
+                return (IntegrationStageState.PartiallyApplied, null, true,
+                    IntegrationAttemptOutcome.PartiallyApplied, IntegrationEffectCertainty.Applied);
             case IntegrationDispatchOutcome.Rejected:
                 // A before-effect rejection is proven no-effect; bounded retry only.
-                return result.Retryable && stage.attemptCount < MaxStageAttempts
-                    ? (IntegrationStageState.Ready, now + TimeSpan.FromSeconds(30 * stage.attemptCount), false)
-                    : (IntegrationStageState.RejectedBeforeEffect, null, true);
+                // Actual-send budget ignores earlier DeferredBeforeSend attempts.
+                return result.Retryable && actualSendAttempts < MaxStageAttempts
+                    ? (IntegrationStageState.Ready, now + TimeSpan.FromSeconds(30 * Math.Max(1, actualSendAttempts)), false,
+                        IntegrationAttemptOutcome.Rejected, IntegrationEffectCertainty.None)
+                    : (IntegrationStageState.RejectedBeforeEffect, null, true,
+                        IntegrationAttemptOutcome.Rejected, IntegrationEffectCertainty.None);
             case IntegrationDispatchOutcome.Accepted:
                 return (IntegrationStageState.Accepted,
-                    result.NextCheckAt ?? now + TimeSpan.FromSeconds(15), false);
+                    result.NextCheckAt ?? now + TimeSpan.FromSeconds(15), false,
+                    IntegrationAttemptOutcome.Accepted, IntegrationEffectCertainty.Possible);
             case IntegrationDispatchOutcome.Pending:
                 return (IntegrationStageState.Deferred,
-                    result.NextCheckAt ?? now + TimeSpan.FromSeconds(15), false);
+                    result.NextCheckAt ?? now + TimeSpan.FromSeconds(15), false,
+                    IntegrationAttemptOutcome.Pending, IntegrationEffectCertainty.Possible);
             case IntegrationDispatchOutcome.Cancelled:
-                return (IntegrationStageState.CancelledBeforeEffect, null, true);
+                return (IntegrationStageState.CancelledBeforeEffect, null, true,
+                    IntegrationAttemptOutcome.Cancelled, IntegrationEffectCertainty.None);
             default:
                 // Effect ambiguous: terminal for automation, blocks dependents.
-                return (IntegrationStageState.Unknown, null, true);
+                return (IntegrationStageState.Unknown, null, true,
+                    IntegrationAttemptOutcome.Unknown, IntegrationEffectCertainty.Possible);
         }
     }
 

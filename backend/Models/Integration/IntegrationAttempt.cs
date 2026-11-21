@@ -51,6 +51,7 @@ public class IntegrationAttempt
 
 public static class IntegrationAttemptOutcome
 {
+    public const string DeferredBeforeSend = "deferredbeforesend";
     public const string Rejected = "rejected";
     public const string Accepted = "accepted";
     public const string Pending = "pending";

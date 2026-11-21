@@ -48,6 +48,9 @@ public sealed class IntegrationExecutionDisabledException(string message)
 /// <summary>Outcome kinds a dispatcher may report for one stage attempt.</summary>
 public enum IntegrationDispatchOutcome
 {
+    /// <summary>Admission deferred before any effectful send was authorized; retry at NextCheckAt without consuming send budget.</summary>
+    DeferredBeforeSend,
+
     /// <summary>Provider rejected before any effect.</summary>
     Rejected,
 
