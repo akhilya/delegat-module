@@ -65,4 +65,186 @@ describe("integrationExecution (P7)", () => {
     }
     assert.equal(resolveIntegrationIssueKey("something_else"), "errors.default");
   });
+
+  it("polls 202 shipment creation until integration.result.shipmentId is available and prevents duplicate creates on retry", async () => {
+    const {
+      createOrResumeShipmentCreation,
+      normalizeIntegrationStatusPath,
+    } = await import("./integrationExecution.js");
+
+    assert.equal(
+      normalizeIntegrationStatusPath("/api/operations/op-9/status", "op-9"),
+      "/operations/op-9/status",
+    );
+
+    let postCalls = 0;
+    let pollCalls = 0;
+    const seenHeaders = [];
+
+    // First attempt: POST returns 202, first poll is still running -> returns pending without discarding command identity.
+    const first = await createOrResumeShipmentCreation({
+      createIdempotencyKey: () => "idem-ship-1",
+      maxPolls: 1,
+      pollIntervalMs: 0,
+      postShipment: async ({ headers }) => {
+        postCalls++;
+        seenHeaders.push(headers);
+        return {
+          status: 202,
+          body: {
+            operationId: "op-ship-1",
+            commandId: "cmd-ship-1",
+            integrationState: "pending",
+            statusUrl: "/api/operations/op-ship-1/status",
+          },
+        };
+      },
+      getStatus: async (path) => {
+        pollCalls++;
+        assert.equal(path, "/operations/op-ship-1/status");
+        return {
+          status: "running",
+          integration: { state: "executing", result: null },
+        };
+      },
+    });
+
+    assert.equal(first.status, "pending");
+    assert.equal(postCalls, 1);
+    assert.equal(pollCalls, 1);
+    assert.equal(seenHeaders[0]["Idempotency-Key"], "idem-ship-1");
+    assert.equal(first.pending.operationId, "op-ship-1");
+
+    // Second attempt (user retries Pack): resumes polling existingPending without issuing a second POST!
+    const resumed = await createOrResumeShipmentCreation({
+      existingPending: first.pending,
+      maxPolls: 2,
+      pollIntervalMs: 0,
+      postShipment: async () => {
+        postCalls++;
+        throw new Error("must not issue duplicate POST /shipments while existing creation is pending");
+      },
+      getStatus: async () => {
+        pollCalls++;
+        if (pollCalls === 2) {
+          return { status: "running", integration: { state: "executing", result: null } };
+        }
+        return {
+          status: "completed",
+          integration: {
+            state: "completed",
+            result: { shipmentId: "WB-GI-4242" },
+          },
+        };
+      },
+    });
+
+    assert.equal(resumed.status, "completed");
+    assert.equal(resumed.shipmentId, "WB-GI-4242");
+    assert.equal(resumed.pending, null);
+    assert.equal(postCalls, 1);
+    assert.equal(pollCalls, 3);
+  });
+
+  it("retains pending identity on unknown outcome and clears it on terminal pre-effect failure", async () => {
+    const { createOrResumeShipmentCreation } = await import("./integrationExecution.js");
+
+    const unknownRes = await createOrResumeShipmentCreation({
+      existingPending: {
+        operationId: "op-unk",
+        statusPath: "/operations/op-unk/status",
+        idempotencyKey: "idem-unk",
+      },
+      maxPolls: 1,
+      pollIntervalMs: 0,
+      postShipment: async () => {
+        throw new Error("should not post");
+      },
+      getStatus: async () => ({
+        status: "failed",
+        summary: "Outcome unknown",
+        integration: { state: "unknown", summary: "Outcome unknown", result: null },
+      }),
+    });
+    assert.equal(unknownRes.status, "unknown");
+    assert.equal(unknownRes.pending?.operationId, "op-unk");
+
+    const failedRes = await createOrResumeShipmentCreation({
+      existingPending: {
+        operationId: "op-fail",
+        statusPath: "/operations/op-fail/status",
+        idempotencyKey: "idem-fail",
+      },
+      maxPolls: 1,
+      pollIntervalMs: 0,
+      postShipment: async () => {
+        throw new Error("should not post");
+      },
+      getStatus: async () => ({
+        status: "failed",
+        summary: "Rejected before effect",
+        integration: { state: "failed", summary: "Rejected before effect", result: null },
+      }),
+    });
+    assert.equal(failedRes.status, "failed");
+    assert.equal(failedRes.pending, null);
+  });
+
+  it("reuses the exact same Idempotency-Key and shipmentName when retrying after a network error during POST", async () => {
+    const { createOrResumeShipmentCreation } = await import("./integrationExecution.js");
+
+    let savedPending = null;
+    const attempts = [];
+    let counter = 0;
+
+    await assert.rejects(
+      () =>
+        createOrResumeShipmentCreation({
+          existingPending: savedPending,
+          onPendingUpdate: (p) => {
+            savedPending = p;
+          },
+          createIdempotencyKey: () => `key-${++counter}`,
+          createShipmentName: () => `Supply ${counter}`,
+          postShipment: async ({ shipmentName, headers }) => {
+            attempts.push({ shipmentName, key: headers["Idempotency-Key"] });
+            throw new Error("Network Error");
+          },
+          getStatus: async () => {
+            throw new Error("should not poll");
+          },
+        }),
+      /Network Error/,
+    );
+
+    assert.equal(savedPending?.idempotencyKey, "key-1");
+    assert.equal(savedPending?.shipmentName, "Supply 1");
+
+    const retryRes = await createOrResumeShipmentCreation({
+      existingPending: savedPending,
+      onPendingUpdate: (p) => {
+        savedPending = p;
+      },
+      createIdempotencyKey: () => `key-${++counter}`,
+      createShipmentName: () => `Supply ${counter}`,
+      postShipment: async ({ shipmentName, headers }) => {
+        attempts.push({ shipmentName, key: headers["Idempotency-Key"] });
+        return {
+          status: 200,
+          body: { success: true, shipment: { externalId: "WB-GI-100" } },
+        };
+      },
+      getStatus: async () => {
+        throw new Error("should not poll");
+      },
+    });
+
+    assert.equal(retryRes.status, "completed");
+    assert.equal(retryRes.shipmentId, "WB-GI-100");
+    assert.equal(savedPending, null);
+    assert.deepEqual(attempts, [
+      { shipmentName: "Supply 1", key: "key-1" },
+      { shipmentName: "Supply 1", key: "key-1" },
+    ]);
+  });
 });

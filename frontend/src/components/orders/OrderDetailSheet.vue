@@ -58,7 +58,11 @@ import {
   orderTotalAmount,
 } from "@/lib/orderSheetFacts.js";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
-import { isIntegrationAcceptedResponse } from "@/lib/integrationExecution";
+import {
+  createOrResumeShipmentCreation,
+  isIntegrationAcceptedResponse,
+} from "@/lib/integrationExecution";
+import { randomUuidCompact } from "@/utils/uuid";
 import { triggerBrowserDownload } from "@/lib/artifactDownload";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -494,10 +498,18 @@ function openActionConfirm(action) {
     );
   }
   if (action === "pack" && props.canManageShipments) {
-    resetPackFields();
+    if (!pendingShipmentCreations.has(pendingShipmentKey())) {
+      resetPackFields();
+    }
     loadPackOptions();
   }
   pendingAction.value = action;
+}
+
+const pendingShipmentCreations = new Map();
+
+function pendingShipmentKey() {
+  return `${props.connectionId || ""}:${props.orderId || ""}`;
 }
 
 let armedAction = "";
@@ -512,15 +524,45 @@ async function buildPackExtra() {
   if (!props.connectionId) return {};
   let chosenSupplyId = packSupplyChoice.value;
   if (!chosenSupplyId || chosenSupplyId === "new") {
-    const response = await http.post(
-      `/marketplace/connections/${props.connectionId}/shipments`,
-      { name: `Delegat ${new Date().toISOString().slice(0, 16).replace("T", " ")}` },
-    );
-    const created = unwrap(response);
-    const shipment = created?.shipment ?? created?.Shipment;
-    chosenSupplyId = shipmentExternalId(shipment);
-    if (!chosenSupplyId) {
-      throw new Error(t("pages.ordersPage.shipmentCreateFailed"));
+    const key = pendingShipmentKey();
+    const existingPending = pendingShipmentCreations.get(key) || null;
+    const outcome = await createOrResumeShipmentCreation({
+      existingPending,
+      onPendingUpdate: (nextPending) => {
+        if (nextPending) pendingShipmentCreations.set(key, nextPending);
+        else pendingShipmentCreations.delete(key);
+      },
+      createIdempotencyKey: () =>
+        `pack-ship-${props.connectionId}-${props.orderId || "order"}-${randomUuidCompact()}`,
+      postShipment: async ({ shipmentName, headers }) => {
+        const response = await http.post(
+          `/marketplace/connections/${props.connectionId}/shipments`,
+          { name: shipmentName },
+          { headers },
+        );
+        return {
+          status: response?.status ?? 200,
+          body: unwrap(response),
+        };
+      },
+      getStatus: async (statusPath) => {
+        const response = await http.get(statusPath, { cache: false });
+        return unwrap(response);
+      },
+    });
+
+    if (outcome.status === "completed") {
+      pendingShipmentCreations.delete(key);
+      chosenSupplyId = outcome.shipmentId;
+    } else if (outcome.status === "pending") {
+      pendingShipmentCreations.set(key, outcome.pending);
+      return { __pendingShipment: true };
+    } else if (outcome.status === "unknown") {
+      pendingShipmentCreations.set(key, outcome.pending);
+      throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
+    } else {
+      pendingShipmentCreations.delete(key);
+      throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
     }
   }
   const extra = { supplyId: chosenSupplyId };
@@ -605,15 +647,28 @@ async function onConfirmSubmit() {
   trackingNumber.value = "";
   deliveryService.value = "";
   if (!action) return;
+  let keepPackState = false;
   try {
     if (action === "pack" && props.canManageShipments) {
+      acting.value = action;
       extra = await buildPackExtra();
+      if (extra?.__pendingShipment) {
+        keepPackState = true;
+        displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
+        return;
+      }
     }
     await runAction(action, extra);
   } catch (error) {
+    if (pendingShipmentCreations.has(pendingShipmentKey())) {
+      keepPackState = true;
+    }
     displaySonnerError(error);
   } finally {
-    resetPackFields();
+    acting.value = "";
+    if (!keepPackState) {
+      resetPackFields();
+    }
   }
 }
 

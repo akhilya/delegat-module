@@ -1012,5 +1012,43 @@ public sealed class IntegrationExecutionP7Tests
         var asyncRes = await controller.CreateShipment(10, new CreateShipmentRequest { Name = "Cabinet Async Supply" }, CancellationToken.None);
         Assert.IsType<AcceptedResult>(asyncRes);
         Assert.Equal(0, proxy.LegacyCreateCalls);
+
+        // 4. Without Prefer header when the bounded wait expires (PublicApiSyncWaitMs = 0),
+        // returns 202 with statusUrl and polling GetStatus surfaces integration.result.shipmentId once finished.
+        var fastTimeoutExec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new FakeShipmentExecutionProvider(),
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 0 }, commerce);
+        var fastController = new MarketplaceCommerceController(new StubCurrentUser(7), commerce, orderSync, fastTimeoutExec)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        fastController.HttpContext.Request.Headers["Idempotency-Key"] = "cab-ship-202-poll-1";
+
+        var slowRes = await fastController.CreateShipment(10, new CreateShipmentRequest { Name = "Slow Supply" }, CancellationToken.None);
+        var slowAccepted = Assert.IsType<AcceptedResult>(slowRes);
+        using var slowAcceptedDoc = JsonDocument.Parse(JsonSerializer.Serialize(slowAccepted.Value));
+        var slowOpId = slowAcceptedDoc.RootElement.GetProperty("operationId").GetString()!;
+        Assert.Equal($"/api/operations/{slowOpId}/status", slowAcceptedDoc.RootElement.GetProperty("statusUrl").GetString());
+
+        // While still executing, GetStatus reports running and no shipmentId yet.
+        var pendingPoll = Assert.IsType<OkObjectResult>(await opsController.GetStatus(slowOpId, CancellationToken.None));
+        using var pendingPollDoc = JsonDocument.Parse(JsonSerializer.Serialize(pendingPoll.Value));
+        Assert.Equal("admitted", pendingPollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
+
+        // Worker completes the shipment asynchronously; polling GetStatus now yields shipmentId.
+        var slowCmd = await schemaDb.integrationCommands.SingleAsync(c => c.operationId == slowOpId);
+        var slowStage = await schemaDb.integrationStages.SingleAsync(s => s.commandId == slowCmd.Id);
+        slowStage.state = IntegrationStageState.Applied;
+        slowStage.evidenceJson = """{"shipmentId":"WB-GI-909"}""";
+        slowCmd.state = IntegrationCommandState.Completed;
+        slowCmd.finishedAt = DateTime.UtcNow;
+        var slowOp = await schemaDb.operations.SingleAsync(o => o.operationId == slowOpId);
+        slowOp.status = OperationLifecycle.Completed;
+        await schemaDb.SaveChangesAsync();
+
+        var donePoll = Assert.IsType<OkObjectResult>(await opsController.GetStatus(slowOpId, CancellationToken.None));
+        using var donePollDoc = JsonDocument.Parse(JsonSerializer.Serialize(donePoll.Value));
+        Assert.Equal("completed", donePollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
+        Assert.Equal("WB-GI-909", donePollDoc.RootElement.GetProperty("integration").GetProperty("result").GetProperty("shipmentId").GetString());
     }
 }
