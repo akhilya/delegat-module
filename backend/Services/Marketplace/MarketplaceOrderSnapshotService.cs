@@ -88,6 +88,21 @@ public sealed class MarketplaceOrderSnapshotService
         return wanted.Count;
     }
 
+    /// <summary>
+    /// Writes a confirmed status projection directly via ExecuteUpdateAsync so
+    /// execution-strategy transaction retries never skip rewriting status or payloadJson.
+    /// </summary>
+    public Task<int> UpdateStatusProjectionAsync(int rowId, ExternalOrder order, DateTime now, CancellationToken ct)
+    {
+        var payload = JsonSerializer.Serialize(order, JsonOptions);
+        return _db.marketplaceOrders
+            .Where(o => o.Id == rowId)
+            .ExecuteUpdateAsync(o => o
+                .SetProperty(x => x.status, order.Status)
+                .SetProperty(x => x.payloadJson, payload)
+                .SetProperty(x => x.syncedAt, now), ct);
+    }
+
     public async Task<(IReadOnlyList<MarketplaceOrder> Items, int Total)> ListPageAsync(
         int storeId,
         int? connectionId,

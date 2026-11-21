@@ -859,7 +859,7 @@ public class IntegrationExecutionWorker : BackgroundService
                 && command.kind == "order_action"
                 && command.connectionId is int connId)
             {
-                await ProjectConfirmedOrderSnapshotAsync(db, command, connId, ct);
+                await ProjectConfirmedOrderSnapshotAsync(db, command, connId, now, ct);
             }
         }
         return new CommandTransition(
@@ -872,7 +872,7 @@ public class IntegrationExecutionWorker : BackgroundService
     }
 
     private async Task ProjectConfirmedOrderSnapshotAsync(
-        DataContext db, IntegrationCommand command, int connectionId, CancellationToken ct)
+        DataContext db, IntegrationCommand command, int connectionId, DateTime now, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(command.inputJson))
             return;
@@ -886,9 +886,13 @@ public class IntegrationExecutionWorker : BackgroundService
             var root = doc.RootElement;
             if (root.TryGetProperty("adapterKey", out var ak) && ak.ValueKind == JsonValueKind.String)
                 adapterKey = ak.GetString();
+            // Always prefer the authoritative top-level itemKey (URL order ID) over merged extra metadata.
+            if (root.TryGetProperty("itemKey", out var ik) && ik.ValueKind == JsonValueKind.String)
+                orderId = ik.GetString();
             if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
             {
-                if (data.TryGetProperty("orderId", out var oid) && oid.ValueKind == JsonValueKind.String)
+                if (string.IsNullOrWhiteSpace(orderId)
+                    && data.TryGetProperty("orderId", out var oid) && oid.ValueKind == JsonValueKind.String)
                     orderId = oid.GetString();
                 if (data.TryGetProperty("action", out var act) && act.ValueKind == JsonValueKind.String)
                     action = act.GetString();
@@ -913,7 +917,7 @@ public class IntegrationExecutionWorker : BackgroundService
 
         var live = snapshots.ToExternalOrder(row);
         Delegat.Services.Marketplace.MarketplaceSellerOrderStatus.Advance(adapterKey, action, live);
-        await snapshots.UpsertAsync(command.storeId, connectionId, live, ct);
+        await snapshots.UpdateStatusProjectionAsync(row.Id, live, now, ct);
     }
 
     private static string MapCommandToOperationStatus(string commandState) =>

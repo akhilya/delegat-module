@@ -785,4 +785,110 @@ public sealed class IntegrationExecutionP7Tests
             "order_action", 1, 7, null, 10, "legacy-key-1", differentInput, "Order 42",
             [new IntegrationStageSeed("42", "order:complete", "order_action", 0)]), v1Enabled: true, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task PublicApi_OrderStatus_ConflictingExtraOrderIdRejected_AndProjectionUsesItemKey()
+    {
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+        await SeedStoreMemberAndConnectionAsync(schemaDb);
+
+        var clock = new ManualClock();
+        var snapshots = new MarketplaceOrderSnapshotService(schemaDb, clock);
+        await snapshots.UpsertAsync(1, 10, new ExternalOrder { ExternalId = "A", Status = "new", CreatedAt = clock.GetUtcNow().UtcDateTime }, CancellationToken.None);
+        await snapshots.UpsertAsync(1, 10, new ExternalOrder { ExternalId = "B", Status = "new", CreatedAt = clock.GetUtcNow().UtcDateTime }, CancellationToken.None);
+
+        var (adapter, _) = OrderAdapterProxy.Create();
+        var commerce = new MarketplaceCommerceService(schemaDb, new SingleAdapterRegistry(adapter), snapshots);
+        var coordinator = new IntegrationCoordinator(schemaDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+        var exec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new WooCommercePlugin(),
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 0 }, commerce);
+
+        var conn = await schemaDb.marketplaceConnections.SingleAsync(c => c.Id == 10);
+
+        // Conflicting extra.orderId is rejected at admission before any command is created.
+        var ex = await Assert.ThrowsAsync<ApiException>(() => exec.AdmitOrderActionAsync(
+            conn, "A", new OrderStatusUpdate
+            {
+                Action = "cancel",
+                Extra = new Dictionary<string, string> { ["orderId"] = "B" }
+            }, 7, null, "conflict-extra-1", CancellationToken.None));
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("order_status_failed", ex.Code);
+
+        // Even if a pre-existing command row had data.orderId != itemKey, worker projects itemKey ("A") and leaves "B" untouched.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn));
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<IOperationLogger, NoopOpLogger>();
+        services.AddSingleton<IIntegrationStageDispatcher>(new ConfigurableDispatcher(
+            new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied, EvidenceJson: """{"status":200}"""),
+            new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied)));
+        await using var provider = services.BuildServiceProvider();
+
+        await coordinator.AdmitAsync(new IntegrationAdmitRequest(
+            "order_action", 1, 7, null, 10, "itemkey-priority-1",
+            """{"adapterKey":"woocommerce","itemKey":"A","data":{"orderId":"B","action":"cancel"}}""",
+            "Cancel A",
+            [new IntegrationStageSeed("A", "order:cancel", "order_action", 0)]),
+            v1Enabled: true, CancellationToken.None);
+
+        var worker = new IntegrationExecutionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<IntegrationExecutionWorker>.Instance, clock);
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+
+        await using var verifyDb = TestDbFactory.CreateSqliteContext(dsn);
+        var verifySnapshots = new MarketplaceOrderSnapshotService(verifyDb, clock);
+        Assert.Equal("cancelled", (await verifySnapshots.FindAsync(1, 10, "A", CancellationToken.None))!.status);
+        Assert.Equal("new", (await verifySnapshots.FindAsync(1, 10, "B", CancellationToken.None))!.status);
+    }
+
+    [Fact]
+    public async Task UpdateStatusProjectionAsync_RewritesStatusAndPayloadAfterRollbackOnSameContext()
+    {
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+        await SeedStoreMemberAndConnectionAsync(schemaDb);
+
+        var clock = new ManualClock();
+        var snapshots = new MarketplaceOrderSnapshotService(schemaDb, clock);
+        await snapshots.UpsertAsync(1, 10, new ExternalOrder
+        {
+            ExternalId = "42",
+            Status = "new",
+            CreatedAt = clock.GetUtcNow().UtcDateTime
+        }, CancellationToken.None);
+
+        var row = (await snapshots.FindAsync(1, 10, "42", CancellationToken.None))!;
+        var live = snapshots.ToExternalOrder(row);
+        MarketplaceSellerOrderStatus.Advance("woocommerce", "cancel", live);
+
+        // Attempt 1: write inside a transaction and roll back.
+        await using (var tx1 = await schemaDb.Database.BeginTransactionAsync())
+        {
+            await snapshots.UpdateStatusProjectionAsync(row.Id, live, clock.GetUtcNow().UtcDateTime, CancellationToken.None);
+            await tx1.RollbackAsync();
+        }
+
+        // Attempt 2 on the SAME DbContext: retry and commit.
+        await using (var tx2 = await schemaDb.Database.BeginTransactionAsync())
+        {
+            await snapshots.UpdateStatusProjectionAsync(row.Id, live, clock.GetUtcNow().UtcDateTime.AddSeconds(1), CancellationToken.None);
+            await tx2.CommitAsync();
+        }
+
+        // Verify via a fresh DbContext that both status column and payloadJson persisted "cancelled".
+        await using var freshDb = TestDbFactory.CreateSqliteContext(dsn);
+        var freshSnapshots = new MarketplaceOrderSnapshotService(freshDb, clock);
+        var freshRow = (await freshSnapshots.FindAsync(1, 10, "42", CancellationToken.None))!;
+        Assert.Equal("cancelled", freshRow.status);
+        Assert.Equal("cancelled", freshSnapshots.ToExternalOrder(freshRow).Status);
+    }
 }

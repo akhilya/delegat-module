@@ -174,8 +174,22 @@ public sealed class MarketplaceCommerceExecutionService
         {
             foreach (var (k, v) in body.Extra)
             {
-                if (!string.IsNullOrWhiteSpace(k) && v is not null)
-                    data[k] = v;
+                if (string.IsNullOrWhiteSpace(k) || v is null)
+                    continue;
+                var key = k.Trim();
+                if (key.Equals("orderId", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(v.Trim(), orderId.Trim(), StringComparison.Ordinal))
+                        throw ApiException.BadRequest("Conflicting orderId in extra metadata", code: "order_status_failed");
+                    continue;
+                }
+                if (key.Equals("action", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(v.Trim(), body.Action.Trim(), StringComparison.OrdinalIgnoreCase))
+                        throw ApiException.BadRequest("Conflicting action in extra metadata", code: "order_status_failed");
+                    continue;
+                }
+                data[key] = v;
             }
         }
 
