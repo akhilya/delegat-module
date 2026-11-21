@@ -167,6 +167,7 @@ public sealed class MarketplaceOrderSnapshotService
     public async Task<MarketplaceOrder?> FindAsync(int storeId, int connectionId, string orderId, CancellationToken ct)
     {
         var matches = await _db.marketplaceOrders
+            .AsNoTracking()
             .Where(o =>
                 o.storeId == storeId
                 && o.connectionId == connectionId

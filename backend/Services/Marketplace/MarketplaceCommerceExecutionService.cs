@@ -90,29 +90,45 @@ public sealed class MarketplaceCommerceExecutionService
         string commandId,
         CancellationToken ct)
     {
-        var snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, ct);
-        if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
-            return snapshot;
-
         var waitMs = Math.Max(0, _options.PublicApiSyncWaitMs);
-        if (waitMs == 0)
+        var deadline = Environment.TickCount64 + waitMs;
+
+        (Delegat.Models.Integration.IntegrationCommand Command, List<Delegat.Models.Integration.IntegrationStage> Stages)? snapshot = null;
+        try
+        {
+            using var initialCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (waitMs > 0)
+                initialCts.CancelAfter(waitMs);
+            snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, initialCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return snapshot;
+        }
+
+        if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state) || waitMs == 0)
             return snapshot;
 
         var pollMs = Math.Clamp(_options.PublicApiSyncPollIntervalMs, 10, 500);
-        var deadline = Environment.TickCount64 + waitMs;
         while (Environment.TickCount64 < deadline && !ct.IsCancellationRequested)
         {
-            var remaining = (int)Math.Min(pollMs, Math.Max(1, deadline - Environment.TickCount64));
+            var remainingMs = (int)Math.Max(1, deadline - Environment.TickCount64);
+            var delayMs = Math.Min(pollMs, remainingMs);
             try
             {
-                await Task.Delay(remaining, ct);
+                await Task.Delay(delayMs, ct);
+                var readBudgetMs = (int)(deadline - Environment.TickCount64);
+                if (readBudgetMs <= 0)
+                    break;
+                using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                pollCts.CancelAfter(readBudgetMs);
+                snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, pollCts.Token);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
 
-            snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, CancellationToken.None);
             if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
                 return snapshot;
         }

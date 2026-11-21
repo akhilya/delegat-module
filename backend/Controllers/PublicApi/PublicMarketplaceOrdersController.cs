@@ -124,10 +124,21 @@ public class PublicMarketplaceOrdersController : ControllerBase
             var admitted = await _commerceExecution.AdmitOrderActionAsync(
                 connection, orderId, body, userId, PublicApiResults.ReadApiKeyId(HttpContext),
                 PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+            var actionResult = await PublicApiResults.CompleteOrAcceptIntegrationAsync(
                 HttpContext, storeId, admitted, _commerceExecution,
                 Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildOrderStatusUpdateResult,
                 "order_status_failed", ct);
+            if (actionResult is OkObjectResult { Value: OrderStatusUpdateResult orderResult } && orderResult.Order == null)
+            {
+                var projected = await _commerce.GetStoredOrderAsync(
+                    connection, adapter, orderId, liveFallback: false, ct);
+                if (projected != null)
+                {
+                    await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, [projected], ct);
+                    orderResult.Order = projected;
+                }
+            }
+            return actionResult;
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(

@@ -83,7 +83,7 @@ public class IntegrationCoordinator
                 .FirstOrDefaultAsync(c => c.scopeKey == scopeKey && c.requestKey == requestKey, ct);
             if (existing != null)
             {
-                if (existing.requestHash != requestHash)
+                if (!MatchesRequestHash(existing, requestHash))
                     throw new IntegrationRequestConflictException(
                         $"Request key '{requestKey}' was already used with a different body in this scope");
                 return new IntegrationAdmitResult(existing.commandId, existing.operationId, IsDuplicate: true);
@@ -180,7 +180,7 @@ public class IntegrationCoordinator
                 DetachFailedGraph();
                 throw;
             }
-            if (winner.requestHash != requestHash)
+            if (!MatchesRequestHash(winner, requestHash))
             {
                 DetachFailedGraph();
                 throw new IntegrationRequestConflictException(
@@ -293,6 +293,10 @@ public class IntegrationCoordinator
 
     internal static string ComputeScopeKey(IntegrationAdmitRequest request) =>
         $"{request.StoreId}:{request.ConnectionId?.ToString() ?? "-"}:{request.Kind}";
+
+    private static bool MatchesRequestHash(IntegrationCommand existing, string incomingCanonicalHash) =>
+        string.Equals(existing.requestHash, incomingCanonicalHash, StringComparison.Ordinal)
+        || string.Equals(ComputeHash(existing.inputJson), incomingCanonicalHash, StringComparison.Ordinal);
 
     internal static string ComputeHash(string input)
     {

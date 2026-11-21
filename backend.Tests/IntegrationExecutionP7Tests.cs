@@ -621,4 +621,168 @@ public sealed class IntegrationExecutionP7Tests
         Assert.Equal(expectedOperationStatus, pollDoc.RootElement.GetProperty("status").GetString());
         Assert.Equal(expectedIntegrationState, pollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
     }
+
+    [Fact]
+    public async Task PublicApi_OrderStatus_CompletedDuringWait_ProjectsSnapshotAndReturnsUpdatedOrder()
+    {
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+        await SeedStoreMemberAndConnectionAsync(schemaDb);
+
+        var clock = new ManualClock();
+        var snapshots = new MarketplaceOrderSnapshotService(schemaDb, clock);
+        await snapshots.UpsertAsync(1, 10, new ExternalOrder
+        {
+            ExternalId = "42",
+            Status = "new",
+            CreatedAt = clock.GetUtcNow().UtcDateTime
+        }, CancellationToken.None);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn));
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<IOperationLogger, NoopOpLogger>();
+        services.AddSingleton<IIntegrationStageDispatcher>(new ConfigurableDispatcher(
+            new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied, EvidenceJson: """{"status":200}"""),
+            new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied)));
+        await using var provider = services.BuildServiceProvider();
+
+        var (adapter, _) = OrderAdapterProxy.Create();
+        var commerce = new MarketplaceCommerceService(schemaDb, new SingleAdapterRegistry(adapter), snapshots);
+        var coordinator = new IntegrationCoordinator(schemaDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+        var exec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new WooCommercePlugin(),
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 1500, PublicApiSyncPollIntervalMs = 20 }, commerce);
+
+        var controller = new PublicMarketplaceOrdersController(
+            new PublicApiStoreContext(new StubCurrentUser(7), schemaDb), commerce, exec)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        controller.HttpContext.Request.Headers["Idempotency-Key"] = "ord-snap-42";
+
+        var worker = new IntegrationExecutionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<IntegrationExecutionWorker>.Instance, clock);
+        var runner = Task.Run(async () =>
+        {
+            for (var i = 0; i < 40; i++)
+            {
+                await Task.Delay(25);
+                await worker.ProcessDueStagesAsync(CancellationToken.None);
+                await using var checkDb = TestDbFactory.CreateSqliteContext(dsn);
+                var done = await checkDb.integrationCommands.AnyAsync(c => c.requestKey == "ord-snap-42" && c.state == IntegrationCommandState.Completed);
+                if (done) return;
+            }
+        });
+
+        var res = await controller.UpdateOrderStatus(
+            1, 10, "42", new OrderStatusUpdate { Action = "cancel", Reason = "Out of stock" }, CancellationToken.None);
+        await runner;
+
+        var ok = Assert.IsType<OkObjectResult>(res);
+        var dto = Assert.IsType<OrderStatusUpdateResult>(ok.Value);
+        Assert.True(dto.Success);
+        Assert.NotNull(dto.Order);
+        Assert.Equal("cancelled", dto.Order!.Status);
+
+        // Subsequent snapshot read also sees the projected status.
+        await using var verifyDb = TestDbFactory.CreateSqliteContext(dsn);
+        var verifySnapshots = new MarketplaceOrderSnapshotService(verifyDb, clock);
+        var stored = await verifySnapshots.FindAsync(1, 10, "42", CancellationToken.None);
+        Assert.NotNull(stored);
+        Assert.Equal("cancelled", stored!.status);
+    }
+
+    [Fact]
+    public void IntegrationCommandResultExtractor_SingleStagePromotionUpdate_DerivesCountsFromPayload()
+    {
+        var cmd = new IntegrationCommand
+        {
+            commandId = "cmd-promo",
+            operationId = "op-promo",
+            kind = "promotion_action",
+            state = IntegrationCommandState.Completed
+        };
+
+        var stages = new List<IntegrationStage>
+        {
+            new()
+            {
+                itemKey = "promo-1",
+                stageKey = "promo:update",
+                kind = "promotion_action",
+                state = IntegrationStageState.Applied,
+                payloadJson = """{"add":[{"externalProductId":"101"},{"externalProductId":"102"},{"externalProductId":"103"}],"removeExternalProductIds":["202"]}"""
+            },
+            new()
+            {
+                itemKey = "promo-2",
+                stageKey = "promo:explicit",
+                kind = "promotion_action",
+                state = IntegrationStageState.Applied,
+                evidenceJson = """{"added":2,"removed":0}"""
+            },
+            new()
+            {
+                itemKey = "promo-3",
+                stageKey = "promo:remove",
+                kind = "promotion_action",
+                state = IntegrationStageState.Applied,
+                payloadJson = """{"action":"deactivate","productId":"303"}"""
+            }
+        };
+
+        var result = IntegrationCommandResultExtractor.BuildPromotionProductsResult(cmd, stages);
+        Assert.True(result.Success);
+        Assert.Equal(5, result.Added);
+        Assert.Equal(2, result.Removed);
+    }
+
+    [Fact]
+    public async Task IntegrationCoordinator_LegacyRawHashRow_MatchesEquivalentCanonicalRetry()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+
+        var rawInput = """{"connectionId":10,"adapterKey":"woocommerce","kind":"order_action","itemKey":"42","data":{"orderId":"42","action":"cancel"}}""";
+        var rawHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawInput))).ToLowerInvariant();
+        Assert.NotEqual(rawHash, IntegrationCoordinator.ComputeHash(rawInput));
+
+        db.integrationCommands.Add(new IntegrationCommand
+        {
+            commandId = "legacy-cmd-1",
+            operationId = "legacy-op-1",
+            storeId = 1,
+            authorUserId = 7,
+            connectionId = 10,
+            scopeKey = "1:10:order_action",
+            kind = "order_action",
+            requestKey = "legacy-key-1",
+            requestHash = rawHash,
+            inputJson = rawInput,
+            state = IntegrationCommandState.Admitted
+        });
+        await db.SaveChangesAsync();
+
+        var coordinator = new IntegrationCoordinator(db, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+
+        // Equivalent retry with reordered keys matches the legacy raw-hash row cleanly.
+        var reorderedInput = """{"adapterKey":"woocommerce","connectionId":10,"data":{"action":"cancel","orderId":"42"},"itemKey":"42","kind":"order_action"}""";
+        var dup = await coordinator.AdmitAsync(new IntegrationAdmitRequest(
+            "order_action", 1, 7, null, 10, "legacy-key-1", reorderedInput, "Order 42",
+            [new IntegrationStageSeed("42", "order:cancel", "order_action", 0)]), v1Enabled: true, CancellationToken.None);
+        Assert.True(dup.IsDuplicate);
+        Assert.Equal("legacy-cmd-1", dup.CommandId);
+
+        // Different body with same key still throws conflict.
+        var differentInput = """{"adapterKey":"woocommerce","connectionId":10,"data":{"action":"complete","orderId":"42"},"itemKey":"42","kind":"order_action"}""";
+        await Assert.ThrowsAsync<IntegrationRequestConflictException>(() => coordinator.AdmitAsync(new IntegrationAdmitRequest(
+            "order_action", 1, 7, null, 10, "legacy-key-1", differentInput, "Order 42",
+            [new IntegrationStageSeed("42", "order:complete", "order_action", 0)]), v1Enabled: true, CancellationToken.None));
+    }
 }

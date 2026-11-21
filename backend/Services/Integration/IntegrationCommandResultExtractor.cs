@@ -288,13 +288,13 @@ public static class IntegrationCommandResultExtractor
     {
         var added = 0;
         var removed = 0;
-        var explicitCounts = false;
 
         foreach (var stage in stages)
         {
             if (stage.state is not (IntegrationStageState.Applied or IntegrationStageState.PartiallyApplied))
                 continue;
 
+            var explicitCounts = false;
             if (!string.IsNullOrWhiteSpace(stage.evidenceJson))
             {
                 try
@@ -319,7 +319,56 @@ public static class IntegrationCommandResultExtractor
                 }
             }
 
-            if (!explicitCounts)
+            if (explicitCounts)
+                continue;
+
+            var derivedFromPayload = false;
+            if (!string.IsNullOrWhiteSpace(stage.payloadJson))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(stage.payloadJson);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        var root = doc.RootElement;
+                        if (root.TryGetProperty("add", out var addArr) && addArr.ValueKind == JsonValueKind.Array)
+                        {
+                            added += addArr.GetArrayLength();
+                            derivedFromPayload = true;
+                        }
+                        if (root.TryGetProperty("removeExternalProductIds", out var remArr) && remArr.ValueKind == JsonValueKind.Array)
+                        {
+                            removed += remArr.GetArrayLength();
+                            derivedFromPayload = true;
+                        }
+                        else if (root.TryGetProperty("remove", out var remShort) && remShort.ValueKind == JsonValueKind.Array)
+                        {
+                            removed += remShort.GetArrayLength();
+                            derivedFromPayload = true;
+                        }
+
+                        if (!derivedFromPayload
+                            && TryReadNonEmptyString(root, "action", out var action))
+                        {
+                            if (action!.Contains("remove", StringComparison.OrdinalIgnoreCase)
+                                || action.Contains("deactivate", StringComparison.OrdinalIgnoreCase))
+                            {
+                                removed++;
+                            }
+                            else
+                            {
+                                added++;
+                            }
+                            derivedFromPayload = true;
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+
+            if (!derivedFromPayload)
             {
                 if (stage.stageKey.Contains("remove", StringComparison.OrdinalIgnoreCase)
                     || stage.stageKey.Contains("deactivate", StringComparison.OrdinalIgnoreCase))
