@@ -435,8 +435,7 @@ public class GroupSyncService
             return GroupImportResult.Failure("Adapter does not support group import");
 
         const int maxImportPages = 200;
-        int importedCount = 0;
-        int updatedCount = 0;
+        var collectedGroups = new List<ExternalGroup>();
         string? cursor = null;
         var seenCursors = new HashSet<string>(StringComparer.Ordinal);
         var completed = false;
@@ -448,13 +447,8 @@ public class GroupSyncService
             if (result == null)
                 return GroupImportResult.Failure("Marketplace returned an empty group page response");
 
-            foreach (var externalGroup in result.Items)
-            {
-                var (imported, updated) = await ProcessImportedGroupAsync(
-                    externalGroup, connection, storeId, ct);
-                if (imported) importedCount++;
-                if (updated) updatedCount++;
-            }
+            if (result.Items is { Count: > 0 })
+                collectedGroups.AddRange(result.Items);
 
             if (!result.HasMore)
             {
@@ -473,6 +467,16 @@ public class GroupSyncService
 
         if (!completed)
             return GroupImportResult.Failure($"Group import exceeded maximum page limit ({maxImportPages}) without completing");
+
+        int importedCount = 0;
+        int updatedCount = 0;
+        foreach (var externalGroup in collectedGroups)
+        {
+            var (imported, updated) = await ProcessImportedGroupAsync(
+                externalGroup, connection, storeId, ct);
+            if (imported) importedCount++;
+            if (updated) updatedCount++;
+        }
 
         await _context.SaveChangesAsync(ct);
 

@@ -194,6 +194,8 @@ public sealed class MarketplaceCommerceExecutionService
 
         var addItems = body.Add?
             .Where(a => !string.IsNullOrWhiteSpace(a.ExternalProductId))
+            .GroupBy(a => a.ExternalProductId.Trim(), StringComparer.Ordinal)
+            .Select(g => g.Last())
             .ToList() ?? [];
         var removeIds = body.RemoveExternalProductIds?
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -227,6 +229,10 @@ public sealed class MarketplaceCommerceExecutionService
         }
         else
         {
+            var addIdSet = new HashSet<string>(addItems.Select(a => a.ExternalProductId.Trim()), StringComparer.Ordinal);
+            if (removeIds.Any(addIdSet.Contains))
+                throw ApiException.BadRequest("Cannot both add and remove the same product in one promotion request", code: "promotion_conflicting_product");
+
             if (body.RemoveAll)
             {
                 intents.Add(new IntegrationItemIntent(
@@ -259,12 +265,13 @@ public sealed class MarketplaceCommerceExecutionService
                 }
                 if (add.Stock.HasValue)
                     data["stock"] = add.Stock.Value;
-                intents.Add(new IntegrationItemIntent($"{promoId}:add:{prodId}", data, ExpectedRemoteId: prodId));
+                // Stable promotion+product entity key ensures cross-command ordering between add and remove.
+                intents.Add(new IntegrationItemIntent($"{promoId}:{prodId}", data, ExpectedRemoteId: prodId));
             }
             foreach (var remId in removeIds)
             {
                 intents.Add(new IntegrationItemIntent(
-                    $"{promoId}:remove:{remId}",
+                    $"{promoId}:{remId}",
                     new Dictionary<string, object?>
                     {
                         ["promotionId"] = promoId,
@@ -285,6 +292,7 @@ public sealed class MarketplaceCommerceExecutionService
             authorUserId,
             authorApiKeyId,
             requestKey,
+            legacySingleItemPayload: null,
             ct);
     }
 
@@ -413,6 +421,7 @@ public sealed class MarketplaceCommerceExecutionService
             authorUserId,
             authorApiKeyId,
             requestKey,
+            legacySingleItemPayload: (itemKey, data),
             ct);
 
     private async Task<IntegrationAdmitResult> AdmitPreparedItemsAsync(
@@ -424,6 +433,7 @@ public sealed class MarketplaceCommerceExecutionService
         int authorUserId,
         int? authorApiKeyId,
         string? requestKey,
+        (string ItemKey, Dictionary<string, object?> Data)? legacySingleItemPayload,
         CancellationToken ct)
     {
         if (!_options.Enabled)
@@ -473,14 +483,24 @@ public sealed class MarketplaceCommerceExecutionService
                 code: "integration_empty_plan");
         }
 
-        var inputJson = JsonSerializer.Serialize(new
-        {
-            connectionId = connection.Id,
-            adapterKey = connection.adapterKey,
-            bindingFingerprint,
-            kind = commandKind,
-            items = intents.Select(i => new { i.ItemKey, i.ExpectedRemoteId, i.Data })
-        });
+        var inputJson = legacySingleItemPayload is { } single
+            ? JsonSerializer.Serialize(new
+            {
+                connectionId = connection.Id,
+                adapterKey = connection.adapterKey,
+                bindingFingerprint,
+                kind = commandKind,
+                itemKey = single.ItemKey,
+                data = single.Data
+            })
+            : JsonSerializer.Serialize(new
+            {
+                connectionId = connection.Id,
+                adapterKey = connection.adapterKey,
+                bindingFingerprint,
+                kind = commandKind,
+                items = intents.Select(i => new { i.ItemKey, i.ExpectedRemoteId, i.Data })
+            });
 
         try
         {

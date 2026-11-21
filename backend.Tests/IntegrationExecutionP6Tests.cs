@@ -257,4 +257,70 @@ public sealed class IntegrationExecutionP6Tests
         Assert.Null(summaryClean.IncompleteReason);
         Assert.Equal(3, summaryClean.Removed);
     }
+
+    [Fact]
+    public async Task ReviewRegressions_WooRoutePolicy_StablePromoItemKey_AndZeroOrphanGroupsOnBadCursor()
+    {
+        // 1. WooCommerce /wp-json/delegat/v1/ coupon route is permitted by host route policy catalog.
+        var wooBinding = new IntegrationHostRouteBinding(
+            IntegrationProviderKind.WooCommerce, IntegrationProviderEnvironment.Production,
+            new Uri("https://shop.example.com/wp-json/delegat/v1"), VerifiedSellerId: "conn:10");
+        var policy = IntegrationRoutePolicyCatalog.Resolve(
+            wooBinding,
+            new IntegrationTransportRequest(
+                "POST", new Uri("https://shop.example.com/wp-json/delegat/v1/promotions/coupon-10/products"),
+                new Dictionary<string, string>(), "{}",
+                new IntegrationRequestPolicy("woo:bridge", "op-1", IsEffectful: true)));
+        Assert.NotNull(policy);
+        Assert.True(policy!.IsEffectful);
+
+        // 2. Ozon activation and later removal of the same product share identical itemKey ("901:5001"),
+        //    and duplicate add entries deduplicate instead of failing with duplicate_item_key.
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        var clock = new ManualClock();
+        var commerce = new MarketplaceCommerceService(db, new SingleAdapterRegistry(null), new MarketplaceOrderSnapshotService(db, clock));
+        var coordinator = new IntegrationCoordinator(db, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+        var exec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new OzonPlugin(),
+            new IntegrationExecutionOptions { Enabled = true }, commerce);
+        var conn = CreateConnection("ozon", """{"clientId":"123","apiKey":"oz-k"}""");
+
+        await exec.AdmitPromotionActionAsync(conn, "901", new PromotionProductsUpdate
+        {
+            Add =
+            [
+                new PromotionProductRef { ExternalProductId = "5001", ActionPrice = 899m },
+                new PromotionProductRef { ExternalProductId = " 5001 ", ActionPrice = 799m }
+            ]
+        }, 7, null, "req-add-5001", CancellationToken.None);
+
+        await exec.AdmitPromotionActionAsync(conn, "901", new PromotionProductsUpdate
+        {
+            RemoveExternalProductIds = ["5001"]
+        }, 7, null, "req-rem-5001", CancellationToken.None);
+
+        var stages = await db.integrationStages.AsNoTracking().OrderBy(s => s.Id).ToListAsync();
+        Assert.Equal(2, stages.Count);
+        Assert.Equal("901:5001", stages[0].itemKey);
+        Assert.Equal("901:5001", stages[1].itemKey);
+
+        // 3. Populated group page with missing NextCursor persists ZERO groups (no orphan on retry).
+        db.stores.Add(new Models.Store { Id = 1, name = "Store 1" });
+        db.marketplaceConnections.Add(new MarketplaceConnection
+        {
+            Id = 10, storeId = 1, name = "Ozon", adapterKey = "ozon", credentialsJson = "{}", isActive = true
+        });
+        await db.SaveChangesAsync();
+
+        var populatedBadCursor = GroupImportAdapterProxy.Create(_ => Task.FromResult(new HostGroupPage(
+            [new Delegat.Models.Marketplace.DTOs.ExternalGroup("g-1", "Summer", [])],
+            true,
+            null)));
+        var groupSvc = new GroupSyncService(db, new SingleAdapterRegistry(populatedBadCursor), NullLogger<GroupSyncService>.Instance);
+        var failedImport = await groupSvc.ImportGroupsAsync(10, 1, CancellationToken.None);
+        Assert.False(failedImport.IsSuccess);
+        Assert.Empty(await db.productGroups.AsNoTracking().ToListAsync());
+    }
 }
