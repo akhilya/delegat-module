@@ -491,4 +491,26 @@ public sealed class IntegrationExecutionP5Tests
             7, null, "req-disabled", CancellationToken.None));
         Assert.Empty(await db.integrationCommands.AsNoTracking().ToListAsync());
     }
+
+    [Theory]
+    [InlineData("ozon", """{"clientId":"123","apiKey":"k"}""", "Ozon", "api-seller.ozon.ru")]
+    [InlineData("wildberries", """{"apiKey":"k","sandbox":"true"}""", "Wildberries", "marketplace-api-sandbox.wildberries.ru")]
+    [InlineData("yandex", """{"businessId":"99","apiKey":"k"}""", "YandexMarket", "api.partner.market.yandex.ru")]
+    [InlineData("avito", """{"clientId":"c1","clientSecret":"s1"}""", "Avito", "api.avito.ru")]
+    [InlineData("opencart", """{"apiBaseUrl":"https://shop.example/index.php?route=extension/delegat/api","apiKey":"k"}""", "OpenCart", "shop.example")]
+    [InlineData("woocommerce", """{"siteUrl":"https://woo.example","apiKey":"k"}""", "WooCommerce", "woo.example")]
+    [InlineData("medusa", """{"apiBaseUrl":"https://medusa.example/admin/delegat","apiKey":"k"}""", "Medusa", "medusa.example")]
+    public void HostBindingResolver_BuildsApprovedRouteBindingForAllSevenAdapters(
+        string adapterKey, string credsJson, string expectedProvider, string expectedHost)
+    {
+        var conn = CreateConnection(adapterKey, credsJson);
+        var creds = ConnectionCredentialsHelper.ParseCredentialsObject(credsJson);
+
+        var ok = HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(conn, creds, out var binding);
+
+        Assert.True(ok);
+        Assert.NotNull(binding);
+        Assert.Equal(expectedProvider, binding!.Provider.ToString());
+        Assert.Equal(expectedHost, binding.AllowedOrigin.Host);
+    }
 }

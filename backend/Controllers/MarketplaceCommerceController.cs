@@ -299,7 +299,7 @@ public class MarketplaceCommerceController : ControllerBase
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
         var req = body ?? new CreateShipmentRequest();
-        if (_commerceExecution is { IsV1Enabled: true })
+        if (_commerceExecution is { IsV1Enabled: true } && PrefersAsync())
         {
             var data = new Dictionary<string, object?>();
             if (!string.IsNullOrWhiteSpace(req.Name))
@@ -569,13 +569,20 @@ public class MarketplaceCommerceController : ControllerBase
         return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
     }
 
+    private bool PrefersAsync()
+    {
+        var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+        return !string.IsNullOrWhiteSpace(prefer)
+            && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+    }
+
     private IActionResult AcceptedIntegration(IntegrationAdmitResult admitted) =>
         Accepted(new
         {
             operationId = admitted.OperationId,
             commandId = admitted.CommandId,
             integrationState = "pending",
-            statusUrl = $"/api/operations/{admitted.OperationId}",
+            statusUrl = $"/api/operations/{admitted.OperationId}/status",
             duplicate = admitted.IsDuplicate
         });
 }

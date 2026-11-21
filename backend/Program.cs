@@ -403,8 +403,10 @@ builder.Services.AddHttpClient(Delegat.Services.Integration.IntegrationHttpTrans
         ActivityHeadersPropagator = null
     })
     .RemoveAllLoggers();
+builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationExecutionBindingResolver,
+    Delegat.Services.Integration.HostIntegrationExecutionBindingResolver>();
 builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationStageDispatcher,
-    Delegat.Services.Integration.NotConfiguredStageDispatcher>();
+    Delegat.Services.Integration.IntegrationProviderStageDispatcher>();
 builder.Services.AddHostedService<Delegat.Services.Integration.IntegrationExecutionWorker>();
 
 if (builder.Environment.IsDevelopment())
