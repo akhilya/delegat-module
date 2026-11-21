@@ -375,4 +375,83 @@ public sealed class IntegrationExecutionP4HostTests
         await using var verify = TestDbFactory.CreateSqliteContext(dsn);
         Assert.Equal(IntegrationCommandState.Completed, (await verify.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
+
+    [Fact]
+    public async Task MedusaExecutionProvider_Http202Acceptance_ReportsUnknownNeverApplied()
+    {
+        var medusa = new MedusaPlugin();
+        var conn = new ConnectionContext
+        {
+            ConnectionId = 10,
+            AdapterKey = "medusa",
+            Credentials = new Dictionary<string, string>
+            {
+                ["apiBaseUrl"] = "https://medusa.example.com/admin/delegat",
+                ["apiKey"] = "sk_test_123"
+            },
+            Transport = new StubTransport((req, _) => Task.FromResult(
+                new IntegrationTransportResponse(202, new Dictionary<string, string>(), """{"success":true,"id":"job-7"}""")))
+        };
+
+        var prep = await medusa.PrepareAsync(new IntegrationPreparationInput(
+            IntegrationOperationKind.ProductExport, conn,
+            [new IntegrationItemIntent("p-202", new Dictionary<string, object?>
+            {
+                ["sku"] = "sku-202",
+                ["name"] = "Chair",
+                ["price"] = "100"
+            })], null, "cmd-202"));
+
+        var card = Assert.Single(prep.Items.SelectMany(i => i.Stages), s => s.Kind == IntegrationStageKind.Card);
+        var attempt = new IntegrationAttemptContext("op-202", "cmd-202", "p-202", card.StageKey, 1, "req-202");
+        var outcome = await medusa.ExecuteStageAsync(new IntegrationStageRequest(conn, attempt, card));
+
+        Assert.Equal(IntegrationStageOutcomeKind.Unknown, outcome.Kind);
+        Assert.Equal("job-7", outcome.Receipt?.Value);
+        Assert.Contains(outcome.Issues ?? [], i => i.Code == "bridge_async_reconciliation_unsupported");
+    }
+
+    [Fact]
+    public async Task AvitoExecutionProvider_ResultNullAndPagedReadBack_ConfirmsOnSecondPage()
+    {
+        var avito = new AvitoPlugin();
+        var page1Items = string.Join(",", Enumerable.Range(1, 100).Select(i => $"{{\"id\":{i},\"price\":100}}"));
+        var calls = new List<string>();
+        var conn = new ConnectionContext
+        {
+            ConnectionId = 12,
+            AdapterKey = "avito",
+            Credentials = new Dictionary<string, string> { ["accessToken"] = "tok_1" },
+            Transport = new StubTransport((req, _) =>
+            {
+                calls.Add($"{req.Method} {req.Url.PathAndQuery}");
+                if (req.Method == "POST")
+                    return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(), """{"result":null}"""));
+                if (req.Url.Query.Contains("&page=1", StringComparison.Ordinal))
+                    return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(), $"{{\"resources\":[{page1Items}]}}"));
+                return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(), """{"resources":[{"id":777,"price":1990}]}"""));
+            })
+        };
+
+        var prep = await avito.PrepareAsync(new IntegrationPreparationInput(
+            IntegrationOperationKind.PriceExport, conn,
+            [new IntegrationItemIntent("av-777", new Dictionary<string, object?> { ["price"] = 1990m }, ExpectedRemoteId: "777")],
+            null, "cmd-av-2"));
+        var stage = Assert.Single(prep.Items.SelectMany(i => i.Stages));
+        var attempt = new IntegrationAttemptContext("op-av-2", "cmd-av-2", "av-777", stage.StageKey, 1, "req-av-2");
+
+        var dispatch = await avito.ExecuteStageAsync(new IntegrationStageRequest(conn, attempt, stage));
+        Assert.Equal(IntegrationStageOutcomeKind.Pending, dispatch.Kind);
+
+        var confirmed = await avito.ConfirmAsync(new IntegrationConfirmationRequest(conn, attempt, stage, dispatch.Receipt));
+        Assert.Equal(IntegrationStageOutcomeKind.Applied, confirmed.Kind);
+        Assert.Contains(calls, c => c.Contains("page=2", StringComparison.Ordinal));
+    }
+
+    private sealed class StubTransport(
+        Func<IntegrationTransportRequest, CancellationToken, Task<IntegrationTransportResponse>> handler) : IMarketplaceTransport
+    {
+        public Task<IntegrationTransportResponse> SendAsync(IntegrationTransportRequest request, CancellationToken ct = default)
+            => handler(request, ct);
+    }
 }

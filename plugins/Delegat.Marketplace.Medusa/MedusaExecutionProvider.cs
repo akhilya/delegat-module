@@ -248,6 +248,34 @@ public partial class MedusaPlugin
     private static IntegrationStageOutcome MapBridgeResponse(
         IntegrationTransportResponse resp, IntegrationStageKind kind, string stageKey, string itemKey)
     {
+        if (resp.StatusCode == 202)
+        {
+            string? acceptedId = null;
+            if (!string.IsNullOrWhiteSpace(resp.Body))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(resp.Body);
+                    var root = doc.RootElement;
+                    if (root.ValueKind == JsonValueKind.Object)
+                    {
+                        acceptedId = root.TryGetProperty("job_id", out var jid) ? jid.ToString()
+                            : root.TryGetProperty("task_id", out var tid) ? tid.ToString()
+                            : root.TryGetProperty("product_id", out var pid) ? pid.ToString()
+                            : root.TryGetProperty("id", out var idEl) ? idEl.ToString()
+                            : root.TryGetProperty("group_id", out var gid) ? gid.ToString()
+                            : null;
+                    }
+                }
+                catch (JsonException) { }
+            }
+
+            return new IntegrationStageOutcome(
+                IntegrationStageOutcomeKind.Unknown,
+                Receipt: string.IsNullOrWhiteSpace(acceptedId) ? null : new IntegrationProviderReceipt("medusa-accepted", acceptedId),
+                Issues: [new IntegrationIssue("bridge_async_reconciliation_unsupported", "Medusa bridge returned HTTP 202 acceptance without a verified completion check", stageKey, Retryable: false, ItemKey: itemKey)]);
+        }
+
         if (resp.StatusCode is >= 200 and < 300)
         {
             if (string.IsNullOrWhiteSpace(resp.Body))
@@ -258,6 +286,9 @@ public partial class MedusaPlugin
             {
                 using var doc = JsonDocument.Parse(resp.Body);
                 var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                    return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                        Issues: [new IntegrationIssue("bridge_unexpected_json", "Medusa bridge returned non-object JSON", stageKey, Retryable: false, ItemKey: itemKey)]);
 
                 // Validate explicit top-level success flag when present.
                 if (root.TryGetProperty("success", out var okEl) && okEl.ValueKind == JsonValueKind.False)
@@ -275,7 +306,8 @@ public partial class MedusaPlugin
                             Issues: [new IntegrationIssue("bridge_missing_result", "Medusa bulk response contained zero item results", stageKey, Retryable: false, ItemKey: itemKey)]);
                     foreach (var entry in results.EnumerateArray())
                     {
-                        if (entry.TryGetProperty("success", out var itemOk) && itemOk.ValueKind == JsonValueKind.False)
+                        if (entry.ValueKind == JsonValueKind.Object &&
+                            entry.TryGetProperty("success", out var itemOk) && itemOk.ValueKind == JsonValueKind.False)
                         {
                             var msg = entry.TryGetProperty("error", out var ie) ? ie.ToString() : "Medusa item mutation rejected";
                             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected,

@@ -156,7 +156,9 @@ public sealed partial class AvitoPlugin
         try
         {
             using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("result", out var res) &&
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("result", out var res) &&
+                res.ValueKind == JsonValueKind.Object &&
                 res.TryGetProperty("success", out var okEl) &&
                 okEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
@@ -180,39 +182,68 @@ public sealed partial class AvitoPlugin
         if (string.IsNullOrWhiteSpace(token))
             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
 
-        var resp = await transport.SendAsync(new IntegrationTransportRequest(
-            "GET", new Uri(AvitoApiOrigin, "/core/v1/items"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Authorization"] = $"Bearer {token}" },
-            null,
-            new IntegrationRequestPolicy("avito:items-list", request.Attempt.OperationId, IsEffectful: false)), ct);
-
-        if (resp.StatusCode is < 200 or >= 300 || string.IsNullOrWhiteSpace(resp.Body))
-            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
-
+        long expectedPrice;
         try
         {
-            using var doc = JsonDocument.Parse(resp.Body);
             using var expectedDoc = JsonDocument.Parse(request.Stage.PayloadJson);
-            var expectedPrice = expectedDoc.RootElement.GetProperty("price").GetInt64();
-            if (doc.RootElement.TryGetProperty("resources", out var resources) && resources.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in resources.EnumerateArray())
-                {
-                    if (item.TryGetProperty("id", out var idEl) && idEl.ToString() == itemId &&
-                        item.TryGetProperty("price", out var priceEl) && priceEl.TryGetInt64(out var actualPrice) &&
-                        actualPrice == expectedPrice)
-                    {
-                        return new IntegrationStageOutcome(
-                            IntegrationStageOutcomeKind.Applied,
-                            Receipt: new IntegrationProviderReceipt("avito-item", itemId),
-                            AppliedEvidence: new Dictionary<string, object?> { ["itemId"] = itemId, ["price"] = actualPrice });
-                    }
-                }
-            }
+            expectedPrice = expectedDoc.RootElement.GetProperty("price").GetInt64();
         }
-        catch (JsonException)
+        catch (Exception)
         {
             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
+        }
+
+        const int perPage = 100;
+        const int maxPages = 20;
+        for (var page = 1; page <= maxPages; page++)
+        {
+            var resp = await transport.SendAsync(new IntegrationTransportRequest(
+                "GET", new Uri(AvitoApiOrigin, $"/core/v1/items?per_page={perPage}&page={page}"),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Authorization"] = $"Bearer {token}" },
+                null,
+                new IntegrationRequestPolicy("avito:items-list", request.Attempt.OperationId, IsEffectful: false)), ct);
+
+            if (resp.StatusCode is < 200 or >= 300 || string.IsNullOrWhiteSpace(resp.Body))
+                return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
+
+            try
+            {
+                using var doc = JsonDocument.Parse(resp.Body);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                    !doc.RootElement.TryGetProperty("resources", out var resources) ||
+                    resources.ValueKind != JsonValueKind.Array)
+                {
+                    return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
+                }
+
+                var count = 0;
+                foreach (var item in resources.EnumerateArray())
+                {
+                    count++;
+                    if (item.ValueKind == JsonValueKind.Object &&
+                        item.TryGetProperty("id", out var idEl) && idEl.ToString() == itemId &&
+                        item.TryGetProperty("price", out var priceEl) && priceEl.TryGetInt64(out var actualPrice))
+                    {
+                        if (actualPrice == expectedPrice)
+                        {
+                            return new IntegrationStageOutcome(
+                                IntegrationStageOutcomeKind.Applied,
+                                Receipt: new IntegrationProviderReceipt("avito-item", itemId),
+                                AppliedEvidence: new Dictionary<string, object?> { ["itemId"] = itemId, ["price"] = actualPrice });
+                        }
+
+                        return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                            Issues: [new IntegrationIssue("reconciliation_unconfirmed", "Avito listing read-back did not confirm the expected price", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
+                    }
+                }
+
+                if (count < perPage)
+                    break;
+            }
+            catch (JsonException)
+            {
+                return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
+            }
         }
 
         return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
