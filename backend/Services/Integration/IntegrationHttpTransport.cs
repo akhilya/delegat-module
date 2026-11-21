@@ -160,11 +160,13 @@ internal sealed class IntegrationHttpTransport(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            loggedStatus = 0;
             loggedError = "transport_timeout";
             return TransportFailure();
         }
         catch (Exception e) when (e is HttpRequestException or IOException)
         {
+            loggedStatus = 0;
             loggedError = "transport_io_error";
             return TransportFailure();
         }

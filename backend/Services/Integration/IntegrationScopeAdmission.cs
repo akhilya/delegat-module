@@ -636,16 +636,18 @@ internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactor
             var activeCount = r.activeLeases is not null
                 ? ParseActiveLeases(r.activeLeases, nowTicks).Count
                 : (r.leaseOwner is not null && r.leaseUntilTicks > nowTicks ? 1 : 0);
+            var windowExpired = r.windowEndTicks > 0 && r.windowEndTicks <= nowTicks;
+            var obsFresh = !windowExpired && r.observedAtTicks >= r.windowStartTicks;
             return new IntegrationScopeSnapshot(
                 RawKey: map[r.scopeKey],
                 HashedKey: r.scopeKey,
                 ActiveLeases: activeCount,
                 CooldownUntil: r.cooldownUntilTicks > nowTicks ? new DateTimeOffset(r.cooldownUntilTicks, TimeSpan.Zero) : null,
                 NextStartAt: r.nextStartTicks > nowTicks ? new DateTimeOffset(r.nextStartTicks, TimeSpan.Zero) : null,
-                UsedUnits: r.usedUnits,
+                UsedUnits: windowExpired ? 0L : r.usedUnits,
                 WindowEndAt: r.windowEndTicks > nowTicks ? new DateTimeOffset(r.windowEndTicks, TimeSpan.Zero) : null,
-                ObservedLimit: r.observedLimit,
-                ObservedRemaining: r.observedRemaining);
+                ObservedLimit: obsFresh ? r.observedLimit : null,
+                ObservedRemaining: obsFresh ? r.observedRemaining : null);
         }).ToList();
     }
 }

@@ -407,4 +407,155 @@ public sealed class IntegrationExecutionHttpTransportTests
         var snapshots = await admission.GetSnapshotsAsync([SharedScope.Key], CancellationToken.None);
         Assert.Equal(clock.GetUtcNow().AddMinutes(2), Assert.Single(snapshots).CooldownUntil);
     }
+
+    [Fact]
+    public async Task V1Transport_Oversized200Body_LogsZeroStatusAndTransportIoError()
+    {
+        var clock = new ManualClock();
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        var dsn = TestDbFactory.SqliteDsn(db);
+        var attempt = (await SeedAsync(db, clock.GetUtcNow())) with { AllowEffects = false };
+
+        var logger = new RecordingHttpLogger();
+        var services = new ServiceCollection()
+            .AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn))
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton<IAdapterHttpLogger>(logger)
+            .AddSingleton<IntegrationScopeAdmission>()
+            .AddSingleton<IntegrationHttpTransport>();
+        services.AddHttpClient(IntegrationHttpTransport.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((_, _) =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(new string('x', 1025))
+                })));
+        await using var provider = services.BuildServiceProvider();
+        var transport = provider.GetRequiredService<IntegrationHttpTransport>();
+
+        var result = await transport.Bind(attempt, Resolve).SendAsync(Request(effectful: false));
+        Assert.Equal(0, result.StatusCode);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(0, entry.StatusCode);
+        Assert.Equal("transport_io_error", entry.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ScopeSnapshots_ClearExpiredWindowUsageAndObservations()
+    {
+        var clock = new ManualClock();
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        var dsn = TestDbFactory.SqliteDsn(db);
+
+        await using var provider = BuildProvider(() => TestDbFactory.CreateSqliteContext(dsn), clock,
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
+        var admission = provider.GetRequiredService<IntegrationScopeAdmission>();
+
+        var windowed = new IntegrationScope("windowed-scope", TimeSpan.Zero, MaxConcurrency: 0,
+            WindowKind: IntegrationScopeWindowKind.FixedWindow, Allowance: 10, Period: TimeSpan.FromMinutes(1));
+        var lease = (await admission.TryReserveAsync([windowed], TimeSpan.FromSeconds(30), CancellationToken.None)).Lease;
+        Assert.NotNull(lease);
+        await admission.CompleteAsync(lease!, new Dictionary<string, IntegrationScopeSettlement>
+        {
+            [windowed.Key] = new(ObservedLimit: 10, ObservedRemaining: 9)
+        }, null, CancellationToken.None);
+
+        var activeSnap = Assert.Single(await admission.GetSnapshotsAsync([windowed.Key], CancellationToken.None));
+        Assert.Equal(1, activeSnap.UsedUnits);
+        Assert.Equal(10, activeSnap.ObservedLimit);
+        Assert.Equal(9, activeSnap.ObservedRemaining);
+        Assert.Equal(clock.Now.AddMinutes(1), activeSnap.WindowEndAt);
+
+        // Once the fixed window expires, snapshot must clear stale usage and observations.
+        clock.Now = clock.Now.AddMinutes(1);
+        var expiredSnap = Assert.Single(await admission.GetSnapshotsAsync([windowed.Key], CancellationToken.None));
+        Assert.Equal(0, expiredSnap.UsedUnits);
+        Assert.Null(expiredSnap.WindowEndAt);
+        Assert.Null(expiredSnap.ObservedLimit);
+        Assert.Null(expiredSnap.ObservedRemaining);
+    }
+
+    [Fact]
+    public async Task Worker_PropagatesCommandCorrelationIntoTransportHttpLog()
+    {
+        var clock = new ManualClock();
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+
+        var logger = new RecordingHttpLogger();
+        IntegrationHttpTransport? transport = null;
+        var dispatcher = new WorkerCorrelationDispatcher(async (req, ct) =>
+        {
+            var resp = await transport!.Bind(req.TransportAttempt!, Resolve).SendAsync(Request(effectful: true), ct);
+            return resp.StatusCode == 200
+                ? new IntegrationDispatchResult(IntegrationDispatchOutcome.Applied)
+                : new IntegrationDispatchResult(IntegrationDispatchOutcome.Unknown);
+        });
+
+        var services = new ServiceCollection()
+            .AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn))
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton<IAdapterHttpLogger>(logger)
+            .AddSingleton<Delegat.Services.IOperationLogger, NoopOpLogger>()
+            .AddSingleton<IIntegrationStageDispatcher>(dispatcher)
+            .AddSingleton<IntegrationScopeAdmission>()
+            .AddSingleton<IntegrationHttpTransport>();
+        services.AddHttpClient(IntegrationHttpTransport.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((_, _) =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") })));
+        await using var provider = services.BuildServiceProvider();
+        transport = provider.GetRequiredService<IntegrationHttpTransport>();
+
+        string admittedOpId;
+        await using (var admitDb = TestDbFactory.CreateSqliteContext(dsn))
+        {
+            var coordinator = new IntegrationCoordinator(admitDb, new NoopOpLogger(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<IntegrationCoordinator>.Instance);
+            var admitted = await coordinator.AdmitAsync(new IntegrationAdmitRequest(
+                "export-product", StoreId: 5, AuthorUserId: 10, AuthorApiKeyId: null, ConnectionId: 23,
+                RequestKey: "corr-key", InputJson: "{}", Title: "Corr test",
+                Stages: [new IntegrationStageSeed("item-1", "create", "create", 0, Payload)]),
+                v1Enabled: true, CancellationToken.None);
+            admittedOpId = admitted.OperationId;
+        }
+
+        var worker = new IntegrationExecutionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<IntegrationExecutionWorker>.Instance,
+            clock);
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(admittedOpId, entry.OperationId);
+        Assert.Equal(5, entry.StoreId);
+        Assert.Equal(23, entry.ConnectionId);
+    }
+
+    private sealed class WorkerCorrelationDispatcher(
+        Func<DispatchStageRequest, CancellationToken, Task<IntegrationDispatchResult>> onDispatch)
+        : IIntegrationStageDispatcher
+    {
+        public Task<IntegrationDispatchResult> DispatchAsync(DispatchStageRequest request, CancellationToken ct) =>
+            onDispatch(request, ct);
+        public Task<IntegrationDispatchResult> ConfirmAsync(DispatchStageRequest request, CancellationToken ct) =>
+            Task.FromResult(new IntegrationDispatchResult(IntegrationDispatchOutcome.Unknown));
+    }
+
+    private sealed class NoopOpLogger : Delegat.Services.IOperationLogger
+    {
+        public Task StartAsync(string operationId, int storeId, int authorUserId, string type, string title,
+            int? connectionId = null, string? connectionName = null,
+            string? batchId = null, string? batchType = null, int? totalItems = null, int? authorApiKeyId = null)
+            => Task.CompletedTask;
+        public Task LogAsync(string operationId, int storeId, string level, string message) => Task.CompletedTask;
+        public Task ProgressAsync(string operationId, int storeId, int total, int completed, int failed) => Task.CompletedTask;
+        public Task FinishAsync(string operationId, int storeId, string status, string? summary = null) => Task.CompletedTask;
+        public Task UpdateStatusAsync(string operationId, int storeId, string status) => Task.CompletedTask;
+    }
 }
