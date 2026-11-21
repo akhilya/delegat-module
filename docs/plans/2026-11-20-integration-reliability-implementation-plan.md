@@ -295,11 +295,11 @@ Executed against host `main` (`aace7fd`) + P8 branch with all 7 plugins built:
 
 | ID | Status | Evidence / Blocker |
 |---|---|---|
-| **A01** | Offline-proven | `IntegrationExecutionP1Tests`, `IntegrationExecutionP4AdaptersTests` (parity across all 7 adapters, no silent stage drop). |
+| **A01** | Offline-proven | `IntegrationExecutionP4HostTests`, `IntegrationExecutionP4AdaptersTests` (all 7 adapters implement `IMarketplaceExecutionProvider`; single vs. bulk preparation parity verified, no silent stage drop). |
 | **A02** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests` (canonical JSON hashing, legacy raw-hash retry compatibility, `409 integration_request_conflict`, independent multi-operation ownership). |
 | **A03** | Offline-proven | `IntegrationExecutionP4AdaptersTests`, `IntegrationExecutionP5Tests`, `IntegrationExecutionP6Tests` (pure `PrepareAsync` preflight refusal before mutation; conflicting `extra.orderId`/`extra.action` and add+remove promotion conflicts rejected before admission). |
 | **A04** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionHttpTransportTests` (committed attempt fence before send, lost-response confirmation, absent reconciliation stays `unknown`). |
-| **A05** | Offline-proven | `IntegrationExecutionP1Tests`, `IntegrationExecutionP4AdaptersTests` (Medusa non-object bulk result guard, partial/unknown never projected as completed). |
+| **A05** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP4AdaptersTests` (Medusa non-object bulk result guard, partial/unknown never projected as completed). |
 | **A06** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionDeferralAndSeamTests` (`DeferredBeforeSend` recovery after provider pause without consuming send budget; restart resumes missing stage). |
 | **A07** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests` (`OperationsStop_AfterSendStarted_PreservesAuthoritativeOutcomeOnPublicPoll` confirms Stop cancels unsent stages while confirming sent stages as `partial` or `unknown`). |
 | **A08** | Partially blocked | SQLite concurrency & per-entity ordering proven in `IntegrationExecutionP2Tests` / `IntegrationExecutionScopeAdmissionTests`; **MySQL row-lock concurrency (`ConcurrentMySqlClaimers_CannotBothOwnSameScope`) and MySQL fence (`EffectfulSend_CommitsFenceOnMySql`) are BLOCKED** pending `DELEGAT_TEST_MYSQL`. |
@@ -318,9 +318,9 @@ Executed against host `main` (`aace7fd`) + P8 branch with all 7 plugins built:
    - Verify all EF Core migrations (including the 4 integration tables) are applied and all 7 plugin binaries match the exact pinned SHAs in §11.1.
    - Pause legacy write admissions, classify in-flight legacy operations (completed = historical; provably unsent = safe to readmit; ambiguous = hold for manual review — never mass-replay legacy rows or overwrite `-1` import checkpoints).
 2. **Enable V1:**
-   - Set `IntegrationExecutionV1=true` on the target instance and restart the API process.
+   - Ensure `IntegrationExecutionV1=true` is passed into the API process/container environment (when running under Docker Compose, forward the env var and recreate the container rather than a plain restart).
    - Verify `GET /api/v1/stores/{storeId}/operations/{operationId}` returns `integration` summaries and `Operations` panel Stop/polling works for a single canary write.
 3. **Rollback procedure (if an incident occurs):**
-   - Set `IntegrationExecutionV1=false` and restart the API process.
-   - New mutations immediately return to legacy paths while `IntegrationExecutionWorker` continues draining/confirming any already-admitted V1 commands (never hand V1 commands back to legacy workers, never drop the 4 integration tables, and never trigger automatic remote rollback).
+   - Set `IntegrationExecutionV1=false` in the API process/container environment and recreate/restart the API process.
+   - New V1 admissions are blocked immediately while `IntegrationExecutionWorker` continues draining/confirming any already-admitted V1 commands. Wait for active/unresolved V1 commands on a given entity to drain or resolve before submitting competing legacy writes for that entity (never hand V1 commands back to legacy workers, never drop the 4 integration tables, and never trigger automatic remote rollback).
 
