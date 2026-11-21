@@ -3,6 +3,7 @@ using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.DTOs;
+using Delegat.Models.Integration;
 using Delegat.Models.Marketplace;
 using Delegat.Services.Integration;
 using Delegat.Services.Plugins;
@@ -80,6 +81,62 @@ public sealed class MarketplaceCommerceExecutionService
     public bool IsV1Enabled => _options.Enabled;
 
     /// <summary>
+    /// Bounded wait for a newly admitted command to reach a terminal state so
+    /// callers without <c>Prefer: respond-async</c> can receive the original
+    /// synchronous DTO when execution finishes quickly. Caller cancellation
+    /// stops waiting without cancelling the durable command.
+    /// </summary>
+    public async Task<(Delegat.Models.Integration.IntegrationCommand Command, List<Delegat.Models.Integration.IntegrationStage> Stages)?> WaitForCommandSnapshotAsync(
+        string commandId,
+        CancellationToken ct)
+    {
+        var waitMs = Math.Max(0, _options.PublicApiSyncWaitMs);
+        var deadline = Environment.TickCount64 + waitMs;
+
+        (Delegat.Models.Integration.IntegrationCommand Command, List<Delegat.Models.Integration.IntegrationStage> Stages)? snapshot = null;
+        try
+        {
+            using var initialCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (waitMs > 0)
+                initialCts.CancelAfter(waitMs);
+            snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, initialCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return snapshot;
+        }
+
+        if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state) || waitMs == 0)
+            return snapshot;
+
+        var pollMs = Math.Clamp(_options.PublicApiSyncPollIntervalMs, 10, 500);
+        while (Environment.TickCount64 < deadline && !ct.IsCancellationRequested)
+        {
+            var remainingMs = (int)Math.Max(1, deadline - Environment.TickCount64);
+            var delayMs = Math.Min(pollMs, remainingMs);
+            try
+            {
+                await Task.Delay(delayMs, ct);
+                var readBudgetMs = (int)(deadline - Environment.TickCount64);
+                if (readBudgetMs <= 0)
+                    break;
+                using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                pollCts.CancelAfter(readBudgetMs);
+                snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, pollCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
+                return snapshot;
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>
     /// Admits an order status action through the durable coordinator after
     /// running provider preflight preparation.
     /// </summary>
@@ -117,8 +174,22 @@ public sealed class MarketplaceCommerceExecutionService
         {
             foreach (var (k, v) in body.Extra)
             {
-                if (!string.IsNullOrWhiteSpace(k) && v is not null)
-                    data[k] = v;
+                if (string.IsNullOrWhiteSpace(k) || v is null)
+                    continue;
+                var key = k.Trim();
+                if (key.Equals("orderId", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(v.Trim(), orderId.Trim(), StringComparison.Ordinal))
+                        throw ApiException.BadRequest("Conflicting orderId in extra metadata", code: "order_status_failed");
+                    continue;
+                }
+                if (key.Equals("action", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(v.Trim(), body.Action.Trim(), StringComparison.OrdinalIgnoreCase))
+                        throw ApiException.BadRequest("Conflicting action in extra metadata", code: "order_status_failed");
+                    continue;
+                }
+                data[k] = v;
             }
         }
 

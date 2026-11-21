@@ -58,6 +58,7 @@ import {
   orderTotalAmount,
 } from "@/lib/orderSheetFacts.js";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
+import { isIntegrationAcceptedResponse } from "@/lib/integrationExecution";
 import { triggerBrowserDownload } from "@/lib/artifactDownload";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -578,6 +579,10 @@ async function runAction(action, extra = {}) {
       { action, ...extra },
     );
     const result = unwrap(response);
+    if (isIntegrationAcceptedResponse(response?.status, result)) {
+      displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
+      return;
+    }
     const nextOrder = result?.order ?? result?.Order;
     if (nextOrder) detail.value = nextOrder;
     displaySonnerSuccess(t("pages.ordersPage.statusUpdated"));

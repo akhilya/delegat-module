@@ -133,6 +133,15 @@ public sealed record DispatchStageRequest(
 public sealed class IntegrationExecutionOptions
 {
     public bool Enabled { get; init; }
+
+    /// <summary>
+    /// Bounded wait (ms) for Public API callers that do not send Prefer: respond-async
+    /// to receive the synchronous DTO when a V1 command completes quickly.
+    /// </summary>
+    public int PublicApiSyncWaitMs { get; init; } = 2000;
+
+    /// <summary>Polling interval (ms) during bounded sync wait.</summary>
+    public int PublicApiSyncPollIntervalMs { get; init; } = 100;
 }
 
 /// <summary>

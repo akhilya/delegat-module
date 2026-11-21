@@ -848,11 +848,19 @@ public class IntegrationExecutionWorker : BackgroundService
             await db.operations
                 .Where(o => o.operationId == command.operationId
                     && (opStatus == OperationLifecycle.Cancelled
-                        || !OperationTerminalStates.Contains(o.status)))
+                        || !OperationTerminalStates.Contains(o.status)
+                        || o.status == OperationLifecycle.Cancelled))
                 .ExecuteUpdateAsync(o => o
                     .SetProperty(x => x.status, opStatus)
                     .SetProperty(x => x.summary, summary)
                     .SetProperty(x => x.finishedAt, (DateTime?)now), ct);
+
+            if (newState == IntegrationCommandState.Completed
+                && command.kind == "order_action"
+                && command.connectionId is int connId)
+            {
+                await ProjectConfirmedOrderSnapshotAsync(db, command, connId, now, ct);
+            }
         }
         return new CommandTransition(
             newState,
@@ -861,6 +869,57 @@ public class IntegrationExecutionWorker : BackgroundService
             items.Count,
             completedItems,
             failedItems);
+    }
+
+    private async Task ProjectConfirmedOrderSnapshotAsync(
+        DataContext db, IntegrationCommand command, int connectionId, DateTime now, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.inputJson))
+            return;
+
+        string? adapterKey = null;
+        string? orderId = null;
+        string? action = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(command.inputJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("adapterKey", out var ak) && ak.ValueKind == JsonValueKind.String)
+                adapterKey = ak.GetString();
+            // Always prefer the authoritative top-level itemKey (URL order ID) over merged extra metadata.
+            if (root.TryGetProperty("itemKey", out var ik) && ik.ValueKind == JsonValueKind.String)
+                orderId = ik.GetString();
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                if (string.IsNullOrWhiteSpace(orderId)
+                    && data.TryGetProperty("orderId", out var oid) && oid.ValueKind == JsonValueKind.String)
+                    orderId = oid.GetString();
+                if (data.TryGetProperty("action", out var act) && act.ValueKind == JsonValueKind.String)
+                    action = act.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(adapterKey)
+            || string.IsNullOrWhiteSpace(orderId)
+            || string.IsNullOrWhiteSpace(action))
+        {
+            return;
+        }
+
+        var snapshots = new Delegat.Services.Marketplace.MarketplaceOrderSnapshotService(db, _clock);
+        var row = await snapshots.FindAsync(command.storeId, connectionId, orderId, ct);
+        if (row == null)
+            return;
+
+        var live = snapshots.ToExternalOrder(row);
+        Delegat.Services.Marketplace.MarketplaceSellerOrderStatus.Advance(adapterKey, action, live);
+        if (string.Equals(live.Status, row.status, StringComparison.Ordinal))
+            return;
+        await snapshots.UpdateStatusProjectionAsync(row.Id, live, now, ct);
     }
 
     private static string MapCommandToOperationStatus(string commandState) =>

@@ -83,7 +83,7 @@ public class IntegrationCoordinator
                 .FirstOrDefaultAsync(c => c.scopeKey == scopeKey && c.requestKey == requestKey, ct);
             if (existing != null)
             {
-                if (existing.requestHash != requestHash)
+                if (!MatchesRequestHash(existing, requestHash))
                     throw new IntegrationRequestConflictException(
                         $"Request key '{requestKey}' was already used with a different body in this scope");
                 return new IntegrationAdmitResult(existing.commandId, existing.operationId, IsDuplicate: true);
@@ -180,7 +180,7 @@ public class IntegrationCoordinator
                 DetachFailedGraph();
                 throw;
             }
-            if (winner.requestHash != requestHash)
+            if (!MatchesRequestHash(winner, requestHash))
             {
                 DetachFailedGraph();
                 throw new IntegrationRequestConflictException(
@@ -271,12 +271,85 @@ public class IntegrationCoordinator
         IntegrationCommandState.Unknown
     ];
 
+    /// <summary>Reads the authoritative command and its stages by commandId.</summary>
+    public async Task<(IntegrationCommand Command, List<IntegrationStage> Stages)?> GetCommandSnapshotAsync(
+        string commandId, CancellationToken ct)
+    {
+        var command = await _db.integrationCommands
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.commandId == commandId, ct);
+        if (command == null)
+            return null;
+
+        var stages = await _db.integrationStages
+            .AsNoTracking()
+            .Where(s => s.commandId == command.Id)
+            .OrderBy(s => s.position)
+            .ThenBy(s => s.Id)
+            .ToListAsync(ct);
+
+        return (command, stages);
+    }
+
     internal static string ComputeScopeKey(IntegrationAdmitRequest request) =>
         $"{request.StoreId}:{request.ConnectionId?.ToString() ?? "-"}:{request.Kind}";
 
+    private static bool MatchesRequestHash(IntegrationCommand existing, string incomingCanonicalHash) =>
+        string.Equals(existing.requestHash, incomingCanonicalHash, StringComparison.Ordinal)
+        || string.Equals(ComputeHash(existing.inputJson), incomingCanonicalHash, StringComparison.Ordinal);
+
     internal static string ComputeHash(string input)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        var canonical = CanonicalizeJsonOrRaw(input);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string CanonicalizeJsonOrRaw(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return input ?? "";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(input);
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                WriteCanonicalElement(writer, doc.RootElement);
+            }
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch (JsonException)
+        {
+            return input;
+        }
+    }
+
+    private static void WriteCanonicalElement(Utf8JsonWriter writer, JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var prop in element.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(prop.Name);
+                    WriteCanonicalElement(writer, prop.Value);
+                }
+                writer.WriteEndObject();
+                break;
+
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                    WriteCanonicalElement(writer, item);
+                writer.WriteEndArray();
+                break;
+
+            default:
+                element.WriteTo(writer);
+                break;
+        }
     }
 }

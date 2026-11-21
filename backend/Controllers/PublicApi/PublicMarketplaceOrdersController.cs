@@ -17,11 +17,16 @@ public class PublicMarketplaceOrdersController : ControllerBase
 {
     private readonly PublicApiStoreContext _storeCtx;
     private readonly MarketplaceCommerceService _commerce;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
-    public PublicMarketplaceOrdersController(PublicApiStoreContext storeCtx, MarketplaceCommerceService commerce)
+    public PublicMarketplaceOrdersController(
+        PublicApiStoreContext storeCtx,
+        MarketplaceCommerceService commerce,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _storeCtx = storeCtx;
         _commerce = commerce;
+        _commerceExecution = commerceExecution;
     }
 
     /// <summary>Lists stored orders.</summary>
@@ -98,6 +103,8 @@ public class PublicMarketplaceOrdersController : ControllerBase
     /// </remarks>
     [HttpPost("orders/{orderId}/status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateOrderStatus(
         int storeId,
         int connectionId,
@@ -105,12 +112,34 @@ public class PublicMarketplaceOrdersController : ControllerBase
         [FromBody] OrderStatusUpdate? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         if (body == null || string.IsNullOrWhiteSpace(body.Action))
             throw ApiException.BadRequest(code: "order_action_required");
 
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdateOrderStatus, ct);
+
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var admitted = await _commerceExecution.AdmitOrderActionAsync(
+                connection, orderId, body, userId, PublicApiResults.ReadApiKeyId(HttpContext),
+                PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            var actionResult = await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildOrderStatusUpdateResult,
+                "order_status_failed", ct);
+            if (actionResult is OkObjectResult { Value: OrderStatusUpdateResult orderResult } && orderResult.Order == null)
+            {
+                var projected = await _commerce.GetStoredOrderAsync(
+                    connection, adapter, orderId, liveFallback: false, ct);
+                if (projected != null)
+                {
+                    await _commerce.AttachLocalOrderItemImagesAsync(connection.Id, [projected], ct);
+                    orderResult.Order = projected;
+                }
+            }
+            return actionResult;
+        }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdateOrderStatusAsync(connection, orderId, body, ct));

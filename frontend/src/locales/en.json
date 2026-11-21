@@ -563,6 +563,14 @@
     "order_label_failed": "Could not download the packing label. The order may not be packed yet.",
     "adapter_capability_missing": "This marketplace does not support that action",
     "connection_inactive": "This connection is inactive",
+    "integration_request_conflict": "This idempotency key was already used with different request data",
+    "invalid_connection_binding": "Connection must use a valid HTTPS endpoint before V1 execution",
+    "promotion_update_empty": "Select at least one product to add, remove, or clear from the promotion",
+    "promotion_conflicting_product": "A product cannot be added and removed in the same promotion update",
+    "adapter_execution_unsupported": "This marketplace adapter does not support durable V1 execution",
+    "integration_empty_plan": "No executable integration stages were prepared for this request",
+    "unverified_provider_route": "This marketplace action is blocked because the provider route contract is unverified",
+    "integration_execution_disabled": "Durable V1 integration execution is disabled on this instance",
     "catalog_connect_busy": "Catalog Connect is already running. Wait for it to finish or stop it from Operations.",
     "connection_adapter_exists": "This marketplace shop is already connected in this store",
     "connection_remote_exists": "This marketplace shop is already connected in this store",
@@ -3670,7 +3678,8 @@
       "packBoxNone": "No box",
       "packBoxNew": "Create a box",
       "packOptionsLoading": "Loading supplies…",
-      "statusUpdated": "Order status updated"
+      "statusUpdated": "Order status updated",
+      "statusUpdateQueued": "Order status update queued — track progress in Operations"
     },
     "notesPage": {
       "breadcrumb": "Notes",

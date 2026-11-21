@@ -321,6 +321,15 @@ curl -H "Authorization: Bearer dk_..." \
   "https://instance.example/api/v1/stores/1/connections/3/shipments?openOnly=true"
 ```
 
+## Durable integration execution (V1, opt-in)
+
+When an instance enables `IntegrationExecutionV1=true` (disabled by default), all commerce mutation endpoints (`POST .../orders/{orderId}/status`, `POST .../shipments`, `POST .../shipments/{shipmentId}/orders`, `POST .../shipments/{shipmentId}/boxes`, `POST .../shipments/{shipmentId}/boxes/{boxId}/orders`, and `POST .../promotions/{promotionId}/products`) admit durable commands through the integration coordinator:
+
+- **Bounded synchronous compatibility (default without `Prefer: respond-async`):** after durable admission, the server waits briefly for fast completion. If the command finishes `completed` within the bounded wait, the endpoint returns `200 OK` with the original typed DTO (including the projected order snapshot or created shipment/box IDs); if rejected before effect, it returns `400 Bad Request`; if still running, deferred, partial, or unknown, it returns `202 Accepted` with `{ operationId, commandId, status, integrationState, statusUrl, duplicate, links }`.
+- **`Prefer: respond-async` header (optional):** skips the bounded wait and immediately returns `202 Accepted` with `statusUrl`.
+- **`Idempotency-Key` header (optional):** repeating the same key with an equivalent body in the same scope returns the original command (`duplicate: true`); reusing the same key with a different body returns `409 Conflict` (`integration_request_conflict`) without mutating.
+- **Polling & Stop:** poll `statusUrl` (`/api/v1/stores/{storeId}/operations/{operationId}`). The response includes an authoritative `integration` object (`commandId`, `state`, `stopRequested`, `result` with created `shipmentId`/`boxIds` when applicable, and `stages`). Caller disconnect does not cancel an admitted command; explicit operation Stop cancels remaining unsent stages while still confirming already-sent effects.
+
 ## Out of scope (v1)
 
 Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys. Promotions are not stored in Delegat. Order snapshots are kept until the connection or store is deleted (no historical backfill of the cabinet). Operator MCP / Agent HTTP (`docs/api/mcp.md`) is not part of `/api/v1`.

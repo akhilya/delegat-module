@@ -208,6 +208,22 @@ public class PublicConnectionsController : ControllerBase
             take: 200,
             ct);
 
+        object? integration = null;
+        var command = await _db.integrationCommands
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.operationId == operationId && c.storeId == storeId, ct);
+        if (command != null)
+        {
+            var stages = await _db.integrationStages
+                .AsNoTracking()
+                .Where(s => s.commandId == command.Id)
+                .OrderBy(s => s.position)
+                .ThenBy(s => s.Id)
+                .ToListAsync(ct);
+            integration = Delegat.Services.Integration.IntegrationCommandResultExtractor
+                .BuildPublicOperationIntegration(command, stages);
+        }
+
         return Ok(new
         {
             op.operationId,
@@ -224,6 +240,7 @@ public class PublicConnectionsController : ControllerBase
             op.summary,
             op.createdAt,
             op.finishedAt,
+            integration,
             logs
         });
     }

@@ -17,11 +17,16 @@ public class PublicMarketplaceShipmentsController : ControllerBase
 {
     private readonly PublicApiStoreContext _storeCtx;
     private readonly MarketplaceCommerceService _commerce;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
-    public PublicMarketplaceShipmentsController(PublicApiStoreContext storeCtx, MarketplaceCommerceService commerce)
+    public PublicMarketplaceShipmentsController(
+        PublicApiStoreContext storeCtx,
+        MarketplaceCommerceService commerce,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _storeCtx = storeCtx;
         _commerce = commerce;
+        _commerceExecution = commerceExecution;
     }
 
     /// <summary>Lists shipments.</summary>
@@ -60,18 +65,38 @@ public class PublicMarketplaceShipmentsController : ControllerBase
     /// <remarks>Wildberries supply. Body: <c>name</c>, optional <c>destinationLocationId</c> (display only when the marketplace has no write). Failure → <c>400 shipment_failed</c>.</remarks>
     [HttpPost("shipments")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateShipment(
         int storeId,
         int connectionId,
         [FromBody] CreateShipmentRequest? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
 
+        var req = body ?? new CreateShipmentRequest();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(req.Name))
+                data["name"] = req.Name.Trim();
+            if (!string.IsNullOrWhiteSpace(req.DestinationLocationId))
+                data["destinationLocationId"] = req.DestinationLocationId.Trim();
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "create_supply", req.Name?.Trim() ?? "shipment", data,
+                $"Create shipment ({connection.name})",
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
-            () => adapter.CreateShipmentAsync(connection, body ?? new CreateShipmentRequest(), ct),
+            () => adapter.CreateShipmentAsync(connection, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -105,6 +130,8 @@ public class PublicMarketplaceShipmentsController : ControllerBase
     /// <remarks>Body: <c>orderIds</c>. Failure → <c>400 shipment_failed</c>.</remarks>
     [HttpPost("shipments/{shipmentId}/orders")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddShipmentOrders(
         int storeId,
         int connectionId,
@@ -112,12 +139,30 @@ public class PublicMarketplaceShipmentsController : ControllerBase
         [FromBody] ShipmentOrdersUpdate? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
 
+        var req = body ?? new ShipmentOrdersUpdate();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["orderIds"] = req.OrderIds ?? []
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "add_orders", shipmentId.Trim(), data,
+                $"Add orders to shipment {shipmentId.Trim()}",
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
-            () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, body ?? new ShipmentOrdersUpdate(), ct),
+            () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -148,6 +193,8 @@ public class PublicMarketplaceShipmentsController : ControllerBase
     /// <remarks>Body: <c>amount</c> (default 1). Wildberries pickup-point supplies only. Failure → <c>400 shipment_failed</c>.</remarks>
     [HttpPost("shipments/{shipmentId}/boxes")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateShipmentBoxes(
         int storeId,
         int connectionId,
@@ -155,13 +202,31 @@ public class PublicMarketplaceShipmentsController : ControllerBase
         [FromBody] CreateShipmentBoxesRequest? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
 
+        var req = body ?? new CreateShipmentBoxesRequest();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["amount"] = req.Amount
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "create_boxes", shipmentId.Trim(), data,
+                $"Create boxes on shipment {shipmentId.Trim()}",
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildCreateShipmentBoxesResult,
+                "shipment_failed", ct);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.CreateShipmentBoxesAsync(
-                connection, shipmentId, body ?? new CreateShipmentBoxesRequest(), ct),
+                connection, shipmentId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -172,6 +237,8 @@ public class PublicMarketplaceShipmentsController : ControllerBase
     /// <remarks>Body: <c>orderIds</c>. Failure → <c>400 shipment_failed</c>.</remarks>
     [HttpPost("shipments/{shipmentId}/boxes/{boxId}/orders")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AssignShipmentBoxOrders(
         int storeId,
         int connectionId,
@@ -180,13 +247,32 @@ public class PublicMarketplaceShipmentsController : ControllerBase
         [FromBody] ShipmentOrdersUpdate? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
 
+        var req = body ?? new ShipmentOrdersUpdate();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["trbxId"] = boxId.Trim(),
+                ["orderIds"] = req.OrderIds ?? []
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "trbx_assign", $"{shipmentId.Trim()}:{boxId.Trim()}", data,
+                $"Assign orders to box {boxId.Trim()}",
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.AssignOrdersToShipmentBoxAsync(
-                connection, shipmentId, boxId, body ?? new ShipmentOrdersUpdate(), ct),
+                connection, shipmentId, boxId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");

@@ -289,12 +289,12 @@ public class OperationsController : ControllerBase
             return BadRequest(new { message = "Operation has already finished" });
 
         // Coordinator-owned operations stop through the durable executor:
-        // the flag prevents new stage writes while in-flight effects are
-        // still confirmed. The cancelled projection stays sticky.
+        // the flag prevents new stage writes while already-sent stages are
+        // still confirmed. The worker projects the authoritative terminal
+        // status (cancelled, partial, or failed/unknown) once reconciliation finishes.
         if (await _integrationCoordinator.RequestStopByOperationIdAsync(operationId, ct))
         {
-            await _operationLogger.FinishAsync(operationId, op.storeId, "cancelled", "Stopped");
-            return Ok(new { status = "cancelled" });
+            return Ok(new { status = op.status, stopRequested = true });
         }
 
         var summary = op.totalItems is > 0

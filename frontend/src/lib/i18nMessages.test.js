@@ -385,6 +385,14 @@ describe("locale message catalogs", () => {
       "hosted_ai_request_too_large",
       "hosted_ai_request_in_progress",
       "review_incomplete",
+      "integration_request_conflict",
+      "invalid_connection_binding",
+      "promotion_update_empty",
+      "promotion_conflicting_product",
+      "adapter_execution_unsupported",
+      "integration_empty_plan",
+      "unverified_provider_route",
+      "integration_execution_disabled",
     ];
 
     for (const code of codes) {
