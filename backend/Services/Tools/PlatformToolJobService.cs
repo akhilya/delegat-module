@@ -201,7 +201,16 @@ public sealed class PlatformToolJobService
                 (level, message) => _operations.LogAsync(operationId, storeId, level, message),
                 ct);
 
-            if (summary.Failed > 0 && summary.Promotions > 0 && summary.Failed == summary.Promotions)
+            if (summary.Incomplete)
+            {
+                failedConnections++;
+                await _operations.LogAsync(
+                    operationId,
+                    storeId,
+                    "error",
+                    $"{connection.name}: promotion listing incomplete ({summary.IncompleteReason ?? "unknown"}); processed {summary.Promotions} promotions, removed {summary.Removed}, skipped {summary.Skipped}, failed {summary.Failed}");
+            }
+            else if (summary.Failed > 0 && summary.Promotions > 0 && summary.Failed == summary.Promotions)
             {
                 failedConnections++;
                 await _operations.LogAsync(
@@ -237,14 +246,16 @@ public sealed class PlatformToolJobService
                 failedConnections);
         }
 
-        var status = completed > 0 || (failedConnections == 0 && skippedConnections == 0)
+        var status = failedConnections == 0 && (completed > 0 || skippedConnections == 0)
             ? "completed"
-            : "failed";
+            : completed > 0
+                ? "partial"
+                : "failed";
         var finish = $"Cleared promotions on {completed} connection(s)";
         if (skippedConnections > 0)
             finish += $", skipped {skippedConnections}";
         if (failedConnections > 0)
-            finish += $", failed {failedConnections}";
+            finish += $", failed/incomplete {failedConnections}";
         await _operations.FinishAsync(operationId, storeId, status, finish);
     }
 }

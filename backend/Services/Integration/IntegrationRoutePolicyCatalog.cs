@@ -540,7 +540,8 @@ internal static partial class IntegrationRoutePolicyCatalog
         var allowed = binding.Provider switch
         {
             IntegrationProviderKind.OpenCart => path is "/index.php" || path.StartsWith("/api/delegat/", StringComparison.Ordinal),
-            IntegrationProviderKind.WooCommerce => path.StartsWith("/wp-json/delegat-bridge/", StringComparison.Ordinal),
+            IntegrationProviderKind.WooCommerce => path.StartsWith("/wp-json/delegat/v1/", StringComparison.Ordinal)
+                || path.StartsWith("/wp-json/delegat-bridge/", StringComparison.Ordinal),
             IntegrationProviderKind.Medusa => path.StartsWith("/admin/delegat/", StringComparison.Ordinal)
                 || path.StartsWith("/delegat/", StringComparison.Ordinal),
             _ => false

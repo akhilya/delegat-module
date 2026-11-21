@@ -9,6 +9,8 @@ public sealed class PromotionClearSummary
     public int Removed { get; init; }
     public int Failed { get; init; }
     public int Skipped { get; init; }
+    public bool Incomplete { get; init; }
+    public string? IncompleteReason { get; init; }
 }
 
 /// <summary>
@@ -30,6 +32,9 @@ public static class PromotionMembershipClearer
         var skipped = 0;
         var page = 1;
         string? cursor = null;
+        var seenCursors = new HashSet<string>(StringComparer.Ordinal);
+        var completed = false;
+        string? incompleteReason = null;
 
         for (var i = 0; i < MaxPages; i++)
         {
@@ -42,7 +47,19 @@ public static class PromotionMembershipClearer
             var result = await list(query, ct);
             var items = result.Items ?? [];
             if (items.Count == 0)
-                break;
+            {
+                if (!result.HasMore)
+                {
+                    completed = true;
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(result.NextCursor))
+                {
+                    incompleteReason = "empty_page_with_has_more";
+                    break;
+                }
+            }
 
             foreach (var promo in items)
             {
@@ -81,17 +98,40 @@ public static class PromotionMembershipClearer
             }
 
             if (!result.HasMore)
+            {
+                completed = true;
                 break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.NextCursor))
+            {
+                if (!seenCursors.Add(result.NextCursor))
+                {
+                    incompleteReason = "cursor_stalled";
+                    break;
+                }
+            }
+            else if (items.Count == 0)
+            {
+                incompleteReason = "missing_next_cursor";
+                break;
+            }
+
             page++;
             cursor = result.NextCursor;
         }
+
+        if (!completed && incompleteReason is null)
+            incompleteReason = "page_limit_reached";
 
         return new PromotionClearSummary
         {
             Promotions = promotions,
             Removed = removed,
             Failed = failed,
-            Skipped = skipped
+            Skipped = skipped,
+            Incomplete = !completed,
+            IncompleteReason = incompleteReason
         };
     }
 

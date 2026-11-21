@@ -174,6 +174,161 @@ public sealed class MarketplaceCommerceExecutionService
     }
 
     /// <summary>
+    /// Admits a promotion membership update (<c>add</c>, <c>remove</c>, or <c>removeAll</c>)
+    /// through the durable coordinator using provider P4 promotion recipes (P6).
+    /// </summary>
+    public Task<IntegrationAdmitResult> AdmitPromotionActionAsync(
+        MarketplaceConnection connection,
+        string promotionId,
+        PromotionProductsUpdate body,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(body);
+
+        if (string.IsNullOrWhiteSpace(promotionId))
+            throw ApiException.BadRequest("Promotion ID is required", code: "promotion_id_required");
+
+        var addItems = body.Add?
+            .Where(a => !string.IsNullOrWhiteSpace(a.ExternalProductId))
+            .GroupBy(a => a.ExternalProductId.Trim(), StringComparer.Ordinal)
+            .Select(g => g.Last())
+            .ToList() ?? [];
+        var removeIds = body.RemoveExternalProductIds?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList() ?? [];
+
+        if (!body.RemoveAll && addItems.Count == 0 && removeIds.Count == 0)
+            throw ApiException.BadRequest("Promotion update requires at least one product to add, remove, or removeAll", code: "promotion_update_empty");
+
+        var promoId = promotionId.Trim();
+        var adapterKey = (connection.adapterKey ?? "").Trim().ToLowerInvariant();
+        var intents = new List<IntegrationItemIntent>();
+
+        // Bridge coupon/promotion endpoints (WooCommerce, OpenCart) accept a single delta/removeAll intent per promotion.
+        if (adapterKey is "woocommerce" or "opencart")
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["promotionId"] = promoId,
+                ["add"] = addItems.Select(a => new Dictionary<string, object?>
+                {
+                    ["externalProductId"] = a.ExternalProductId.Trim(),
+                    ["actionPrice"] = a.ActionPrice,
+                    ["stock"] = a.Stock
+                }).ToList(),
+                ["removeExternalProductIds"] = removeIds,
+                ["removeAll"] = body.RemoveAll
+            };
+            intents.Add(new IntegrationItemIntent(promoId, data, ExpectedRemoteId: promoId));
+        }
+        else
+        {
+            var addIdSet = new HashSet<string>(addItems.Select(a => a.ExternalProductId.Trim()), StringComparer.Ordinal);
+            if (removeIds.Any(addIdSet.Contains))
+                throw ApiException.BadRequest("Cannot both add and remove the same product in one promotion request", code: "promotion_conflicting_product");
+
+            if (body.RemoveAll)
+            {
+                intents.Add(new IntegrationItemIntent(
+                    $"{promoId}:removeAll",
+                    new Dictionary<string, object?>
+                    {
+                        ["promotionId"] = promoId,
+                        ["actionId"] = promoId,
+                        ["action"] = "removeAll",
+                        ["removeAll"] = true
+                    },
+                    ExpectedRemoteId: promoId));
+            }
+            var addAction = adapterKey == "ozon" ? "activate" : "add";
+            var removeAction = adapterKey == "ozon" ? "deactivate" : "remove";
+            foreach (var add in addItems)
+            {
+                var prodId = add.ExternalProductId.Trim();
+                var data = new Dictionary<string, object?>
+                {
+                    ["promotionId"] = promoId,
+                    ["actionId"] = promoId,
+                    ["action"] = addAction,
+                    ["productId"] = prodId
+                };
+                if (add.ActionPrice.HasValue)
+                {
+                    data["actionPrice"] = add.ActionPrice.Value;
+                    data["promoPrice"] = add.ActionPrice.Value;
+                }
+                if (add.Stock.HasValue)
+                    data["stock"] = add.Stock.Value;
+                // Stable promotion+product entity key ensures cross-command ordering between add and remove.
+                intents.Add(new IntegrationItemIntent($"{promoId}:{prodId}", data, ExpectedRemoteId: prodId));
+            }
+            foreach (var remId in removeIds)
+            {
+                intents.Add(new IntegrationItemIntent(
+                    $"{promoId}:{remId}",
+                    new Dictionary<string, object?>
+                    {
+                        ["promotionId"] = promoId,
+                        ["actionId"] = promoId,
+                        ["action"] = removeAction,
+                        ["productId"] = remId
+                    },
+                    ExpectedRemoteId: remId));
+            }
+        }
+
+        return AdmitPreparedItemsAsync(
+            connection,
+            IntegrationOperationKind.PromotionAction,
+            "promotion_action",
+            intents,
+            title: $"Promotion {promoId}: update products",
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            legacySingleItemPayload: null,
+            ct);
+    }
+
+    /// <summary>
+    /// Admits a marketplace product group upsert through the durable coordinator (P6).
+    /// </summary>
+    public Task<IntegrationAdmitResult> AdmitGroupUpdateAsync(
+        MarketplaceConnection connection,
+        string groupKey,
+        Dictionary<string, object?> data,
+        string title,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(data);
+        if (string.IsNullOrWhiteSpace(groupKey))
+            throw ApiException.BadRequest("Group key is required", code: "group_key_required");
+
+        return AdmitPreparedAsync(
+            connection,
+            IntegrationOperationKind.GroupUpdate,
+            "group_update",
+            groupKey.Trim(),
+            data,
+            expectedRemoteId: null,
+            title: title,
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            ct);
+    }
+
+    /// <summary>
     /// Advances the stored order snapshot ONLY when the remote effect is
     /// confirmed <see cref="IntegrationStageOutcomeKind.Applied"/>. Pending,
     /// accepted-not-confirmed, unknown, and rejected outcomes never overwrite
@@ -245,7 +400,7 @@ public sealed class MarketplaceCommerceExecutionService
         };
     }
 
-    private async Task<IntegrationAdmitResult> AdmitPreparedAsync(
+    private Task<IntegrationAdmitResult> AdmitPreparedAsync(
         MarketplaceConnection connection,
         IntegrationOperationKind operationKind,
         string commandKind,
@@ -256,6 +411,29 @@ public sealed class MarketplaceCommerceExecutionService
         int authorUserId,
         int? authorApiKeyId,
         string? requestKey,
+        CancellationToken ct) =>
+        AdmitPreparedItemsAsync(
+            connection,
+            operationKind,
+            commandKind,
+            [new IntegrationItemIntent(itemKey, data, ExpectedRemoteId: expectedRemoteId)],
+            title,
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            legacySingleItemPayload: (itemKey, data),
+            ct);
+
+    private async Task<IntegrationAdmitResult> AdmitPreparedItemsAsync(
+        MarketplaceConnection connection,
+        IntegrationOperationKind operationKind,
+        string commandKind,
+        IReadOnlyList<IntegrationItemIntent> intents,
+        string title,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        (string ItemKey, Dictionary<string, object?> Data)? legacySingleItemPayload,
         CancellationToken ct)
     {
         if (!_options.Enabled)
@@ -287,7 +465,7 @@ public sealed class MarketplaceCommerceExecutionService
         var prepInput = new IntegrationPreparationInput(
             operationKind,
             connCtx,
-            [new IntegrationItemIntent(itemKey, data, ExpectedRemoteId: expectedRemoteId)],
+            intents,
             null,
             commandIdSeed);
 
@@ -305,15 +483,24 @@ public sealed class MarketplaceCommerceExecutionService
                 code: "integration_empty_plan");
         }
 
-        var inputJson = JsonSerializer.Serialize(new
-        {
-            connectionId = connection.Id,
-            adapterKey = connection.adapterKey,
-            bindingFingerprint,
-            kind = commandKind,
-            itemKey,
-            data
-        });
+        var inputJson = legacySingleItemPayload is { } single
+            ? JsonSerializer.Serialize(new
+            {
+                connectionId = connection.Id,
+                adapterKey = connection.adapterKey,
+                bindingFingerprint,
+                kind = commandKind,
+                itemKey = single.ItemKey,
+                data = single.Data
+            })
+            : JsonSerializer.Serialize(new
+            {
+                connectionId = connection.Id,
+                adapterKey = connection.adapterKey,
+                bindingFingerprint,
+                kind = commandKind,
+                items = intents.Select(i => new { i.ItemKey, i.ExpectedRemoteId, i.Data })
+            });
 
         try
         {

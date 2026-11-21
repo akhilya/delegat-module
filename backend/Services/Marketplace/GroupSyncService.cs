@@ -434,27 +434,49 @@ public class GroupSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportGroups))
             return GroupImportResult.Failure("Adapter does not support group import");
 
-        int importedCount = 0;
-        int updatedCount = 0;
+        const int maxImportPages = 200;
+        var collectedGroups = new List<ExternalGroup>();
         string? cursor = null;
+        var seenCursors = new HashSet<string>(StringComparer.Ordinal);
+        var completed = false;
 
-        do
+        for (var page = 0; page < maxImportPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             var result = await adapter.ImportGroupsAsync(connection, 100, cursor, ct);
+            if (result == null)
+                return GroupImportResult.Failure("Marketplace returned an empty group page response");
 
-            foreach (var externalGroup in result.Items)
+            if (result.Items is { Count: > 0 })
+                collectedGroups.AddRange(result.Items);
+
+            if (!result.HasMore)
             {
-                var (imported, updated) = await ProcessImportedGroupAsync(
-                    externalGroup, connection, storeId, ct);
-                if (imported) importedCount++;
-                if (updated) updatedCount++;
+                completed = true;
+                break;
             }
 
-            cursor = result.NextCursor;
+            if (string.IsNullOrWhiteSpace(result.NextCursor))
+                return GroupImportResult.Failure("Group import pagination stalled: hasMore=true without nextCursor");
 
-            if (!result.HasMore) break;
+            if (!seenCursors.Add(result.NextCursor))
+                return GroupImportResult.Failure($"Group import pagination stalled on repeated cursor '{result.NextCursor}'");
+
+            cursor = result.NextCursor;
         }
-        while (!ct.IsCancellationRequested);
+
+        if (!completed)
+            return GroupImportResult.Failure($"Group import exceeded maximum page limit ({maxImportPages}) without completing");
+
+        int importedCount = 0;
+        int updatedCount = 0;
+        foreach (var externalGroup in collectedGroups)
+        {
+            var (imported, updated) = await ProcessImportedGroupAsync(
+                externalGroup, connection, storeId, ct);
+            if (imported) importedCount++;
+            if (updated) updatedCount++;
+        }
 
         await _context.SaveChangesAsync(ct);
 
