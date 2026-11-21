@@ -448,7 +448,7 @@ public sealed class IntegrationExecutionP7Tests
         var coordinator = new IntegrationCoordinator(schemaDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
         var exec = new MarketplaceCommerceExecutionService(
             coordinator, new IntegrationPreparationService(), _ => new FakeShipmentExecutionProvider(),
-            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 1500, PublicApiSyncPollIntervalMs = 20 }, commerce);
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 5000, PublicApiSyncPollIntervalMs = 20 }, commerce);
 
         var storeCtx = new PublicApiStoreContext(new StubCurrentUser(7), schemaDb);
         var shipmentsController = new PublicMarketplaceShipmentsController(storeCtx, commerce, exec)
@@ -498,7 +498,7 @@ public sealed class IntegrationExecutionP7Tests
 
         var completer = Task.Run(async () =>
         {
-            for (var i = 0; i < 40; i++)
+            for (var i = 0; i < 120; i++)
             {
                 await Task.Delay(25);
                 await using var bgDb = TestDbFactory.CreateSqliteContext(dsn);
@@ -655,7 +655,7 @@ public sealed class IntegrationExecutionP7Tests
         var coordinator = new IntegrationCoordinator(schemaDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
         var exec = new MarketplaceCommerceExecutionService(
             coordinator, new IntegrationPreparationService(), _ => new WooCommercePlugin(),
-            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 1500, PublicApiSyncPollIntervalMs = 20 }, commerce);
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 5000, PublicApiSyncPollIntervalMs = 20 }, commerce);
 
         var controller = new PublicMarketplaceOrdersController(
             new PublicApiStoreContext(new StubCurrentUser(7), schemaDb), commerce, exec)
@@ -669,7 +669,7 @@ public sealed class IntegrationExecutionP7Tests
             NullLogger<IntegrationExecutionWorker>.Instance, clock);
         var runner = Task.Run(async () =>
         {
-            for (var i = 0; i < 40; i++)
+            for (var i = 0; i < 120; i++)
             {
                 await Task.Delay(25);
                 await worker.ProcessDueStagesAsync(CancellationToken.None);
