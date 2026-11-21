@@ -306,8 +306,10 @@ public partial class MedusaPlugin
                             Issues: [new IntegrationIssue("bridge_missing_result", "Medusa bulk response contained zero item results", stageKey, Retryable: false, ItemKey: itemKey)]);
                     foreach (var entry in results.EnumerateArray())
                     {
-                        if (entry.ValueKind == JsonValueKind.Object &&
-                            entry.TryGetProperty("success", out var itemOk) && itemOk.ValueKind == JsonValueKind.False)
+                        if (entry.ValueKind != JsonValueKind.Object)
+                            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                                Issues: [new IntegrationIssue("bridge_unexpected_result_entry", "Medusa bulk response contained a non-object result entry", stageKey, Retryable: false, ItemKey: itemKey)]);
+                        if (entry.TryGetProperty("success", out var itemOk) && itemOk.ValueKind == JsonValueKind.False)
                         {
                             var msg = entry.TryGetProperty("error", out var ie) ? ie.ToString() : "Medusa item mutation rejected";
                             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected,
