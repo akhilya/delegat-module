@@ -189,10 +189,13 @@ public partial class MedusaPlugin
                 FieldKey: "groupName", Retryable: false, ItemKey: item.ItemKey));
             return;
         }
+        var productIds = ReadStrList(item.Data, "productIds") ?? ReadStrList(item.Data, "product_ids");
         var req = new MedusaUpsertGroupRequest
         {
-            CollectionId = item.ExpectedRemoteId,
-            Name = groupName
+            CollectionId = item.ExpectedRemoteId ?? ReadStr(item.Data, "collectionId") ?? ReadStr(item.Data, "collection_id"),
+            DelegatGroupId = ReadStr(item.Data, "delegatGroupId") ?? ReadStr(item.Data, "delegat_group_id"),
+            Name = groupName,
+            ProductIds = productIds is { Count: > 0 } ? productIds : null
         };
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
             "group", IntegrationStageKind.Grouping, $"{commandId}:{item.ItemKey}:group",
@@ -354,8 +357,9 @@ public partial class MedusaPlugin
 
                 // For single upsert responses, require explicit success=true or a returned entity ID.
                 string? id = root.TryGetProperty("product_id", out var pid) ? pid.ToString()
-                    : root.TryGetProperty("id", out var idEl) ? idEl.ToString()
+                    : root.TryGetProperty("collection_id", out var cid) ? cid.ToString()
                     : root.TryGetProperty("group_id", out var gid) ? gid.ToString()
+                    : root.TryGetProperty("id", out var idEl) ? idEl.ToString()
                     : null;
                 var explicitSuccess = root.TryGetProperty("success", out var ok2) && ok2.ValueKind == JsonValueKind.True;
                 if (!explicitSuccess && string.IsNullOrWhiteSpace(id))
@@ -366,7 +370,7 @@ public partial class MedusaPlugin
 
                 return new IntegrationStageOutcome(
                     IntegrationStageOutcomeKind.Applied,
-                    Receipt: id is null ? null : new IntegrationProviderReceipt("medusa-entity", id),
+                    Receipt: string.IsNullOrWhiteSpace(id) ? null : new IntegrationProviderReceipt("medusa-entity", id),
                     AppliedEvidence: new Dictionary<string, object?> { ["status"] = resp.StatusCode, ["id"] = id });
             }
             catch (JsonException)
@@ -401,6 +405,42 @@ public partial class MedusaPlugin
         foreach (var (k, v) in data)
             if (k.Trim().Equals(key, StringComparison.OrdinalIgnoreCase) && v is not null)
                 return v.ToString()?.Trim();
+        return null;
+    }
+
+    private static List<string>? ReadStrList(IReadOnlyDictionary<string, object?> data, string key)
+    {
+        foreach (var (k, v) in data)
+        {
+            if (!k.Trim().Equals(key, StringComparison.OrdinalIgnoreCase) || v is null)
+                continue;
+            if (v is IEnumerable<string> strs)
+                return strs.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+            if (v is JsonElement el && el.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<string>();
+                foreach (var entry in el.EnumerateArray())
+                {
+                    var s = entry.ValueKind == JsonValueKind.String ? entry.GetString()?.Trim()
+                        : entry.ValueKind == JsonValueKind.Number ? entry.GetRawText()
+                        : null;
+                    if (!string.IsNullOrWhiteSpace(s))
+                        list.Add(s);
+                }
+                return list;
+            }
+            if (v is System.Collections.IEnumerable seq && v is not string)
+            {
+                var list = new List<string>();
+                foreach (var entry in seq)
+                {
+                    var s = entry?.ToString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        list.Add(s);
+                }
+                return list;
+            }
+        }
         return null;
     }
 

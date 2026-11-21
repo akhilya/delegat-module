@@ -29,6 +29,11 @@ public partial class ProductSyncService
     private readonly IOperationLogger _operationLogger;
     private readonly QuotaService _quotaService;
     private readonly ProductMediaExportGrantService? _mediaExportGrants;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
+
+    public bool IsV1ExecutionActive(string? adapterKey) =>
+        _commerceExecution is { IsV1Enabled: true }
+        && _commerceExecution.CanExecute(adapterKey, Delegat.Marketplace.SDK.IntegrationOperationKind.ProductExport);
 
     /// <summary>
     /// Checks whether selected products have the category mapping and required mapped
@@ -190,7 +195,8 @@ public partial class ProductSyncService
         ILogger<ProductSyncService> logger,
         IOperationLogger operationLogger,
         QuotaService quotaService,
-        ProductMediaExportGrantService? mediaExportGrants = null)
+        ProductMediaExportGrantService? mediaExportGrants = null,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
@@ -200,6 +206,7 @@ public partial class ProductSyncService
         _operationLogger = operationLogger;
         _quotaService = quotaService;
         _mediaExportGrants = mediaExportGrants;
+        _commerceExecution = commerceExecution;
     }
 
     private static void AddMarketplaceUnitIds(
@@ -229,7 +236,10 @@ public partial class ProductSyncService
         int connectionId,
         CancellationToken ct = default,
         string? operationId = null,
-        int? operationStoreId = null)
+        int? operationStoreId = null,
+        int authorUserId = 0,
+        string? requestKey = null,
+        bool preferAsync = false)
     {
         // Helper: log to operations panel (no-op when called without an operation context)
         async Task Log(string level, string message)
@@ -538,11 +548,75 @@ public partial class ProductSyncService
                 await Log("warning", mediaWarning);
             await Log("info", "Sending to the marketplace");
 
-            var result = await adapter.ExportProductAsync(
-                connection,
-                exportDataNonNull,
-                realExternalId,
-                ct);
+            var v1Executed = false;
+            string? v1OperationId = null;
+            string? v1CommandId = null;
+            ExportResult result;
+            if (IsV1ExecutionActive(connection.adapterKey))
+            {
+                var intent = BuildProductExportIntent(product.Id, exportDataNonNull, realExternalId);
+                var effectiveRequestKey = !string.IsNullOrWhiteSpace(requestKey)
+                    ? requestKey.Trim()
+                    : (!string.IsNullOrWhiteSpace(operationId) ? $"product-export:{operationId}:{product.Id}" : null);
+
+                var admitted = await _commerceExecution!.AdmitProductExportAsync(
+                    connection,
+                    [intent],
+                    $"Export product #{productId} ({connection.name})",
+                    authorUserId,
+                    authorApiKeyId: null,
+                    effectiveRequestKey,
+                    ct);
+                v1OperationId = admitted.OperationId;
+                v1CommandId = admitted.CommandId;
+
+                if (preferAsync)
+                {
+                    return ProductExportResult.Pending(
+                        admitted.OperationId,
+                        admitted.CommandId,
+                        admitted.IsDuplicate,
+                        "Product export queued for durable execution");
+                }
+
+                var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+                if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+                {
+                    return ProductExportResult.Pending(
+                        admitted.OperationId,
+                        admitted.CommandId,
+                        admitted.IsDuplicate,
+                        "Product export queued for durable execution");
+                }
+
+                v1Executed = true;
+                if (s.Command.state == Delegat.Models.Integration.IntegrationCommandState.Completed)
+                {
+                    var confirmedExternalId = Delegat.Services.Integration.IntegrationCommandResultExtractor
+                        .ExtractItemExternalId(s.Stages, intent.ItemKey) ?? realExternalId;
+                    result = new ExportResult(
+                        Success: !string.IsNullOrWhiteSpace(confirmedExternalId),
+                        ExternalProductId: confirmedExternalId,
+                        ErrorMessage: string.IsNullOrWhiteSpace(confirmedExternalId)
+                            ? "Marketplace did not return a confirmed product ID"
+                            : null);
+                }
+                else
+                {
+                    result = new ExportResult(
+                        Success: false,
+                        ErrorMessage: s.Command.summary ?? "Product export failed",
+                        Retryable: false);
+                }
+            }
+            else
+            {
+                result = await adapter.ExportProductAsync(
+                    connection,
+                    exportDataNonNull,
+                    realExternalId,
+                    ct);
+            }
 
             if (!result.Success)
             {
@@ -692,9 +766,9 @@ public partial class ProductSyncService
             }
 
             // Auto-export price after successful product export.
-            // Medusa product upsert already writes prices and stock.
+            // V1 durable export and Medusa product upsert already include price/stock stages.
             var followUpErrors = new List<string>();
-            var skipFollowUp = string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase);
+            var skipFollowUp = v1Executed || string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase);
             if (!skipFollowUp && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             {
                 var priceInfo = await _mappingService.BuildPriceInfoFromGraphAsync(
@@ -789,7 +863,9 @@ public partial class ProductSyncService
                 existingLink.Id,
                 result.ExternalProductId!,
                 isNewProduct,
-                isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace"
+                isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace",
+                integrationOperationId: v1OperationId,
+                integrationCommandId: v1CommandId
             );
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -812,13 +888,17 @@ public partial class ProductSyncService
 
     /// <summary>
     /// Export multiple products to a marketplace in a single bulk operation.
-    /// Uses batched DB queries and a single adapter call for efficiency.
+    /// Uses batched DB queries and a single adapter call (or durable V1 coordinator
+    /// admission when IntegrationExecutionV1 is enabled).
     /// </summary>
     public async Task<BulkProductExportResult> ExportProductsBulkAsync(
         List<int> productIds,
         int connectionId,
         CancellationToken ct = default,
-        Func<string, CancellationToken, Task>? progress = null)
+        Func<string, CancellationToken, Task>? progress = null,
+        int authorUserId = 0,
+        string? requestKey = null,
+        bool preferAsync = false)
     {
         var itemResults = new List<BulkProductExportItemResult>();
 
@@ -1096,14 +1176,26 @@ public partial class ProductSyncService
             }
         }
 
-        // Call adapter bulk export
+        // Call adapter bulk export (or route through durable IntegrationCoordinator under V1)
         if (bulkItems.Count > 0)
         {
             try
             {
-                var bulkResult = progress != null && adapter is IBulkExportProgressAdapter progressAdapter
-                    ? await progressAdapter.ExportProductsBulkAsync(connection, bulkItems, progress, ct)
-                    : await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
+                BulkExportResult bulkResult;
+                if (IsV1ExecutionActive(connection.adapterKey))
+                {
+                    var (v1BulkResult, pendingResult) = await ExportProductsBulkViaIntegrationV1Async(
+                        connection, bulkItems, authorUserId, requestKey, preferAsync, itemResults, productIds.Count, ct);
+                    if (pendingResult != null)
+                        return pendingResult;
+                    bulkResult = v1BulkResult!;
+                }
+                else
+                {
+                    bulkResult = progress != null && adapter is IBulkExportProgressAdapter progressAdapter
+                        ? await progressAdapter.ExportProductsBulkAsync(connection, bulkItems, progress, ct)
+                        : await adapter.ExportProductsBulkAsync(connection, bulkItems, ct);
+                }
 
                 // Pre-load existing links by externalProductId to avoid N+1 queries
                     Dictionary<string, ProductMarketplaceLink> dupLinksByExternalId = new();
@@ -3632,6 +3724,100 @@ public partial class ProductSyncService
             return "Export details received, but could not be serialized for the log";
         }
     }
+    private static Delegat.Marketplace.SDK.IntegrationItemIntent BuildProductExportIntent(
+        int productId,
+        Dictionary<string, object> exportDataNonNull,
+        string? existingExternalId)
+    {
+        var data = new Dictionary<string, object?>(exportDataNonNull.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in exportDataNonNull)
+            data[k] = v;
+
+        return new Delegat.Marketplace.SDK.IntegrationItemIntent(
+            $"product:{productId}",
+            data,
+            ExpectedRemoteId: string.IsNullOrWhiteSpace(existingExternalId) ? null : existingExternalId.Trim());
+    }
+
+    private async Task<(BulkExportResult? Terminal, BulkProductExportResult? Pending)> ExportProductsBulkViaIntegrationV1Async(
+        MarketplaceConnection connection,
+        List<BulkExportItem> bulkItems,
+        int authorUserId,
+        string? requestKey,
+        bool preferAsync,
+        List<BulkProductExportItemResult> preflightFailures,
+        int totalRequestedCount,
+        CancellationToken ct)
+    {
+        var intents = bulkItems
+            .Select(i => BuildProductExportIntent(i.LocalProductId, i.ProductData, i.ExistingExternalId))
+            .ToList();
+
+        var admitted = await _commerceExecution!.AdmitProductExportAsync(
+            connection,
+            intents,
+            $"Bulk export {intents.Count} products ({connection.name})",
+            authorUserId,
+            authorApiKeyId: null,
+            requestKey,
+            ct);
+
+        if (preferAsync)
+        {
+            return (null, BulkProductExportResult.Pending(
+                admitted.OperationId,
+                admitted.CommandId,
+                admitted.IsDuplicate,
+                totalRequestedCount,
+                preflightFailures));
+        }
+
+        var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+        if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+        {
+            return (null, BulkProductExportResult.Pending(
+                admitted.OperationId,
+                admitted.CommandId,
+                admitted.IsDuplicate,
+                totalRequestedCount,
+                preflightFailures));
+        }
+
+        var stagesByItem = s.Stages
+            .GroupBy(st => st.itemKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var results = new List<ExportItemResult>(bulkItems.Count);
+        var successCount = 0;
+        var failedCount = 0;
+        foreach (var item in bulkItems)
+        {
+            var itemKey = $"product:{item.LocalProductId}";
+            var itemStages = stagesByItem.GetValueOrDefault(itemKey) ?? [];
+            var allApplied = itemStages.Count > 0
+                && itemStages.All(st => st.state == Delegat.Models.Integration.IntegrationStageState.Applied);
+            if (allApplied)
+            {
+                var confirmedExtId = Delegat.Services.Integration.IntegrationCommandResultExtractor
+                    .ExtractItemExternalId(itemStages, itemKey) ?? item.ExistingExternalId;
+                if (!string.IsNullOrWhiteSpace(confirmedExtId))
+                {
+                    successCount++;
+                    results.Add(new ExportItemResult(item.LocalProductId, true, confirmedExtId));
+                    continue;
+                }
+            }
+
+            failedCount++;
+            results.Add(new ExportItemResult(
+                item.LocalProductId,
+                false,
+                ErrorMessage: s.Command.summary ?? "Product export did not confirm applied state",
+                Retryable: false));
+        }
+
+        return (new BulkExportResult(bulkItems.Count, successCount, failedCount, results), null);
+    }
 }
 
 #region Result DTOs
@@ -3642,6 +3828,10 @@ public partial class ProductSyncService
 public class ProductExportResult
 {
     public bool IsSuccess { get; private set; }
+    public bool IsPending { get; private set; }
+    public bool IsDuplicate { get; private set; }
+    public string? IntegrationOperationId { get; private set; }
+    public string? IntegrationCommandId { get; private set; }
     public string? ErrorMessage { get; private set; }
     public int? LinkId { get; private set; }
     public string? ExternalProductId { get; private set; }
@@ -3652,7 +3842,13 @@ public class ProductExportResult
     /// <summary>
     /// Create a successful export result.
     /// </summary>
-    public static ProductExportResult Success(int linkId, string externalProductId, bool isNew, string message)
+    public static ProductExportResult Success(
+        int linkId,
+        string externalProductId,
+        bool isNew,
+        string message,
+        string? integrationOperationId = null,
+        string? integrationCommandId = null)
     {
         return new ProductExportResult
         {
@@ -3660,6 +3856,24 @@ public class ProductExportResult
             LinkId = linkId,
             ExternalProductId = externalProductId,
             IsNewProduct = isNew,
+            Message = message,
+            IntegrationOperationId = integrationOperationId,
+            IntegrationCommandId = integrationCommandId
+        };
+    }
+
+    /// <summary>
+    /// Create a pending durable export result (202 Accepted) when remote confirmation is asynchronous.
+    /// </summary>
+    public static ProductExportResult Pending(string operationId, string commandId, bool isDuplicate, string message)
+    {
+        return new ProductExportResult
+        {
+            IsSuccess = true,
+            IsPending = true,
+            IsDuplicate = isDuplicate,
+            IntegrationOperationId = operationId,
+            IntegrationCommandId = commandId,
             Message = message
         };
     }
@@ -3818,15 +4032,47 @@ public class BulkProductExportResult
     public int SuccessCount { get; }
     public int FailedCount { get; }
     public int TotalCount { get; }
+    public bool IsPending { get; }
+    public bool IsDuplicate { get; }
+    public string? IntegrationOperationId { get; }
+    public string? IntegrationCommandId { get; }
     public List<BulkProductExportItemResult> Items { get; }
 
-    public BulkProductExportResult(int successCount, int failedCount, int totalCount, List<BulkProductExportItemResult> items)
+    public BulkProductExportResult(
+        int successCount,
+        int failedCount,
+        int totalCount,
+        List<BulkProductExportItemResult> items,
+        bool isPending = false,
+        bool isDuplicate = false,
+        string? integrationOperationId = null,
+        string? integrationCommandId = null)
     {
         SuccessCount = successCount;
         FailedCount = failedCount;
         TotalCount = totalCount;
         Items = items;
+        IsPending = isPending;
+        IsDuplicate = isDuplicate;
+        IntegrationOperationId = integrationOperationId;
+        IntegrationCommandId = integrationCommandId;
     }
+
+    public static BulkProductExportResult Pending(
+        string operationId,
+        string commandId,
+        bool isDuplicate,
+        int totalCount,
+        List<BulkProductExportItemResult> preflightFailures) =>
+        new(
+            successCount: 0,
+            failedCount: preflightFailures.Count(i => !i.IsSuccess),
+            totalCount: totalCount,
+            items: preflightFailures,
+            isPending: true,
+            isDuplicate: isDuplicate,
+            integrationOperationId: operationId,
+            integrationCommandId: commandId);
 }
 
 /// <summary>Readiness of one catalog product for export to a marketplace.</summary>

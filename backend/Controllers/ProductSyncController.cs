@@ -226,6 +226,47 @@ public class ProductSyncController : ControllerBase
         await ProductNotTrashed.EnsureAsync(_context, productId, ct);
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = connection.storeId;
+
+        if (_productSyncService.IsV1ExecutionActive(connection.adapterKey))
+        {
+            var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+            var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+            var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+            var preferAsync = !string.IsNullOrWhiteSpace(prefer)
+                && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+
+            var v1Result = await _productSyncService.ExportProductAsync(
+                productId, connectionId, ct,
+                authorUserId: userId,
+                requestKey: requestKey,
+                preferAsync: preferAsync);
+
+            if (v1Result.IsPending)
+            {
+                return Accepted(new
+                {
+                    operationId = v1Result.IntegrationOperationId,
+                    commandId = v1Result.IntegrationCommandId,
+                    integrationState = "pending",
+                    statusUrl = $"/api/operations/{v1Result.IntegrationOperationId}/status",
+                    duplicate = v1Result.IsDuplicate,
+                    message = v1Result.Message
+                });
+            }
+
+            if (!v1Result.IsSuccess)
+                throw ApiException.BadRequest(v1Result.ErrorMessage ?? "Export failed", code: "export_failed");
+
+            return Ok(new
+            {
+                operationId = v1Result.IntegrationOperationId,
+                linkId = v1Result.LinkId,
+                externalProductId = v1Result.ExternalProductId,
+                isNewProduct = v1Result.IsNewProduct,
+                message = v1Result.Message
+            });
+        }
+
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
 
         var opExists = !string.IsNullOrEmpty(input?.OperationId) &&
@@ -622,8 +663,33 @@ public class ProductSyncController : ControllerBase
         await GetConnectionAsync(connectionId);
         await ProductNotTrashed.EnsureNoneAsync(_context, input.productIds ?? new List<int>(), ct);
 
+        var userId = _currentUserService.GetUserId() ?? 0;
+        var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+        var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+        var preferAsync = !string.IsNullOrWhiteSpace(prefer)
+            && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+
         var bulkResult = await _productSyncService.ExportProductsBulkAsync(
-            input.productIds ?? new List<int>(), connectionId, ct);
+            input.productIds ?? new List<int>(),
+            connectionId,
+            ct,
+            authorUserId: userId,
+            requestKey: requestKey,
+            preferAsync: preferAsync);
+
+        if (bulkResult.IsPending)
+        {
+            return Accepted(new
+            {
+                operationId = bulkResult.IntegrationOperationId,
+                commandId = bulkResult.IntegrationCommandId,
+                integrationState = "pending",
+                statusUrl = $"/api/operations/{bulkResult.IntegrationOperationId}/status",
+                duplicate = bulkResult.IsDuplicate,
+                preflightFailedCount = bulkResult.FailedCount
+            });
+        }
 
         var results = bulkResult.Items.Select(r => new
         {
@@ -1626,9 +1692,51 @@ public class ProductSyncController : ControllerBase
         if (priceLinkIds is { Count: > 0 })
             await ProductNotTrashed.EnsureLinksAsync(_context, priceLinkIds, ct);
 
-        var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = connection.storeId;
+        var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+        var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+        var preferAsync = !string.IsNullOrWhiteSpace(prefer)
+            && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+
+        if (_priceSyncService.IsV1PriceExecutionActive(connection.adapterKey))
+        {
+            var v1Result = await _priceSyncService.ExportPricesAsync(
+                connectionId,
+                input?.linkIds,
+                ct,
+                authorUserId: userId,
+                requestKey: requestKey,
+                preferAsync: preferAsync);
+
+            if (v1Result.IsPending)
+            {
+                return Accepted(new
+                {
+                    operationId = v1Result.IntegrationOperationId,
+                    commandId = v1Result.IntegrationCommandId,
+                    integrationState = "pending",
+                    statusUrl = $"/api/operations/{v1Result.IntegrationOperationId}/status",
+                    duplicate = v1Result.IsDuplicate,
+                    message = v1Result.Message
+                });
+            }
+
+            if (!v1Result.IsSuccess)
+                throw ApiException.BadRequest(v1Result.ErrorMessage ?? "Failed to export prices", code: "export_failed");
+
+            return Ok(new
+            {
+                operationId = v1Result.IntegrationOperationId,
+                updatedCount = v1Result.UpdatedCount,
+                skippedCount = v1Result.SkippedCount,
+                partial = v1Result.IsPartial,
+                message = v1Result.Message
+            });
+        }
+
+        var operationId = Guid.NewGuid().ToString("N");
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "price-export",
             "Export prices", connectionId: connectionId, connectionName: connection.name);
@@ -1673,9 +1781,51 @@ public class ProductSyncController : ControllerBase
         if (stockLinkIds is { Count: > 0 })
             await ProductNotTrashed.EnsureLinksAsync(_context, stockLinkIds, ct);
 
-        var operationId = Guid.NewGuid().ToString("N");
         var userId = _currentUserService.GetUserId() ?? 0;
         var storeId = connection.storeId;
+        var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+        var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+        var preferAsync = !string.IsNullOrWhiteSpace(prefer)
+            && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+
+        if (_priceSyncService.IsV1StockExecutionActive(connection.adapterKey))
+        {
+            var v1Result = await _priceSyncService.ExportStocksAsync(
+                connectionId,
+                input?.linkIds,
+                ct,
+                authorUserId: userId,
+                requestKey: requestKey,
+                preferAsync: preferAsync);
+
+            if (v1Result.IsPending)
+            {
+                return Accepted(new
+                {
+                    operationId = v1Result.IntegrationOperationId,
+                    commandId = v1Result.IntegrationCommandId,
+                    integrationState = "pending",
+                    statusUrl = $"/api/operations/{v1Result.IntegrationOperationId}/status",
+                    duplicate = v1Result.IsDuplicate,
+                    message = v1Result.Message
+                });
+            }
+
+            if (!v1Result.IsSuccess)
+                throw ApiException.BadRequest(v1Result.ErrorMessage ?? "Failed to export stock levels", code: "export_failed");
+
+            return Ok(new
+            {
+                operationId = v1Result.IntegrationOperationId,
+                updatedCount = v1Result.UpdatedCount,
+                skippedCount = v1Result.SkippedCount,
+                partial = v1Result.IsPartial,
+                message = v1Result.Message
+            });
+        }
+
+        var operationId = Guid.NewGuid().ToString("N");
 
         await _operationLogger.StartAsync(operationId, storeId, userId, "stock-export",
             "Export stock levels", connectionId: connectionId, connectionName: connection.name);
@@ -2844,6 +2994,47 @@ public class ProductSyncController : ControllerBase
         if (link.product == null)
             throw ApiException.BadRequest("Local product not found", code: "product_not_found");
 
+        if (_productSyncService.IsV1ExecutionActive(link.connection.adapterKey))
+        {
+            var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+            var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+            var prefer = HttpContext?.Request.Headers["Prefer"].ToString();
+            var preferAsync = !string.IsNullOrWhiteSpace(prefer)
+                && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+
+            var v1Result = await _productSyncService.ExportProductAsync(
+                link.productId,
+                link.connectionId,
+                ct,
+                authorUserId: userId,
+                requestKey: requestKey,
+                preferAsync: preferAsync);
+
+            if (v1Result.IsPending)
+            {
+                return Accepted(new
+                {
+                    operationId = v1Result.IntegrationOperationId,
+                    commandId = v1Result.IntegrationCommandId,
+                    integrationState = "pending",
+                    statusUrl = $"/api/operations/{v1Result.IntegrationOperationId}/status",
+                    duplicate = v1Result.IsDuplicate,
+                    message = v1Result.Message
+                });
+            }
+
+            if (!v1Result.IsSuccess)
+                throw ApiException.BadRequest(v1Result.ErrorMessage ?? "Export failed", code: "export_failed");
+
+            return Ok(new
+            {
+                operationId = v1Result.IntegrationOperationId,
+                success = true,
+                externalProductId = v1Result.ExternalProductId,
+                message = v1Result.Message ?? "Product exported successfully"
+            });
+        }
+
         var operationId = input?.OperationId ?? Guid.NewGuid().ToString("N");
         var storeId = selectedStoreId.Value;
 
@@ -2933,6 +3124,23 @@ public class ProductSyncController : ControllerBase
 
             // 6. Export as new product
             var exportResult = await _productSyncService.ExportProductAsync(productId, connectionId, ct);
+
+            if (exportResult.IsPending)
+            {
+                // Restore original SKU and do NOT prematurely archive the old remote product
+                // before the new product creation is confirmed.
+                link.product.sku = originalSku;
+                await _context.SaveChangesAsync(ct);
+                return Accepted(new
+                {
+                    operationId = exportResult.IntegrationOperationId,
+                    commandId = exportResult.IntegrationCommandId,
+                    integrationState = "pending",
+                    statusUrl = $"/api/operations/{exportResult.IntegrationOperationId}/status",
+                    archivedOld = false,
+                    message = "New product export is pending durable confirmation; old remote product was not archived yet"
+                });
+            }
 
             if (!exportResult.IsSuccess)
             {

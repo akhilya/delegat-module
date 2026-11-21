@@ -38,6 +38,7 @@ import {
 import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import { mapActions } from "vuex";
 import { displaySonnerError, displaySonnerSuccess } from "@/store/sonnerHelper";
+import { isIntegrationAcceptedResponse } from "@/lib/integrationExecution";
 import {
   Save,
   Plus,
@@ -510,7 +511,15 @@ export default {
         groupId: this.groupId,
         connectionId,
         onSuccess: (response) => {
-          const data = response.data.value;
+          const data = response.data?.value ?? {};
+          const httpStatus = response.response?.value?.status ?? 200;
+          if (isIntegrationAcceptedResponse(httpStatus, data)) {
+            const msg = data.message || this.$t("pages.productGroupEditPage.toast.exportDone");
+            displaySonnerSuccess(msg);
+            this.$store?.dispatch("operations/openPanel");
+            this.fetchSyncStatus();
+            return;
+          }
           const msg = data.message || data.externalGroupId || this.$t("pages.productGroupEditPage.toast.exportDone");
           if (data.isFieldBased) {
             displaySonnerSuccess(this.$t("pages.productGroupEditPage.toast.linkCreated", { message: msg }));

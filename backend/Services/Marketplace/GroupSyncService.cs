@@ -14,6 +14,7 @@ public class GroupSyncService
     private readonly DataContext _context;
     private readonly IMarketplaceAdapterRegistry _adapterRegistry;
     private readonly ILogger<GroupSyncService> _logger;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
     /// <summary>
     /// Initializes a new instance of <see cref="GroupSyncService"/>.
@@ -21,11 +22,13 @@ public class GroupSyncService
     public GroupSyncService(
         DataContext context,
         IMarketplaceAdapterRegistry adapterRegistry,
-        ILogger<GroupSyncService> logger)
+        ILogger<GroupSyncService> logger,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
         _logger = logger;
+        _commerceExecution = commerceExecution;
     }
 
     #region Export Groups
@@ -33,12 +36,15 @@ public class GroupSyncService
     /// <summary>
     /// Export a product group to a marketplace.
     /// Field-based: creates a link; MappingService adds group_id during product export.
-    /// Endpoint-based: calls the marketplace API to create the group.
+    /// Endpoint-based: calls the marketplace API to create the group (or routes through
+    /// IntegrationCoordinator when IntegrationExecutionV1 is enabled).
     /// </summary>
     public async Task<GroupExportResult> ExportGroupAsync(
         int productGroupId,
         int connectionId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int authorUserId = 0,
+        string? requestKey = null)
     {
         // Load group with members and their marketplace links
         var group = await _context.productGroups
@@ -90,7 +96,7 @@ public class GroupSyncService
             else
             {
                 return await ExportEndpointBasedGroupAsync(
-                    group, connection, adapter, existingLink, ct);
+                    group, connection, adapter, existingLink, ct, authorUserId, requestKey);
             }
         }
         catch (Exception ex)
@@ -182,7 +188,9 @@ public class GroupSyncService
         MarketplaceConnection connection,
         IMarketplaceAdapter adapter,
         ProductGroupMarketplaceLink? existingLink,
-        CancellationToken ct)
+        CancellationToken ct,
+        int authorUserId = 0,
+        string? requestKey = null)
     {
         // Collect external IDs of group products
         var productExternalIds = new List<string>();
@@ -214,6 +222,94 @@ public class GroupSyncService
         if (!productExternalIds.Any())
         {
             return GroupExportResult.Failure("Group contains no products");
+        }
+
+        if (_commerceExecution is { IsV1Enabled: true }
+            && _commerceExecution.CanExecute(connection.adapterKey, Delegat.Marketplace.SDK.IntegrationOperationKind.GroupUpdate))
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["localGroupId"] = group.Id,
+                ["delegatGroupId"] = group.Id.ToString(),
+                ["groupName"] = group.name,
+                ["name"] = group.name,
+                ["productIds"] = productExternalIds
+            };
+            var admitted = await _commerceExecution.AdmitGroupUpdateAsync(
+                connection,
+                $"group:{group.Id}",
+                data,
+                $"Export group '{group.name}' ({connection.name})",
+                authorUserId,
+                authorApiKeyId: null,
+                requestKey,
+                ct,
+                expectedRemoteId: existingLink?.externalGroupId);
+
+            var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+            if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+            {
+                return GroupExportResult.Pending(
+                    admitted.OperationId,
+                    admitted.CommandId,
+                    "Group export queued for durable execution");
+            }
+
+            if (s.Command.state != Delegat.Models.Integration.IntegrationCommandState.Completed)
+            {
+                if (existingLink != null)
+                {
+                    existingLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
+                    {
+                        status = ProductMarketplaceStatus.SyncError,
+                        lastErrorMessage = s.Command.summary ?? "Group export failed",
+                        lastSyncAt = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync(ct);
+                }
+                return GroupExportResult.Failure(s.Command.summary ?? "Error exporting group");
+            }
+
+            var resolvedExternalGroupId = Delegat.Services.Integration.IntegrationCommandResultExtractor
+                .ExtractGroupExternalId(s.Stages) ?? existingLink?.externalGroupId;
+            if (string.IsNullOrWhiteSpace(resolvedExternalGroupId))
+                return GroupExportResult.Failure("Marketplace did not return a group ID");
+
+            var isNew = existingLink == null;
+            if (existingLink == null)
+            {
+                // IntegrationExecutionWorker may have already projected the link in its own scope.
+                existingLink = await _context.productGroupMarketplaceLinks
+                    .FirstOrDefaultAsync(l =>
+                        l.productGroupId == group.Id &&
+                        l.connectionId == connection.Id, ct);
+            }
+            if (existingLink == null)
+            {
+                existingLink = new ProductGroupMarketplaceLink();
+                existingLink.AddFill(new ProductGroupMarketplaceLink.AddForm
+                {
+                    productGroupId = group.Id,
+                    connectionId = connection.Id,
+                    externalGroupId = resolvedExternalGroupId,
+                    externalGroupName = group.name,
+                    status = ProductMarketplaceStatus.Synced
+                });
+                _context.productGroupMarketplaceLinks.Add(existingLink);
+            }
+            else
+            {
+                existingLink.UpdateFill(new ProductGroupMarketplaceLink.UpdateForm
+                {
+                    externalGroupId = resolvedExternalGroupId,
+                    externalGroupName = group.name,
+                    status = ProductMarketplaceStatus.Synced,
+                    lastErrorMessage = null,
+                    lastSyncAt = DateTime.UtcNow
+                });
+            }
+            await _context.SaveChangesAsync(ct);
+            return GroupExportResult.Ok(existingLink.Id, resolvedExternalGroupId, isNew, isFieldBased: false);
         }
 
         // If a link already exists - update group membership
@@ -661,10 +757,16 @@ public record GroupExportResult(
     bool IsNew = false,
     bool IsFieldBased = false,
     string? ErrorMessage = null,
-    string? Message = null)
+    string? Message = null,
+    bool IsPending = false,
+    string? OperationId = null,
+    string? CommandId = null)
 {
     public static GroupExportResult Failure(string message) =>
         new(false, ErrorMessage: message);
+
+    public static GroupExportResult Pending(string operationId, string commandId, string? message = null) =>
+        new(true, Message: message, IsPending: true, OperationId: operationId, CommandId: commandId);
 
     public static GroupExportResult Ok(
         int linkId,

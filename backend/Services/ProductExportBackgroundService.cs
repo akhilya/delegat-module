@@ -241,8 +241,20 @@ public class ProductExportBackgroundService : BackgroundService
                 : (message, _) => _operationLogger.LogAsync(
                     firstItem.batchId, firstItem.storeId, "info", message);
 
+            var bulkRequestKey = $"pending-export-batch:{firstItem.batchId ?? "queue"}:{string.Join(',', pendingItems.OrderBy(p => p.Id).Select(p => p.Id))}";
             var result = await productSyncService.ExportProductsBulkAsync(
-                productIds, connectionId, linked.Token, progress);
+                productIds, connectionId, linked.Token, progress, requestKey: bulkRequestKey);
+
+            if (result.IsPending && !string.IsNullOrWhiteSpace(result.IntegrationCommandId))
+            {
+                if (firstItem.batchId != null)
+                {
+                    await _operationLogger.LogAsync(firstItem.batchId, firstItem.storeId, "info",
+                        $"Bulk export handed off to durable integration operation {result.IntegrationOperationId}; awaiting confirmed outcome.");
+                }
+                result = await AwaitPendingBulkCommandAsync(
+                    result, productIds, connectionId, linked.Token);
+            }
 
             foreach (var itemResult in result.Items
                 .GroupBy(r => r.ProductId)
@@ -428,16 +440,28 @@ public class ProductExportBackgroundService : BackgroundService
         try
         {
             // Export the product
+            var singleRequestKey = $"pending-export:{pending.Id}";
             var result = await productSyncService.ExportProductAsync(
                 pending.productId,
                 pending.connectionId,
-                ct);
+                ct,
+                requestKey: singleRequestKey);
+
+            if (result.IsPending && !string.IsNullOrWhiteSpace(result.IntegrationCommandId))
+            {
+                if (pending.batchId != null)
+                {
+                    await _operationLogger.LogAsync(pending.batchId, pending.storeId, "info",
+                        $"Export of {OperationProductRef.Format(pending.productId, pending.productName)} handed off to durable operation {result.IntegrationOperationId}; awaiting confirmation.");
+                }
+                result = await AwaitPendingSingleCommandAsync(result, pending.productId, pending.connectionId, ct);
+            }
 
             _logger.LogDebug(
                 "Product export result {Id}: IsSuccess={IsSuccess}, Error={Error}",
                 pending.Id, result.IsSuccess, result.ErrorMessage);
 
-            if (result.IsSuccess)
+            if (result.IsSuccess && !result.IsPending)
             {
                 pending.status = ProductExportStatus.Completed;
                 pending.completedAt = DateTime.UtcNow;
@@ -529,6 +553,158 @@ public class ProductExportBackgroundService : BackgroundService
                 pending.Id, pending.productId, pending.retryCount);
 
             return permanent;
+        }
+    }
+
+    private async Task<ProductExportResult> AwaitPendingSingleCommandAsync(
+        ProductExportResult pendingResult,
+        int productId,
+        int connectionId,
+        CancellationToken ct)
+    {
+        var commandId = pendingResult.IntegrationCommandId!;
+        var terminal = await PollCommandUntilTerminalAsync(commandId, pendingResult.IntegrationOperationId, ct);
+        if (terminal is not { } s)
+            return ProductExportResult.Failure("Durable product export command was not found", retryable: false);
+
+        var itemKey = $"product:{productId}";
+        var itemStages = s.Stages.Where(st => st.itemKey == itemKey).ToList();
+        var applied = itemStages.Count > 0
+            && itemStages.All(st => st.state == Delegat.Models.Integration.IntegrationStageState.Applied);
+        if (applied)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+            var link = await db.productMarketplaceLinks.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+            var extId = link?.externalProductId
+                ?? Delegat.Services.Integration.IntegrationCommandResultExtractor.ExtractItemExternalId(itemStages, itemKey);
+            if (!string.IsNullOrWhiteSpace(extId))
+            {
+                return ProductExportResult.Success(
+                    link?.Id ?? 0,
+                    extId,
+                    isNew: false,
+                    "Product exported via durable integration command",
+                    pendingResult.IntegrationOperationId,
+                    commandId);
+            }
+        }
+
+        return ProductExportResult.Failure(
+            s.Command.summary ?? "Durable product export did not confirm applied state",
+            retryable: false);
+    }
+
+    private async Task<BulkProductExportResult> AwaitPendingBulkCommandAsync(
+        BulkProductExportResult pendingResult,
+        List<int> productIds,
+        int connectionId,
+        CancellationToken ct)
+    {
+        var commandId = pendingResult.IntegrationCommandId!;
+        var terminal = await PollCommandUntilTerminalAsync(commandId, pendingResult.IntegrationOperationId, ct);
+        if (terminal is not { } s)
+        {
+            var missingItems = productIds
+                .Select(pid => new BulkProductExportItemResult(pid, false, ErrorMessage: "Durable bulk export command not found", Retryable: false))
+                .ToList();
+            return new BulkProductExportResult(0, missingItems.Count, productIds.Count, missingItems);
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        var links = await db.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.connectionId == connectionId && productIds.Contains(l.productId))
+            .ToDictionaryAsync(l => l.productId, ct);
+
+        var stagesByItem = s.Stages
+            .GroupBy(st => st.itemKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var preflightByProduct = pendingResult.Items
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var items = new List<BulkProductExportItemResult>(productIds.Count);
+        var successCount = 0;
+        var failedCount = 0;
+        foreach (var pid in productIds)
+        {
+            if (preflightByProduct.TryGetValue(pid, out var preflight))
+            {
+                items.Add(preflight);
+                if (preflight.IsSuccess) successCount++; else failedCount++;
+                continue;
+            }
+
+            var itemKey = $"product:{pid}";
+            var itemStages = stagesByItem.GetValueOrDefault(itemKey) ?? [];
+            var applied = itemStages.Count > 0
+                && itemStages.All(st => st.state == Delegat.Models.Integration.IntegrationStageState.Applied);
+            if (applied)
+            {
+                var extId = (links.TryGetValue(pid, out var link) ? link.externalProductId : null)
+                    ?? Delegat.Services.Integration.IntegrationCommandResultExtractor.ExtractItemExternalId(itemStages, itemKey);
+                if (!string.IsNullOrWhiteSpace(extId))
+                {
+                    successCount++;
+                    items.Add(new BulkProductExportItemResult(pid, true, ExternalProductId: extId));
+                    continue;
+                }
+            }
+
+            failedCount++;
+            items.Add(new BulkProductExportItemResult(
+                pid,
+                false,
+                ErrorMessage: s.Command.summary ?? "Durable product export did not confirm applied state",
+                Retryable: false));
+        }
+
+        return new BulkProductExportResult(
+            successCount,
+            failedCount,
+            productIds.Count,
+            items,
+            integrationOperationId: pendingResult.IntegrationOperationId,
+            integrationCommandId: commandId);
+    }
+
+    private async Task<(Delegat.Models.Integration.IntegrationCommand Command, List<Delegat.Models.Integration.IntegrationStage> Stages)?> PollCommandUntilTerminalAsync(
+        string commandId,
+        string? operationId,
+        CancellationToken ct)
+    {
+        while (true)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var coordinator = scope.ServiceProvider.GetService<Delegat.Services.Integration.IntegrationCoordinator>();
+            if (coordinator == null)
+                return null;
+
+            var snapshot = await coordinator.GetCommandSnapshotAsync(commandId, ct);
+            if (snapshot == null || Delegat.Models.Integration.IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
+                return snapshot;
+
+            try
+            {
+                await Task.Delay(POLL_INTERVAL_MS, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!string.IsNullOrWhiteSpace(operationId))
+                {
+                    using var stopScope = _scopeFactory.CreateScope();
+                    var stopCoordinator = stopScope.ServiceProvider.GetService<Delegat.Services.Integration.IntegrationCoordinator>();
+                    if (stopCoordinator != null)
+                    {
+                        try { await stopCoordinator.RequestStopByOperationIdAsync(operationId, CancellationToken.None); }
+                        catch { /* best effort */ }
+                    }
+                }
+                throw;
+            }
         }
     }
 }

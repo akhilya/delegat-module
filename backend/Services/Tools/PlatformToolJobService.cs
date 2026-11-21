@@ -13,19 +13,22 @@ public sealed class PlatformToolJobService
     private readonly PriceSyncService _prices;
     private readonly IOperationLogger _operations;
     private readonly MarketplaceActionExecutor _marketplaceActions;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
     public PlatformToolJobService(
         DataContext db,
         IMarketplaceAdapterRegistry adapters,
         PriceSyncService prices,
         IOperationLogger operations,
-        MarketplaceActionExecutor marketplaceActions)
+        MarketplaceActionExecutor marketplaceActions,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _db = db;
         _adapters = adapters;
         _prices = prices;
         _operations = operations;
         _marketplaceActions = marketplaceActions;
+        _commerceExecution = commerceExecution;
     }
 
     public async Task RunAsync(
@@ -195,9 +198,45 @@ public sealed class PlatformToolJobService
                 "info",
                 $"Clearing promotions on {connection.name} ({connection.adapterKey})");
 
+            Func<string, PromotionProductsUpdate, CancellationToken, Task<PromotionProductsResult>> updatePromotion =
+                _commerceExecution is { IsV1Enabled: true }
+                && _commerceExecution.CanExecute(connection.adapterKey, Delegat.Marketplace.SDK.IntegrationOperationKind.PromotionAction)
+                    ? async (id, update, token) =>
+                    {
+                        var admitted = await _commerceExecution.AdmitPromotionActionAsync(
+                            connection,
+                            id,
+                            update,
+                            authorUserId: 0,
+                            authorApiKeyId: null,
+                            requestKey: $"tool-clear-promo:{operationId}:{connection.Id}:{id}",
+                            token);
+                        var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, token);
+                        if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+                        {
+                            return new PromotionProductsResult
+                            {
+                                Success = false,
+                                ErrorMessage = $"Promotion clear queued in durable operation {admitted.OperationId} (pending confirmation)"
+                            };
+                        }
+                        return s.Command.state == Delegat.Models.Integration.IntegrationCommandState.Completed
+                            ? new PromotionProductsResult
+                            {
+                                Success = true,
+                                Removed = update.RemoveExternalProductIds?.Count ?? 0
+                            }
+                            : new PromotionProductsResult
+                            {
+                                Success = false,
+                                ErrorMessage = s.Command.summary ?? "Promotion update failed"
+                            };
+                    }
+                    : (id, update, token) => adapter.UpdatePromotionProductsAsync(connection, id, update, token);
+
             var summary = await PromotionMembershipClearer.ClearAsync(
                 (query, token) => adapter.GetPromotionsAsync(connection, query, token),
-                (id, update, token) => adapter.UpdatePromotionProductsAsync(connection, id, update, token),
+                updatePromotion,
                 (level, message) => _operations.LogAsync(operationId, storeId, level, message),
                 ct);
 

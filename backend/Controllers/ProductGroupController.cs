@@ -389,10 +389,26 @@ public class ProductGroupController : ControllerBase
         if (group == null)
             throw ApiException.NotFound(code: "group_not_found");
 
-        var result = await _groupSyncService.ExportGroupAsync(groupId, connectionId);
+        var authorUserId = _currentUserService.GetUserId() ?? 0;
+        var rawIdemKey = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        var requestKey = string.IsNullOrWhiteSpace(rawIdemKey) ? null : rawIdemKey.Trim();
+        var result = await _groupSyncService.ExportGroupAsync(
+            groupId, connectionId, HttpContext?.RequestAborted ?? CancellationToken.None, authorUserId, requestKey);
+
+        if (result.IsPending)
+        {
+            return Accepted(new
+            {
+                operationId = result.OperationId,
+                commandId = result.CommandId,
+                integrationState = "pending",
+                statusUrl = $"/api/operations/{result.OperationId}/status",
+                message = result.Message
+            });
+        }
 
         if (!result.IsSuccess)
-            throw ApiException.BadRequest(code: "export_failed");
+            throw ApiException.BadRequest(result.ErrorMessage ?? "Export failed", code: "export_failed");
 
         return Ok(new
         {
