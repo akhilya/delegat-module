@@ -214,8 +214,8 @@ public partial class MedusaPlugin
         if (action.Equals("cancel", StringComparison.OrdinalIgnoreCase))
         {
             var refundRaw = ReadStr(item.Data, "refund");
-            var refund = string.Equals(refundRaw, "true", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(refundRaw, "1", StringComparison.Ordinal);
+            var refund = !string.Equals(refundRaw, "false", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(refundRaw, "0", StringComparison.Ordinal);
             var reason = ReadStr(item.Data, "reason");
             var note = ReadStr(item.Data, "note");
             prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
