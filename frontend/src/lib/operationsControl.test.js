@@ -5,6 +5,7 @@ import {
   REQUEST_SCOPED_SYNC_TYPES,
   appendOperationLog,
   canStopOperation,
+  classifyStopOperationResponse,
   shouldApplyOperationFinish,
 } from "./operationsControl.js";
 
@@ -24,6 +25,22 @@ describe("operationsControl", () => {
     assert.equal(canStopOperation("catalog-connect-match", "running"), true);
     assert.equal(canStopOperation("product-transfer", "running"), true);
     assert.equal(canStopOperation("image-download", "paused"), true);
+  });
+
+  it("hides Stop once stopRequested is already true for an active operation", () => {
+    assert.equal(canStopOperation("integration", "running", false), true);
+    assert.equal(canStopOperation("integration", "running", true), false);
+  });
+
+  it("classifies coordinator-owned stop responses as stop_requested so authoritative partial/failed finishes apply", () => {
+    const durable = classifyStopOperationResponse({ status: "running", stopRequested: true });
+    assert.deepEqual(durable, { mode: "stop_requested", status: "running" });
+    assert.equal(shouldApplyOperationFinish(durable.status, "partial"), true);
+    assert.equal(shouldApplyOperationFinish(durable.status, "failed"), true);
+    assert.equal(shouldApplyOperationFinish(durable.status, "cancelled"), true);
+
+    const legacy = classifyStopOperationResponse({ status: "cancelled" });
+    assert.deepEqual(legacy, { mode: "cancelled", status: "cancelled" });
   });
 
   it("keeps the newest log lines when the window is full", () => {

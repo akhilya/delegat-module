@@ -30,8 +30,28 @@ export function isOperationActive(status) {
   return status === "running" || status === "paused";
 }
 
-export function canStopOperation(type, status) {
-  return isOperationActive(status) && !REQUEST_SCOPED_SYNC_TYPES.has(type);
+export function canStopOperation(type, status, stopRequested = false) {
+  return isOperationActive(status) && !stopRequested && !REQUEST_SCOPED_SYNC_TYPES.has(type);
+}
+
+/**
+ * Classifies `POST /operations/{id}/stop` responses. Coordinator-owned durable
+ * integration operations return `{ stopRequested: true, status }` and stay active
+ * until the worker finishes reconciling in-flight stages and broadcasts the
+ * authoritative terminal state (`cancelled`, `partial`, or `failed`).
+ */
+export function classifyStopOperationResponse(payload) {
+  const body = payload?.value ?? payload;
+  if (body && body.stopRequested === true) {
+    return {
+      mode: "stop_requested",
+      status: typeof body.status === "string" && body.status ? body.status : "running",
+    };
+  }
+  return {
+    mode: "cancelled",
+    status: typeof body?.status === "string" && body.status ? body.status : "cancelled",
+  };
 }
 
 /** Cancelled is sticky so a late worker finish cannot reopen the row. */

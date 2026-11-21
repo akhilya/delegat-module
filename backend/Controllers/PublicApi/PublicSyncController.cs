@@ -26,6 +26,7 @@ public class PublicSyncController : ControllerBase
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PublicSyncController> _logger;
     private readonly QuotaService _quotaService;
+    private readonly PriceSyncService? _priceSync;
 
     public PublicSyncController(
         PublicApiStoreContext storeCtx,
@@ -33,7 +34,8 @@ public class PublicSyncController : ControllerBase
         IOperationLogger operationLogger,
         IServiceScopeFactory scopeFactory,
         ILogger<PublicSyncController> logger,
-        QuotaService quotaService)
+        QuotaService quotaService,
+        PriceSyncService? priceSync = null)
     {
         _storeCtx = storeCtx;
         _db = db;
@@ -41,6 +43,7 @@ public class PublicSyncController : ControllerBase
         _scopeFactory = scopeFactory;
         _logger = logger;
         _quotaService = quotaService;
+        _priceSync = priceSync;
     }
 
     public class ProductIdsRequest
@@ -229,6 +232,39 @@ public class PublicSyncController : ControllerBase
     public async Task<IActionResult> ExportPrices(
         int storeId, int connectionId, [FromBody] LinkIdsRequest? body, CancellationToken ct)
     {
+        if (_priceSync != null)
+        {
+            var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
+            var connection = await RequireConnectionAsync(storeId, connectionId, ct);
+            if (_priceSync.IsV1PriceExecutionActive(connection.adapterKey))
+            {
+                var res = await _priceSync.ExportPricesAsync(
+                    connectionId,
+                    body?.linkIds,
+                    ct,
+                    authorUserId: userId,
+                    authorApiKeyId: ApiKeyId(),
+                    requestKey: PublicApiResults.ReadIdempotencyKey(HttpContext),
+                    preferAsync: true);
+                if (!res.IsSuccess)
+                    throw ApiException.BadRequest(res.ErrorMessage ?? "Price export failed", code: "export_failed");
+                if (res.IsPending && !string.IsNullOrWhiteSpace(res.IntegrationOperationId))
+                {
+                    return PublicApiResults.AcceptedIntegration(
+                        new Delegat.Services.Integration.IntegrationAdmitResult(
+                            res.IntegrationCommandId!,
+                            res.IntegrationOperationId!,
+                            res.IsDuplicate),
+                        storeId);
+                }
+                var noopOpId = Guid.NewGuid().ToString("N");
+                await _operationLogger.StartAsync(noopOpId, storeId, userId, "price-export", "Export prices",
+                    connectionId: connectionId, connectionName: connection.name, authorApiKeyId: ApiKeyId());
+                await _operationLogger.FinishAsync(noopOpId, storeId, "completed", res.Message ?? "No products with prices to export");
+                return PublicApiResults.AcceptedOperation(noopOpId, storeId, "completed");
+            }
+        }
+
         return await StartPriceStockOpAsync(storeId, connectionId, "price-export", "Export prices",
             async (scope, opId, sid, ct2) =>
             {
@@ -257,6 +293,39 @@ public class PublicSyncController : ControllerBase
     public async Task<IActionResult> ExportStocks(
         int storeId, int connectionId, [FromBody] LinkIdsRequest? body, CancellationToken ct)
     {
+        if (_priceSync != null)
+        {
+            var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
+            var connection = await RequireConnectionAsync(storeId, connectionId, ct);
+            if (_priceSync.IsV1StockExecutionActive(connection.adapterKey))
+            {
+                var res = await _priceSync.ExportStocksAsync(
+                    connectionId,
+                    body?.linkIds,
+                    ct,
+                    authorUserId: userId,
+                    authorApiKeyId: ApiKeyId(),
+                    requestKey: PublicApiResults.ReadIdempotencyKey(HttpContext),
+                    preferAsync: true);
+                if (!res.IsSuccess)
+                    throw ApiException.BadRequest(res.ErrorMessage ?? "Stock export failed", code: "export_failed");
+                if (res.IsPending && !string.IsNullOrWhiteSpace(res.IntegrationOperationId))
+                {
+                    return PublicApiResults.AcceptedIntegration(
+                        new Delegat.Services.Integration.IntegrationAdmitResult(
+                            res.IntegrationCommandId!,
+                            res.IntegrationOperationId!,
+                            res.IsDuplicate),
+                        storeId);
+                }
+                var noopOpId = Guid.NewGuid().ToString("N");
+                await _operationLogger.StartAsync(noopOpId, storeId, userId, "stock-export", "Export stock levels",
+                    connectionId: connectionId, connectionName: connection.name, authorApiKeyId: ApiKeyId());
+                await _operationLogger.FinishAsync(noopOpId, storeId, "completed", res.Message ?? "No products with stock to export");
+                return PublicApiResults.AcceptedOperation(noopOpId, storeId, "completed");
+            }
+        }
+
         return await StartPriceStockOpAsync(storeId, connectionId, "stock-export", "Export stock levels",
             async (scope, opId, sid, ct2) =>
             {

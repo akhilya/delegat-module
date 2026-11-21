@@ -11,6 +11,7 @@ import { randomUuidCompact } from "@/utils/uuid";
 import {
   OPERATION_TERMINAL_STATUSES,
   appendOperationLog,
+  classifyStopOperationResponse,
   isOperationActive,
   shouldApplyOperationFinish,
 } from "@/lib/operationsControl";
@@ -116,6 +117,7 @@ const mutations = {
     if (!op) return;
     if (!shouldApplyOperationFinish(op.status, status)) return;
     op.status = status;
+    op.stopRequested = false;
     if (progress) {
       op.progress = progress;
     }
@@ -135,11 +137,19 @@ const mutations = {
       }
     }
   },
+  SET_STOP_REQUESTED(state, { id, stopRequested = true }) {
+    const op = state.operations.find((o) => o.id === id);
+    if (!op) return;
+    op.stopRequested = Boolean(stopRequested);
+  },
   UPDATE_OPERATION_STATUS(state, { id, status }) {
     const op = state.operations.find((o) => o.id === id);
     if (!op) return;
     if (!shouldApplyOperationFinish(op.status, status)) return;
     op.status = status;
+    if (status === "running") {
+      op.stopRequested = false;
+    }
   },
   SET_OPERATION_PRODUCTS(state, { id, products }) {
     const op = state.operations.find((o) => o.id === id);
@@ -503,10 +513,28 @@ const actions = {
       }, { cache: false }).catch(() => {});
       return;
     }
-    commit("FINISH_OPERATION", { id, status: "cancelled", summary: t("store.operationsModule.stoppedSummary") });
+    commit("SET_STOP_REQUESTED", { id, stopRequested: true });
     try {
-      await http.post(`/operations/${id}/stop`);
-    } catch { /* already finished or network; UI already shows cancelled */ }
+      const response = await http.post(`/operations/${id}/stop`);
+      const outcome = classifyStopOperationResponse(response?.data);
+      if (outcome.mode === "cancelled") {
+        commit("FINISH_OPERATION", {
+          id,
+          status: outcome.status,
+          summary: t("store.operationsModule.stoppedSummary"),
+        });
+      }
+      // For coordinator-owned durable integration operations (`stopRequested: true`),
+      // keep the operation active with `stopRequested: true` so the worker's
+      // authoritative terminal broadcast (`cancelled`, `partial`, or `failed`) applies.
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 400 || status === 404) {
+        // Already finished on the server; leave authoritative status untouched.
+        return;
+      }
+      commit("SET_STOP_REQUESTED", { id, stopRequested: false });
+    }
   },
 
   async clearOperation({ commit }, id) {

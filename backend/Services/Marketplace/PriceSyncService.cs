@@ -20,20 +20,34 @@ public class PriceSyncService
     private readonly MappingService _mappingService;
     private readonly IOperationLogger _operationLogger;
     private readonly CurrencyService _currencyService;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
     public PriceSyncService(
         DataContext context,
         IMarketplaceAdapterRegistry adapterRegistry,
         MappingService mappingService,
         IOperationLogger operationLogger,
-        CurrencyService currencyService)
+        CurrencyService currencyService,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _context = context;
         _adapterRegistry = adapterRegistry;
         _mappingService = mappingService;
         _operationLogger = operationLogger;
         _currencyService = currencyService;
+        _commerceExecution = commerceExecution;
     }
+
+    public bool IsV1PriceExecutionActive(string? adapterKey) =>
+        _commerceExecution is { IsV1Enabled: true }
+        && _commerceExecution.CanExecute(adapterKey, Delegat.Marketplace.SDK.IntegrationOperationKind.PriceExport);
+
+    public bool IsV1StockExecutionActive(string? adapterKey) =>
+        _commerceExecution is { IsV1Enabled: true }
+        && _commerceExecution.CanExecute(adapterKey, Delegat.Marketplace.SDK.IntegrationOperationKind.StockExport);
+
+    public bool IsV1ExecutionActive(string? adapterKey) =>
+        IsV1PriceExecutionActive(adapterKey) || IsV1StockExecutionActive(adapterKey);
 
     /// <summary>
     /// Get a price comparison between local products and the marketplace
@@ -244,7 +258,11 @@ public class PriceSyncService
         List<int>? linkIds = null,
         CancellationToken ct = default,
         string? operationId = null,
-        int? storeId = null)
+        int? storeId = null,
+        int authorUserId = 0,
+        int? authorApiKeyId = null,
+        string? requestKey = null,
+        bool preferAsync = false)
     {
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
@@ -320,7 +338,7 @@ public class PriceSyncService
             .GroupBy(m => m.localCategoryId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var pricesToExport = new List<PriceInfo>();
+        var priceExportEntries = new List<(ProductMarketplaceLink Link, PriceInfo Price)>();
         var mappingNotSelected = 0;
         foreach (var l in uniqueExportableLinks)
         {
@@ -355,13 +373,14 @@ public class PriceSyncService
 
             var price = fromGraph ?? BuildLegacyPriceInfo(l, extendedPrice, storeBaseCurrency);
             if (price.Price != null)
-                pricesToExport.Add(price);
+                priceExportEntries.Add((l, price));
         }
 
-        var convertedPrices = new List<PriceInfo>();
-        foreach (var price in pricesToExport)
-            convertedPrices.Add(await ConvertPriceInfoForExportAsync(price, connection.storeId, ct));
-        pricesToExport = convertedPrices;
+        var convertedEntries = new List<(ProductMarketplaceLink Link, PriceInfo Price)>(priceExportEntries.Count);
+        foreach (var entry in priceExportEntries)
+            convertedEntries.Add((entry.Link, await ConvertPriceInfoForExportAsync(entry.Price, connection.storeId, ct)));
+        priceExportEntries = convertedEntries;
+        var pricesToExport = priceExportEntries.Select(e => e.Price).ToList();
 
         var skippedNoPrice = 0;
         foreach (var l in exportableLinks)
@@ -413,6 +432,22 @@ public class PriceSyncService
         if (canLog)
             await _operationLogger.LogAsync(operationId!, storeId!.Value, "info",
                 $"Prepared {pricesToExport.Count} prices, sending to {connection.adapterKey}...");
+
+        if (IsV1PriceExecutionActive(connection.adapterKey))
+        {
+            return await ExportPricesViaIntegrationV1Async(
+                connection,
+                priceExportEntries,
+                skippedNoPrice + skippedDuplicateExternalIds,
+                sw,
+                operationId,
+                storeId,
+                authorUserId,
+                authorApiKeyId,
+                requestKey,
+                preferAsync,
+                ct);
+        }
 
         try
         {
@@ -488,7 +523,11 @@ public class PriceSyncService
         List<int>? linkIds = null,
         CancellationToken ct = default,
         string? operationId = null,
-        int? storeId = null)
+        int? storeId = null,
+        int authorUserId = 0,
+        int? authorApiKeyId = null,
+        string? requestKey = null,
+        bool preferAsync = false)
     {
         var connection = await _context.marketplaceConnections
             .FirstOrDefaultAsync(c => c.Id == connectionId, ct);
@@ -579,6 +618,22 @@ public class PriceSyncService
             if (skippedDuplicateStockTargets > 0)
                 await _operationLogger.LogAsync(operationId!, storeId!.Value, "warning",
                     $"Skipped {skippedDuplicateStockTargets} duplicate external stock entries in one request");
+        }
+
+        if (IsV1StockExecutionActive(connection.adapterKey))
+        {
+            return await ExportStocksViaIntegrationV1Async(
+                connection,
+                uniqueStockExportEntries,
+                skippedDuplicateStockTargets,
+                sw,
+                operationId,
+                storeId,
+                authorUserId,
+                authorApiKeyId,
+                requestKey,
+                preferAsync,
+                ct);
         }
 
         try
@@ -811,6 +866,280 @@ public class PriceSyncService
         if (av == null) return null;
         return int.TryParse(av.value, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
+
+    private async Task<PriceSyncResult> ExportPricesViaIntegrationV1Async(
+        MarketplaceConnection connection,
+        List<(ProductMarketplaceLink Link, PriceInfo Price)> entries,
+        int baseSkipped,
+        System.Diagnostics.Stopwatch sw,
+        string? operationId,
+        int? storeId,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        bool preferAsync,
+        CancellationToken ct)
+    {
+        var canLog = operationId != null && storeId != null;
+        var isWb = string.Equals(connection.adapterKey, "wildberries", StringComparison.OrdinalIgnoreCase);
+        var intents = new List<Delegat.Marketplace.SDK.IntegrationItemIntent>(entries.Count);
+        var linkByItemKey = new Dictionary<string, ProductMarketplaceLink>(StringComparer.Ordinal);
+
+        foreach (var (link, price) in entries)
+        {
+            var itemKey = $"link:{link.Id}";
+            linkByItemKey[itemKey] = link;
+            var expectedRemoteId = string.IsNullOrWhiteSpace(price.ExternalProductId) ? null : price.ExternalProductId.Trim();
+            var data = new Dictionary<string, object?>();
+            if (expectedRemoteId != null)
+            {
+                data["externalProductId"] = expectedRemoteId;
+                data["productId"] = expectedRemoteId;
+            }
+            var sku = !string.IsNullOrWhiteSpace(price.ExternalSku) ? price.ExternalSku.Trim() : link.product?.sku?.Trim();
+            if (!string.IsNullOrWhiteSpace(sku))
+            {
+                data["sku"] = sku;
+                data["offer_id"] = sku;
+            }
+            if (price.Price.HasValue)
+            {
+                data["price"] = isWb
+                    ? Math.Round(price.Price.Value, 0, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture)
+                    : price.Price.Value.ToString(CultureInfo.InvariantCulture);
+            }
+            if (price.OldPrice.HasValue)
+                data["oldPrice"] = price.OldPrice.Value.ToString(CultureInfo.InvariantCulture);
+            if (price.DiscountedPrice.HasValue)
+                data["discountedPrice"] = price.DiscountedPrice.Value.ToString(CultureInfo.InvariantCulture);
+            if (price.MinPrice.HasValue)
+                data["minPrice"] = price.MinPrice.Value.ToString(CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(price.Currency))
+                data["currency"] = price.Currency.Trim();
+
+            intents.Add(new Delegat.Marketplace.SDK.IntegrationItemIntent(itemKey, data, ExpectedRemoteId: expectedRemoteId));
+        }
+
+        var effectiveRequestKey = !string.IsNullOrWhiteSpace(requestKey)
+            ? requestKey.Trim()
+            : (!string.IsNullOrWhiteSpace(operationId) ? $"price-export:{operationId}:{connection.Id}" : null);
+
+        var admitted = await _commerceExecution!.AdmitPriceExportAsync(
+            connection,
+            intents,
+            $"Export {intents.Count} prices ({connection.name})",
+            authorUserId,
+            authorApiKeyId,
+            effectiveRequestKey,
+            ct);
+
+        if (preferAsync)
+            return PriceSyncResult.Pending(admitted.OperationId, admitted.CommandId, admitted.IsDuplicate, "Price export queued for durable execution");
+
+        var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+        if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+            return PriceSyncResult.Pending(admitted.OperationId, admitted.CommandId, admitted.IsDuplicate, "Price export queued for durable execution");
+
+        if (s.Command.state is not (Delegat.Models.Integration.IntegrationCommandState.Completed or Delegat.Models.Integration.IntegrationCommandState.Partial))
+        {
+            sw.Stop();
+            var errMsg = s.Command.summary ?? "Price export failed";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error", $"{errMsg} - {sw.ElapsedMilliseconds}ms");
+            return PriceSyncResult.Failure(errMsg);
+        }
+
+        var appliedItemKeys = s.Stages
+            .GroupBy(st => st.itemKey, StringComparer.Ordinal)
+            .Where(g => g.All(st => st.state == Delegat.Models.Integration.IntegrationStageState.Applied))
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var appliedCount = 0;
+        foreach (var (itemKey, link) in linkByItemKey)
+        {
+            if (!appliedItemKeys.Contains(itemKey))
+                continue;
+            link.externalPrice = link.product!.price;
+            link.externalStock = link.product.storageQuantity;
+            link.lastSyncAt = DateTime.UtcNow;
+            appliedCount++;
+        }
+        if (appliedCount > 0)
+            await _context.SaveChangesAsync(ct);
+
+        sw.Stop();
+        var failedCount = entries.Count - appliedCount;
+        var msg = $"Exported {appliedCount} prices, errors: {failedCount}, skipped: {baseSkipped} - {sw.ElapsedMilliseconds}ms";
+        if (canLog)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, failedCount == 0 ? "success" : "warning", msg);
+
+        return PriceSyncResult.Success(
+            appliedCount,
+            failedCount + baseSkipped,
+            msg,
+            isPartial: s.Command.state == Delegat.Models.Integration.IntegrationCommandState.Partial,
+            integrationOperationId: admitted.OperationId,
+            integrationCommandId: admitted.CommandId);
+    }
+
+    private async Task<PriceSyncResult> ExportStocksViaIntegrationV1Async(
+        MarketplaceConnection connection,
+        List<(ProductMarketplaceLink Link, StockInfo Stock)> entries,
+        int baseSkipped,
+        System.Diagnostics.Stopwatch sw,
+        string? operationId,
+        int? storeId,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        bool preferAsync,
+        CancellationToken ct)
+    {
+        var canLog = operationId != null && storeId != null;
+        var defaultWarehouseId = TryGetConnectionSetting(connection, "warehouseId", "warehouse_id");
+        var intents = new List<Delegat.Marketplace.SDK.IntegrationItemIntent>(entries.Count);
+        var linkByItemKey = new Dictionary<string, ProductMarketplaceLink>(StringComparer.Ordinal);
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var (link, stock) = entries[i];
+            var itemKey = string.IsNullOrWhiteSpace(stock.VariantId)
+                ? $"link:{link.Id}:{i}"
+                : $"link:{link.Id}:v:{stock.VariantId}:{i}";
+            linkByItemKey[itemKey] = link;
+            var expectedRemoteId = string.IsNullOrWhiteSpace(stock.ExternalProductId) ? null : stock.ExternalProductId.Trim();
+            var warehouseId = !string.IsNullOrWhiteSpace(stock.WarehouseId) ? stock.WarehouseId.Trim() : defaultWarehouseId;
+            var sku = !string.IsNullOrWhiteSpace(stock.Barcode)
+                ? stock.Barcode.Trim()
+                : (!string.IsNullOrWhiteSpace(link.externalSku) ? link.externalSku.Trim() : link.product?.sku?.Trim());
+
+            var data = new Dictionary<string, object?>
+            {
+                ["stock"] = stock.Quantity,
+                ["quantity"] = stock.Quantity,
+                ["amount"] = stock.Quantity,
+                ["count"] = stock.Quantity
+            };
+            if (expectedRemoteId != null)
+            {
+                data["externalProductId"] = expectedRemoteId;
+                data["productId"] = expectedRemoteId;
+            }
+            if (!string.IsNullOrWhiteSpace(sku))
+            {
+                data["sku"] = sku;
+                data["offer_id"] = sku;
+                data["barcode"] = sku;
+            }
+            if (!string.IsNullOrWhiteSpace(stock.VariantId))
+                data["variantId"] = stock.VariantId.Trim();
+            if (!string.IsNullOrWhiteSpace(warehouseId))
+            {
+                data["warehouseId"] = warehouseId;
+                data["warehouse_id"] = warehouseId;
+            }
+
+            intents.Add(new Delegat.Marketplace.SDK.IntegrationItemIntent(itemKey, data, ExpectedRemoteId: expectedRemoteId));
+        }
+
+        var effectiveRequestKey = !string.IsNullOrWhiteSpace(requestKey)
+            ? requestKey.Trim()
+            : (!string.IsNullOrWhiteSpace(operationId) ? $"stock-export:{operationId}:{connection.Id}" : null);
+
+        var admitted = await _commerceExecution!.AdmitStockExportAsync(
+            connection,
+            intents,
+            $"Export {intents.Count} stock entries ({connection.name})",
+            authorUserId,
+            authorApiKeyId,
+            effectiveRequestKey,
+            ct);
+
+        if (preferAsync)
+            return PriceSyncResult.Pending(admitted.OperationId, admitted.CommandId, admitted.IsDuplicate, "Stock export queued for durable execution");
+
+        var snapshot = await _commerceExecution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+        if (snapshot is not { } s || !Delegat.Models.Integration.IntegrationCommandState.IsTerminal(s.Command.state))
+            return PriceSyncResult.Pending(admitted.OperationId, admitted.CommandId, admitted.IsDuplicate, "Stock export queued for durable execution");
+
+        if (s.Command.state is not (Delegat.Models.Integration.IntegrationCommandState.Completed or Delegat.Models.Integration.IntegrationCommandState.Partial))
+        {
+            sw.Stop();
+            var errMsg = s.Command.summary ?? "Stock export failed";
+            if (canLog)
+                await _operationLogger.LogAsync(operationId!, storeId!.Value, "error", $"{errMsg} - {sw.ElapsedMilliseconds}ms");
+            return PriceSyncResult.Failure(errMsg);
+        }
+
+        var appliedItemKeys = s.Stages
+            .GroupBy(st => st.itemKey, StringComparer.Ordinal)
+            .Where(g => g.All(st => st.state == Delegat.Models.Integration.IntegrationStageState.Applied))
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var updatedLinkIds = new HashSet<int>();
+        var appliedCount = 0;
+        foreach (var (itemKey, link) in linkByItemKey)
+        {
+            if (!appliedItemKeys.Contains(itemKey))
+                continue;
+            appliedCount++;
+            if (updatedLinkIds.Add(link.Id))
+            {
+                link.externalStock = link.product!.storageQuantity;
+                link.lastSyncAt = DateTime.UtcNow;
+            }
+        }
+        if (updatedLinkIds.Count > 0)
+            await _context.SaveChangesAsync(ct);
+
+        sw.Stop();
+        var failedCount = entries.Count - appliedCount;
+        var msg = $"Exported {appliedCount} stock entries, errors: {failedCount}, skipped: {baseSkipped} - {sw.ElapsedMilliseconds}ms";
+        if (canLog)
+            await _operationLogger.LogAsync(operationId!, storeId!.Value, failedCount == 0 ? "success" : "warning", msg);
+
+        return PriceSyncResult.Success(
+            appliedCount,
+            failedCount + baseSkipped,
+            msg,
+            isPartial: s.Command.state == Delegat.Models.Integration.IntegrationCommandState.Partial,
+            integrationOperationId: admitted.OperationId,
+            integrationCommandId: admitted.CommandId);
+    }
+
+    private static string? TryGetConnectionSetting(MarketplaceConnection connection, params string[] keys)
+    {
+        if (string.IsNullOrWhiteSpace(connection.settingsJson))
+            return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(connection.settingsJson);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return null;
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                foreach (var key in keys)
+                {
+                    if (!prop.Name.Equals(key, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    var val = prop.Value.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.String => prop.Value.GetString()?.Trim(),
+                        System.Text.Json.JsonValueKind.Number => prop.Value.GetRawText(),
+                        _ => null
+                    };
+                    if (!string.IsNullOrWhiteSpace(val))
+                        return val;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+        return null;
+    }
 }
 
 #region Result DTOs
@@ -860,18 +1189,45 @@ public class PriceComparisonItem
 public class PriceSyncResult
 {
     public bool IsSuccess { get; private set; }
+    public bool IsPending { get; private set; }
+    public bool IsPartial { get; private set; }
+    public bool IsDuplicate { get; private set; }
+    public string? IntegrationOperationId { get; private set; }
+    public string? IntegrationCommandId { get; private set; }
     public string? ErrorMessage { get; private set; }
     public int UpdatedCount { get; private set; }
     public int SkippedCount { get; private set; }
     public string? Message { get; private set; }
 
-    public static PriceSyncResult Success(int updated, int skipped, string message)
+    public static PriceSyncResult Success(
+        int updated,
+        int skipped,
+        string message,
+        bool isPartial = false,
+        string? integrationOperationId = null,
+        string? integrationCommandId = null)
     {
         return new PriceSyncResult
         {
             IsSuccess = true,
+            IsPartial = isPartial,
             UpdatedCount = updated,
             SkippedCount = skipped,
+            Message = message,
+            IntegrationOperationId = integrationOperationId,
+            IntegrationCommandId = integrationCommandId
+        };
+    }
+
+    public static PriceSyncResult Pending(string operationId, string commandId, bool isDuplicate, string message)
+    {
+        return new PriceSyncResult
+        {
+            IsSuccess = true,
+            IsPending = true,
+            IsDuplicate = isDuplicate,
+            IntegrationOperationId = operationId,
+            IntegrationCommandId = commandId,
             Message = message
         };
     }

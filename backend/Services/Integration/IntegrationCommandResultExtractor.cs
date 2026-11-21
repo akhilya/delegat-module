@@ -57,6 +57,13 @@ public static class IntegrationCommandResultExtractor
                     Success = command.state == IntegrationCommandState.Completed
                 };
             }
+            else if (command.kind == "group_update")
+            {
+                typedResult = new
+                {
+                    externalGroupId = ExtractGroupExternalId(stages)
+                };
+            }
         }
 
         return new
@@ -78,6 +85,83 @@ public static class IntegrationCommandResultExtractor
                 issues = TryParseJsonElement(s.issuesJson)
             }).ToList()
         };
+    }
+
+    public static string? ExtractGroupExternalId(IReadOnlyList<IntegrationStage> stages)
+    {
+        foreach (var stage in stages)
+        {
+            if (stage.state != IntegrationStageState.Applied)
+                continue;
+            var fromEvidence = ExtractPropertyFromJson(stage.evidenceJson, "collection_id", "collectionId", "externalGroupId", "group_id", "groupId", "id");
+            if (!string.IsNullOrWhiteSpace(fromEvidence))
+                return fromEvidence;
+            var fromReceipt = ExtractReceiptValue(stage.receiptJson);
+            if (!string.IsNullOrWhiteSpace(fromReceipt))
+                return fromReceipt;
+        }
+        return null;
+    }
+
+    public static string? ExtractItemExternalId(IReadOnlyList<IntegrationStage> stages, string itemKey)
+    {
+        foreach (var stage in stages)
+        {
+            if (!string.Equals(stage.itemKey, itemKey, StringComparison.Ordinal))
+                continue;
+            if (stage.state != IntegrationStageState.Applied)
+                continue;
+            var fromEvidence = ExtractPropertyFromJson(
+                stage.evidenceJson,
+                "externalProductId", "external_product_id", "product_id", "productId", "nmID", "nmId", "offer_id", "offerId", "external_id", "externalId", "id");
+            if (!string.IsNullOrWhiteSpace(fromEvidence))
+                return fromEvidence;
+            var fromReceipt = ExtractReceiptValue(stage.receiptJson);
+            if (!string.IsNullOrWhiteSpace(fromReceipt))
+                return fromReceipt;
+        }
+        return null;
+    }
+
+    private static string? ExtractPropertyFromJson(string? json, params string[] propertyNames)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+            foreach (var prop in propertyNames)
+            {
+                if (TryReadNonEmptyString(doc.RootElement, prop, out var value))
+                    return value;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        return null;
+    }
+
+    private static string? ExtractReceiptValue(string? receiptJson)
+    {
+        if (string.IsNullOrWhiteSpace(receiptJson))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(receiptJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && TryReadNonEmptyString(doc.RootElement, "Value", out var val))
+                return val;
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && TryReadNonEmptyString(doc.RootElement, "value", out var lowerVal))
+                return lowerVal;
+        }
+        catch (JsonException)
+        {
+        }
+        return null;
     }
 
     public static ShipmentMutationResult BuildShipmentMutationResult(

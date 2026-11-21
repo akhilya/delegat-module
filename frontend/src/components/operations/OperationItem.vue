@@ -201,7 +201,11 @@ const isFinished = computed(() =>
 const isRunning = computed(() => props.operation.status === "running");
 
 const canStop = computed(() =>
-  canStopOperation(props.operation.type, props.operation.status),
+  canStopOperation(
+    props.operation.type,
+    props.operation.status,
+    Boolean(props.operation.stopRequested),
+  ),
 );
 
 const showProgress = computed(() =>

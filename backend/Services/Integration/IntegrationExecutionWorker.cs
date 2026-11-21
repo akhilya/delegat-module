@@ -855,11 +855,31 @@ public class IntegrationExecutionWorker : BackgroundService
                     .SetProperty(x => x.summary, summary)
                     .SetProperty(x => x.finishedAt, (DateTime?)now), ct);
 
-            if (newState == IntegrationCommandState.Completed
-                && command.kind == "order_action"
-                && command.connectionId is int connId)
+            if (command.connectionId is int connId)
             {
-                await ProjectConfirmedOrderSnapshotAsync(db, command, connId, now, ct);
+                if (newState == IntegrationCommandState.Completed && command.kind == "order_action")
+                {
+                    await ProjectConfirmedOrderSnapshotAsync(db, command, connId, now, ct);
+                }
+                else if (newState == IntegrationCommandState.Completed && command.kind == "group_update")
+                {
+                    await ProjectConfirmedGroupLinkAsync(db, command, stages, connId, now, ct);
+                }
+                else if (newState is IntegrationCommandState.Completed or IntegrationCommandState.Partial
+                    && command.kind == "price_export")
+                {
+                    await ProjectConfirmedPriceLinksAsync(db, command, stages, connId, now, ct);
+                }
+                else if (newState is IntegrationCommandState.Completed or IntegrationCommandState.Partial
+                    && command.kind == "stock_export")
+                {
+                    await ProjectConfirmedStockLinksAsync(db, stages, connId, now, ct);
+                }
+                else if (newState is IntegrationCommandState.Completed or IntegrationCommandState.Partial
+                    && command.kind == "product_export")
+                {
+                    await ProjectConfirmedProductLinksAsync(db, command, stages, connId, now, ct);
+                }
             }
         }
         return new CommandTransition(
@@ -920,6 +940,310 @@ public class IntegrationExecutionWorker : BackgroundService
         if (string.Equals(live.Status, row.status, StringComparison.Ordinal))
             return;
         await snapshots.UpdateStatusProjectionAsync(row.Id, live, now, ct);
+    }
+
+    private static async Task ProjectConfirmedGroupLinkAsync(
+        DataContext db,
+        IntegrationCommand command,
+        List<IntegrationStage> stages,
+        int connectionId,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.inputJson))
+            return;
+
+        var localGroupId = 0;
+        string? groupName = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(command.inputJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                if (data.TryGetProperty("localGroupId", out var gid) && gid.ValueKind == JsonValueKind.Number)
+                    gid.TryGetInt32(out localGroupId);
+                if (data.TryGetProperty("groupName", out var gn) && gn.ValueKind == JsonValueKind.String)
+                    groupName = gn.GetString();
+                else if (data.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String)
+                    groupName = nm.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (localGroupId <= 0)
+            return;
+
+        var existing = await db.productGroupMarketplaceLinks.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.productGroupId == localGroupId && l.connectionId == connectionId, ct);
+
+        var externalGroupId = IntegrationCommandResultExtractor.ExtractGroupExternalId(stages)
+            ?? existing?.externalGroupId;
+        if (string.IsNullOrWhiteSpace(externalGroupId))
+            return;
+
+        if (existing != null)
+        {
+            await db.productGroupMarketplaceLinks
+                .Where(l => l.Id == existing.Id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.externalGroupId, externalGroupId)
+                    .SetProperty(x => x.externalGroupName, groupName ?? existing.externalGroupName)
+                    .SetProperty(x => x.status, Delegat.Enums.ProductMarketplaceStatus.Synced)
+                    .SetProperty(x => x.lastErrorMessage, (string?)null)
+                    .SetProperty(x => x.lastSyncAt, (DateTime?)now), ct);
+        }
+        else
+        {
+            var row = new Delegat.Models.Marketplace.ProductGroupMarketplaceLink();
+            row.AddFill(new Delegat.Models.Marketplace.ProductGroupMarketplaceLink.AddForm
+            {
+                productGroupId = localGroupId,
+                connectionId = connectionId,
+                externalGroupId = externalGroupId,
+                externalGroupName = groupName,
+                status = Delegat.Enums.ProductMarketplaceStatus.Synced
+            });
+            row.lastSyncAt = now;
+            db.productGroupMarketplaceLinks.Add(row);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            finally
+            {
+                db.Entry(row).State = EntityState.Detached;
+            }
+        }
+    }
+
+    private static async Task ProjectConfirmedPriceLinksAsync(
+        DataContext db,
+        IntegrationCommand command,
+        List<IntegrationStage> stages,
+        int connectionId,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.inputJson))
+            return;
+
+        var appliedItemKeys = stages
+            .GroupBy(s => s.itemKey, StringComparer.Ordinal)
+            .Where(g => g.All(s => s.state == IntegrationStageState.Applied))
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        if (appliedItemKeys.Count == 0)
+            return;
+
+        var updates = new List<(int LinkId, decimal Price)>();
+        try
+        {
+            using var doc = JsonDocument.Parse(command.inputJson);
+            if (!doc.RootElement.TryGetProperty("items", out var itemsEl) || itemsEl.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var item in itemsEl.EnumerateArray())
+            {
+                if (!item.TryGetProperty("ItemKey", out var ikEl) || ikEl.ValueKind != JsonValueKind.String)
+                    continue;
+                var itemKey = ikEl.GetString();
+                if (string.IsNullOrWhiteSpace(itemKey) || !appliedItemKeys.Contains(itemKey))
+                    continue;
+                if (!TryParsePrefixedId(itemKey, "link:", out var linkId))
+                    continue;
+                if (item.TryGetProperty("Data", out var dataEl)
+                    && dataEl.ValueKind == JsonValueKind.Object
+                    && dataEl.TryGetProperty("price", out var priceEl))
+                {
+                    if (priceEl.ValueKind == JsonValueKind.Number && priceEl.TryGetDecimal(out var numPrice))
+                    {
+                        updates.Add((linkId, numPrice));
+                    }
+                    else if (priceEl.ValueKind == JsonValueKind.String
+                        && decimal.TryParse(
+                            priceEl.GetString(),
+                            System.Globalization.NumberStyles.Number,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var strPrice))
+                    {
+                        updates.Add((linkId, strPrice));
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        foreach (var (linkId, price) in updates)
+        {
+            await db.productMarketplaceLinks
+                .Where(l => l.Id == linkId && l.connectionId == connectionId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.externalPrice, (decimal?)price)
+                    .SetProperty(x => x.lastSyncAt, (DateTime?)now), ct);
+        }
+    }
+
+    private static async Task ProjectConfirmedStockLinksAsync(
+        DataContext db,
+        List<IntegrationStage> stages,
+        int connectionId,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var appliedLinkIds = stages
+            .GroupBy(s => s.itemKey, StringComparer.Ordinal)
+            .Where(g => g.All(s => s.state == IntegrationStageState.Applied))
+            .Select(g => TryParsePrefixedId(g.Key, "link:", out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+        if (appliedLinkIds.Count == 0)
+            return;
+
+        var linkStocks = await db.productMarketplaceLinks.AsNoTracking()
+            .Where(l => l.connectionId == connectionId && appliedLinkIds.Contains(l.Id) && l.product != null)
+            .Select(l => new { l.Id, l.product!.storageQuantity })
+            .ToListAsync(ct);
+
+        foreach (var entry in linkStocks)
+        {
+            await db.productMarketplaceLinks
+                .Where(l => l.Id == entry.Id && l.connectionId == connectionId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.externalStock, entry.storageQuantity)
+                    .SetProperty(x => x.lastSyncAt, (DateTime?)now), ct);
+        }
+    }
+
+    private static async Task ProjectConfirmedProductLinksAsync(
+        DataContext db,
+        IntegrationCommand command,
+        List<IntegrationStage> stages,
+        int connectionId,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.inputJson))
+            return;
+
+        var stagesByItem = stages
+            .GroupBy(s => s.itemKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var items = new List<(string ItemKey, int ProductId, string? ExpectedRemoteId)>();
+        try
+        {
+            using var doc = JsonDocument.Parse(command.inputJson);
+            if (!doc.RootElement.TryGetProperty("items", out var itemsEl) || itemsEl.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var item in itemsEl.EnumerateArray())
+            {
+                if (!item.TryGetProperty("ItemKey", out var ikEl) || ikEl.ValueKind != JsonValueKind.String)
+                    continue;
+                var itemKey = ikEl.GetString();
+                if (string.IsNullOrWhiteSpace(itemKey) || !TryParsePrefixedId(itemKey, "product:", out var productId))
+                    continue;
+                string? expectedRemoteId = null;
+                if (item.TryGetProperty("ExpectedRemoteId", out var erEl) && erEl.ValueKind == JsonValueKind.String)
+                    expectedRemoteId = erEl.GetString();
+                items.Add((itemKey, productId, expectedRemoteId));
+            }
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        foreach (var (itemKey, productId, expectedRemoteId) in items)
+        {
+            if (!stagesByItem.TryGetValue(itemKey, out var itemStages)
+                || itemStages.Count == 0
+                || !itemStages.All(s => s.state == IntegrationStageState.Applied))
+                continue;
+
+            var confirmedExtId = IntegrationCommandResultExtractor.ExtractItemExternalId(itemStages, itemKey)
+                ?? expectedRemoteId;
+            if (string.IsNullOrWhiteSpace(confirmedExtId) || confirmedExtId == "0")
+                continue;
+
+            var existing = await db.productMarketplaceLinks.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.productId == productId && l.connectionId == connectionId, ct);
+
+            if (!Delegat.Services.Marketplace.MarketplaceExportIdentity.MayUpdateExternalProductId(
+                    existing?.externalProductId, expectedRemoteId, confirmedExtId, resolvedFrom: null))
+                continue;
+
+            if (existing != null)
+            {
+                await db.productMarketplaceLinks
+                    .Where(l => l.Id == existing.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.externalProductId, confirmedExtId)
+                        .SetProperty(x => x.status, Delegat.Enums.ProductMarketplaceStatus.Synced)
+                        .SetProperty(x => x.lastErrorMessage, (string?)null)
+                        .SetProperty(x => x.lastSyncAt, (DateTime?)now), ct);
+                continue;
+            }
+
+            var dup = await db.productMarketplaceLinks.AsNoTracking()
+                .AnyAsync(l => l.externalProductId == confirmedExtId && l.connectionId == connectionId, ct);
+            if (dup)
+                continue;
+
+            var productCatId = await db.products.AsNoTracking()
+                .Where(p => p.Id == productId)
+                .Select(p => p.categoryId)
+                .FirstOrDefaultAsync(ct);
+            int? mappingId = null;
+            if (productCatId != null)
+            {
+                var catMappings = await db.categoryMappings.AsNoTracking()
+                    .Where(m => m.connectionId == connectionId && m.localCategoryId == productCatId.Value)
+                    .Select(m => m.Id)
+                    .Take(2)
+                    .ToListAsync(ct);
+                if (catMappings.Count == 1)
+                    mappingId = catMappings[0];
+            }
+
+            var row = new Delegat.Models.Marketplace.ProductMarketplaceLink();
+            row.AddFill(new Delegat.Models.Marketplace.ProductMarketplaceLink.AddForm
+            {
+                productId = productId,
+                connectionId = connectionId,
+                externalProductId = confirmedExtId,
+                status = Delegat.Enums.ProductMarketplaceStatus.Synced,
+                categoryMappingId = mappingId
+            });
+            row.lastSyncAt = now;
+            db.productMarketplaceLinks.Add(row);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            finally
+            {
+                db.Entry(row).State = EntityState.Detached;
+            }
+        }
+    }
+
+    private static bool TryParsePrefixedId(string itemKey, string prefix, out int id)
+    {
+        id = 0;
+        if (!itemKey.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+        var rest = itemKey.AsSpan(prefix.Length);
+        var sep = rest.IndexOf(':');
+        if (sep >= 0)
+            rest = rest[..sep];
+        return int.TryParse(rest, out id) && id > 0;
     }
 
     private static string MapCommandToOperationStatus(string commandState) =>

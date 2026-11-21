@@ -254,7 +254,7 @@ Current canonical API/architecture/changelog references and the bounded operatio
 
 ## 11. Implementation & Verification Record (P1–P8)
 
-> **Important honesty boundary:** Offline implementation and automated verification across P1–P8 are complete, and `IntegrationExecutionV1` remains **OFF by default**. This program is **not** marked live-certified until the explicitly blocked external gates (`DELEGAT_TEST_MYSQL`, isolated OpenCart/WooCommerce shops, and Wildberries developer sandbox) are executed against approved isolated destinations.
+> **Important honesty boundary:** Offline implementation, cross-PR Devin Review closure, and automated verification across P1–P8 are complete, and `IntegrationExecutionV1` remains **OFF by default**. This program is **not** marked live-certified until the explicitly blocked external gates (`DELEGAT_TEST_MYSQL`, isolated OpenCart/WooCommerce shops, and Wildberries developer sandbox) are executed against approved isolated destinations.
 
 ### 11.1 Merged PR & Binary Pin Inventory
 
@@ -266,28 +266,30 @@ Current canonical API/architecture/changelog references and the bounded operatio
 | Host P5 (Commerce orders, shipments, packing, labels) | `akhilya/delegat-module` | `#110` | `a6bfb1e` |
 | Host P6 (Promotions, groups, pagination/import hardening) | `akhilya/delegat-module` | `#111` | `66defc6` |
 | Host P7 (Public API V1, bounded sync wait, UI/i18n) | `akhilya/delegat-module` | `#112` | `aace7fd` |
-| Host P8 (Conformance gate, ledger, cutover checklist) | `akhilya/delegat-module` | P8 PR (`integration-reliability/p8-conformance-closure`) | HEAD |
+| Host P8 (Conformance gate, ledger, cutover checklist) | `akhilya/delegat-module` | `#113` | `07e44ad` |
+| Host PR A (5 reviewed adapter pins, order/shipment review fixes, `IMediaBlobReader`, cabinet `OrderDetailSheet` 202 pack flow, `docker-compose.prod.yml` flag) | `akhilya/delegat-module` | `#114` | `40b3528` |
+| Host PR B (Catalog/group/price/stock/scheduled/tool/background-queue V1 routing, async worker link projection, honest `stopRequested` UI, 7-adapter A01 conformance) | `akhilya/delegat-module` | `integration-reliability/catalog-group-ui-wiring` | HEAD |
 | SDK (`IMarketplaceExecutionProvider`, transport contracts) | `akhilya/delegat-marketplace-sdk` | `#3`, `#4`, `#5` | `8a06d671aeccf8f1ffe031e4c1b3bba80d525762` |
-| OpenCart adapter | `akhilya/delegat-adapter-opencart` | `#2` | `213e4222eafba9853bb0d7b3ed9c0e84ca1b82f3` |
-| Ozon adapter | `akhilya/delegat-adapter-ozon` | `#6` | `e6b7610059a658d1b369a6999b0dcb38077798ff` |
-| Wildberries adapter | `akhilya/delegat-adapter-wildberries` | `#2` | `c3a18eb665ca6f069ba4db76831de928551510c2` |
-| WooCommerce adapter | `akhilya/delegat-adapter-woocommerce` | `#4` | `734acdd0880f7cd99b5839bb89afd90548e0aadd` |
-| Yandex Market adapter | `akhilya/delegat-adapter-yandex-market` | `#1` | `4d329fce453497dc65a24381e56806678223eaa3` |
-| Avito & Medusa adapters | Host-owned (`plugins/`) | `#108`, `#109`, `#110` | Host `main` |
+| OpenCart adapter | `akhilya/delegat-adapter-opencart` | `#2`, `#3` | `56fba4440060b9f91f348aa98fbeec948d2876ef` |
+| Ozon adapter | `akhilya/delegat-adapter-ozon` | `#6`, `#7` | `566a7067423cbf306d01629bf2a1cf6e08a3fb19` |
+| Wildberries adapter | `akhilya/delegat-adapter-wildberries` | `#2`, `#3`, `#4` | `800484d6a2630e6044305a9e529394e65381813f` |
+| WooCommerce adapter | `akhilya/delegat-adapter-woocommerce` | `#4`, `#5` | `3704b4331ad56bcfb5cd83a0cc029f93d25b884a` |
+| Yandex Market adapter | `akhilya/delegat-adapter-yandex-market` | `#1`, `#2` | `98413790c45389028d94f2cf5d6badfc77f07c79` |
+| Avito & Medusa adapters | Host-owned (`plugins/`) | `#108`, `#109`, `#110`, `#114`, Host PR B | Host `main` |
 
 Architecture lock verified: **4 persistence models/tables** (`IntegrationCommand`, `IntegrationStage`, `IntegrationAttempt`, `IntegrationScopeState`), **1 coordinator**, **1 polling worker**, **1 preparation service**, **1 admission service**, and **1 configuration switch** (`IntegrationExecutionV1`, default `false`).
 
 ### 11.2 Full P8 Verification Gate Results
 
-Executed against host `main` (`aace7fd`) + P8 branch with all 7 plugins built:
+Executed against host `main` (`40b3528`) + `integration-reliability/catalog-group-ui-wiring` with all 7 plugins built from exact pinned SHAs:
 
 1. `dotnet test backend.Tests/Delegat.Tests.csproj --configuration Debug -p:BuildPlugins=true -maxcpucount:1`
-   - **Result:** `Passed! - Failed: 0, Passed: 4135, Skipped: 14, Total: 4149` (58 s).
+   - **Result:** `Passed! - Failed: 0, Passed: 4143, Skipped: 14, Total: 4157` (58 s).
    - **Skipped (explicitly blocked — no `DELEGAT_TEST_MYSQL` instance provisioned):** 2 `IntegrationExecution` MySQL tests (`EffectfulSend_CommitsFenceOnMySql`, `ConcurrentMySqlClaimers_CannotBothOwnSameScope`) + 12 `LocalMySqlCatalogTests`.
 2. `npm --prefix frontend run build`
-   - **Result:** `✓ built in 24.09s` (0 errors).
+   - **Result:** `✓ built in 25.51s` (0 errors).
 3. `node --test frontend/src/lib/integrationExecution.test.js frontend/src/lib/operationsControl.test.js frontend/src/lib/operationLogText.test.js frontend/src/lib/i18nMessages.test.js`
-   - **Result:** `pass 20, fail 0` (4 suites).
+   - **Result:** `pass 27, fail 0` (4 suites).
 4. `npm run check:docs`
    - **Result:** `Project documentation checks passed (45 indexed docs, 7 adapters).`
 
@@ -295,21 +297,21 @@ Executed against host `main` (`aace7fd`) + P8 branch with all 7 plugins built:
 
 | ID | Status | Evidence / Blocker |
 |---|---|---|
-| **A01** | Offline-proven | `IntegrationExecutionP4HostTests`, `IntegrationExecutionP4AdaptersTests` (all 7 adapters implement `IMarketplaceExecutionProvider`; single vs. bulk preparation parity verified, no silent stage drop). |
-| **A02** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests` (canonical JSON hashing, legacy raw-hash retry compatibility, `409 integration_request_conflict`, independent multi-operation ownership). |
-| **A03** | Offline-proven | `IntegrationExecutionP4AdaptersTests`, `IntegrationExecutionP5Tests`, `IntegrationExecutionP6Tests` (pure `PrepareAsync` preflight refusal before mutation; conflicting `extra.orderId`/`extra.action` and add+remove promotion conflicts rejected before admission). |
+| **A01** | Offline-proven | `IntegrationExecutionP4HostTests`, `IntegrationExecutionP4AdaptersTests`, `IntegrationExecutionP8CatalogRoutingTests` (`AllSevenAdapters_A01_SingleVsBulkAndOneItemTail_PrepareIdenticalStages` + `ProductSync_SingleAndBulk_V1RoutesThroughCoordinator_WithIdenticalPayloadsAndAsyncProjection` verify single vs. bulk and 1-item tail stage parity across all 7 adapters with 0 legacy calls under V1). |
+| **A02** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests`, `IntegrationExecutionP8CatalogRoutingTests` (canonical JSON hashing, legacy raw-hash retry compatibility, `409 integration_request_conflict`, independent multi-operation ownership). |
+| **A03** | Offline-proven | `IntegrationExecutionP4AdaptersTests`, `IntegrationExecutionP5Tests`, `IntegrationExecutionP6Tests`, `IntegrationExecutionP8CatalogRoutingTests` (pure `PrepareAsync` preflight refusal before mutation; canonicalized order metadata conflict check; add+remove promotion conflict refusal; operation-kind adapter gating via `CanExecute`). |
 | **A04** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionHttpTransportTests` (committed attempt fence before send, lost-response confirmation, absent reconciliation stays `unknown`). |
-| **A05** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP4AdaptersTests` (Medusa non-object bulk result guard, partial/unknown never projected as completed). |
+| **A05** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP4AdaptersTests`, `IntegrationExecutionP8CatalogRoutingTests` (Medusa non-object bulk result guard, Wildberries missing supply ID fails closed as `Unknown`, partial/unknown never projected as completed, rejected price/product items never overwrite confirmed links). |
 | **A06** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionDeferralAndSeamTests` (`DeferredBeforeSend` recovery after provider pause without consuming send budget; restart resumes missing stage). |
-| **A07** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests` (`OperationsStop_AfterSendStarted_PreservesAuthoritativeOutcomeOnPublicPoll` confirms Stop cancels unsent stages while confirming sent stages as `partial` or `unknown`). |
+| **A07** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests`, `operationsControl.test.js` (`OperationsStop_AfterSendStarted_PreservesAuthoritativeOutcomeOnPublicPoll` + honest `stopRequested` UI handling so coordinator-owned stops keep operations active until authoritative `cancelled`/`partial`/`failed` broadcasts). |
 | **A08** | Partially blocked | SQLite concurrency & per-entity ordering proven in `IntegrationExecutionP2Tests` / `IntegrationExecutionScopeAdmissionTests`; **MySQL row-lock concurrency (`ConcurrentMySqlClaimers_CannotBothOwnSameScope`) and MySQL fence (`EffectfulSend_CommitsFenceOnMySql`) are BLOCKED** pending `DELEGAT_TEST_MYSQL`. |
-| **A09** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests` (atomic `ExecuteUpdateAsync` snapshot projection rollback-retry safety, guarded history delete, unresolved command protection). |
+| **A09** | Offline-proven | `IntegrationExecutionP2Tests`, `IntegrationExecutionP7Tests`, `IntegrationExecutionP8CatalogRoutingTests` (atomic `ExecuteUpdateAsync` snapshot & confirmed link projections for `order_action`, `group_update`, `price_export`, `stock_export`, and `product_export`, guarded history delete, unresolved command protection). |
 | **A10** | Offline-proven | `IntegrationExecutionScopeAdmissionTests`, `IntegrationExecutionP3Tests` (account/method/entity windows, dynamic quota, cooldown, shared seller budgets across keys, HTTPS-only bridge route policy). |
 | **A11** | Offline-proven | `IntegrationExecutionHttpTransportTests`, `IntegrationExecutionP4AdaptersTests` (durable attempt evidence per effectful dispatch, secret redaction, structured error classification). |
-| **A12** | Offline-proven | Adapter PRs (`OpenCart#2`, `Ozon#6`, `Wildberries#2`, `WooCommerce#4`, `YandexMarket#1`) + `IntegrationExecutionP4AdaptersTests` (D1–D4 fixtures, Ozon D2 async labels, WB D3 `trbx_assign` refusal, 200 semantic errors, 401/403/420/429/5xx). |
-| **A13** | Offline-proven | `IntegrationExecutionP5Tests`, `IntegrationExecutionP6Tests`, `IntegrationExecutionP7Tests` (confirmed order snapshot projection, buffered complete group pagination, incomplete promotion clear flagging). |
-| **A14** | Offline-proven | `IntegrationExecutionP7Tests`, `integrationExecution.test.js`, `i18nMessages.test.js`, `OrderDetailSheet.vue` (200/202/409/poll/Stop, `apiKeyId` attribution, EN/RU issue codes, store isolation). |
-| **A15** | **BLOCKED (external)** | Offline cutover/rollback rehearsal (`CallerDisconnect_DoesNotCancelAdmittedCommand_WhileUserStopAndRollbackDrainWorkCleanly`) and binary pin inventory are complete; **native isolated-shop OpenCart/WooCommerce runs and Wildberries developer sandbox runs are BLOCKED** pending isolated test destinations and sandbox credentials (configured seller accounts and `.env` were never touched). |
+| **A12** | Offline-proven | Adapter PRs (`OpenCart#2/#3`, `Ozon#6/#7`, `Wildberries#2/#3/#4`, `WooCommerce#4/#5`, `YandexMarket#1/#2`) + `IntegrationExecutionP4AdaptersTests` + `IntegrationExecutionP7Tests` (D1–D4 fixtures, Ozon D2 async labels, WB D3 `trbx_assign` refusal & supply ID evidence, Yandex `PARTIALLY_AUTO` pending until `MANUAL`, Woo stored-image `Media` stage & `removeAll` safety, OpenCart fail-closed effective SKU). |
+| **A13** | Offline-proven | `IntegrationExecutionP5Tests`, `IntegrationExecutionP6Tests`, `IntegrationExecutionP7Tests`, `IntegrationExecutionP8CatalogRoutingTests` (confirmed order snapshot & catalog/group/price/stock link projections, buffered complete group pagination, V1 promotion clearing in `PlatformToolJobService`). |
+| **A14** | Offline-proven | `IntegrationExecutionP7Tests`, `integrationExecution.test.js`, `operationsControl.test.js`, `i18nMessages.test.js`, `OrderDetailSheet.vue`, `productGroupEditPage.vue` (200/202/409/poll/Stop, `apiKeyId` attribution, EN/RU issue codes, store isolation, 202 cabinet pack & group export handling). |
+| **A15** | **BLOCKED (external)** | Offline cutover/rollback rehearsal (`CallerDisconnect_DoesNotCancelAdmittedCommand_WhileUserStopAndRollbackDrainWorkCleanly`), `docker-compose.prod.yml` env forwarding, and exact binary pin inventory are complete; **native isolated-shop OpenCart/WooCommerce runs and Wildberries developer sandbox runs are BLOCKED** pending isolated test destinations and sandbox credentials (configured seller accounts and `.env` were never touched). |
 
 ### 11.4 Bounded Cutover & Rollback Operational Checklist
 
@@ -319,7 +321,7 @@ Executed against host `main` (`aace7fd`) + P8 branch with all 7 plugins built:
    - Pause legacy write admissions, classify in-flight legacy operations (completed = historical; provably unsent = safe to readmit; ambiguous = hold for manual review — never mass-replay legacy rows or overwrite `-1` import checkpoints).
 2. **Enable V1:**
    - Ensure `IntegrationExecutionV1=true` is passed into the API process/container environment (when running under Docker Compose, forward the env var and recreate the container rather than a plain restart).
-   - Verify `GET /api/v1/stores/{storeId}/operations/{operationId}` returns `integration` summaries and `Operations` panel Stop/polling works for a single canary write.
+   - Verify `GET /api/v1/stores/{storeId}/operations/{operationId}` and `GET /api/operations/{operationId}/status` return `integration` summaries and `Operations` panel Stop/polling works for a single canary write.
 3. **Rollback procedure (if an incident occurs):**
    - Set `IntegrationExecutionV1=false` in the API process/container environment and recreate/restart the API process.
    - New V1 admissions are blocked immediately while `IntegrationExecutionWorker` continues draining/confirming any already-admitted V1 commands. Wait for active/unresolved V1 commands on a given entity to drain or resolve before submitting competing legacy writes for that entity (never hand V1 commands back to legacy workers, never drop the 4 integration tables, and never trigger automatic remote rollback).

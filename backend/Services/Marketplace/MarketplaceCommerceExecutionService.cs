@@ -379,6 +379,127 @@ public sealed class MarketplaceCommerceExecutionService
     }
 
     /// <summary>
+    /// Returns true when V1 execution is enabled, the adapter implements <see cref="IMarketplaceExecutionProvider"/>,
+    /// and the adapter supports <paramref name="operationKind"/>.
+    /// </summary>
+    public bool CanExecute(string? adapterKey, IntegrationOperationKind operationKind) =>
+        _options.Enabled
+        && !string.IsNullOrWhiteSpace(adapterKey)
+        && _providerResolver(adapterKey) is not null
+        && SupportsOperation(adapterKey, operationKind);
+
+    /// <summary>
+    /// Returns true when V1 execution is enabled and the adapter implements <see cref="IMarketplaceExecutionProvider"/>.
+    /// </summary>
+    public bool CanExecute(string? adapterKey) =>
+        _options.Enabled && !string.IsNullOrWhiteSpace(adapterKey) && _providerResolver(adapterKey) is not null;
+
+    private static bool SupportsOperation(string adapterKey, IntegrationOperationKind kind) =>
+        adapterKey.Trim().ToLowerInvariant() switch
+        {
+            "avito" => kind == IntegrationOperationKind.PriceExport,
+            "medusa" => kind is IntegrationOperationKind.ProductExport
+                or IntegrationOperationKind.PriceExport
+                or IntegrationOperationKind.StockExport
+                or IntegrationOperationKind.GroupUpdate
+                or IntegrationOperationKind.OrderAction,
+            "opencart" or "woocommerce" or "yandex-market" => kind is IntegrationOperationKind.ProductExport
+                or IntegrationOperationKind.PriceExport
+                or IntegrationOperationKind.StockExport
+                or IntegrationOperationKind.OrderAction
+                or IntegrationOperationKind.PromotionAction,
+            "ozon" or "wildberries" => kind is IntegrationOperationKind.ProductExport
+                or IntegrationOperationKind.PriceExport
+                or IntegrationOperationKind.StockExport
+                or IntegrationOperationKind.OrderAction
+                or IntegrationOperationKind.ShipmentAction
+                or IntegrationOperationKind.PromotionAction,
+            // Custom / test adapters registered via provider resolver decide support during preparation.
+            _ => true
+        };
+
+    /// <summary>
+    /// Admits a single or bulk product catalog export through the durable coordinator (P4/A01).
+    /// </summary>
+    public Task<IntegrationAdmitResult> AdmitProductExportAsync(
+        MarketplaceConnection connection,
+        IReadOnlyList<IntegrationItemIntent> intents,
+        string title,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(intents);
+        return AdmitPreparedItemsAsync(
+            connection,
+            IntegrationOperationKind.ProductExport,
+            "product_export",
+            intents,
+            title,
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            legacySingleItemPayload: null,
+            ct);
+    }
+
+    /// <summary>
+    /// Admits a price export through the durable coordinator (P4).
+    /// </summary>
+    public Task<IntegrationAdmitResult> AdmitPriceExportAsync(
+        MarketplaceConnection connection,
+        IReadOnlyList<IntegrationItemIntent> intents,
+        string title,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(intents);
+        return AdmitPreparedItemsAsync(
+            connection,
+            IntegrationOperationKind.PriceExport,
+            "price_export",
+            intents,
+            title,
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            legacySingleItemPayload: null,
+            ct);
+    }
+
+    /// <summary>
+    /// Admits a stock export through the durable coordinator (P4).
+    /// </summary>
+    public Task<IntegrationAdmitResult> AdmitStockExportAsync(
+        MarketplaceConnection connection,
+        IReadOnlyList<IntegrationItemIntent> intents,
+        string title,
+        int authorUserId,
+        int? authorApiKeyId,
+        string? requestKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(intents);
+        return AdmitPreparedItemsAsync(
+            connection,
+            IntegrationOperationKind.StockExport,
+            "stock_export",
+            intents,
+            title,
+            authorUserId,
+            authorApiKeyId,
+            requestKey,
+            legacySingleItemPayload: null,
+            ct);
+    }
+
+    /// <summary>
     /// Admits a marketplace product group upsert through the durable coordinator (P6).
     /// </summary>
     public Task<IntegrationAdmitResult> AdmitGroupUpdateAsync(
@@ -389,7 +510,8 @@ public sealed class MarketplaceCommerceExecutionService
         int authorUserId,
         int? authorApiKeyId,
         string? requestKey,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? expectedRemoteId = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(data);
@@ -402,7 +524,7 @@ public sealed class MarketplaceCommerceExecutionService
             "group_update",
             groupKey.Trim(),
             data,
-            expectedRemoteId: null,
+            expectedRemoteId: string.IsNullOrWhiteSpace(expectedRemoteId) ? null : expectedRemoteId.Trim(),
             title: title,
             authorUserId,
             authorApiKeyId,
