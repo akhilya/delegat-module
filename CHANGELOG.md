@@ -108,6 +108,10 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Cabinet assistant no longer treats a nonzero Python exit code or timeout as a successful plan step; file-driven write plans require inspected attachment data and validated catalog matches.
 - Cabinet assistant can save small generated text to store storage: `POST /store-storage/files/from-text` accepts `{ fileName, text, contentType?, folderId? }` (UTF-8, at most 262144 bytes; plain text, CSV, or JSON) and returns an authenticated `downloadUrl` for the selected store. The write requires `files.manage` and, like every assistant mutation, a confirmed plan; binary and large artifacts remain unsupported.
 - Cabinet assistant can also save small generated text into a product's private files: `POST /products/{productId}/files/from-text` accepts the same bounded body and returns the file's authenticated `/api/files/{id}/download` link. The file stays private and is not attached to the gallery or characteristics; `files.manage` and a confirmed plan still apply.
+- Durable marketplace execution kernel (V1, disabled by default): three new `integrationCommands` / `integrationStages` / `integrationAttempts` tables record admitted work, prepared stage state, and pre-dispatch attempt evidence so a lost provider response or API restart can be reconciled instead of silently retried or marked complete. A single polling worker claims stages with expiring leases, honors per-item ordering and user Stop (in-flight effects are still confirmed — Stop never claims remote rollback), and projects status onto the existing operation list; operations backed by unresolved commands cannot be deleted or aged out by queue cleanup, and the delete conflict carries a localized explanation. Stage idempotency keys are per-stage (multi-item commands with identical stage names cannot collide), dependency waits and retries are persisted rather than spun on, stage writes are lease-guarded so an expired worker cannot overwrite a newer reconciliation, all stage/command/projection writes are idempotent database-level updates inside retried transactions so a retry cannot publish a finish the projection never committed, terminal transitions stamp the finalizing worker (`finalizedBy`) so a commit retry after a lost acknowledgment still emits its finish exactly once while a rival finalizer emits nothing, and a post-poll sweep finishes commands whose last stages completed on different workers. Admission requires the new `IntegrationExecutionV1=true` instance switch — with it off nothing is admitted and no provider calls are made; the transport seam ships a placeholder until the shared rate-limited transport lands. Requires the `IntegrationExecutionV1` migration.
+- The disabled-by-default marketplace executor now has a database-backed foundation for outbound admission. It can reserve shared scopes together and retain provider cooldowns across restarts. A cooldown recorded after a reservation commits is honored if the reservation is recovered after a lost acknowledgement. This does not enable provider traffic or change the limits on existing adapter operations.
+- Added a shared HTTP transport for prepared marketplace stages. It checks current admission and records permission before each effectful send, without retrying writes itself. Existing adapters are not switched to the new transport.
+- Extended the disabled-by-default V1 executor and shared admission transport with durable pre-send deferral (`DeferredBeforeSend`) that resumes first dispatch at the exact provider retry time without exhausting send retries, fresh per-stage lease clocks, lease-guarded dependency waits and cross-command same-entity ordering, and evidence-backed route policy/scope accounting (token-bucket burst/refill, fixed/calendar-reset windows, multi-concurrency leases, weighted error and response-element settlement, and provider-specific throttle/quota headers). Requires the `IntegrationScopeBudgeting` migration; `IntegrationExecutionV1` remains off and no live adapter is switched.
 
 ### Changed
 
@@ -280,6 +284,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Background operations open as an Apple-style sheet: bar header, inset grouped Active / History lists, and the platform overlay scrim
 
 ### Fixed
+
+- Marketplace export operations no longer finish early while item retries are still pending, combine queued products from different operations into one adapter call, report a successful product export when a follow-up price or stock update was rejected, accept missing, duplicate, or foreign bulk item results as authoritative, or stay "running" forever when an interactive export request is cancelled or times out (the operation now finishes as failed with an explicit unknown-outcome message).
 
 - AI assistant can create a category, its attributes, and related products in one confirmed plan, without asking for separate confirmation just to obtain new identifiers.
 
@@ -517,6 +523,8 @@ How we maintain this file: [docs/platform/releasing.md](docs/platform/releasing.
 - Unused `PageHeader` primitive — page titles are the navbar trail
 
 ### Security
+
+- Adapter HTTP diagnostics now mask `X-Delegat-Api-Key` at both the SDK capture boundary and host persistence boundary, matching the existing handling of `Authorization` and other credential headers.
 
 - Bind Ozon OAuth grant completion to the random browser transaction nonce created on the instance, preventing a grant initiated in another browser from being attached to the signed-in user's store.
 - Console SSO signs in only the matching workspace user. If no local user matches the Control Plane email, the flow fails instead of issuing the workspace administrator's session.

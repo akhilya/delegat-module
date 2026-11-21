@@ -121,6 +121,7 @@ vibecoding/
 AGENTS.md
 CLAUDE.md
 .copilot/
+.21st/
 
 # Agent skills, plugins, and local rule packs
 .agents/

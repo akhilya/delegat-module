@@ -193,6 +193,10 @@ public abstract class BaseMarketplaceAdapter : IMarketplaceAdapter
                 if (result.Success) successCount++;
                 else failedCount++;
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 results.Add(new ExportItemResult(

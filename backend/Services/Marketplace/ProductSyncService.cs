@@ -693,6 +693,7 @@ public partial class ProductSyncService
 
             // Auto-export price after successful product export.
             // Medusa product upsert already writes prices and stock.
+            var followUpErrors = new List<string>();
             var skipFollowUp = string.Equals(adapter.Key, "medusa", StringComparison.OrdinalIgnoreCase);
             if (!skipFollowUp && adapter.Capabilities.HasFlag(MarketplaceCapabilities.ExportPrices))
             {
@@ -712,13 +713,29 @@ public partial class ProductSyncService
                     await Log("info", $"Automatic price export: {priceInfo.Price}");
                     try
                     {
-                        await adapter.ExportPricesAsync(connection, new List<PriceInfo> { priceInfo }, ct);
-                        await Log("info", "Price exported");
+                        var priceResult = await adapter.ExportPricesAsync(
+                            connection, new List<PriceInfo> { priceInfo }, ct);
+                        if (priceResult.IsSuccess)
+                        {
+                            await Log("info", "Price exported");
+                        }
+                        else
+                        {
+                            var error = $"Price export failed: {FormatImportErrors(priceResult)}";
+                            followUpErrors.Add(error);
+                            await Log("warning", error);
+                        }
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
                     }
                     catch (Exception ex)
                     {
+                        var safeError = MediaExportGrantSecrets.Redact(ex.Message);
                         _logger.LogWarning(ex, "Auto price export failed for product {ProductId}", productId);
-                        await Log("warning", $"Failed to export price: {ex.Message}");
+                        followUpErrors.Add($"Price export failed: {safeError}");
+                        await Log("warning", $"Failed to export price: {safeError}");
                     }
                 }
             }
@@ -733,14 +750,37 @@ public partial class ProductSyncService
                         existingLink.externalProductId,
                         product.storageQuantity ?? 0
                     );
-                    await adapter.ExportStocksAsync(connection, new List<StockInfo> { stockInfo }, ct);
-                    await Log("info", "Stock exported");
+                    var stockResult = await adapter.ExportStocksAsync(
+                        connection, new List<StockInfo> { stockInfo }, ct);
+                    if (stockResult.IsSuccess)
+                    {
+                        await Log("info", "Stock exported");
+                    }
+                    else
+                    {
+                        var error = $"Stock export failed: {FormatImportErrors(stockResult)}";
+                        followUpErrors.Add(error);
+                        await Log("warning", error);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
+                    var safeError = MediaExportGrantSecrets.Redact(ex.Message);
                     _logger.LogWarning(ex, "Auto stock export failed for product {ProductId}", productId);
-                    await Log("warning", $"Failed to export stock: {ex.Message}");
+                    followUpErrors.Add($"Stock export failed: {safeError}");
+                    await Log("warning", $"Failed to export stock: {safeError}");
                 }
+            }
+
+            if (followUpErrors.Count > 0)
+            {
+                var error = string.Join("; ", followUpErrors);
+                await Log("warning", $"Card exported, but the product is not fully synced: {error}");
+                return ProductExportResult.Failure(error);
             }
 
             await Log("success", isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace");
@@ -751,6 +791,10 @@ public partial class ProductSyncService
                 isNewProduct,
                 isNewProduct ? "Product created on the marketplace" : "Product updated on the marketplace"
             );
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (ApiException ex)
         {
@@ -1072,18 +1116,58 @@ public partial class ProductSyncService
                         .ToList();
                     if (allExternalIds.Count > 0)
                     {
-                        // GroupBy: duplicate external IDs must not throw and wipe the whole bulk result
-                        dupLinksByExternalId = await _context.productMarketplaceLinks
+                        // Group in memory: EF Core cannot translate GroupBy without an aggregate,
+                        // and duplicate external IDs must not throw and wipe the whole bulk result
+                        var matchingLinks = await _context.productMarketplaceLinks
                             .Where(l => l.connectionId == connectionId && allExternalIds.Contains(l.externalProductId))
+                            .ToListAsync(ct);
+                        dupLinksByExternalId = matchingLinks
                             .GroupBy(l => l.externalProductId)
-                            .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+                            .ToDictionary(g => g.Key, g => g.First());
                     }
                 }
 
-                if (bulkResult.Items != null)
+                var adapterProductIds = bulkItems.Select(i => i.LocalProductId).ToHashSet();
+                var resultGroups = (bulkResult.Items ?? [])
+                    .GroupBy(i => i.LocalProductId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+                var foreignProductIds = resultGroups.Keys
+                    .Where(id => !adapterProductIds.Contains(id))
+                    .ToList();
+
+                if (foreignProductIds.Count > 0)
                 {
-                    foreach (var exportItemResult in bulkResult.Items)
+                    var protocolError =
+                        $"Marketplace returned results for unrequested products ({string.Join(", ", foreignProductIds)}); " +
+                        "the bulk response is not authoritative and requires reconciliation.";
+                    _logger.LogError(
+                        "Bulk export protocol fault for connectionId={ConnectionId}: foreign product ids [{ProductIds}]",
+                        connectionId, string.Join(", ", foreignProductIds));
+                    foreach (var item in bulkItems)
                     {
+                        itemResults.Add(new BulkProductExportItemResult(
+                            item.LocalProductId,
+                            false,
+                            ErrorMessage: protocolError,
+                            Retryable: false));
+                    }
+                }
+                else
+                {
+                    foreach (var resultGroup in resultGroups)
+                    {
+                        if (resultGroup.Value.Count != 1)
+                        {
+                            itemResults.Add(new BulkProductExportItemResult(
+                                resultGroup.Key,
+                                false,
+                                ErrorMessage:
+                                    $"Marketplace returned {resultGroup.Value.Count} conflicting results for this product; outcome requires reconciliation.",
+                                Retryable: false));
+                            continue;
+                        }
+
+                        var exportItemResult = resultGroup.Value[0];
                         if (!exportItemResult.Success)
                         {
                             itemResults.Add(new BulkProductExportItemResult(
@@ -1206,7 +1290,21 @@ public partial class ProductSyncService
                         await ApplyExportedVariantIdsAsync(
                             pid, connectionId, exportItemResult.Details, ct);
                     }
+
+                    foreach (var item in bulkItems.Where(i => !resultGroups.ContainsKey(i.LocalProductId)))
+                    {
+                        itemResults.Add(new BulkProductExportItemResult(
+                            item.LocalProductId,
+                            false,
+                            ErrorMessage:
+                                "Marketplace did not return a result for this product; outcome requires reconciliation.",
+                            Retryable: false));
+                    }
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -3500,6 +3598,19 @@ public partial class ProductSyncService
         WriteIndented = true,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    private static string FormatImportErrors(ImportResult result)
+    {
+        var messages = result.Errors?
+            .Select(e => string.IsNullOrWhiteSpace(e.ExternalId)
+                ? e.Message
+                : $"{e.ExternalId}: {e.Message}")
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .ToList();
+        return messages is { Count: > 0 }
+            ? string.Join("; ", messages)
+            : $"{result.FailedCount} item(s) failed";
+    }
 
     private static string? FormatExportDetails(Dictionary<string, object>? details)
     {

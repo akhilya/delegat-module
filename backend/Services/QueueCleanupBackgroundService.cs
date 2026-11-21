@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Delegat.Infrastructure.Configuration;
 using Delegat.Models;
+using Delegat.Models.Integration;
 
 namespace Delegat.Services;
 
@@ -169,9 +170,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
             _logger.LogInformation("Queue cleanup abandoned {Count} client operations", abandonedClientOps.Count);
 
         // Safety net: any running/paused op older than 24h without finish.
+        // Coordinator-owned projections are excluded: the durable executor owns
+        // their lifecycle and retains unresolved effect evidence indefinitely.
         var ancientOps = await db.operations
             .Where(o => (o.status == "running" || o.status == "paused")
-                        && o.createdAt < ancientRunningBefore)
+                        && o.createdAt < ancientRunningBefore
+                        && !db.integrationCommands.Any(c => c.operationId == o.operationId))
             .Select(o => new { o.operationId, o.storeId, o.batchId, o.batchType })
             .Take(500)
             .ToListAsync(ct);
@@ -293,7 +297,12 @@ public sealed class QueueCleanupBackgroundService : BackgroundService
                 await using var transaction = await db.Database.BeginTransactionAsync(ct);
                 var rows = await db.operations.AsNoTracking().Where(o =>
                         (o.status == "completed" || o.status == "failed" || o.status == "cancelled" || o.status == "partial")
-                        && (o.finishedAt ?? o.createdAt) < cutoff)
+                        && (o.finishedAt ?? o.createdAt) < cutoff
+                        // A stopped command's projection can be terminal while the
+                        // command still reconciles in-flight effects; never delete it.
+                        && !db.integrationCommands.Any(c => c.operationId == o.operationId
+                            && (c.state == IntegrationCommandState.Admitted
+                                || c.state == IntegrationCommandState.Executing)))
                     .OrderBy(o => o.Id).Take(CleanupBatchSize)
                     .Select(o => new { o.Id, o.operationId }).ToListAsync(ct);
                 if (rows.Count == 0) return 0;

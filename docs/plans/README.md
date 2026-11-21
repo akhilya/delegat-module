@@ -2,6 +2,10 @@
 
 This directory contains dated design decisions, implementation plans, and completion notes. It is a history, **not** the current product or architecture spec. Check the status and the linked current reference before using any record as implementation guidance.
 
+## Open designs
+
+- [Bounded integration reliability implementation](2026-11-20-integration-reliability-implementation-plan.md) - proposed closed program: 8 work packages, 14 planned PRs, fixed acceptance gates and scope-change rules; not implemented or enabled. Evidence: [integration reliability audit](../architecture/integration-reliability-audit.md).
+
 ## In progress
 
 - [Marketplace credential broker for the AI sandbox](2026-10-27-marketplace-credential-broker.md) — read-only broker and SDK integration are implemented behind an opt-in; compatibility fixtures and per-store canaries remain required before rollout. No production store is enabled.

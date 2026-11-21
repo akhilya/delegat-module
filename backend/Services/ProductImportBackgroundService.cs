@@ -348,6 +348,10 @@ public class ProductImportBackgroundService : BackgroundService
 
             return false;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             pending.status = ProductImportStatus.Failed;
@@ -398,14 +402,24 @@ public class ProductImportBackgroundService : BackgroundService
             .ToListAsync(ct);
         var total = counts.Sum(g => g.Count);
         var completed = counts.Where(g => g.Status == ProductImportStatus.Completed).Sum(g => g.Count);
-        var failed = counts.Where(g => g.Status == ProductImportStatus.Failed).Sum(g => g.Count);
+        var cancelled = counts.Where(g => g.Status == ProductImportStatus.Cancelled).Sum(g => g.Count);
+        var failed = await context.pendingProductImports
+            .AsNoTracking()
+            .Where(p => p.batchId == pending.batchId
+                && p.status == ProductImportStatus.Failed
+                && p.retryCount >= PendingProductImport.MAX_RETRIES)
+            .CountAsync(ct);
         await _operationLogger.ProgressAsync(pending.batchId, pending.storeId, total, completed, failed);
 
-        if (total != completed + failed)
+        if (total != completed + failed + cancelled)
             return;
 
-        await _operationLogger.FinishAsync(pending.batchId, pending.storeId,
-            failed == 0 ? "completed" : (completed == 0 ? "failed" : "partial"),
+        var status = failed > 0
+            ? (completed == 0 && cancelled == 0 ? "failed" : "partial")
+            : (cancelled > 0
+                ? (completed == 0 ? "cancelled" : "partial")
+                : "completed");
+        await _operationLogger.FinishAsync(pending.batchId, pending.storeId, status,
             $"Imported: {completed} succeeded, {failed} failed");
 
         await ImageDownloadBackgroundService.FinishIdleImageDownloadOpsAsync(

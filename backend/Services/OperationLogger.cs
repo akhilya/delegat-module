@@ -185,6 +185,23 @@ public class OperationLogger : IOperationLogger
             });
     }
 
+    /// <inheritdoc />
+    public async Task NotifyFinishedAsync(string operationId, int storeId, string status, string? summary = null,
+        int? totalItems = null, int? completedItems = null, int? failedItems = null)
+    {
+        await _hub.Clients.Group($"store-{storeId}")
+            .SendAsync("OperationFinished", new
+            {
+                operationId,
+                status,
+                summary,
+                total = totalItems,
+                completed = completedItems,
+                failed = failedItems,
+                timestamp = DateTime.UtcNow
+            });
+    }
+
     private static async Task<string?> ResolveAuthorNameAsync(
         DataContext db, int authorUserId, int? authorApiKeyId)
     {

@@ -101,7 +101,8 @@ public sealed class AdapterHttpLogService : IAdapterHttpLogger, IAdapterHttpLogQ
     private static readonly HashSet<string> SensitiveHeaderNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Api-Key", "Authorization", "Client-Secret", "X-Api-Key", "Cookie",
-        "X-Client-Secret", "Proxy-Authorization", "Set-Cookie"
+        "X-Client-Secret", "Proxy-Authorization", "Set-Cookie", "Client-Id",
+        "X-Delegat-Api-Key", "Delegat-Api-Key"
     };
 
     private static readonly Regex SensitiveJsonValue = new(

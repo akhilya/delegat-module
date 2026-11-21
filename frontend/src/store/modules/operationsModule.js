@@ -111,11 +111,14 @@ const mutations = {
     if (!op) return;
     op.progress = progress;
   },
-  FINISH_OPERATION(state, { id, status, summary }) {
+  FINISH_OPERATION(state, { id, status, summary, progress }) {
     const op = state.operations.find((o) => o.id === id);
     if (!op) return;
     if (!shouldApplyOperationFinish(op.status, status)) return;
     op.status = status;
+    if (progress) {
+      op.progress = progress;
+    }
     op.finishedAt = op.finishedAt || new Date().toISOString();
     if (summary) {
       op.summary = summary;
@@ -271,6 +274,18 @@ const actions = {
         id: data.operationId,
         status: data.status,
         summary: data.summary,
+        progress:
+          data.total != null
+            ? {
+                total: data.total,
+                completed: data.completed ?? 0,
+                failed: data.failed ?? 0,
+                pending: Math.max(
+                  0,
+                  data.total - (data.completed ?? 0) - (data.failed ?? 0),
+                ),
+              }
+            : undefined,
       });
     });
 

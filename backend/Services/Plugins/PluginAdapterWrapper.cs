@@ -565,7 +565,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
             result.Success,
             result.ExternalProductId,
             result.ErrorMessage,
-            result.Details
+            result.Details,
+            result.Retryable
         );
     }
 
@@ -577,7 +578,7 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
         var context = CreateContext(connection);
         var result = await _plugin.ArchiveProductAsync(context, externalProductId, ct);
         return new Models.Marketplace.DTOs.ExportResult(
-            result.Success, result.ExternalProductId, result.ErrorMessage, result.Details);
+            result.Success, result.ExternalProductId, result.ErrorMessage, result.Details, result.Retryable);
     }
 
     #endregion
@@ -919,7 +920,8 @@ public class PluginAdapterWrapper : IMarketplaceAdapter, IBulkExportProgressAdap
             result.Success,
             result.ExternalProductId,
             result.ErrorMessage,
-            result.Details
+            result.Details,
+            result.Retryable
         );
     }
 

@@ -743,6 +743,7 @@
     "price_delta_conflict": "Use either price or price change, not both.",
     "marketplace_link_not_found": "Marketplace product link not found.",
     "operation_not_found": "Operation not found.",
+    "operation_command_unresolved": "This operation is still being processed by the integration executor. Wait until it finishes and reconciles before deleting it.",
     "group_member_not_found": "The product is not in this group.",
     "variant_not_found": "Product variant not found.",
     "import_nothing_queued": "No products were queued for import. Check the category mappings.",
