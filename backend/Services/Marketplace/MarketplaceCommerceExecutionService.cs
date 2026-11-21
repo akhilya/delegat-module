@@ -189,7 +189,7 @@ public sealed class MarketplaceCommerceExecutionService
                         throw ApiException.BadRequest("Conflicting action in extra metadata", code: "order_status_failed");
                     continue;
                 }
-                data[key] = v;
+                data[k] = v;
             }
         }
 

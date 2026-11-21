@@ -917,6 +917,8 @@ public class IntegrationExecutionWorker : BackgroundService
 
         var live = snapshots.ToExternalOrder(row);
         Delegat.Services.Marketplace.MarketplaceSellerOrderStatus.Advance(adapterKey, action, live);
+        if (string.Equals(live.Status, row.status, StringComparison.Ordinal))
+            return;
         await snapshots.UpdateStatusProjectionAsync(row.Id, live, now, ct);
     }
 
