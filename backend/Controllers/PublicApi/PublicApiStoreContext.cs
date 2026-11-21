@@ -65,7 +65,8 @@ public static class PublicApiResults
 
     public static IActionResult AcceptedIntegration(
         Delegat.Services.Integration.IntegrationAdmitResult admitted,
-        int storeId)
+        int storeId,
+        string integrationState = "pending")
     {
         var statusUrl = $"/api/v1/stores/{storeId}/operations/{admitted.OperationId}";
         return new AcceptedResult(
@@ -75,7 +76,7 @@ public static class PublicApiResults
                 operationId = admitted.OperationId,
                 commandId = admitted.CommandId,
                 status = "running",
-                integrationState = "pending",
+                integrationState,
                 statusUrl,
                 duplicate = admitted.IsDuplicate,
                 links = new
@@ -83,6 +84,45 @@ public static class PublicApiResults
                     self = statusUrl
                 }
             });
+    }
+
+    public static async Task<IActionResult> CompleteOrAcceptIntegrationAsync<TDto>(
+        HttpContext? httpContext,
+        int storeId,
+        Delegat.Services.Integration.IntegrationAdmitResult admitted,
+        Delegat.Services.Marketplace.MarketplaceCommerceExecutionService execution,
+        Func<Delegat.Models.Integration.IntegrationCommand, IReadOnlyList<Delegat.Models.Integration.IntegrationStage>, TDto> buildDto,
+        string failureCode,
+        CancellationToken ct)
+    {
+        if (PrefersAsync(httpContext))
+            return AcceptedIntegration(admitted, storeId);
+
+        var snapshot = await execution.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+        if (snapshot is not { } s)
+            return AcceptedIntegration(admitted, storeId);
+
+        var (cmd, stages) = s;
+        if (cmd.state == Delegat.Models.Integration.IntegrationCommandState.Completed)
+            return new OkObjectResult(buildDto(cmd, stages));
+
+        if (cmd.state == Delegat.Models.Integration.IntegrationCommandState.Failed)
+            throw ApiException.BadRequest(cmd.summary ?? "Integration command failed", code: failureCode);
+
+        var stateLabel = cmd.state switch
+        {
+            Delegat.Models.Integration.IntegrationCommandState.Partial => "partial",
+            Delegat.Models.Integration.IntegrationCommandState.Unknown => "unknown",
+            Delegat.Models.Integration.IntegrationCommandState.Cancelled => "cancelled",
+            _ => "pending"
+        };
+        return AcceptedIntegration(admitted, storeId, stateLabel);
+    }
+
+    public static int? ReadApiKeyId(HttpContext? httpContext)
+    {
+        var raw = httpContext?.User?.FindFirst("apiKeyId")?.Value;
+        return int.TryParse(raw, out var id) && id > 0 ? id : null;
     }
 
     public static string? ReadIdempotencyKey(HttpContext? httpContext)

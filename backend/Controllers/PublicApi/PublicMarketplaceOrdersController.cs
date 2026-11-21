@@ -122,9 +122,12 @@ public class PublicMarketplaceOrdersController : ControllerBase
         if (_commerceExecution is { IsV1Enabled: true })
         {
             var admitted = await _commerceExecution.AdmitOrderActionAsync(
-                connection, orderId, body, userId, authorApiKeyId: null,
+                connection, orderId, body, userId, PublicApiResults.ReadApiKeyId(HttpContext),
                 PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildOrderStatusUpdateResult,
+                "order_status_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(

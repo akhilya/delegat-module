@@ -106,9 +106,12 @@ public class PublicMarketplacePromotionsController : ControllerBase
         if (_commerceExecution is { IsV1Enabled: true })
         {
             var admitted = await _commerceExecution.AdmitPromotionActionAsync(
-                connection, promotionId, update, userId, authorApiKeyId: null,
+                connection, promotionId, update, userId, PublicApiResults.ReadApiKeyId(HttpContext),
                 PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildPromotionProductsResult,
+                "promotion_update_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(

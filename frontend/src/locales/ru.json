@@ -3678,7 +3678,8 @@
       "packBoxNone": "Без короба",
       "packBoxNew": "Создать короб",
       "packOptionsLoading": "Загрузка поставок…",
-      "statusUpdated": "Статус заказа обновлён"
+      "statusUpdated": "Статус заказа обновлён",
+      "statusUpdateQueued": "Обновление статуса заказа поставлено в очередь — статус доступен в «Операциях»"
     },
     "notesPage": {
       "breadcrumb": "Заметки",

@@ -3,6 +3,7 @@ using Delegat.Infrastructure.Middleware;
 using Delegat.Infrastructure.Security;
 using Delegat.Marketplace.SDK;
 using Delegat.Marketplace.SDK.DTOs;
+using Delegat.Models.Integration;
 using Delegat.Models.Marketplace;
 using Delegat.Services.Integration;
 using Delegat.Services.Plugins;
@@ -78,6 +79,46 @@ public sealed class MarketplaceCommerceExecutionService
     }
 
     public bool IsV1Enabled => _options.Enabled;
+
+    /// <summary>
+    /// Bounded wait for a newly admitted command to reach a terminal state so
+    /// callers without <c>Prefer: respond-async</c> can receive the original
+    /// synchronous DTO when execution finishes quickly. Caller cancellation
+    /// stops waiting without cancelling the durable command.
+    /// </summary>
+    public async Task<(Delegat.Models.Integration.IntegrationCommand Command, List<Delegat.Models.Integration.IntegrationStage> Stages)?> WaitForCommandSnapshotAsync(
+        string commandId,
+        CancellationToken ct)
+    {
+        var snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, ct);
+        if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
+            return snapshot;
+
+        var waitMs = Math.Max(0, _options.PublicApiSyncWaitMs);
+        if (waitMs == 0)
+            return snapshot;
+
+        var pollMs = Math.Clamp(_options.PublicApiSyncPollIntervalMs, 10, 500);
+        var deadline = Environment.TickCount64 + waitMs;
+        while (Environment.TickCount64 < deadline && !ct.IsCancellationRequested)
+        {
+            var remaining = (int)Math.Min(pollMs, Math.Max(1, deadline - Environment.TickCount64));
+            try
+            {
+                await Task.Delay(remaining, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            snapshot = await _coordinator.GetCommandSnapshotAsync(commandId, CancellationToken.None);
+            if (snapshot is null || IntegrationCommandState.IsTerminal(snapshot.Value.Command.state))
+                return snapshot;
+        }
+
+        return snapshot;
+    }
 
     /// <summary>
     /// Admits an order status action through the durable coordinator after

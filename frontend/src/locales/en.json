@@ -3678,7 +3678,8 @@
       "packBoxNone": "No box",
       "packBoxNew": "Create a box",
       "packOptionsLoading": "Loading supplies…",
-      "statusUpdated": "Order status updated"
+      "statusUpdated": "Order status updated",
+      "statusUpdateQueued": "Order status update queued — track progress in Operations"
     },
     "notesPage": {
       "breadcrumb": "Notes",

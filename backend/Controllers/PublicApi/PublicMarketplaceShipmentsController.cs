@@ -78,7 +78,7 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
 
         var req = body ?? new CreateShipmentRequest();
-        if (_commerceExecution is { IsV1Enabled: true } && PublicApiResults.PrefersAsync(HttpContext))
+        if (_commerceExecution is { IsV1Enabled: true })
         {
             var data = new Dictionary<string, object?>();
             if (!string.IsNullOrWhiteSpace(req.Name))
@@ -88,8 +88,11 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             var admitted = await _commerceExecution.AdmitShipmentActionAsync(
                 connection, "create_supply", req.Name?.Trim() ?? "shipment", data,
                 $"Create shipment ({connection.name})",
-                userId, authorApiKeyId: null, PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
@@ -151,8 +154,11 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             var admitted = await _commerceExecution.AdmitShipmentActionAsync(
                 connection, "add_orders", shipmentId.Trim(), data,
                 $"Add orders to shipment {shipmentId.Trim()}",
-                userId, authorApiKeyId: null, PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
@@ -211,8 +217,11 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             var admitted = await _commerceExecution.AdmitShipmentActionAsync(
                 connection, "create_boxes", shipmentId.Trim(), data,
                 $"Create boxes on shipment {shipmentId.Trim()}",
-                userId, authorApiKeyId: null, PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildCreateShipmentBoxesResult,
+                "shipment_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
@@ -254,8 +263,11 @@ public class PublicMarketplaceShipmentsController : ControllerBase
             var admitted = await _commerceExecution.AdmitShipmentActionAsync(
                 connection, "trbx_assign", $"{shipmentId.Trim()}:{boxId.Trim()}", data,
                 $"Assign orders to box {boxId.Trim()}",
-                userId, authorApiKeyId: null, PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
-            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+                userId, PublicApiResults.ReadApiKeyId(HttpContext), PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return await PublicApiResults.CompleteOrAcceptIntegrationAsync(
+                HttpContext, storeId, admitted, _commerceExecution,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed", ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(

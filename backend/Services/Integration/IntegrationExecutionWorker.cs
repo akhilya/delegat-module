@@ -848,7 +848,8 @@ public class IntegrationExecutionWorker : BackgroundService
             await db.operations
                 .Where(o => o.operationId == command.operationId
                     && (opStatus == OperationLifecycle.Cancelled
-                        || !OperationTerminalStates.Contains(o.status)))
+                        || !OperationTerminalStates.Contains(o.status)
+                        || o.status == OperationLifecycle.Cancelled))
                 .ExecuteUpdateAsync(o => o
                     .SetProperty(x => x.status, opStatus)
                     .SetProperty(x => x.summary, summary)
