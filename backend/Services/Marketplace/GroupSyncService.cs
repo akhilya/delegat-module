@@ -434,13 +434,19 @@ public class GroupSyncService
         if (!adapter.Capabilities.HasFlag(MarketplaceCapabilities.ImportGroups))
             return GroupImportResult.Failure("Adapter does not support group import");
 
+        const int maxImportPages = 200;
         int importedCount = 0;
         int updatedCount = 0;
         string? cursor = null;
+        var seenCursors = new HashSet<string>(StringComparer.Ordinal);
+        var completed = false;
 
-        do
+        for (var page = 0; page < maxImportPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             var result = await adapter.ImportGroupsAsync(connection, 100, cursor, ct);
+            if (result == null)
+                return GroupImportResult.Failure("Marketplace returned an empty group page response");
 
             foreach (var externalGroup in result.Items)
             {
@@ -450,11 +456,23 @@ public class GroupSyncService
                 if (updated) updatedCount++;
             }
 
-            cursor = result.NextCursor;
+            if (!result.HasMore)
+            {
+                completed = true;
+                break;
+            }
 
-            if (!result.HasMore) break;
+            if (string.IsNullOrWhiteSpace(result.NextCursor))
+                return GroupImportResult.Failure("Group import pagination stalled: hasMore=true without nextCursor");
+
+            if (!seenCursors.Add(result.NextCursor))
+                return GroupImportResult.Failure($"Group import pagination stalled on repeated cursor '{result.NextCursor}'");
+
+            cursor = result.NextCursor;
         }
-        while (!ct.IsCancellationRequested);
+
+        if (!completed)
+            return GroupImportResult.Failure($"Group import exceeded maximum page limit ({maxImportPages}) without completing");
 
         await _context.SaveChangesAsync(ct);
 

@@ -548,8 +548,17 @@ public class MarketplaceCommerceController : ControllerBase
         var storeId = await RequireStoreAsync();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdatePromotions, ct);
+        var req = body ?? new PromotionProductsUpdate();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var admitted = await _commerceExecution.AdmitPromotionActionAsync(
+                connection, promotionId, req,
+                _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
-            () => adapter.UpdatePromotionProductsAsync(connection, promotionId, body ?? new PromotionProductsUpdate(), ct));
+            () => adapter.UpdatePromotionProductsAsync(connection, promotionId, req, ct));
         if (!result.Success)
             throw ApiException.BadRequest(code: "promotion_update_failed");
         return Ok(result);
