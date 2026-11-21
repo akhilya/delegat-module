@@ -63,6 +63,7 @@ services:
       - CATALOG_SCRAPE_PLAYWRIGHT_PROXY=${CATALOG_SCRAPE_PLAYWRIGHT_PROXY:-}
       - ADAPTER_HTTP_LOG_RETENTION_DAYS=${ADAPTER_HTTP_LOG_RETENTION_DAYS:-7}
       - ADAPTER_HTTP_LOG_DETAIL_RETENTION_HOURS=${ADAPTER_HTTP_LOG_DETAIL_RETENTION_HOURS:-24}
+      - IntegrationExecutionV1=${IntegrationExecutionV1:-false}
     shm_size: "1gb"
     ipc: host
     init: true

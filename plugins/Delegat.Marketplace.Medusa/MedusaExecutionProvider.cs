@@ -213,9 +213,25 @@ public partial class MedusaPlugin
 
         if (action.Equals("cancel", StringComparison.OrdinalIgnoreCase))
         {
-            var refundRaw = ReadStr(item.Data, "refund");
-            var refund = !string.Equals(refundRaw, "false", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(refundRaw, "0", StringComparison.Ordinal);
+            bool? refundDecision = null;
+            foreach (var (k, v) in item.Data)
+            {
+                if (!k.Trim().Equals("refund", StringComparison.OrdinalIgnoreCase) || v is null)
+                    continue;
+                var raw = v.ToString()?.Trim();
+                var parsed = !string.Equals(raw, "false", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(raw, "0", StringComparison.Ordinal)
+                    && !string.Equals(raw, "no", StringComparison.OrdinalIgnoreCase);
+                if (refundDecision.HasValue && refundDecision.Value != parsed)
+                {
+                    issues.Add(new IntegrationIssue("conflicting_order_extra",
+                        "Medusa order cancel received conflicting refund flags",
+                        FieldKey: "refund", Retryable: false, ItemKey: item.ItemKey));
+                    return;
+                }
+                refundDecision = parsed;
+            }
+            var refund = refundDecision ?? true;
             var reason = ReadStr(item.Data, "reason");
             var note = ReadStr(item.Data, "note");
             prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
@@ -383,7 +399,7 @@ public partial class MedusaPlugin
     private static string? ReadStr(IReadOnlyDictionary<string, object?> data, string key)
     {
         foreach (var (k, v) in data)
-            if (k.Equals(key, StringComparison.OrdinalIgnoreCase) && v is not null)
+            if (k.Trim().Equals(key, StringComparison.OrdinalIgnoreCase) && v is not null)
                 return v.ToString()?.Trim();
         return null;
     }

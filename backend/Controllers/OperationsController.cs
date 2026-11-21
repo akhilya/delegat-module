@@ -268,6 +268,23 @@ public class OperationsController : ControllerBase
     {
         var op = await GetOperationAsync(operationId, ct);
         if (op == null) return NotFound();
+
+        object? integration = null;
+        var command = await _context.integrationCommands
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.operationId == operationId && c.storeId == op.storeId, ct);
+        if (command != null)
+        {
+            var stages = await _context.integrationStages
+                .AsNoTracking()
+                .Where(s => s.commandId == command.Id)
+                .OrderBy(s => s.position)
+                .ThenBy(s => s.Id)
+                .ToListAsync(ct);
+            integration = Delegat.Services.Integration.IntegrationCommandResultExtractor
+                .BuildPublicOperationIntegration(command, stages);
+        }
+
         return Ok(new
         {
             status = op.status,
@@ -276,6 +293,7 @@ public class OperationsController : ControllerBase
             failedItems = op.failedItems,
             summary = op.summary,
             finishedAt = op.finishedAt,
+            integration
         });
     }
 

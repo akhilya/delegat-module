@@ -236,6 +236,7 @@ public sealed class IntegrationExecutionP4AdaptersTests
     {
         var plugin = new YandexMarketPlugin();
         var attemptNo = 0;
+        var promoReads = 0;
         var conn = new ConnectionContext
         {
             ConnectionId = 25,
@@ -257,8 +258,11 @@ public sealed class IntegrationExecutionP4AdaptersTests
                 }
                 if (req.Url.AbsolutePath.EndsWith("/promos/offers", StringComparison.Ordinal))
                 {
-                    return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(),
-                        """{"status":"OK","result":{"offers":[{"offerId":"OFF-1","status":"PARTIALLY_AUTO","params":{"discountParams":{"price":1000,"promoPrice":800}}}]}}"""));
+                    promoReads++;
+                    var body = promoReads == 1
+                        ? """{"status":"OK","result":{"offers":[{"offerId":"OFF-1","status":"PARTIALLY_AUTO","params":{"discountParams":{"price":1000,"promoPrice":800}}}]}}"""
+                        : """{"status":"OK","result":{"offers":[{"offerId":"OFF-1","status":"MANUAL","params":{"discountParams":{"price":1000,"promoPrice":800}}}]}}""";
+                    return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(), body));
                 }
                 return Task.FromResult(new IntegrationTransportResponse(404, new Dictionary<string, string>(), ""));
             })
@@ -287,7 +291,60 @@ public sealed class IntegrationExecutionP4AdaptersTests
         Assert.Equal(IntegrationStageOutcomeKind.Accepted, accepted.Kind);
         Assert.NotNull(accepted.Receipt);
 
+        // PARTIALLY_AUTO must remain Pending until Yandex transitions the manual update to MANUAL.
+        var stillPending = await plugin.ConfirmAsync(new IntegrationConfirmationRequest(conn, attempt, stage, accepted.Receipt));
+        Assert.Equal(IntegrationStageOutcomeKind.Pending, stillPending.Kind);
+
         var confirmed = await plugin.ConfirmAsync(new IntegrationConfirmationRequest(conn, attempt, stage, accepted.Receipt));
         Assert.Equal(IntegrationStageOutcomeKind.Applied, confirmed.Kind);
+    }
+
+    [Fact]
+    public async Task OpenCart_PriceFallbackAndConfirm_FailClosedOnSkuModelCollision()
+    {
+        var plugin = new OpenCartPlugin();
+        var conn = new ConnectionContext
+        {
+            ConnectionId = 20,
+            StoreId = 1,
+            AdapterKey = "opencart",
+            Credentials = new Dictionary<string, string>
+            {
+                ["apiBaseUrl"] = "https://shop.example/index.php?route=extension/delegat/api",
+                ["apiKey"] = "oc-key"
+            },
+            Transport = new StubTransport((req, _) =>
+            {
+                var url = req.Url.ToString();
+                if (url.Contains("prices.bulk", StringComparison.Ordinal))
+                    return Task.FromResult(new IntegrationTransportResponse(404, new Dictionary<string, string>(), """{"error":"not_found"}"""));
+                if (url.Contains("products", StringComparison.Ordinal) && req.Method == "GET")
+                {
+                    return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(),
+                        """{"items":[{"product_id":"101","sku":"","model":"ABC","price":100,"quantity":5},{"product_id":"202","sku":"ABC","model":"XYZ","price":250,"quantity":5}],"has_more":false}"""));
+                }
+                throw new InvalidOperationException($"Unexpected write to {req.Method} {url}");
+            })
+        };
+
+        var prep = await plugin.PrepareAsync(new IntegrationPreparationInput(
+            IntegrationOperationKind.PriceExport, conn,
+            [new IntegrationItemIntent("oc-1", new Dictionary<string, object?>
+            {
+                ["sku"] = "ABC",
+                ["price"] = 250m
+            })], null, "cmd-oc-collision"));
+
+        Assert.Empty(prep.Issues);
+        var stage = Assert.Single(prep.Items.SelectMany(i => i.Stages));
+        var attempt = new IntegrationAttemptContext("op-oc-1", "cmd-oc-collision", "oc-1", stage.StageKey, 1, "req-oc-1");
+
+        // Fallback must fail closed without mutating product 202.
+        var outcome = await plugin.ExecuteStageAsync(new IntegrationStageRequest(conn, attempt, stage));
+        Assert.Equal(IntegrationStageOutcomeKind.Rejected, outcome.Kind);
+
+        // Confirmation must also fail closed as Unknown (ambiguous) instead of confirming against product 202.
+        var confirmed = await plugin.ConfirmAsync(new IntegrationConfirmationRequest(conn, attempt, stage, Receipt: null));
+        Assert.Equal(IntegrationStageOutcomeKind.Unknown, confirmed.Kind);
     }
 }

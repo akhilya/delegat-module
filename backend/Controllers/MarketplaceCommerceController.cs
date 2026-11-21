@@ -299,7 +299,7 @@ public class MarketplaceCommerceController : ControllerBase
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
         var req = body ?? new CreateShipmentRequest();
-        if (_commerceExecution is { IsV1Enabled: true } && PrefersAsync())
+        if (_commerceExecution is { IsV1Enabled: true })
         {
             var data = new Dictionary<string, object?>();
             if (!string.IsNullOrWhiteSpace(req.Name))
@@ -310,7 +310,11 @@ public class MarketplaceCommerceController : ControllerBase
                 connection, "create_supply", req.Name?.Trim() ?? "shipment", data,
                 $"Create shipment ({connection.name})",
                 _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
-            return AcceptedIntegration(admitted);
+            return await CompleteOrAcceptIntegrationAsync(
+                admitted,
+                Delegat.Services.Integration.IntegrationCommandResultExtractor.BuildShipmentMutationResult,
+                "shipment_failed",
+                ct);
         }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
@@ -585,12 +589,42 @@ public class MarketplaceCommerceController : ControllerBase
             && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
     }
 
-    private IActionResult AcceptedIntegration(IntegrationAdmitResult admitted) =>
+    private async Task<IActionResult> CompleteOrAcceptIntegrationAsync<TDto>(
+        IntegrationAdmitResult admitted,
+        Func<Delegat.Models.Integration.IntegrationCommand, IReadOnlyList<Delegat.Models.Integration.IntegrationStage>, TDto> buildDto,
+        string failureCode,
+        CancellationToken ct)
+    {
+        if (PrefersAsync())
+            return AcceptedIntegration(admitted);
+
+        var snapshot = await _commerceExecution!.WaitForCommandSnapshotAsync(admitted.CommandId, ct);
+        if (snapshot is not { } s)
+            return AcceptedIntegration(admitted);
+
+        var (cmd, stages) = s;
+        if (cmd.state == Delegat.Models.Integration.IntegrationCommandState.Completed)
+            return Ok(buildDto(cmd, stages));
+
+        if (cmd.state == Delegat.Models.Integration.IntegrationCommandState.Failed)
+            throw ApiException.BadRequest(cmd.summary ?? "Integration command failed", code: failureCode);
+
+        var stateLabel = cmd.state switch
+        {
+            Delegat.Models.Integration.IntegrationCommandState.Partial => "partial",
+            Delegat.Models.Integration.IntegrationCommandState.Unknown => "unknown",
+            Delegat.Models.Integration.IntegrationCommandState.Cancelled => "cancelled",
+            _ => "pending"
+        };
+        return AcceptedIntegration(admitted, stateLabel);
+    }
+
+    private IActionResult AcceptedIntegration(IntegrationAdmitResult admitted, string integrationState = "pending") =>
         Accepted(new
         {
             operationId = admitted.OperationId,
             commandId = admitted.CommandId,
-            integrationState = "pending",
+            integrationState,
             statusUrl = $"/api/operations/{admitted.OperationId}/status",
             duplicate = admitted.IsDuplicate
         });
