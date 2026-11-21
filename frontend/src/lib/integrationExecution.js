@@ -249,3 +249,73 @@ export async function createOrResumeShipmentCreation({
   onPendingUpdate(pending);
   return { status: "pending", pending };
 }
+
+/**
+ * Runs the cabinet Pack flow against captured (targetConnectionId, targetOrderId) and
+ * packing choices so switching orders while a 202 shipment creation polls can never
+ * pack the newly opened order.
+ */
+export async function executeOrderPackFlow({
+  targetConnectionId,
+  targetOrderId,
+  supplyChoice,
+  boxChoice,
+  existingPending = null,
+  onPendingUpdate = () => {},
+  createIdempotencyKey,
+  createShipmentName,
+  postShipment,
+  getStatus,
+  postOrderStatus,
+  maxPolls = 20,
+  pollIntervalMs = 500,
+  sleep,
+}) {
+  if (!targetConnectionId || !targetOrderId) {
+    return { status: "skipped", targetConnectionId, targetOrderId };
+  }
+
+  let chosenSupplyId = supplyChoice;
+  if (!chosenSupplyId || chosenSupplyId === "new") {
+    const outcome = await createOrResumeShipmentCreation({
+      existingPending,
+      onPendingUpdate,
+      createIdempotencyKey,
+      createShipmentName,
+      postShipment: (opts) => postShipment(targetConnectionId, opts),
+      getStatus,
+      maxPolls,
+      pollIntervalMs,
+      sleep,
+    });
+    if (outcome.status !== "completed") {
+      return {
+        ...outcome,
+        targetConnectionId,
+        targetOrderId,
+      };
+    }
+    chosenSupplyId = outcome.shipmentId;
+  }
+
+  const extra = { supplyId: chosenSupplyId };
+  if (boxChoice === "new") extra.createBox = "true";
+  else if (boxChoice && boxChoice !== "none") {
+    extra.boxId = boxChoice;
+  }
+
+  const orderResponse = await postOrderStatus({
+    connectionId: targetConnectionId,
+    orderId: targetOrderId,
+    action: "pack",
+    extra,
+  });
+
+  return {
+    status: "packed",
+    shipmentId: chosenSupplyId,
+    targetConnectionId,
+    targetOrderId,
+    orderResponse,
+  };
+}

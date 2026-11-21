@@ -59,7 +59,7 @@ import {
 } from "@/lib/orderSheetFacts.js";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
 import {
-  createOrResumeShipmentCreation,
+  executeOrderPackFlow,
   isIntegrationAcceptedResponse,
 } from "@/lib/integrationExecution";
 import { randomUuidCompact } from "@/utils/uuid";
@@ -435,8 +435,12 @@ async function loadWarehouseNames() {
 
 watch(
   () => [props.open, props.connectionId, props.orderId],
-  async () => {
-    if (props.open) {
+  async ([isOpen, nextConnId, nextOrderId], prev) => {
+    const targetChanged = !prev || prev[1] !== nextConnId || prev[2] !== nextOrderId;
+    if (targetChanged || !isOpen) {
+      acting.value = "";
+    }
+    if (isOpen) {
       await loadDetail();
       await loadWarehouseNames();
       return;
@@ -498,7 +502,7 @@ function openActionConfirm(action) {
     );
   }
   if (action === "pack" && props.canManageShipments) {
-    if (!pendingShipmentCreations.has(pendingShipmentKey())) {
+    if (!pendingShipmentCreations.has(pendingShipmentKey(props.connectionId, props.orderId))) {
       resetPackFields();
     }
     loadPackOptions();
@@ -508,8 +512,12 @@ function openActionConfirm(action) {
 
 const pendingShipmentCreations = new Map();
 
-function pendingShipmentKey() {
-  return `${props.connectionId || ""}:${props.orderId || ""}`;
+function pendingShipmentKey(connectionId = props.connectionId, orderId = props.orderId) {
+  return `${connectionId || ""}:${orderId || ""}`;
+}
+
+function isSameTarget(connectionId, orderId) {
+  return props.connectionId === connectionId && props.orderId === orderId;
 }
 
 let armedAction = "";
@@ -518,59 +526,6 @@ let armedExtra = {};
 function armConfirmSubmit() {
   armedAction = pendingAction.value;
   armedExtra = actionExtra(armedAction);
-}
-
-async function buildPackExtra() {
-  if (!props.connectionId) return {};
-  let chosenSupplyId = packSupplyChoice.value;
-  if (!chosenSupplyId || chosenSupplyId === "new") {
-    const key = pendingShipmentKey();
-    const existingPending = pendingShipmentCreations.get(key) || null;
-    const outcome = await createOrResumeShipmentCreation({
-      existingPending,
-      onPendingUpdate: (nextPending) => {
-        if (nextPending) pendingShipmentCreations.set(key, nextPending);
-        else pendingShipmentCreations.delete(key);
-      },
-      createIdempotencyKey: () =>
-        `pack-ship-${props.connectionId}-${props.orderId || "order"}-${randomUuidCompact()}`,
-      postShipment: async ({ shipmentName, headers }) => {
-        const response = await http.post(
-          `/marketplace/connections/${props.connectionId}/shipments`,
-          { name: shipmentName },
-          { headers },
-        );
-        return {
-          status: response?.status ?? 200,
-          body: unwrap(response),
-        };
-      },
-      getStatus: async (statusPath) => {
-        const response = await http.get(statusPath, { cache: false });
-        return unwrap(response);
-      },
-    });
-
-    if (outcome.status === "completed") {
-      pendingShipmentCreations.delete(key);
-      chosenSupplyId = outcome.shipmentId;
-    } else if (outcome.status === "pending") {
-      pendingShipmentCreations.set(key, outcome.pending);
-      return { __pendingShipment: true };
-    } else if (outcome.status === "unknown") {
-      pendingShipmentCreations.set(key, outcome.pending);
-      throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
-    } else {
-      pendingShipmentCreations.delete(key);
-      throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
-    }
-  }
-  const extra = { supplyId: chosenSupplyId };
-  if (packBoxChoice.value === "new") extra.createBox = "true";
-  else if (packBoxChoice.value && packBoxChoice.value !== "none") {
-    extra.boxId = packBoxChoice.value;
-  }
-  return { extra };
 }
 
 async function downloadMarketplaceLabel(kind) {
@@ -612,62 +567,128 @@ async function downloadLabel() {
   await downloadMarketplaceLabel("order");
 }
 
-async function runAction(action, extra = {}) {
-  if (!props.canMutate || !props.connectionId || !props.orderId) return;
-  acting.value = action;
+function applyOrderActionResponse(response, targetConnectionId, targetOrderId) {
+  const result = unwrap(response);
+  if (isIntegrationAcceptedResponse(response?.status, result)) {
+    displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
+    return;
+  }
+  const nextOrder = result?.order ?? result?.Order;
+  if (nextOrder && isSameTarget(targetConnectionId, targetOrderId)) {
+    detail.value = nextOrder;
+  }
+  displaySonnerSuccess(t("pages.ordersPage.statusUpdated"));
+  emit("updated", nextOrder || (isSameTarget(targetConnectionId, targetOrderId) ? detail.value : null));
+}
+
+async function runAction(
+  action,
+  extra = {},
+  targetConnectionId = props.connectionId,
+  targetOrderId = props.orderId,
+) {
+  if (!props.canMutate || !targetConnectionId || !targetOrderId) return;
+  if (isSameTarget(targetConnectionId, targetOrderId)) {
+    acting.value = action;
+  }
   try {
     const response = await http.post(
-      `/marketplace/connections/${props.connectionId}/orders/${encodeURIComponent(props.orderId)}/status`,
+      `/marketplace/connections/${targetConnectionId}/orders/${encodeURIComponent(targetOrderId)}/status`,
       { action, ...extra },
     );
-    const result = unwrap(response);
-    if (isIntegrationAcceptedResponse(response?.status, result)) {
-      displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
-      return;
-    }
-    const nextOrder = result?.order ?? result?.Order;
-    if (nextOrder) detail.value = nextOrder;
-    displaySonnerSuccess(t("pages.ordersPage.statusUpdated"));
-    emit("updated", nextOrder || detail.value);
+    applyOrderActionResponse(response, targetConnectionId, targetOrderId);
   } catch (error) {
     displaySonnerError(error);
   } finally {
-    acting.value = "";
+    if (isSameTarget(targetConnectionId, targetOrderId)) {
+      acting.value = "";
+    }
   }
 }
 
 async function onConfirmSubmit() {
   if (!armedAction) armConfirmSubmit();
   const action = armedAction;
-  let extra = armedExtra;
+  const extra = armedExtra;
+  const targetConnectionId = props.connectionId;
+  const targetOrderId = props.orderId;
+  const targetCanManageShipments = props.canManageShipments;
+  const targetCanMutate = props.canMutate;
+  const targetSupplyChoice = packSupplyChoice.value;
+  const targetBoxChoice = packBoxChoice.value;
   armedAction = "";
   armedExtra = {};
   pendingAction.value = "";
   actionFieldValues.value = {};
   trackingNumber.value = "";
   deliveryService.value = "";
-  if (!action) return;
+  if (!action || !targetConnectionId || !targetOrderId) return;
+
+  const key = pendingShipmentKey(targetConnectionId, targetOrderId);
   let keepPackState = false;
   try {
-    if (action === "pack" && props.canManageShipments) {
+    if (action === "pack" && targetCanManageShipments) {
+      if (!targetCanMutate) return;
       acting.value = action;
-      extra = await buildPackExtra();
-      if (extra?.__pendingShipment) {
+      const outcome = await executeOrderPackFlow({
+        targetConnectionId,
+        targetOrderId,
+        supplyChoice: targetSupplyChoice,
+        boxChoice: targetBoxChoice,
+        existingPending: pendingShipmentCreations.get(key) || null,
+        onPendingUpdate: (nextPending) => {
+          if (nextPending) pendingShipmentCreations.set(key, nextPending);
+          else pendingShipmentCreations.delete(key);
+        },
+        createIdempotencyKey: () =>
+          `pack-ship-${targetConnectionId}-${targetOrderId}-${randomUuidCompact()}`,
+        postShipment: async (connId, { shipmentName, headers }) => {
+          const response = await http.post(
+            `/marketplace/connections/${connId}/shipments`,
+            { name: shipmentName },
+            { headers },
+          );
+          return {
+            status: response?.status ?? 200,
+            body: unwrap(response),
+          };
+        },
+        getStatus: async (statusPath) => {
+          const response = await http.get(statusPath, { cache: false });
+          return unwrap(response);
+        },
+        postOrderStatus: async ({ connectionId, orderId, action: act, extra: packExtra }) =>
+          http.post(
+            `/marketplace/connections/${connectionId}/orders/${encodeURIComponent(orderId)}/status`,
+            { action: act, extra: packExtra },
+          ),
+      });
+
+      if (outcome.status === "packed") {
+        applyOrderActionResponse(outcome.orderResponse, targetConnectionId, targetOrderId);
+      } else if (outcome.status === "pending") {
         keepPackState = true;
         displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
-        return;
+      } else if (outcome.status === "unknown") {
+        keepPackState = true;
+        throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
+      } else if (outcome.status === "failed") {
+        throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
       }
+      return;
     }
-    await runAction(action, extra);
+    await runAction(action, extra, targetConnectionId, targetOrderId);
   } catch (error) {
-    if (pendingShipmentCreations.has(pendingShipmentKey())) {
+    if (pendingShipmentCreations.has(key)) {
       keepPackState = true;
     }
     displaySonnerError(error);
   } finally {
-    acting.value = "";
-    if (!keepPackState) {
-      resetPackFields();
+    if (isSameTarget(targetConnectionId, targetOrderId)) {
+      acting.value = "";
+      if (!keepPackState) {
+        resetPackFields();
+      }
     }
   }
 }

@@ -247,4 +247,69 @@ describe("integrationExecution (P7)", () => {
       { shipmentName: "Supply 1", key: "key-1" },
     ]);
   });
+
+  it("packs the captured original order A even if the user opens order B while shipment creation polls", async () => {
+    const { executeOrderPackFlow } = await import("./integrationExecution.js");
+
+    let activeOrderId = "ORDER-A";
+    let releaseSecondPoll;
+    const secondPollGate = new Promise((resolve) => {
+      releaseSecondPoll = resolve;
+    });
+    let polls = 0;
+    const packedCalls = [];
+
+    const flowPromise = executeOrderPackFlow({
+      targetConnectionId: 10,
+      targetOrderId: activeOrderId,
+      supplyChoice: "new",
+      boxChoice: "new",
+      maxPolls: 3,
+      pollIntervalMs: 0,
+      postShipment: async (connId) => {
+        assert.equal(connId, 10);
+        return {
+          status: 202,
+          body: {
+            operationId: "op-order-a",
+            commandId: "cmd-order-a",
+            integrationState: "pending",
+            statusUrl: "/api/operations/op-order-a/status",
+          },
+        };
+      },
+      getStatus: async () => {
+        polls++;
+        if (polls === 1) {
+          return { status: "running", integration: { state: "executing", result: null } };
+        }
+        await secondPollGate;
+        return {
+          status: "completed",
+          integration: { state: "completed", result: { shipmentId: "WB-GI-A1" } },
+        };
+      },
+      postOrderStatus: async ({ connectionId, orderId, action, extra }) => {
+        packedCalls.push({ connectionId, orderId, action, extra });
+        return { status: 202, body: { operationId: "op-pack-a", integrationState: "pending" } };
+      },
+    });
+
+    // User switches the detail sheet to ORDER-B before the poll resolves.
+    activeOrderId = "ORDER-B";
+    releaseSecondPoll();
+
+    const result = await flowPromise;
+    assert.equal(result.status, "packed");
+    assert.equal(result.targetOrderId, "ORDER-A");
+    assert.equal(activeOrderId, "ORDER-B");
+    assert.deepEqual(packedCalls, [
+      {
+        connectionId: 10,
+        orderId: "ORDER-A",
+        action: "pack",
+        extra: { supplyId: "WB-GI-A1", createBox: "true" },
+      },
+    ]);
+  });
 });

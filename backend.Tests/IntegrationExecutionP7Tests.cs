@@ -1014,9 +1014,16 @@ public sealed class IntegrationExecutionP7Tests
         Assert.Equal(0, proxy.LegacyCreateCalls);
 
         // 4. Without Prefer header when the bounded wait expires (PublicApiSyncWaitMs = 0),
-        // returns 202 with statusUrl and polling GetStatus surfaces integration.result.shipmentId once finished.
+        // returns 202 with statusUrl and driving the real WildberriesPlugin through IntegrationExecutionWorker
+        // produces AppliedEvidence that OperationsController.GetStatus exposes as integration.result.shipmentId.
+        var wbConn = await schemaDb.marketplaceConnections.SingleAsync(c => c.Id == 10);
+        wbConn.adapterKey = "wildberries";
+        wbConn.credentialsJson = """{"apiKey":"wb-test-token"}""";
+        await schemaDb.SaveChangesAsync();
+
+        var wbPlugin = new Delegat.Marketplace.Wildberries.WildberriesPlugin();
         var fastTimeoutExec = new MarketplaceCommerceExecutionService(
-            coordinator, new IntegrationPreparationService(), _ => new FakeShipmentExecutionProvider(),
+            coordinator, new IntegrationPreparationService(), _ => wbPlugin,
             new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 0 }, commerce);
         var fastController = new MarketplaceCommerceController(new StubCurrentUser(7), commerce, orderSync, fastTimeoutExec)
         {
@@ -1024,31 +1031,88 @@ public sealed class IntegrationExecutionP7Tests
         };
         fastController.HttpContext.Request.Headers["Idempotency-Key"] = "cab-ship-202-poll-1";
 
-        var slowRes = await fastController.CreateShipment(10, new CreateShipmentRequest { Name = "Slow Supply" }, CancellationToken.None);
+        var slowRes = await fastController.CreateShipment(10, new CreateShipmentRequest { Name = "WB Slow Supply" }, CancellationToken.None);
         var slowAccepted = Assert.IsType<AcceptedResult>(slowRes);
         using var slowAcceptedDoc = JsonDocument.Parse(JsonSerializer.Serialize(slowAccepted.Value));
         var slowOpId = slowAcceptedDoc.RootElement.GetProperty("operationId").GetString()!;
         Assert.Equal($"/api/operations/{slowOpId}/status", slowAcceptedDoc.RootElement.GetProperty("statusUrl").GetString());
 
-        // While still executing, GetStatus reports running and no shipmentId yet.
+        // While still admitted/unexecuted, GetStatus reports admitted and no shipmentId yet.
         var pendingPoll = Assert.IsType<OkObjectResult>(await opsController.GetStatus(slowOpId, CancellationToken.None));
         using var pendingPollDoc = JsonDocument.Parse(JsonSerializer.Serialize(pendingPoll.Value));
         Assert.Equal("admitted", pendingPollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
 
-        // Worker completes the shipment asynchronously; polling GetStatus now yields shipmentId.
-        var slowCmd = await schemaDb.integrationCommands.SingleAsync(c => c.operationId == slowOpId);
-        var slowStage = await schemaDb.integrationStages.SingleAsync(s => s.commandId == slowCmd.Id);
-        slowStage.state = IntegrationStageState.Applied;
-        slowStage.evidenceJson = """{"shipmentId":"WB-GI-909"}""";
-        slowCmd.state = IntegrationCommandState.Completed;
-        slowCmd.finishedAt = DateTime.UtcNow;
-        var slowOp = await schemaDb.operations.SingleAsync(o => o.operationId == slowOpId);
-        slowOp.status = OperationLifecycle.Completed;
-        await schemaDb.SaveChangesAsync();
+        // Drive real WildberriesPlugin.ExecuteStageAsync through IntegrationExecutionWorker.
+        var wbServices = new ServiceCollection();
+        wbServices.AddLogging();
+        wbServices.AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn));
+        wbServices.AddSingleton<TimeProvider>(clock);
+        wbServices.AddSingleton<IOperationLogger, NoopOpLogger>();
+        wbServices.AddSingleton<IIntegrationStageDispatcher>(new WildberriesTestSupplyDispatcher(wbPlugin, "WB-GI-909"));
+        await using var wbProvider = wbServices.BuildServiceProvider();
 
-        var donePoll = Assert.IsType<OkObjectResult>(await opsController.GetStatus(slowOpId, CancellationToken.None));
+        var wbWorker = new IntegrationExecutionWorker(
+            wbProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<IntegrationExecutionWorker>.Instance, clock);
+        await wbWorker.ProcessDueStagesAsync(CancellationToken.None);
+
+        await using var pollDb = TestDbFactory.CreateSqliteContext(dsn);
+        var pollOpsController = new OperationsController(pollDb, new StubCurrentUser(7), new NoopOpLogger(), storageService: null!,
+            new IntegrationCoordinator(pollDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance));
+        var donePoll = Assert.IsType<OkObjectResult>(await pollOpsController.GetStatus(slowOpId, CancellationToken.None));
         using var donePollDoc = JsonDocument.Parse(JsonSerializer.Serialize(donePoll.Value));
         Assert.Equal("completed", donePollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
         Assert.Equal("WB-GI-909", donePollDoc.RootElement.GetProperty("integration").GetProperty("result").GetProperty("shipmentId").GetString());
+    }
+
+    private sealed class StubWbSupplyTransport(string supplyId) : IMarketplaceTransport
+    {
+        public Task<IntegrationTransportResponse> SendAsync(IntegrationTransportRequest request, CancellationToken ct = default)
+        {
+            Assert.Equal("POST", request.Method);
+            Assert.EndsWith("/api/v3/supplies", request.Url.AbsolutePath, StringComparison.Ordinal);
+            return Task.FromResult(new IntegrationTransportResponse(
+                201, new Dictionary<string, string>(), $$"""{"id":"{{supplyId}}"}"""));
+        }
+    }
+
+    private sealed class WildberriesTestSupplyDispatcher(
+        Delegat.Marketplace.Wildberries.WildberriesPlugin plugin,
+        string supplyId) : IIntegrationStageDispatcher
+    {
+        public async Task<IntegrationDispatchResult> DispatchAsync(DispatchStageRequest request, CancellationToken ct)
+        {
+            var conn = new ConnectionContext
+            {
+                ConnectionId = 10,
+                StoreId = 1,
+                AdapterKey = "wildberries",
+                Credentials = new Dictionary<string, string> { ["apiKey"] = "wb-test-token" },
+                Transport = new StubWbSupplyTransport(supplyId)
+            };
+            var attempt = new IntegrationAttemptContext(
+                request.TransportAttempt?.OperationId ?? request.CommandGuid,
+                request.CommandGuid,
+                request.ItemKey,
+                request.StageKey,
+                request.AttemptNumber,
+                request.RequestKey);
+            var stage = new IntegrationPreparedStage(
+                request.StageKey,
+                IntegrationStageKind.ShipmentAction,
+                request.RequestKey,
+                request.PayloadJson ?? "{}",
+                [],
+                IsEffectful: true);
+            var outcome = await plugin.ExecuteStageAsync(new IntegrationStageRequest(conn, attempt, stage), ct);
+            Assert.Equal(IntegrationStageOutcomeKind.Applied, outcome.Kind);
+            return new IntegrationDispatchResult(
+                IntegrationDispatchOutcome.Applied,
+                ReceiptJson: outcome.Receipt is null ? null : JsonSerializer.Serialize(outcome.Receipt),
+                EvidenceJson: outcome.AppliedEvidence is null ? null : JsonSerializer.Serialize(outcome.AppliedEvidence));
+        }
+
+        public Task<IntegrationDispatchResult> ConfirmAsync(DispatchStageRequest request, CancellationToken ct) =>
+            Task.FromResult(new IntegrationDispatchResult(IntegrationDispatchOutcome.Unknown));
     }
 }
