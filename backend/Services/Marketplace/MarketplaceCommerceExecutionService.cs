@@ -157,7 +157,7 @@ public sealed class MarketplaceCommerceExecutionService
         if (string.IsNullOrWhiteSpace(body.Action))
             throw ApiException.BadRequest("Order action is required", code: "order_action_required");
 
-        var data = new Dictionary<string, object?>
+        var data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["orderId"] = orderId.Trim(),
             ["action"] = body.Action.Trim()
@@ -176,20 +176,31 @@ public sealed class MarketplaceCommerceExecutionService
             {
                 if (string.IsNullOrWhiteSpace(k) || v is null)
                     continue;
-                var key = k.Trim();
+                var key = CanonicalizeOrderExtraKey(k.Trim());
+                var trimmedVal = v.Trim();
                 if (key.Equals("orderId", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.Equals(v.Trim(), orderId.Trim(), StringComparison.Ordinal))
+                    if (!string.Equals(trimmedVal, orderId.Trim(), StringComparison.Ordinal))
                         throw ApiException.BadRequest("Conflicting orderId in extra metadata", code: "order_status_failed");
                     continue;
                 }
                 if (key.Equals("action", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.Equals(v.Trim(), body.Action.Trim(), StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(trimmedVal, body.Action.Trim(), StringComparison.OrdinalIgnoreCase))
                         throw ApiException.BadRequest("Conflicting action in extra metadata", code: "order_status_failed");
                     continue;
                 }
-                data[k] = v;
+                if (data.TryGetValue(key, out var existing))
+                {
+                    var existingStr = existing?.ToString()?.Trim() ?? "";
+                    var same = key.Equals("refund", StringComparison.OrdinalIgnoreCase)
+                        ? NormalizeRefundFlag(existingStr) == NormalizeRefundFlag(trimmedVal)
+                        : string.Equals(existingStr, trimmedVal, StringComparison.Ordinal);
+                    if (!same)
+                        throw ApiException.BadRequest($"Conflicting {key} in extra metadata", code: "order_status_failed");
+                    continue;
+                }
+                data[key] = trimmedVal;
             }
         }
 
@@ -594,4 +605,23 @@ public sealed class MarketplaceCommerceExecutionService
             throw ApiException.Conflict(ex.Message, code: "integration_request_conflict");
         }
     }
+
+    private static string CanonicalizeOrderExtraKey(string trimmedKey) =>
+        trimmedKey.ToLowerInvariant() switch
+        {
+            "orderid" => "orderId",
+            "action" => "action",
+            "status" => "status",
+            "reason" => "reason",
+            "trackingnumber" => "trackingNumber",
+            "deliveryservice" => "deliveryService",
+            "refund" => "refund",
+            "note" => "note",
+            _ => trimmedKey
+        };
+
+    private static bool NormalizeRefundFlag(string trimmedValue) =>
+        !string.Equals(trimmedValue, "false", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(trimmedValue, "0", StringComparison.Ordinal)
+        && !string.Equals(trimmedValue, "no", StringComparison.OrdinalIgnoreCase);
 }

@@ -20,7 +20,8 @@ namespace Delegat.Services.Integration;
 internal sealed class HostIntegrationExecutionBindingResolver(
     DataContext db,
     PluginManager plugins,
-    EncryptionService? encryption = null) : IIntegrationExecutionBindingResolver
+    EncryptionService? encryption = null,
+    IMediaBlobReader? mediaBlobReader = null) : IIntegrationExecutionBindingResolver
 {
     public async Task<IntegrationExecutionBinding?> ResolveAsync(DispatchStageRequest request, CancellationToken ct)
     {
@@ -74,7 +75,8 @@ internal sealed class HostIntegrationExecutionBindingResolver(
             StoreId = connection.storeId,
             AdapterKey = connection.adapterKey,
             Credentials = creds,
-            Settings = settings
+            Settings = settings,
+            MediaBlobReader = mediaBlobReader
         };
 
         return new IntegrationExecutionBinding(provider, connCtx, routeBinding);

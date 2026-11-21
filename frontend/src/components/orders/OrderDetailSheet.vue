@@ -58,7 +58,11 @@ import {
   orderTotalAmount,
 } from "@/lib/orderSheetFacts.js";
 import { ORDER_ACTION_ICONS } from "@/lib/orderActionIcons";
-import { isIntegrationAcceptedResponse } from "@/lib/integrationExecution";
+import {
+  createOrderPackCoordinator,
+  isIntegrationAcceptedResponse,
+} from "@/lib/integrationExecution";
+import { randomUuidCompact } from "@/utils/uuid";
 import { triggerBrowserDownload } from "@/lib/artifactDownload";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -429,13 +433,20 @@ async function loadWarehouseNames() {
   }
 }
 
+const packCoordinator = createOrderPackCoordinator();
+
 watch(
   () => [props.open, props.connectionId, props.orderId],
-  async () => {
-    if (props.open) {
+  async ([isOpen, nextConnId, nextOrderId], prev) => {
+    const targetChanged = !prev || prev[1] !== nextConnId || prev[2] !== nextOrderId;
+    if (isOpen) {
+      acting.value = packCoordinator.getActiveAction(nextConnId, nextOrderId);
       await loadDetail();
       await loadWarehouseNames();
       return;
+    }
+    if (targetChanged || !isOpen) {
+      acting.value = "";
     }
     detail.value = null;
     pendingAction.value = "";
@@ -494,10 +505,16 @@ function openActionConfirm(action) {
     );
   }
   if (action === "pack" && props.canManageShipments) {
-    resetPackFields();
+    if (!packCoordinator.hasPendingShipment(props.connectionId, props.orderId)) {
+      resetPackFields();
+    }
     loadPackOptions();
   }
   pendingAction.value = action;
+}
+
+function isSameTarget(connectionId, orderId) {
+  return props.connectionId === connectionId && props.orderId === orderId;
 }
 
 let armedAction = "";
@@ -506,29 +523,6 @@ let armedExtra = {};
 function armConfirmSubmit() {
   armedAction = pendingAction.value;
   armedExtra = actionExtra(armedAction);
-}
-
-async function buildPackExtra() {
-  if (!props.connectionId) return {};
-  let chosenSupplyId = packSupplyChoice.value;
-  if (!chosenSupplyId || chosenSupplyId === "new") {
-    const response = await http.post(
-      `/marketplace/connections/${props.connectionId}/shipments`,
-      { name: `Delegat ${new Date().toISOString().slice(0, 16).replace("T", " ")}` },
-    );
-    const created = unwrap(response);
-    const shipment = created?.shipment ?? created?.Shipment;
-    chosenSupplyId = shipmentExternalId(shipment);
-    if (!chosenSupplyId) {
-      throw new Error(t("pages.ordersPage.shipmentCreateFailed"));
-    }
-  }
-  const extra = { supplyId: chosenSupplyId };
-  if (packBoxChoice.value === "new") extra.createBox = "true";
-  else if (packBoxChoice.value && packBoxChoice.value !== "none") {
-    extra.boxId = packBoxChoice.value;
-  }
-  return { extra };
 }
 
 async function downloadMarketplaceLabel(kind) {
@@ -570,50 +564,132 @@ async function downloadLabel() {
   await downloadMarketplaceLabel("order");
 }
 
-async function runAction(action, extra = {}) {
-  if (!props.canMutate || !props.connectionId || !props.orderId) return;
-  acting.value = action;
+function applyOrderActionResponse(response, targetConnectionId, targetOrderId) {
+  const result = unwrap(response);
+  if (isIntegrationAcceptedResponse(response?.status, result)) {
+    displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
+    return;
+  }
+  const nextOrder = result?.order ?? result?.Order;
+  if (nextOrder && isSameTarget(targetConnectionId, targetOrderId)) {
+    detail.value = nextOrder;
+  }
+  displaySonnerSuccess(t("pages.ordersPage.statusUpdated"));
+  emit("updated", nextOrder || (isSameTarget(targetConnectionId, targetOrderId) ? detail.value : null));
+}
+
+async function runAction(
+  action,
+  extra = {},
+  targetConnectionId = props.connectionId,
+  targetOrderId = props.orderId,
+) {
+  if (!props.canMutate || !targetConnectionId || !targetOrderId) return;
+  if (isSameTarget(targetConnectionId, targetOrderId)) {
+    acting.value = action;
+  }
   try {
     const response = await http.post(
-      `/marketplace/connections/${props.connectionId}/orders/${encodeURIComponent(props.orderId)}/status`,
+      `/marketplace/connections/${targetConnectionId}/orders/${encodeURIComponent(targetOrderId)}/status`,
       { action, ...extra },
     );
-    const result = unwrap(response);
-    if (isIntegrationAcceptedResponse(response?.status, result)) {
-      displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
-      return;
-    }
-    const nextOrder = result?.order ?? result?.Order;
-    if (nextOrder) detail.value = nextOrder;
-    displaySonnerSuccess(t("pages.ordersPage.statusUpdated"));
-    emit("updated", nextOrder || detail.value);
+    applyOrderActionResponse(response, targetConnectionId, targetOrderId);
   } catch (error) {
     displaySonnerError(error);
   } finally {
-    acting.value = "";
+    if (isSameTarget(targetConnectionId, targetOrderId)) {
+      acting.value = "";
+    }
   }
 }
 
 async function onConfirmSubmit() {
   if (!armedAction) armConfirmSubmit();
   const action = armedAction;
-  let extra = armedExtra;
+  const extra = armedExtra;
+  const targetConnectionId = props.connectionId;
+  const targetOrderId = props.orderId;
+  const targetCanManageShipments = props.canManageShipments;
+  const targetCanMutate = props.canMutate;
+  const targetSupplyChoice = packSupplyChoice.value;
+  const targetBoxChoice = packBoxChoice.value;
   armedAction = "";
   armedExtra = {};
   pendingAction.value = "";
   actionFieldValues.value = {};
   trackingNumber.value = "";
   deliveryService.value = "";
-  if (!action) return;
+  if (!action || !targetConnectionId || !targetOrderId) return;
+
+  let keepPackState = false;
   try {
-    if (action === "pack" && props.canManageShipments) {
-      extra = await buildPackExtra();
+    if (action === "pack" && targetCanManageShipments) {
+      if (!targetCanMutate) return;
+      if (packCoordinator.getActiveAction(targetConnectionId, targetOrderId)) {
+        keepPackState = true;
+        return;
+      }
+      acting.value = action;
+      const outcome = await packCoordinator.runPack({
+        targetConnectionId,
+        targetOrderId,
+        supplyChoice: targetSupplyChoice,
+        boxChoice: targetBoxChoice,
+        createIdempotencyKey: () =>
+          `pack-ship-${targetConnectionId}-${targetOrderId}-${randomUuidCompact()}`,
+        postShipment: async (connId, { shipmentName, headers }) => {
+          const response = await http.post(
+            `/marketplace/connections/${connId}/shipments`,
+            { name: shipmentName },
+            { headers },
+          );
+          return {
+            status: response?.status ?? 200,
+            body: unwrap(response),
+          };
+        },
+        getStatus: async (statusPath) => {
+          const response = await http.get(statusPath, { cache: false });
+          return unwrap(response);
+        },
+        postOrderStatus: async ({ connectionId, orderId, action: act, extra: packExtra, headers }) =>
+          http.post(
+            `/marketplace/connections/${connectionId}/orders/${encodeURIComponent(orderId)}/status`,
+            { action: act, extra: packExtra },
+            { headers },
+          ),
+      });
+
+      if (outcome.status === "already_active") {
+        keepPackState = true;
+        return;
+      }
+      if (outcome.status === "packed") {
+        applyOrderActionResponse(outcome.orderResponse, targetConnectionId, targetOrderId);
+      } else if (outcome.status === "pending") {
+        keepPackState = true;
+        displaySonnerSuccess(t("pages.ordersPage.statusUpdateQueued"));
+      } else if (outcome.status === "unknown") {
+        keepPackState = true;
+        throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
+      } else if (outcome.status === "failed") {
+        throw new Error(outcome.message || t("pages.ordersPage.shipmentCreateFailed"));
+      }
+      return;
     }
-    await runAction(action, extra);
+    await runAction(action, extra, targetConnectionId, targetOrderId);
   } catch (error) {
+    if (packCoordinator.hasPendingShipment(targetConnectionId, targetOrderId)) {
+      keepPackState = true;
+    }
     displaySonnerError(error);
   } finally {
-    resetPackFields();
+    if (isSameTarget(targetConnectionId, targetOrderId)) {
+      acting.value = packCoordinator.getActiveAction(targetConnectionId, targetOrderId);
+      if (!keepPackState) {
+        resetPackFields();
+      }
+    }
   }
 }
 

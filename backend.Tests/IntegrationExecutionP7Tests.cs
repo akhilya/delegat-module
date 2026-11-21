@@ -891,4 +891,228 @@ public sealed class IntegrationExecutionP7Tests
         Assert.Equal("cancelled", freshRow.status);
         Assert.Equal("cancelled", freshSnapshots.ToExternalOrder(freshRow).Status);
     }
+
+    [Fact]
+    public async Task AdmitOrderAction_NormalizesPaddedRefundKey_AndRejectsConflictingRefundAliases()
+    {
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        await SeedStoreMemberAndConnectionAsync(db);
+
+        var conn = await db.marketplaceConnections.SingleAsync(c => c.Id == 10);
+        conn.adapterKey = "medusa";
+        conn.credentialsJson = """{"apiBaseUrl":"https://shop.example/admin/delegat","apiKey":"secret"}""";
+        await db.SaveChangesAsync();
+
+        var clock = new ManualClock();
+        var (adapter, _) = OrderAdapterProxy.Create();
+        var commerce = new MarketplaceCommerceService(db, new SingleAdapterRegistry(adapter), new MarketplaceOrderSnapshotService(db, clock));
+        var coordinator = new IntegrationCoordinator(db, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+        var exec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new Delegat.Marketplace.Medusa.MedusaPlugin(),
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 0 }, commerce);
+
+        // Padded " refund " = "false" must normalize to "refund": false on the prepared Medusa cancel stage.
+        var admitted = await exec.AdmitOrderActionAsync(
+            conn, "ord_1", new OrderStatusUpdate
+            {
+                Action = "cancel",
+                Extra = new Dictionary<string, string> { [" refund "] = " false ", [" note "] = "customer request" }
+            }, 7, null, "medusa-cancel-padded-1", CancellationToken.None);
+
+        var cmd = await db.integrationCommands.AsNoTracking().SingleAsync(c => c.commandId == admitted.CommandId);
+        var stage = await db.integrationStages.AsNoTracking().SingleAsync(s => s.commandId == cmd.Id);
+        using var payloadDoc = JsonDocument.Parse(stage.payloadJson!);
+        Assert.False(payloadDoc.RootElement.GetProperty("refund").GetBoolean());
+        Assert.Equal("customer request", payloadDoc.RootElement.GetProperty("note").GetString());
+
+        // Conflicting refund aliases must be rejected before creating a command.
+        var ex = await Assert.ThrowsAsync<ApiException>(() => exec.AdmitOrderActionAsync(
+            conn, "ord_2", new OrderStatusUpdate
+            {
+                Action = "cancel",
+                Extra = new Dictionary<string, string> { ["refund"] = "false", [" refund "] = "true" }
+            }, 7, null, "medusa-cancel-conflict-1", CancellationToken.None));
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("order_status_failed", ex.Code);
+        Assert.Equal(1, await db.integrationCommands.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
+    public async Task Cabinet_CreateShipment_RoutesThroughCoordinatorWithBoundedSyncWait_AndGetStatusExposesIntegration()
+    {
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+        await SeedStoreMemberAndConnectionAsync(schemaDb);
+
+        var (adapter, proxy) = ShipmentAdapterProxy.Create();
+        var clock = new ManualClock();
+        var commerce = new MarketplaceCommerceService(schemaDb, new SingleAdapterRegistry(adapter), new MarketplaceOrderSnapshotService(schemaDb, clock));
+        var coordinator = new IntegrationCoordinator(schemaDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+        var exec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => new FakeShipmentExecutionProvider(),
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 5000, PublicApiSyncPollIntervalMs = 20 }, commerce);
+
+        var orderSync = new MarketplaceOrderSyncService(
+            schemaDb, new SingleAdapterRegistry(adapter), new MarketplaceOrderSnapshotService(schemaDb, clock),
+            clock, NullLogger<MarketplaceOrderSyncService>.Instance);
+        var controller = new MarketplaceCommerceController(new StubCurrentUser(7), commerce, orderSync, exec)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        // 1. Without Prefer: respond-async, completes synchronously within bounded wait and NEVER calls legacy CreateShipmentAsync.
+        controller.HttpContext.Request.Headers["Idempotency-Key"] = "cab-ship-sync-1";
+        var completer = Task.Run(async () =>
+        {
+            for (var i = 0; i < 120; i++)
+            {
+                await Task.Delay(25);
+                await using var bgDb = TestDbFactory.CreateSqliteContext(dsn);
+                var bgCmd = await bgDb.integrationCommands.FirstOrDefaultAsync(c => c.requestKey == "cab-ship-sync-1");
+                if (bgCmd == null) continue;
+                await bgDb.integrationStages
+                    .Where(s => s.commandId == bgCmd.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.state, IntegrationStageState.Applied)
+                        .SetProperty(x => x.evidenceJson, """{"shipmentId":"WB-GI-777"}"""));
+                await bgDb.integrationCommands
+                    .Where(c => c.Id == bgCmd.Id)
+                    .ExecuteUpdateAsync(c => c
+                        .SetProperty(x => x.state, IntegrationCommandState.Completed)
+                        .SetProperty(x => x.finishedAt, (DateTime?)DateTime.UtcNow));
+                return;
+            }
+        });
+
+        var syncRes = await controller.CreateShipment(10, new CreateShipmentRequest { Name = "Cabinet Supply" }, CancellationToken.None);
+        await completer;
+        var ok = Assert.IsType<OkObjectResult>(syncRes);
+        var dto = Assert.IsType<ShipmentMutationResult>(ok.Value);
+        Assert.True(dto.Success);
+        Assert.Equal("WB-GI-777", dto.Shipment?.ExternalId);
+        Assert.Equal(0, proxy.LegacyCreateCalls);
+
+        // 2. OperationsController.GetStatus exposes the integration summary (including shipmentId) for the created operation.
+        var completedCmd = await schemaDb.integrationCommands.AsNoTracking().SingleAsync(c => c.requestKey == "cab-ship-sync-1");
+        var opsController = new OperationsController(schemaDb, new StubCurrentUser(7), new NoopOpLogger(), storageService: null!, coordinator);
+        var statusRes = await opsController.GetStatus(completedCmd.operationId!, CancellationToken.None);
+        var statusOk = Assert.IsType<OkObjectResult>(statusRes);
+        using var statusDoc = JsonDocument.Parse(JsonSerializer.Serialize(statusOk.Value));
+        var integration = statusDoc.RootElement.GetProperty("integration");
+        Assert.Equal("completed", integration.GetProperty("state").GetString());
+        Assert.Equal("WB-GI-777", integration.GetProperty("result").GetProperty("shipmentId").GetString());
+
+        // 3. With Prefer: respond-async, returns 202 Accepted immediately without waiting.
+        controller.HttpContext.Request.Headers["Prefer"] = "respond-async";
+        controller.HttpContext.Request.Headers["Idempotency-Key"] = "cab-ship-async-1";
+        var asyncRes = await controller.CreateShipment(10, new CreateShipmentRequest { Name = "Cabinet Async Supply" }, CancellationToken.None);
+        Assert.IsType<AcceptedResult>(asyncRes);
+        Assert.Equal(0, proxy.LegacyCreateCalls);
+
+        // 4. Without Prefer header when the bounded wait expires (PublicApiSyncWaitMs = 0),
+        // returns 202 with statusUrl and driving the real WildberriesPlugin through IntegrationExecutionWorker
+        // produces AppliedEvidence that OperationsController.GetStatus exposes as integration.result.shipmentId.
+        var wbConn = await schemaDb.marketplaceConnections.SingleAsync(c => c.Id == 10);
+        wbConn.adapterKey = "wildberries";
+        wbConn.credentialsJson = """{"apiKey":"wb-test-token"}""";
+        await schemaDb.SaveChangesAsync();
+
+        var wbPlugin = new Delegat.Marketplace.Wildberries.WildberriesPlugin();
+        var fastTimeoutExec = new MarketplaceCommerceExecutionService(
+            coordinator, new IntegrationPreparationService(), _ => wbPlugin,
+            new IntegrationExecutionOptions { Enabled = true, PublicApiSyncWaitMs = 0 }, commerce);
+        var fastController = new MarketplaceCommerceController(new StubCurrentUser(7), commerce, orderSync, fastTimeoutExec)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        fastController.HttpContext.Request.Headers["Idempotency-Key"] = "cab-ship-202-poll-1";
+
+        var slowRes = await fastController.CreateShipment(10, new CreateShipmentRequest { Name = "WB Slow Supply" }, CancellationToken.None);
+        var slowAccepted = Assert.IsType<AcceptedResult>(slowRes);
+        using var slowAcceptedDoc = JsonDocument.Parse(JsonSerializer.Serialize(slowAccepted.Value));
+        var slowOpId = slowAcceptedDoc.RootElement.GetProperty("operationId").GetString()!;
+        Assert.Equal($"/api/operations/{slowOpId}/status", slowAcceptedDoc.RootElement.GetProperty("statusUrl").GetString());
+
+        // While still admitted/unexecuted, GetStatus reports admitted and no shipmentId yet.
+        var pendingPoll = Assert.IsType<OkObjectResult>(await opsController.GetStatus(slowOpId, CancellationToken.None));
+        using var pendingPollDoc = JsonDocument.Parse(JsonSerializer.Serialize(pendingPoll.Value));
+        Assert.Equal("admitted", pendingPollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
+
+        // Drive real WildberriesPlugin.ExecuteStageAsync through IntegrationExecutionWorker.
+        var wbServices = new ServiceCollection();
+        wbServices.AddLogging();
+        wbServices.AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn));
+        wbServices.AddSingleton<TimeProvider>(clock);
+        wbServices.AddSingleton<IOperationLogger, NoopOpLogger>();
+        wbServices.AddSingleton<IIntegrationStageDispatcher>(new WildberriesTestSupplyDispatcher(wbPlugin, "WB-GI-909"));
+        await using var wbProvider = wbServices.BuildServiceProvider();
+
+        var wbWorker = new IntegrationExecutionWorker(
+            wbProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<IntegrationExecutionWorker>.Instance, clock);
+        await wbWorker.ProcessDueStagesAsync(CancellationToken.None);
+
+        await using var pollDb = TestDbFactory.CreateSqliteContext(dsn);
+        var pollOpsController = new OperationsController(pollDb, new StubCurrentUser(7), new NoopOpLogger(), storageService: null!,
+            new IntegrationCoordinator(pollDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance));
+        var donePoll = Assert.IsType<OkObjectResult>(await pollOpsController.GetStatus(slowOpId, CancellationToken.None));
+        using var donePollDoc = JsonDocument.Parse(JsonSerializer.Serialize(donePoll.Value));
+        Assert.Equal("completed", donePollDoc.RootElement.GetProperty("integration").GetProperty("state").GetString());
+        Assert.Equal("WB-GI-909", donePollDoc.RootElement.GetProperty("integration").GetProperty("result").GetProperty("shipmentId").GetString());
+    }
+
+    private sealed class StubWbSupplyTransport(string supplyId) : IMarketplaceTransport
+    {
+        public Task<IntegrationTransportResponse> SendAsync(IntegrationTransportRequest request, CancellationToken ct = default)
+        {
+            Assert.Equal("POST", request.Method);
+            Assert.EndsWith("/api/v3/supplies", request.Url.AbsolutePath, StringComparison.Ordinal);
+            return Task.FromResult(new IntegrationTransportResponse(
+                201, new Dictionary<string, string>(), $$"""{"id":"{{supplyId}}"}"""));
+        }
+    }
+
+    private sealed class WildberriesTestSupplyDispatcher(
+        Delegat.Marketplace.Wildberries.WildberriesPlugin plugin,
+        string supplyId) : IIntegrationStageDispatcher
+    {
+        public async Task<IntegrationDispatchResult> DispatchAsync(DispatchStageRequest request, CancellationToken ct)
+        {
+            var conn = new ConnectionContext
+            {
+                ConnectionId = 10,
+                StoreId = 1,
+                AdapterKey = "wildberries",
+                Credentials = new Dictionary<string, string> { ["apiKey"] = "wb-test-token" },
+                Transport = new StubWbSupplyTransport(supplyId)
+            };
+            var attempt = new IntegrationAttemptContext(
+                request.TransportAttempt?.OperationId ?? request.CommandGuid,
+                request.CommandGuid,
+                request.ItemKey,
+                request.StageKey,
+                request.AttemptNumber,
+                request.RequestKey);
+            var stage = new IntegrationPreparedStage(
+                request.StageKey,
+                IntegrationStageKind.ShipmentAction,
+                request.RequestKey,
+                request.PayloadJson ?? "{}",
+                [],
+                IsEffectful: true);
+            var outcome = await plugin.ExecuteStageAsync(new IntegrationStageRequest(conn, attempt, stage), ct);
+            Assert.Equal(IntegrationStageOutcomeKind.Applied, outcome.Kind);
+            return new IntegrationDispatchResult(
+                IntegrationDispatchOutcome.Applied,
+                ReceiptJson: outcome.Receipt is null ? null : JsonSerializer.Serialize(outcome.Receipt),
+                EvidenceJson: outcome.AppliedEvidence is null ? null : JsonSerializer.Serialize(outcome.AppliedEvidence));
+        }
+
+        public Task<IntegrationDispatchResult> ConfirmAsync(DispatchStageRequest request, CancellationToken ct) =>
+            Task.FromResult(new IntegrationDispatchResult(IntegrationDispatchOutcome.Unknown));
+    }
 }
