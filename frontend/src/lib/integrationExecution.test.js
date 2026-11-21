@@ -312,4 +312,81 @@ describe("integrationExecution (P7)", () => {
       },
     ]);
   });
+
+  it("restores busy state and prevents duplicate packing requests when order A is reopened while supply creation polls", async () => {
+    const { createOrderPackCoordinator } = await import("./integrationExecution.js");
+
+    const coordinator = createOrderPackCoordinator();
+    let releasePoll;
+    const pollGate = new Promise((resolve) => {
+      releasePoll = resolve;
+    });
+    let shipmentPosts = 0;
+    const packRequests = [];
+
+    const firstFlow = coordinator.runPack({
+      targetConnectionId: 10,
+      targetOrderId: "ORDER-A",
+      supplyChoice: "new",
+      boxChoice: "new",
+      maxPolls: 2,
+      pollIntervalMs: 0,
+      createIdempotencyKey: () => "idem-a-1",
+      postShipment: async () => {
+        shipmentPosts++;
+        return {
+          status: 202,
+          body: {
+            operationId: "op-a-1",
+            commandId: "cmd-a-1",
+            integrationState: "pending",
+            statusUrl: "/api/operations/op-a-1/status",
+          },
+        };
+      },
+      getStatus: async () => {
+        await pollGate;
+        return {
+          status: "completed",
+          integration: { state: "completed", result: { shipmentId: "WB-GI-A9" } },
+        };
+      },
+      postOrderStatus: async ({ connectionId, orderId, action, extra, headers }) => {
+        packRequests.push({ connectionId, orderId, action, extra, headers });
+        return { status: 202, body: { operationId: "op-pack-a9", integrationState: "pending" } };
+      },
+    });
+
+    // While firstFlow is blocked in poll: ORDER-A reports busy, ORDER-B is not busy.
+    assert.equal(coordinator.getActiveAction(10, "ORDER-A"), "pack");
+    assert.equal(coordinator.getActiveAction(10, "ORDER-B"), "");
+
+    // Reopening ORDER-A and trying to submit Pack again is rejected immediately.
+    const duplicate = await coordinator.runPack({
+      targetConnectionId: 10,
+      targetOrderId: "ORDER-A",
+      supplyChoice: "new",
+      boxChoice: "new",
+      postShipment: async () => {
+        shipmentPosts++;
+        throw new Error("must not post shipment again");
+      },
+      getStatus: async () => {
+        throw new Error("must not poll again");
+      },
+      postOrderStatus: async () => {
+        throw new Error("must not pack twice");
+      },
+    });
+    assert.equal(duplicate.status, "already_active");
+
+    releasePoll();
+    const settled = await firstFlow;
+    assert.equal(settled.status, "packed");
+    assert.equal(coordinator.getActiveAction(10, "ORDER-A"), "");
+    assert.equal(shipmentPosts, 1);
+    assert.equal(packRequests.length, 1);
+    assert.equal(packRequests[0].orderId, "ORDER-A");
+    assert.ok(packRequests[0].headers["Idempotency-Key"]);
+  });
 });

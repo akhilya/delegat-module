@@ -304,11 +304,16 @@ export async function executeOrderPackFlow({
     extra.boxId = boxChoice;
   }
 
+  const packIdempotencyKey =
+    existingPending?.packIdempotencyKey ||
+    (createIdempotencyKey ? `${createIdempotencyKey()}-status` : `pack-${targetConnectionId}-${targetOrderId}-${chosenSupplyId}`);
+
   const orderResponse = await postOrderStatus({
     connectionId: targetConnectionId,
     orderId: targetOrderId,
     action: "pack",
     extra,
+    headers: buildIntegrationRequestHeaders({ idempotencyKey: packIdempotencyKey }),
   });
 
   return {
@@ -317,5 +322,52 @@ export async function executeOrderPackFlow({
     targetConnectionId,
     targetOrderId,
     orderResponse,
+  };
+}
+
+/**
+ * Tracks active Pack flows per (connectionId, orderId) separately from pending
+ * shipment creation admissions so reopening an order restores its busy state and
+ * prevents duplicate concurrent packing submissions, while still allowing a later
+ * retry to resume polling once a previous flow returns "pending".
+ */
+export function createOrderPackCoordinator() {
+  const activeFlows = new Map();
+  const pendingShipments = new Map();
+
+  function keyOf(connectionId, orderId) {
+    return `${connectionId || ""}:${orderId || ""}`;
+  }
+
+  return {
+    getActiveAction(connectionId, orderId) {
+      return activeFlows.get(keyOf(connectionId, orderId)) || "";
+    },
+    hasPendingShipment(connectionId, orderId) {
+      return pendingShipments.has(keyOf(connectionId, orderId));
+    },
+    async runPack(params) {
+      const { targetConnectionId, targetOrderId } = params;
+      if (!targetConnectionId || !targetOrderId) {
+        return { status: "skipped", targetConnectionId, targetOrderId };
+      }
+      const key = keyOf(targetConnectionId, targetOrderId);
+      if (activeFlows.has(key)) {
+        return { status: "already_active", targetConnectionId, targetOrderId };
+      }
+      activeFlows.set(key, "pack");
+      try {
+        return await executeOrderPackFlow({
+          ...params,
+          existingPending: pendingShipments.get(key) || null,
+          onPendingUpdate: (nextPending) => {
+            if (nextPending) pendingShipments.set(key, nextPending);
+            else pendingShipments.delete(key);
+          },
+        });
+      } finally {
+        activeFlows.delete(key);
+      }
+    },
   };
 }
