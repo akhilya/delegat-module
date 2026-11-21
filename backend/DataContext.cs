@@ -283,6 +283,7 @@ public class DataContext : IdentityDbContext<User, UserRole, int>
             e.HasKey(s => s.scopeKey);
             e.Property(s => s.scopeKey).HasMaxLength(64);
             e.Property(s => s.leaseOwner).HasMaxLength(32);
+            e.Property(s => s.activeLeases).HasColumnType("text");
         });
 
         // CategoryAttribute options - use LONGTEXT for large Ozon dictionaries

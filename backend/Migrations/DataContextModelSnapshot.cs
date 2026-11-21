@@ -1437,6 +1437,9 @@ namespace Delegat.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
 
+                    b.Property<string>("activeLeases")
+                        .HasColumnType("text");
+
                     b.Property<long>("cooldownUntilTicks")
                         .HasColumnType("bigint");
 
@@ -1450,7 +1453,25 @@ namespace Delegat.Migrations
                     b.Property<long>("nextStartTicks")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("observedAtTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("observedLimit")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("observedRemaining")
+                        .HasColumnType("bigint");
+
                     b.Property<long>("revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("usedUnits")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("windowEndTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("windowStartTicks")
                         .HasColumnType("bigint");
 
                     b.HasKey("scopeKey");
