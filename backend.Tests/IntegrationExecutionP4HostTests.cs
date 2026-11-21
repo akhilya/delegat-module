@@ -59,16 +59,24 @@ public sealed class IntegrationExecutionP4HostTests
     }
 
     [Fact]
-    public async Task Preparation_SingleAndBulkProductExport_ProduceIdenticalStagePlan()
+    public async Task Preparation_SingleAndBulkProductExport_PreserveVariantsMediaGroupsIdentically()
     {
         var prep = new IntegrationPreparationService();
         var medusa = new MedusaPlugin();
         var itemData = new Dictionary<string, object?>
         {
             ["sku"] = "SKU-1",
-            ["name"] = "Widget",
+            ["name"] = "Shirt",
             ["price"] = "199.50",
-            ["quantity"] = "7"
+            ["quantity"] = "7",
+            ["group_id"] = "grp-summer",
+            ["group_name"] = "Summer",
+            ["_imageUrls"] = new List<string> { "https://cdn.example/1.jpg", "https://cdn.example/2.jpg" },
+            ["_variants"] = new List<Dictionary<string, object>>
+            {
+                new() { ["id"] = "v-1", ["sku"] = "SKU-1-S", ["name"] = "Small", ["price"] = 199.50m, ["quantity"] = 3 },
+                new() { ["id"] = "v-2", ["sku"] = "SKU-1-M", ["name"] = "Medium", ["price"] = 199.50m, ["quantity"] = 4 }
+            }
         };
 
         var single = await prep.PrepareAsync(medusa, new IntegrationPreparationInput(
@@ -83,24 +91,20 @@ public sealed class IntegrationExecutionP4HostTests
         Assert.False(single.HasBlockingIssues);
         Assert.False(bulk.HasBlockingIssues);
 
-        var singleStages = single.Stages.Where(s => s.ItemKey == "p-1").ToList();
-        var bulkStages = bulk.Stages.Where(s => s.ItemKey == "p-1").ToList();
-        Assert.Equal(3, singleStages.Count);
-        Assert.Equal(singleStages.Count, bulkStages.Count);
-        for (var i = 0; i < singleStages.Count; i++)
-        {
-            Assert.Equal(singleStages[i].StageKey, bulkStages[i].StageKey);
-            Assert.Equal(singleStages[i].Kind, bulkStages[i].Kind);
-            Assert.Equal(singleStages[i].PayloadJson, bulkStages[i].PayloadJson);
-            Assert.Equal(singleStages[i].DependsOn, bulkStages[i].DependsOn);
-        }
+        var singleStage = Assert.Single(single.Stages, s => s.ItemKey == "p-1");
+        var bulkStage = Assert.Single(bulk.Stages, s => s.ItemKey == "p-1");
+        Assert.Equal(singleStage.PayloadJson, bulkStage.PayloadJson);
+        Assert.Contains("SKU-1-S", singleStage.PayloadJson);
+        Assert.Contains("SKU-1-M", singleStage.PayloadJson);
+        Assert.Contains("https://cdn.example/1.jpg", singleStage.PayloadJson);
+        Assert.Contains("grp-summer", singleStage.PayloadJson);
     }
 
     [Fact]
-    public async Task Preparation_PreflightValidation_BlocksCyclesMissingDepsAndBadPayloads()
+    public async Task Preparation_PreflightValidation_BlocksCyclesMissingDuplicateDepsAndBadPayloads()
     {
         var prep = new IntegrationPreparationService();
-        var cyclicProvider = new FakeBrokenProvider(new IntegrationPreparationResult(
+        var brokenProvider = new FakeBrokenProvider(new IntegrationPreparationResult(
         [
             new IntegrationPreparedItem("item-1",
             [
@@ -114,15 +118,21 @@ public sealed class IntegrationExecutionP4HostTests
             new IntegrationPreparedItem("item-3",
             [
                 new IntegrationPreparedStage("y", IntegrationStageKind.Price, "k4", "{}", ["nonexistent"])
+            ]),
+            new IntegrationPreparedItem("item-4",
+            [
+                new IntegrationPreparedStage("c", IntegrationStageKind.Card, "k5", "{}", []),
+                new IntegrationPreparedStage("d", IntegrationStageKind.Price, "k6", "{}", ["c", "c"])
             ])
         ], []));
 
-        var plan = await prep.PrepareAsync(cyclicProvider, new IntegrationPreparationInput(
+        var plan = await prep.PrepareAsync(brokenProvider, new IntegrationPreparationInput(
             IntegrationOperationKind.ProductExport, new ConnectionContext(),
             [
                 new IntegrationItemIntent("item-1", new Dictionary<string, object?>()),
                 new IntegrationItemIntent("item-2", new Dictionary<string, object?>()),
-                new IntegrationItemIntent("item-3", new Dictionary<string, object?>())
+                new IntegrationItemIntent("item-3", new Dictionary<string, object?>()),
+                new IntegrationItemIntent("item-4", new Dictionary<string, object?>())
             ], null, "cmd-bad"), CancellationToken.None);
 
         Assert.True(plan.HasBlockingIssues);
@@ -130,10 +140,11 @@ public sealed class IntegrationExecutionP4HostTests
         Assert.Contains(plan.Issues, i => i.Code == "cyclic_stage_dependency" && i.ItemKey == "item-1");
         Assert.Contains(plan.Issues, i => i.Code == "invalid_stage_payload" && i.ItemKey == "item-2");
         Assert.Contains(plan.Issues, i => i.Code == "missing_stage_dependency" && i.ItemKey == "item-3");
+        Assert.Contains(plan.Issues, i => i.Code == "duplicate_stage_dependency" && i.ItemKey == "item-4");
     }
 
     [Fact]
-    public async Task Avito_PriceExport_EndToEndThroughWorkerTransportAndAdmittedAuth()
+    public async Task Avito_PriceExport_EndToEnd_HandlesAdmittedAuthSemanticRejectionThrottleRetryAndLostResponseReconciliation()
     {
         var clock = new ManualClock();
         var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
@@ -150,16 +161,13 @@ public sealed class IntegrationExecutionP4HostTests
         Assert.False(plan.HasBlockingIssues);
 
         var seenPaths = new List<string>();
+        var priceCalls = 0;
         var binding = new IntegrationExecutionBinding(
             avito,
             new ConnectionContext
             {
                 AdapterKey = "avito",
-                Credentials = new Dictionary<string, string>
-                {
-                    ["clientId"] = "cid",
-                    ["clientSecret"] = "csec"
-                }
+                Credentials = new Dictionary<string, string> { ["clientId"] = "cid", ["clientSecret"] = "csec" }
             },
             new IntegrationHostRouteBinding(
                 IntegrationProviderKind.Avito, IntegrationProviderEnvironment.Production,
@@ -179,7 +187,19 @@ public sealed class IntegrationExecutionP4HostTests
                 seenPaths.Add($"{req.Method} {req.RequestUri!.AbsolutePath}");
                 if (req.RequestUri.AbsolutePath == "/token")
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"access_token":"tok-1"}""") });
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"result":{"success":true}}""") });
+                if (req.RequestUri.AbsolutePath == "/core/v1/items/123456/update_price")
+                {
+                    priceCalls++;
+                    if (priceCalls == 1)
+                        return Task.FromResult(new HttpResponseMessage((HttpStatusCode)429) { Content = new StringContent("slow") });
+                    // Second attempt applies remotely but drops connection (IOException -> status 0).
+                    throw new IOException("connection dropped after provider applied price");
+                }
+                // Confirmation read-back verifies the price 2500 without replaying the write.
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"resources":[{"id":123456,"price":2500}]}""")
+                });
             }));
         await using var provider = services.BuildServiceProvider();
 
@@ -194,39 +214,89 @@ public sealed class IntegrationExecutionP4HostTests
         var worker = new IntegrationExecutionWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<IntegrationExecutionWorker>.Instance, clock);
-        await worker.ProcessDueStagesAsync(CancellationToken.None);
 
-        // Both OAuth /token AND /core/v1/items/{id}/update_price flowed through admitted V1 transport!
-        Assert.Equal(["POST /token", "POST /core/v1/items/123456/update_price"], seenPaths);
+        // Poll 1: 429 -> Retryable Rejected -> stays Ready for retry.
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+        Assert.Equal(1, priceCalls);
+
+        // Poll 2: retries dispatch -> connection drops (status 0) -> schedules ConfirmAsync (Pending -> Deferred).
+        clock.Now = clock.Now.AddMinutes(2);
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+        Assert.Equal(2, priceCalls);
+
+        // Poll 3: ConfirmAsync reads GET /core/v1/items and confirms Applied WITHOUT a 3rd update_price!
+        clock.Now = clock.Now.AddMinutes(2);
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+        Assert.Equal(2, priceCalls);
+        Assert.Contains("GET /core/v1/items", seenPaths);
+
         await using var verify = TestDbFactory.CreateSqliteContext(dsn);
         Assert.Equal(IntegrationCommandState.Completed, (await verify.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
-    public async Task Avito_UnsupportedOperationAndInvalidInput_BlockedBeforeMutation()
+    public async Task Avito_Semantic200SuccessFalse_IsRejectedNotApplied()
     {
         var avito = new AvitoPlugin();
+        var clock = new ManualClock();
+        var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = schemaDb;
+        var dsn = TestDbFactory.SqliteDsn(schemaDb);
+
         var prep = new IntegrationPreparationService();
-
-        var unsupported = await prep.PrepareAsync(avito, new IntegrationPreparationInput(
-            IntegrationOperationKind.ProductExport, new ConnectionContext(),
-            [new IntegrationItemIntent("p-1", new Dictionary<string, object?> { ["name"] = "Test" })],
-            null, "cmd-u"), CancellationToken.None);
-        Assert.True(unsupported.HasBlockingIssues);
-        Assert.Empty(unsupported.Stages);
-        Assert.Contains(unsupported.Issues, i => i.Code == "unsupported_operation");
-
-        var badPrice = await prep.PrepareAsync(avito, new IntegrationPreparationInput(
+        var plan = await prep.PrepareAsync(avito, new IntegrationPreparationInput(
             IntegrationOperationKind.PriceExport, new ConnectionContext(),
-            [new IntegrationItemIntent("p-2", new Dictionary<string, object?> { ["price"] = "-5" }, ExpectedRemoteId: "123")],
-            null, "cmd-b"), CancellationToken.None);
-        Assert.True(badPrice.HasBlockingIssues);
-        Assert.Empty(badPrice.Stages);
-        Assert.Contains(badPrice.Issues, i => i.Code == "invalid_price");
+            [new IntegrationItemIntent("item-1", new Dictionary<string, object?> { ["price"] = "2500" }, ExpectedRemoteId: "123456")],
+            null, "cmd-avito-rej"), CancellationToken.None);
+
+        var binding = new IntegrationExecutionBinding(
+            avito,
+            new ConnectionContext
+            {
+                AdapterKey = "avito",
+                Credentials = new Dictionary<string, string> { ["accessToken"] = "tok-1" }
+            },
+            new IntegrationHostRouteBinding(
+                IntegrationProviderKind.Avito, IntegrationProviderEnvironment.Production,
+                new Uri("https://api.avito.ru"), VerifiedSellerId: "avito-user-2"));
+
+        var services = new ServiceCollection()
+            .AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn))
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton<IOperationLogger, NoopOpLogger>()
+            .AddSingleton<IntegrationScopeAdmission>()
+            .AddSingleton<IntegrationHttpTransport>()
+            .AddSingleton<IIntegrationExecutionBindingResolver>(new StaticBindingResolver(binding))
+            .AddSingleton<IIntegrationStageDispatcher, IntegrationProviderStageDispatcher>();
+        services.AddHttpClient(IntegrationHttpTransport.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((_, _) =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"result":{"success":false}}""")
+                })));
+        await using var provider = services.BuildServiceProvider();
+
+        await using (var admitDb = TestDbFactory.CreateSqliteContext(dsn))
+        {
+            var coordinator = new IntegrationCoordinator(admitDb, new NoopOpLogger(), NullLogger<IntegrationCoordinator>.Instance);
+            await coordinator.AdmitAsync(new IntegrationAdmitRequest(
+                "PriceExport", 1, 10, null, 7, "avito-rej-1", "{}", "Avito semantic reject", plan.Stages),
+                v1Enabled: true, CancellationToken.None);
+        }
+
+        var worker = new IntegrationExecutionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<IntegrationExecutionWorker>.Instance, clock);
+        await worker.ProcessDueStagesAsync(CancellationToken.None);
+
+        await using var verify = TestDbFactory.CreateSqliteContext(dsn);
+        Assert.Equal(IntegrationStageState.RejectedBeforeEffect, (await verify.integrationStages.AsNoTracking().SingleAsync()).state);
+        Assert.Equal(IntegrationCommandState.Failed, (await verify.integrationCommands.AsNoTracking().SingleAsync()).state);
     }
 
     [Fact]
-    public async Task Medusa_BridgeAccepted202_ConfirmsViaStatusReceiptAndCompletesDependents()
+    public async Task Medusa_BridgeRootCredential_ResolvesUpsertEndpointAndRejectsSemanticFalse()
     {
         var clock = new ManualClock();
         var (schemaDb, keeper) = TestDbFactory.CreateSqliteDb();
@@ -241,9 +311,9 @@ public sealed class IntegrationExecutionP4HostTests
             [new IntegrationItemIntent("p-1", new Dictionary<string, object?> { ["sku"] = "MED-1", ["name"] = "Shirt", ["price"] = "49.90" })],
             null, "cmd-med"), CancellationToken.None);
         Assert.False(plan.HasBlockingIssues);
-        Assert.Equal(2, plan.Stages.Count);
 
         var seenPaths = new List<string>();
+        var callCount = 0;
         var origin = new Uri("https://medusa.shop.test");
         var binding = new IntegrationExecutionBinding(
             medusa,
@@ -252,7 +322,8 @@ public sealed class IntegrationExecutionP4HostTests
                 AdapterKey = "medusa",
                 Credentials = new Dictionary<string, string>
                 {
-                    ["apiBaseUrl"] = origin.ToString(),
+                    // Documented bridge root includes /admin/delegat — must NOT duplicate it.
+                    ["apiBaseUrl"] = "https://medusa.shop.test/admin/delegat",
                     ["apiKey"] = "bridge-secret"
                 }
             },
@@ -272,11 +343,13 @@ public sealed class IntegrationExecutionP4HostTests
             .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((req, _) =>
             {
                 seenPaths.Add($"{req.Method} {req.RequestUri!.AbsolutePath}");
-                if (req.RequestUri.AbsolutePath == "/admin/delegat/products")
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted) { Content = new StringContent("""{"taskId":"t-med-7"}""") });
-                if (req.RequestUri.AbsolutePath == "/admin/delegat/status/t-med-7")
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"status":"applied"}""") });
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"id":"price-1"}""") });
+                callCount++;
+                if (callCount == 1)
+                    return Task.FromResult(new HttpResponseMessage((HttpStatusCode)429) { Content = new StringContent("busy") });
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"success":true,"product_id":"prod_123"}""")
+                });
             }));
         await using var provider = services.BuildServiceProvider();
 
@@ -292,22 +365,13 @@ public sealed class IntegrationExecutionP4HostTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<IntegrationExecutionWorker>.Instance, clock);
 
-        // Poll 1: card -> 202 Accepted (receipt t-med-7); price stage waits on card dependency!
+        // Poll 1: 429 -> Retryable Rejected (stays Ready).
         await worker.ProcessDueStagesAsync(CancellationToken.None);
-        Assert.Equal(["POST /admin/delegat/products"], seenPaths);
-
-        // Poll 2 (after confirm delay): card confirms Applied via GET /admin/delegat/status/t-med-7, then price dispatches!
-        clock.Now = clock.Now.AddMinutes(1);
-        await worker.ProcessDueStagesAsync(CancellationToken.None);
-        clock.Now = clock.Now.AddMinutes(1);
+        // Poll 2: retries and succeeds at /admin/delegat/products/upsert!
+        clock.Now = clock.Now.AddMinutes(2);
         await worker.ProcessDueStagesAsync(CancellationToken.None);
 
-        Assert.Equal([
-            "POST /admin/delegat/products",
-            "GET /admin/delegat/status/t-med-7",
-            "POST /admin/delegat/prices"
-        ], seenPaths);
-
+        Assert.Equal(["POST /admin/delegat/products/upsert", "POST /admin/delegat/products/upsert"], seenPaths);
         await using var verify = TestDbFactory.CreateSqliteContext(dsn);
         Assert.Equal(IntegrationCommandState.Completed, (await verify.integrationCommands.AsNoTracking().SingleAsync()).state);
     }

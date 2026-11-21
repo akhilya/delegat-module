@@ -103,23 +103,69 @@ public sealed partial class AvitoPlugin
             "POST", url, headers, request.Stage.PayloadJson,
             new IntegrationRequestPolicy("avito:price", request.Attempt.OperationId, IsEffectful: true)), ct);
 
-        return resp.StatusCode switch
+        if (resp.StatusCode is >= 200 and < 300)
         {
-            >= 200 and < 300 => new IntegrationStageOutcome(
-                IntegrationStageOutcomeKind.Applied,
-                Receipt: new IntegrationProviderReceipt("avito-item", itemId),
-                AppliedEvidence: new Dictionary<string, object?> { ["itemId"] = itemId, ["status"] = resp.StatusCode }),
-            400 or 401 or 403 or 404 or 422 => new IntegrationStageOutcome(
-                IntegrationStageOutcomeKind.Rejected,
-                Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito rejected price update with HTTP {resp.StatusCode}", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]),
-            429 or 503 => new IntegrationStageOutcome(
+            if (TryParseAvitoPriceSuccess(resp.Body, out var succeeded))
+            {
+                return succeeded
+                    ? new IntegrationStageOutcome(
+                        IntegrationStageOutcomeKind.Applied,
+                        Receipt: new IntegrationProviderReceipt("avito-item", itemId),
+                        AppliedEvidence: new Dictionary<string, object?> { ["itemId"] = itemId, ["status"] = resp.StatusCode })
+                    : new IntegrationStageOutcome(
+                        IntegrationStageOutcomeKind.Rejected,
+                        Issues: [new IntegrationIssue("provider_semantic_rejected", "Avito returned result.success=false for price update", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
+            }
+
+            // Missing or malformed result.success cannot be treated as applied; schedule read-back confirmation.
+            return new IntegrationStageOutcome(
                 IntegrationStageOutcomeKind.Pending,
+                Receipt: new IntegrationProviderReceipt("avito-item", itemId),
                 NextCheckAt: null,
-                Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito throttled price update with HTTP {resp.StatusCode}", request.Stage.StageKey, Retryable: true, ItemKey: request.Attempt.ItemKey)]),
-            _ => new IntegrationStageOutcome(
-                IntegrationStageOutcomeKind.Unknown,
-                Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito price update returned ambiguous HTTP {resp.StatusCode}", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)])
-        };
+                Issues: [new IntegrationIssue("provider_unconfirmed_body", "Avito 2xx response lacked result.success; scheduling read-back confirmation", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
+        }
+
+        if (resp.StatusCode is 400 or 401 or 403 or 404 or 422)
+        {
+            return new IntegrationStageOutcome(
+                IntegrationStageOutcomeKind.Rejected,
+                Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito rejected price update with HTTP {resp.StatusCode}", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
+        }
+
+        if (resp.StatusCode is 429 or 503)
+        {
+            // Proven before-effect throttle: return Retryable Rejected so worker re-dispatches instead of confirming an unsent write.
+            return new IntegrationStageOutcome(
+                IntegrationStageOutcomeKind.Rejected,
+                Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito throttled price update with HTTP {resp.StatusCode}", request.Stage.StageKey, Retryable: true, ItemKey: request.Attempt.ItemKey)]);
+        }
+
+        // Lost response (status 0) or 5xx: schedule read-only ConfirmAsync reconciliation instead of terminating immediately as Unknown.
+        return new IntegrationStageOutcome(
+            IntegrationStageOutcomeKind.Pending,
+            Receipt: new IntegrationProviderReceipt("avito-item", itemId),
+            NextCheckAt: null,
+            Issues: [new IntegrationIssue($"provider_http_{resp.StatusCode}", $"Avito price update returned ambiguous HTTP {resp.StatusCode}; scheduling read-back confirmation", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
+    }
+
+    private static bool TryParseAvitoPriceSuccess(string? body, out bool success)
+    {
+        success = false;
+        if (string.IsNullOrWhiteSpace(body))
+            return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("result", out var res) &&
+                res.TryGetProperty("success", out var okEl) &&
+                okEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                success = okEl.GetBoolean();
+                return true;
+            }
+        }
+        catch (JsonException) { }
+        return false;
     }
 
     public async Task<IntegrationStageOutcome> ConfirmAsync(

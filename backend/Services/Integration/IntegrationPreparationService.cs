@@ -135,8 +135,16 @@ internal sealed class IntegrationPreparationService
     {
         foreach (var (stageKey, deps) in depMap)
         {
+            var seenDeps = new HashSet<string>(StringComparer.Ordinal);
             foreach (var dep in deps)
             {
+                if (!seenDeps.Add(dep))
+                {
+                    issues.Add(new IntegrationIssue("duplicate_stage_dependency",
+                        $"Stage '{stageKey}' declares duplicate dependency '{dep}'",
+                        StageKey: stageKey, Retryable: false, ItemKey: itemKey));
+                    return false;
+                }
                 if (!depMap.ContainsKey(dep))
                 {
                     issues.Add(new IntegrationIssue("missing_stage_dependency",

@@ -1,12 +1,20 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Delegat.Marketplace.Medusa.Models;
 using Delegat.Marketplace.SDK;
 
 namespace Delegat.Marketplace.Medusa;
 
 public partial class MedusaPlugin
 {
+    private static readonly JsonSerializerOptions V1JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public Task<IntegrationPreparationResult> PrepareAsync(
         IntegrationPreparationInput input, CancellationToken ct = default)
     {
@@ -63,7 +71,7 @@ public partial class MedusaPlugin
             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
                 Issues: [new IntegrationIssue("transport_missing", "V1 transport is required for Medusa execution", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
 
-        if (!TryBuildBridgeUri(request.Connection, request.Stage.Kind, out var uri, out var authHeader))
+        if (!TryBuildBridgeUri(request.Connection, request.Stage.Kind, request.Stage.StageKey, out var uri, out var authHeader))
         {
             return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected,
                 Issues: [new IntegrationIssue("invalid_connection", "Medusa apiBaseUrl or apiKey is missing or invalid", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
@@ -79,53 +87,16 @@ public partial class MedusaPlugin
             "POST", uri!, headers, request.Stage.PayloadJson,
             new IntegrationRequestPolicy("medusa:bridge", request.Attempt.OperationId, IsEffectful: true)), ct);
 
-        return MapBridgeResponse(resp, request.Stage.StageKey, request.Attempt.ItemKey);
+        return MapBridgeResponse(resp, request.Stage.Kind, request.Stage.StageKey, request.Attempt.ItemKey);
     }
 
-    public async Task<IntegrationStageOutcome> ConfirmAsync(
-        IntegrationConfirmationRequest request, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var transport = request.Connection.Transport;
-        if (transport is null || request.Receipt is null || string.IsNullOrWhiteSpace(request.Receipt.Value))
-            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
-                Issues: [new IntegrationIssue("receipt_missing", "Medusa confirmation requires a provider receipt", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]);
-
-        var apiBaseUrl = request.Connection.GetCredential("apiBaseUrl")?.Trim();
-        var apiKey = request.Connection.GetCredential("apiKey")?.Trim();
-        if (string.IsNullOrWhiteSpace(apiBaseUrl) || string.IsNullOrWhiteSpace(apiKey) ||
-            !Uri.TryCreate(apiBaseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri))
-            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
-
-        var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiKey}:"));
-        var statusUri = new Uri(baseUri, $"admin/delegat/status/{Uri.EscapeDataString(request.Receipt.Value)}");
-        var resp = await transport.SendAsync(new IntegrationTransportRequest(
-            "GET", statusUri,
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Authorization"] = $"Basic {basic}" },
-            null,
-            new IntegrationRequestPolicy("medusa:bridge:confirm", request.Attempt.OperationId, IsEffectful: false)), ct);
-
-        if (resp.StatusCode is < 200 or >= 300 || string.IsNullOrWhiteSpace(resp.Body))
-            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown);
-
-        try
-        {
-            using var doc = JsonDocument.Parse(resp.Body);
-            var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString()?.ToLowerInvariant() : null;
-            return status switch
-            {
-                "applied" or "completed" => new IntegrationStageOutcome(IntegrationStageOutcomeKind.Applied, Receipt: request.Receipt),
-                "pending" or "processing" => new IntegrationStageOutcome(IntegrationStageOutcomeKind.Pending, Receipt: request.Receipt, NextCheckAt: null),
-                "rejected" or "failed" => new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected, Receipt: request.Receipt,
-                    Issues: [new IntegrationIssue("bridge_rejected", "Medusa bridge reported stage failure", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]),
-                _ => new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown, Receipt: request.Receipt)
-            };
-        }
-        catch (JsonException)
-        {
-            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown, Receipt: request.Receipt);
-        }
-    }
+    public Task<IntegrationStageOutcome> ConfirmAsync(
+        IntegrationConfirmationRequest request, CancellationToken ct = default) =>
+        // Medusa Delegat bridge has no verified async receipt polling endpoint; keep ambiguous effects honest.
+        Task.FromResult(new IntegrationStageOutcome(
+            IntegrationStageOutcomeKind.Unknown,
+            Receipt: request.Receipt,
+            Issues: [new IntegrationIssue("reconciliation_unsupported", "Medusa bridge does not expose a verified async receipt confirmation endpoint", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]));
 
     public Task<IntegrationStageOutcome> CancelAcceptedAsync(
         IntegrationConfirmationRequest request, CancellationToken ct = default) =>
@@ -133,86 +104,79 @@ public partial class MedusaPlugin
             IntegrationStageOutcomeKind.Unknown,
             Issues: [new IntegrationIssue("cancel_not_supported", "Medusa bridge does not support cancelling accepted mutations", request.Stage.StageKey, Retryable: false, ItemKey: request.Attempt.ItemKey)]));
 
-    private static void PrepareProductItem(
+    private void PrepareProductItem(
         string commandId, IntegrationItemIntent item, List<IntegrationPreparedItem> prepared, List<IntegrationIssue> issues)
     {
-        var sku = ReadStr(item.Data, "sku");
-        var name = ReadStr(item.Data, "name");
-        if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(name))
+        var nonNullData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in item.Data)
+            if (v is not null)
+                nonNullData[k] = v;
+
+        // Reuse the existing normalized Medusa product mapper so variants, images,
+        // categories, groups, attributes, prices, and stocks are never silently dropped.
+        var payload = BuildProductPayload(nonNullData, item.ExpectedRemoteId);
+        if (string.IsNullOrWhiteSpace(payload.Sku) || string.IsNullOrWhiteSpace(payload.Name))
         {
             issues.Add(new IntegrationIssue("missing_required_fields",
                 "Medusa product export requires non-empty sku and name",
-                FieldKey: string.IsNullOrWhiteSpace(sku) ? "sku" : "name",
+                FieldKey: string.IsNullOrWhiteSpace(payload.Sku) ? "sku" : "name",
                 Retryable: false, ItemKey: item.ItemKey));
             return;
         }
-
-        var stages = new List<IntegrationPreparedStage>();
-        var cardPayload = JsonSerializer.Serialize(new
+        if (payload.Price is < 0)
         {
-            sku,
-            name,
-            remoteId = item.ExpectedRemoteId,
-            description = ReadStr(item.Data, "description")
-        });
-        stages.Add(new IntegrationPreparedStage(
-            "card", IntegrationStageKind.Card, $"{commandId}:{item.ItemKey}:card", cardPayload, [], IsEffectful: true));
-
-        if (TryReadDecimal(item.Data, "price", out var price))
+            issues.Add(new IntegrationIssue("invalid_price", "Price cannot be negative", "card", "price", Retryable: false, ItemKey: item.ItemKey));
+            return;
+        }
+        if (payload.Quantity is < 0)
         {
-            if (price < 0)
-            {
-                issues.Add(new IntegrationIssue("invalid_price", "Price cannot be negative", "price", "price", Retryable: false, ItemKey: item.ItemKey));
-                return;
-            }
-            stages.Add(new IntegrationPreparedStage(
-                "price", IntegrationStageKind.Price, $"{commandId}:{item.ItemKey}:price",
-                JsonSerializer.Serialize(new { sku, price }), ["card"], IsEffectful: true));
+            issues.Add(new IntegrationIssue("invalid_stock", "Stock quantity cannot be negative", "card", "quantity", Retryable: false, ItemKey: item.ItemKey));
+            return;
         }
 
-        if (TryReadInt(item.Data, "quantity", out var qty) || TryReadInt(item.Data, "stock", out qty))
-        {
-            if (qty < 0)
-            {
-                issues.Add(new IntegrationIssue("invalid_stock", "Stock quantity cannot be negative", "stock", "quantity", Retryable: false, ItemKey: item.ItemKey));
-                return;
-            }
-            stages.Add(new IntegrationPreparedStage(
-                "stock", IntegrationStageKind.Stock, $"{commandId}:{item.ItemKey}:stock",
-                JsonSerializer.Serialize(new { sku, quantity = qty }), ["card"], IsEffectful: true));
-        }
+        var cardJson = JsonSerializer.Serialize(payload, V1JsonOptions);
+        var cardStage = new IntegrationPreparedStage(
+            "card", IntegrationStageKind.Card, $"{commandId}:{item.ItemKey}:card", cardJson, [], IsEffectful: true);
 
-        prepared.Add(new IntegrationPreparedItem(item.ItemKey, stages));
+        prepared.Add(new IntegrationPreparedItem(item.ItemKey, [cardStage]));
     }
 
     private static void PreparePriceItem(
         string commandId, IntegrationItemIntent item, List<IntegrationPreparedItem> prepared, List<IntegrationIssue> issues)
     {
-        var sku = ReadStr(item.Data, "sku") ?? item.ExpectedRemoteId;
-        if (string.IsNullOrWhiteSpace(sku) || !TryReadDecimal(item.Data, "price", out var price) || price < 0)
+        var productId = item.ExpectedRemoteId ?? ReadStr(item.Data, "productId") ?? ReadStr(item.Data, "sku");
+        if (string.IsNullOrWhiteSpace(productId) || !TryReadDecimal(item.Data, "price", out var price) || price < 0)
         {
-            issues.Add(new IntegrationIssue("invalid_price_payload", "Medusa price export requires sku and non-negative price",
+            issues.Add(new IntegrationIssue("invalid_price_payload", "Medusa price export requires productId/sku and non-negative price",
                 Retryable: false, ItemKey: item.ItemKey));
             return;
         }
+        var envelope = new MedusaBulkPricesRequest
+        {
+            Prices = [new MedusaPriceItem { ProductId = productId, Price = price }]
+        };
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
             "price", IntegrationStageKind.Price, $"{commandId}:{item.ItemKey}:price",
-            JsonSerializer.Serialize(new { sku, price }), [], IsEffectful: true)]));
+            JsonSerializer.Serialize(envelope, V1JsonOptions), [], IsEffectful: true)]));
     }
 
     private static void PrepareStockItem(
         string commandId, IntegrationItemIntent item, List<IntegrationPreparedItem> prepared, List<IntegrationIssue> issues)
     {
-        var sku = ReadStr(item.Data, "sku") ?? item.ExpectedRemoteId;
-        if (string.IsNullOrWhiteSpace(sku) || !(TryReadInt(item.Data, "quantity", out var qty) || TryReadInt(item.Data, "stock", out qty)) || qty < 0)
+        var productId = item.ExpectedRemoteId ?? ReadStr(item.Data, "productId") ?? ReadStr(item.Data, "sku");
+        if (string.IsNullOrWhiteSpace(productId) || !(TryReadInt(item.Data, "quantity", out var qty) || TryReadInt(item.Data, "stock", out qty)) || qty < 0)
         {
-            issues.Add(new IntegrationIssue("invalid_stock_payload", "Medusa stock export requires sku and non-negative quantity",
+            issues.Add(new IntegrationIssue("invalid_stock_payload", "Medusa stock export requires productId/sku and non-negative quantity",
                 Retryable: false, ItemKey: item.ItemKey));
             return;
         }
+        var envelope = new MedusaBulkStocksRequest
+        {
+            Stocks = [new MedusaStockItem { ProductId = productId, Quantity = qty }]
+        };
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
             "stock", IntegrationStageKind.Stock, $"{commandId}:{item.ItemKey}:stock",
-            JsonSerializer.Serialize(new { sku, quantity = qty }), [], IsEffectful: true)]));
+            JsonSerializer.Serialize(envelope, V1JsonOptions), [], IsEffectful: true)]));
     }
 
     private static void PrepareGroupItem(
@@ -225,9 +189,14 @@ public partial class MedusaPlugin
                 FieldKey: "groupName", Retryable: false, ItemKey: item.ItemKey));
             return;
         }
+        var req = new MedusaUpsertGroupRequest
+        {
+            CollectionId = item.ExpectedRemoteId,
+            Name = groupName
+        };
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
             "group", IntegrationStageKind.Grouping, $"{commandId}:{item.ItemKey}:group",
-            JsonSerializer.Serialize(new { groupId = item.ExpectedRemoteId, name = groupName }), [], IsEffectful: true)]));
+            JsonSerializer.Serialize(req, V1JsonOptions), [], IsEffectful: true)]));
     }
 
     private static void PrepareOrderActionItem(
@@ -242,12 +211,12 @@ public partial class MedusaPlugin
             return;
         }
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
-            "order", IntegrationStageKind.OrderAction, $"{commandId}:{item.ItemKey}:order",
-            JsonSerializer.Serialize(new { orderId, status = action }), [], IsEffectful: true)]));
+            $"order:{orderId}", IntegrationStageKind.OrderAction, $"{commandId}:{item.ItemKey}:order",
+            JsonSerializer.Serialize(new { status = action }, V1JsonOptions), [], IsEffectful: true)]));
     }
 
     private static bool TryBuildBridgeUri(
-        ConnectionContext connection, IntegrationStageKind kind, out Uri? uri, out string authHeader)
+        ConnectionContext connection, IntegrationStageKind kind, string stageKey, out Uri? uri, out string authHeader)
     {
         uri = null;
         authHeader = "";
@@ -257,13 +226,15 @@ public partial class MedusaPlugin
             !Uri.TryCreate(apiBaseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri))
             return false;
 
-        var relative = kind switch
+        // Resolve endpoints relative to the configured Medusa bridge root (e.g. https://shop/admin/delegat/).
+        string? relative = kind switch
         {
-            IntegrationStageKind.Card => "admin/delegat/products",
-            IntegrationStageKind.Price => "admin/delegat/prices",
-            IntegrationStageKind.Stock => "admin/delegat/stocks",
-            IntegrationStageKind.Grouping => "admin/delegat/groups",
-            IntegrationStageKind.OrderAction => "admin/delegat/orders/status",
+            IntegrationStageKind.Card => "products/upsert",
+            IntegrationStageKind.Price => "prices/bulk",
+            IntegrationStageKind.Stock => "stocks/bulk",
+            IntegrationStageKind.Grouping => "groups/upsert",
+            IntegrationStageKind.OrderAction when stageKey.StartsWith("order:", StringComparison.Ordinal) =>
+                $"orders/{Uri.EscapeDataString(stageKey["order:".Length..])}/status",
             _ => null
         };
         if (relative is null)
@@ -275,36 +246,68 @@ public partial class MedusaPlugin
     }
 
     private static IntegrationStageOutcome MapBridgeResponse(
-        IntegrationTransportResponse resp, string stageKey, string itemKey)
+        IntegrationTransportResponse resp, IntegrationStageKind kind, string stageKey, string itemKey)
     {
         if (resp.StatusCode is >= 200 and < 300)
         {
-            string? receiptId = null;
-            if (!string.IsNullOrWhiteSpace(resp.Body))
+            if (string.IsNullOrWhiteSpace(resp.Body))
+                return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                    Issues: [new IntegrationIssue("bridge_empty_body", "Medusa bridge returned 2xx with empty body", stageKey, Retryable: false, ItemKey: itemKey)]);
+
+            try
             {
-                try
+                using var doc = JsonDocument.Parse(resp.Body);
+                var root = doc.RootElement;
+
+                // Validate explicit top-level success flag when present.
+                if (root.TryGetProperty("success", out var okEl) && okEl.ValueKind == JsonValueKind.False)
                 {
-                    using var doc = JsonDocument.Parse(resp.Body);
-                    if (doc.RootElement.TryGetProperty("id", out var idEl))
-                        receiptId = idEl.ToString();
-                    else if (doc.RootElement.TryGetProperty("taskId", out var taskEl))
-                        receiptId = taskEl.ToString();
+                    var errMsg = root.TryGetProperty("error", out var err) ? err.ToString() : "Medusa bridge reported success=false";
+                    return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected,
+                        Issues: [new IntegrationIssue("bridge_semantic_rejected", errMsg, stageKey, Retryable: false, ItemKey: itemKey)]);
                 }
-                catch (JsonException) { }
-            }
 
-            if (resp.StatusCode == 202)
-            {
+                // Validate bulk results array when present (prices/bulk, stocks/bulk).
+                if (root.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+                {
+                    if (results.GetArrayLength() == 0)
+                        return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                            Issues: [new IntegrationIssue("bridge_missing_result", "Medusa bulk response contained zero item results", stageKey, Retryable: false, ItemKey: itemKey)]);
+                    foreach (var entry in results.EnumerateArray())
+                    {
+                        if (entry.TryGetProperty("success", out var itemOk) && itemOk.ValueKind == JsonValueKind.False)
+                        {
+                            var msg = entry.TryGetProperty("error", out var ie) ? ie.ToString() : "Medusa item mutation rejected";
+                            return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Rejected,
+                                Issues: [new IntegrationIssue("bridge_item_rejected", msg, stageKey, Retryable: false, ItemKey: itemKey)]);
+                        }
+                    }
+                    return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Applied,
+                        AppliedEvidence: new Dictionary<string, object?> { ["status"] = resp.StatusCode });
+                }
+
+                // For single upsert responses, require explicit success=true or a returned entity ID.
+                string? id = root.TryGetProperty("product_id", out var pid) ? pid.ToString()
+                    : root.TryGetProperty("id", out var idEl) ? idEl.ToString()
+                    : root.TryGetProperty("group_id", out var gid) ? gid.ToString()
+                    : null;
+                var explicitSuccess = root.TryGetProperty("success", out var ok2) && ok2.ValueKind == JsonValueKind.True;
+                if (!explicitSuccess && string.IsNullOrWhiteSpace(id))
+                {
+                    return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                        Issues: [new IntegrationIssue("bridge_unconfirmed_body", "Medusa 2xx response lacked success=true or entity id", stageKey, Retryable: false, ItemKey: itemKey)]);
+                }
+
                 return new IntegrationStageOutcome(
-                    IntegrationStageOutcomeKind.Accepted,
-                    Receipt: receiptId is null ? null : new IntegrationProviderReceipt("medusa-task", receiptId),
-                    NextCheckAt: null);
+                    IntegrationStageOutcomeKind.Applied,
+                    Receipt: id is null ? null : new IntegrationProviderReceipt("medusa-entity", id),
+                    AppliedEvidence: new Dictionary<string, object?> { ["status"] = resp.StatusCode, ["id"] = id });
             }
-
-            return new IntegrationStageOutcome(
-                IntegrationStageOutcomeKind.Applied,
-                Receipt: receiptId is null ? null : new IntegrationProviderReceipt("medusa-entity", receiptId),
-                AppliedEvidence: new Dictionary<string, object?> { ["status"] = resp.StatusCode, ["id"] = receiptId });
+            catch (JsonException)
+            {
+                return new IntegrationStageOutcome(IntegrationStageOutcomeKind.Unknown,
+                    Issues: [new IntegrationIssue("bridge_malformed_json", "Medusa 2xx response was not valid JSON", stageKey, Retryable: false, ItemKey: itemKey)]);
+            }
         }
 
         if (resp.StatusCode is 400 or 401 or 403 or 404 or 422)
@@ -316,9 +319,9 @@ public partial class MedusaPlugin
 
         if (resp.StatusCode is 429 or 503)
         {
+            // Proven before-effect throttle: return Retryable Rejected so worker re-dispatches cleanly.
             return new IntegrationStageOutcome(
-                IntegrationStageOutcomeKind.Pending,
-                NextCheckAt: null,
+                IntegrationStageOutcomeKind.Rejected,
                 Issues: [new IntegrationIssue($"bridge_http_{resp.StatusCode}", $"Medusa bridge throttled request with HTTP {resp.StatusCode}", stageKey, Retryable: true, ItemKey: itemKey)]);
         }
 
@@ -330,10 +333,8 @@ public partial class MedusaPlugin
     private static string? ReadStr(IReadOnlyDictionary<string, object?> data, string key)
     {
         foreach (var (k, v) in data)
-        {
             if (k.Equals(key, StringComparison.OrdinalIgnoreCase) && v is not null)
                 return v.ToString()?.Trim();
-        }
         return null;
     }
 
