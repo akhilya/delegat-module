@@ -17,11 +17,16 @@ public class PublicMarketplacePromotionsController : ControllerBase
 {
     private readonly PublicApiStoreContext _storeCtx;
     private readonly MarketplaceCommerceService _commerce;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
-    public PublicMarketplacePromotionsController(PublicApiStoreContext storeCtx, MarketplaceCommerceService commerce)
+    public PublicMarketplacePromotionsController(
+        PublicApiStoreContext storeCtx,
+        MarketplaceCommerceService commerce,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _storeCtx = storeCtx;
         _commerce = commerce;
+        _commerceExecution = commerceExecution;
     }
 
     /// <summary>Lists promotions.</summary>
@@ -84,6 +89,8 @@ public class PublicMarketplacePromotionsController : ControllerBase
     /// <remarks>Body: <c>add</c> [{ <c>externalProductId</c>, <c>actionPrice</c>? }], <c>removeExternalProductIds</c>. Failure → <c>400 promotion_update_failed</c>.</remarks>
     [HttpPost("promotions/{promotionId}/products")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdatePromotionProducts(
         int storeId,
         int connectionId,
@@ -91,10 +98,18 @@ public class PublicMarketplacePromotionsController : ControllerBase
         [FromBody] PromotionProductsUpdate? body,
         CancellationToken ct)
     {
-        await _storeCtx.EnsureStoreAccessAsync(storeId, ct);
+        var (userId, _) = await _storeCtx.RequireStoreAsync(storeId, ct);
         var update = body ?? new PromotionProductsUpdate();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdatePromotions, ct);
+
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var admitted = await _commerceExecution.AdmitPromotionActionAsync(
+                connection, promotionId, update, userId, authorApiKeyId: null,
+                PublicApiResults.ReadIdempotencyKey(HttpContext), ct);
+            return PublicApiResults.AcceptedIntegration(admitted, storeId);
+        }
 
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdatePromotionProductsAsync(connection, promotionId, update, ct));

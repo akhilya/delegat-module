@@ -63,6 +63,41 @@ public static class PublicApiResults
             });
     }
 
+    public static IActionResult AcceptedIntegration(
+        Delegat.Services.Integration.IntegrationAdmitResult admitted,
+        int storeId)
+    {
+        var statusUrl = $"/api/v1/stores/{storeId}/operations/{admitted.OperationId}";
+        return new AcceptedResult(
+            statusUrl,
+            new
+            {
+                operationId = admitted.OperationId,
+                commandId = admitted.CommandId,
+                status = "running",
+                integrationState = "pending",
+                statusUrl,
+                duplicate = admitted.IsDuplicate,
+                links = new
+                {
+                    self = statusUrl
+                }
+            });
+    }
+
+    public static string? ReadIdempotencyKey(HttpContext? httpContext)
+    {
+        var raw = httpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+    }
+
+    public static bool PrefersAsync(HttpContext? httpContext)
+    {
+        var prefer = httpContext?.Request.Headers["Prefer"].ToString();
+        return !string.IsNullOrWhiteSpace(prefer)
+            && prefer.Contains("respond-async", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static object Page<T>(IEnumerable<T> items, int page, int pageSize, int total) => new
     {
         items,

@@ -321,6 +321,14 @@ curl -H "Authorization: Bearer dk_..." \
   "https://instance.example/api/v1/stores/1/connections/3/shipments?openOnly=true"
 ```
 
+## Durable integration execution (V1, opt-in)
+
+When an instance enables `IntegrationExecutionV1=true` (disabled by default), commerce mutation endpoints (`POST .../orders/{orderId}/status`, `POST .../shipments/{shipmentId}/orders`, `POST .../shipments/{shipmentId}/boxes`, `POST .../shipments/{shipmentId}/boxes/{boxId}/orders`, `POST .../promotions/{promotionId}/products`, and `POST .../shipments` when `Prefer: respond-async` is sent) admit durable commands and return `202 Accepted` with `{ operationId, commandId, status, integrationState, statusUrl, duplicate, links }`:
+
+- **`Idempotency-Key` header (optional):** repeating the same key with the same body in the same scope returns the original command (`duplicate: true`); reusing the same key with a different body returns `409 Conflict` (`integration_request_conflict`) without mutating.
+- **`Prefer: respond-async` header (optional):** opts into immediate `202 Accepted` admission on endpoints that otherwise remain synchronous for compatibility (such as `POST .../shipments`).
+- **Polling & Stop:** poll `statusUrl` (`/api/v1/stores/{storeId}/operations/{operationId}`). Caller disconnect does not cancel an admitted command; explicit operation Stop cancels remaining unsent stages without claiming remote rollback.
+
 ## Out of scope (v1)
 
 Field-mapping graph editor, AI chat, plugin upload/reload, admin invites, webhooks, per-key OAuth scopes / RBAC on keys. Promotions are not stored in Delegat. Order snapshots are kept until the connection or store is deleted (no historical backfill of the cabinet). Operator MCP / Agent HTTP (`docs/api/mcp.md`) is not part of `/api/v1`.
