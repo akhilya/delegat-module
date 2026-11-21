@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace Delegat.Marketplace.Avito;
 
 /// <summary>Avito API adapter for account access, listing import, category metadata, and price updates.</summary>
-public sealed class AvitoPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker
+public sealed partial class AvitoPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker, IMarketplaceExecutionProvider
 {
     private static readonly ConcurrentDictionary<int, MarketplaceRateLimiter> BrokerRateLimiters = new();
     private readonly Func<HttpMessageHandler?> _handlerFactory;

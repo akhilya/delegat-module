@@ -48,6 +48,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT || github.token }}
 
       - name: Validate project documentation standards
         run: npm run check:docs

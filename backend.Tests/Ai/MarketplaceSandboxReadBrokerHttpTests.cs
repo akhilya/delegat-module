@@ -73,12 +73,14 @@ public sealed class MarketplaceSandboxReadBrokerHttpTests
         var baseUri = new Uri("https://store.example/index.php?route=extension/delegat/api");
 
         var ok = MarketplaceSandboxReadBrokerHttp.TryCreateOpenCartTargetUri(
-            baseUri, "/categories/list?page=3", out var target);
+            baseUri, "/categories?page=3", out var target);
 
         Assert.True(ok);
         Assert.Equal(
-            "https://store.example/index.php?route=extension/delegat/api&action=categories.list&page=3",
+            "https://store.example/index.php?route=extension/delegat/api&action=categories&page=3",
             target!.ToString());
+        Assert.False(MarketplaceSandboxReadBrokerHttp.TryCreateOpenCartTargetUri(
+            baseUri, "/categories/list?page=3", out _));
         Assert.False(MarketplaceSandboxReadBrokerHttp.TryCreateOpenCartTargetUri(
             baseUri, "/products?action=evil", out _));
         Assert.False(MarketplaceSandboxReadBrokerHttp.TryCreateOpenCartTargetUri(
