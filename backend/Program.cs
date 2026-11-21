@@ -391,6 +391,7 @@ builder.Services.AddSingleton(new Delegat.Services.Integration.IntegrationExecut
 });
 builder.Services.AddScoped<Delegat.Services.Integration.IntegrationCoordinator>();
 builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationPreparationService>();
+builder.Services.AddScoped<Delegat.Services.Marketplace.MarketplaceCommerceExecutionService>();
 builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationScopeAdmission>();
 builder.Services.AddSingleton<Delegat.Services.Integration.IntegrationHttpTransport>();
 builder.Services.AddHttpClient(Delegat.Services.Integration.IntegrationHttpTransport.ClientName,
@@ -402,8 +403,10 @@ builder.Services.AddHttpClient(Delegat.Services.Integration.IntegrationHttpTrans
         ActivityHeadersPropagator = null
     })
     .RemoveAllLoggers();
+builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationExecutionBindingResolver,
+    Delegat.Services.Integration.HostIntegrationExecutionBindingResolver>();
 builder.Services.AddScoped<Delegat.Services.Integration.IIntegrationStageDispatcher,
-    Delegat.Services.Integration.NotConfiguredStageDispatcher>();
+    Delegat.Services.Integration.IntegrationProviderStageDispatcher>();
 builder.Services.AddHostedService<Delegat.Services.Integration.IntegrationExecutionWorker>();
 
 if (builder.Environment.IsDevelopment())

@@ -3,7 +3,7 @@ using Delegat.Marketplace.SDK;
 
 namespace Delegat.Services.Integration;
 
-internal sealed record IntegrationPreparedCommandPlan(
+public sealed record IntegrationPreparedCommandPlan(
     IReadOnlyList<IntegrationStageSeed> Stages,
     IReadOnlyList<IntegrationIssue> Issues,
     bool HasBlockingIssues);
@@ -13,9 +13,9 @@ internal sealed record IntegrationPreparedCommandPlan(
 /// single and bulk requests through the same adapter <see cref="IMarketplaceExecutionProvider.PrepareAsync"/>
 /// call and validates stage graphs and JSON payloads before any mutation is admitted.
 /// </summary>
-internal sealed class IntegrationPreparationService
+public sealed class IntegrationPreparationService
 {
-    internal async Task<IntegrationPreparedCommandPlan> PrepareAsync(
+    public async Task<IntegrationPreparedCommandPlan> PrepareAsync(
         IMarketplaceExecutionProvider provider,
         IntegrationPreparationInput input,
         CancellationToken ct)

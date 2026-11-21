@@ -203,16 +203,30 @@ public partial class MedusaPlugin
         string commandId, IntegrationItemIntent item, List<IntegrationPreparedItem> prepared, List<IntegrationIssue> issues)
     {
         var orderId = item.ExpectedRemoteId ?? ReadStr(item.Data, "orderId");
-        var action = ReadStr(item.Data, "action") ?? ReadStr(item.Data, "status");
+        var action = (ReadStr(item.Data, "action") ?? ReadStr(item.Data, "status"))?.Trim();
         if (string.IsNullOrWhiteSpace(orderId) || string.IsNullOrWhiteSpace(action))
         {
-            issues.Add(new IntegrationIssue("invalid_order_action", "Medusa order action requires orderId and action/status",
+            issues.Add(new IntegrationIssue("invalid_order_action", "Medusa order action requires orderId and action",
                 Retryable: false, ItemKey: item.ItemKey));
             return;
         }
+
+        if (action.Equals("cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            var refundRaw = ReadStr(item.Data, "refund");
+            var refund = !string.Equals(refundRaw, "false", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(refundRaw, "0", StringComparison.Ordinal);
+            var reason = ReadStr(item.Data, "reason");
+            var note = ReadStr(item.Data, "note");
+            prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
+                $"order:cancel:{orderId}", IntegrationStageKind.OrderAction, $"{commandId}:{item.ItemKey}:order:cancel",
+                JsonSerializer.Serialize(new { refund, reason, note }, V1JsonOptions), [], IsEffectful: true)]));
+            return;
+        }
+
         prepared.Add(new IntegrationPreparedItem(item.ItemKey, [new IntegrationPreparedStage(
             $"order:{orderId}", IntegrationStageKind.OrderAction, $"{commandId}:{item.ItemKey}:order",
-            JsonSerializer.Serialize(new { status = action }, V1JsonOptions), [], IsEffectful: true)]));
+            JsonSerializer.Serialize(new { action }, V1JsonOptions), [], IsEffectful: true)]));
     }
 
     private static bool TryBuildBridgeUri(
@@ -233,6 +247,8 @@ public partial class MedusaPlugin
             IntegrationStageKind.Price => "prices/bulk",
             IntegrationStageKind.Stock => "stocks/bulk",
             IntegrationStageKind.Grouping => "groups/upsert",
+            IntegrationStageKind.OrderAction when stageKey.StartsWith("order:cancel:", StringComparison.Ordinal) =>
+                $"orders/{Uri.EscapeDataString(stageKey["order:cancel:".Length..])}/cancel",
             IntegrationStageKind.OrderAction when stageKey.StartsWith("order:", StringComparison.Ordinal) =>
                 $"orders/{Uri.EscapeDataString(stageKey["order:".Length..])}/status",
             _ => null
