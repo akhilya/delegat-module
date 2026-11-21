@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using Delegat.Marketplace.SDK;
 using Delegat.Models.Integration;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Delegat.Services.Integration;
 
 internal sealed record IntegrationTransportAttempt(
-    int CommandId, int StageId, int AttemptId, int ClaimVersion, bool AllowEffects, DateTimeOffset ClaimExpiresAt);
+    int CommandId, int StageId, int AttemptId, int ClaimVersion, bool AllowEffects, DateTimeOffset ClaimExpiresAt)
+{
+    internal string? OperationId { get; init; }
+    internal int StoreId { get; init; }
+    internal int ConnectionId { get; init; }
+    internal string? AdapterKey { get; init; }
+}
 
 internal enum IntegrationVendorHeaderProfile
 {
@@ -39,7 +46,8 @@ internal sealed class IntegrationHttpTransport(
     IServiceScopeFactory dbScopes,
     IntegrationScopeAdmission admission,
     IHttpClientFactory clients,
-    TimeProvider clock)
+    TimeProvider clock,
+    IAdapterHttpLogger? httpLogger = null)
 {
     internal const string ClientName = "IntegrationV1";
     private static readonly TimeSpan MaxSendTime = TimeSpan.FromSeconds(30);
@@ -47,6 +55,12 @@ internal sealed class IntegrationHttpTransport(
     {
         "Host", "Content-Length", "Transfer-Encoding", "Connection", "Upgrade", "Proxy-Authorization",
         "Proxy-Connection", "Keep-Alive", "TE", "Trailer", "Expect"
+    };
+    private static readonly HashSet<string> RedactedHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Authorization", "Api-Key", "X-Api-Key", "Client-Secret", "X-Client-Secret",
+        "Client-Id", "Cookie", "Set-Cookie", "Proxy-Authorization",
+        "X-Delegat-Api-Key", "Delegat-Api-Key"
     };
 
     // The host resolver must validate the bound provider/account, destination and exact route.
@@ -88,6 +102,11 @@ internal sealed class IntegrationHttpTransport(
 
         DateTimeOffset? cooldown = null;
         Dictionary<string, IntegrationScopeSettlement>? settlements = null;
+        var startedAt = clock.GetUtcNow();
+        var loggedStatus = 0;
+        IReadOnlyDictionary<string, string>? loggedResponseHeaders = null;
+        string? loggedError = null;
+        var attemptedHttp = false;
         try
         {
             using var client = clients.CreateClient(ClientName);
@@ -107,9 +126,13 @@ internal sealed class IntegrationHttpTransport(
             using var timeout = new CancellationTokenSource(remaining, clock);
             using var send = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
             send.Token.ThrowIfCancellationRequested();
+            startedAt = clock.GetUtcNow();
+            attemptedHttp = true;
             using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, send.Token);
             var responseNow = clock.GetUtcNow();
+            loggedStatus = (int)response.StatusCode;
             var headers = ExtractHeaders(response);
+            loggedResponseHeaders = headers;
             cooldown = ParseCooldown(response, headers, policy.HeaderProfile, responseNow);
             var headerSettlement = ParseHeaderQuota(headers, policy.HeaderProfile, responseNow);
             if (headerSettlement is not null)
@@ -123,13 +146,13 @@ internal sealed class IntegrationHttpTransport(
             try
             {
                 body = await ReadBodyAsync(response.Content, policy.ResponseLimitBytes, send.Token);
-                return new((int)response.StatusCode, headers, body);
+                return new(loggedStatus, headers, body);
             }
             finally
             {
                 if (policy.SettleResponse is not null)
                 {
-                    var custom = policy.SettleResponse((int)response.StatusCode, body, headers);
+                    var custom = policy.SettleResponse(loggedStatus, body, headers);
                     if (custom.Count > 0)
                         settlements = MergeSettlements(lease, settlements, custom);
                 }
@@ -137,17 +160,68 @@ internal sealed class IntegrationHttpTransport(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            loggedError = "transport_timeout";
             return TransportFailure();
         }
         catch (Exception e) when (e is HttpRequestException or IOException)
         {
+            loggedError = "transport_io_error";
             return TransportFailure();
         }
         finally
         {
             // Caller cancellation must not discard a cooldown or settlement already seen in the response.
             await admission.CompleteAsync(lease, settlements, cooldown, CancellationToken.None);
+            if (attemptedHttp && httpLogger is not null)
+            {
+                EmitSanitizedLog(attempt, request, loggedStatus, loggedResponseHeaders, loggedError, startedAt);
+            }
         }
+    }
+
+    private void EmitSanitizedLog(
+        IntegrationTransportAttempt attempt,
+        IntegrationTransportRequest request,
+        int statusCode,
+        IReadOnlyDictionary<string, string>? responseHeaders,
+        string? errorCode,
+        DateTimeOffset startedAt)
+    {
+        try
+        {
+            var elapsedMs = (int)Math.Clamp((clock.GetUtcNow() - startedAt).TotalMilliseconds, 0, int.MaxValue);
+            var safeUrl = $"{request.Url.Scheme}://{request.Url.Authority}{request.Url.AbsolutePath}";
+            httpLogger!.Log(new AdapterHttpLogEntry
+            {
+                StoreId = attempt.StoreId,
+                ConnectionId = attempt.ConnectionId,
+                AdapterKey = attempt.AdapterKey ?? "integration-v1",
+                Method = request.Method,
+                Url = safeUrl,
+                Path = request.Url.AbsolutePath,
+                StatusCode = statusCode,
+                DurationMs = elapsedMs,
+                RequestHeadersJson = SerializeRedactedHeaders(request.Headers),
+                ResponseHeadersJson = responseHeaders is null ? null : SerializeRedactedHeaders(responseHeaders),
+                // Never persist raw request/response bodies, payload secrets, or media bytes in V1 transport logs.
+                RequestBody = null,
+                ResponseBody = null,
+                ErrorMessage = errorCode,
+                OperationId = attempt.OperationId
+            });
+        }
+        catch
+        {
+            // Best-effort diagnostics must never affect transport outcome or cooldown persistence.
+        }
+    }
+
+    private static string SerializeRedactedHeaders(IReadOnlyDictionary<string, string> headers)
+    {
+        var sanitized = new Dictionary<string, string>(headers.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in headers)
+            sanitized[name] = RedactedHeaders.Contains(name) ? "[REDACTED]" : value;
+        return JsonSerializer.Serialize(sanitized);
     }
 
     private async Task<bool> AuthorizeAsync(IntegrationTransportAttempt attempt, IntegrationScopeLease lease,

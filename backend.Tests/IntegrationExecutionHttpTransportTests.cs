@@ -291,4 +291,120 @@ public sealed class IntegrationExecutionHttpTransportTests
         await using var verify = TestDbFactory.CreateSqliteContext(dsn);
         Assert.Null((await verify.integrationAttempts.AsNoTracking().SingleAsync()).sendAuthorizedAt);
     }
+
+    private sealed class RecordingHttpLogger(bool throwOnLog = false) : IAdapterHttpLogger
+    {
+        public List<AdapterHttpLogEntry> Entries { get; } = [];
+        public void Log(AdapterHttpLogEntry entry)
+        {
+            if (throwOnLog)
+                throw new InvalidOperationException("simulated logger failure");
+            Entries.Add(entry);
+        }
+    }
+
+    [Fact]
+    public async Task V1Transport_LogsCorrelatedSanitizedExchange_WithoutSecretsOrRawBodies()
+    {
+        var clock = new ManualClock();
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        var dsn = TestDbFactory.SqliteDsn(db);
+        var attempt = (await SeedAsync(db, clock.GetUtcNow())) with
+        {
+            OperationId = "op-corr-42",
+            StoreId = 3,
+            ConnectionId = 19,
+            AdapterKey = "ozon"
+        };
+
+        var logger = new RecordingHttpLogger();
+        var services = new ServiceCollection()
+            .AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn))
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton<IAdapterHttpLogger>(logger)
+            .AddSingleton<IntegrationScopeAdmission>()
+            .AddSingleton<IntegrationHttpTransport>();
+        services.AddHttpClient(IntegrationHttpTransport.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((_, _) =>
+            {
+                var resp = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"secret":"top-secret"}""") };
+                resp.Headers.TryAddWithoutValidation("Set-Cookie", "sid=super-secret-cookie");
+                resp.Headers.TryAddWithoutValidation("X-Request-Id", "req-trace-1");
+                return Task.FromResult(resp);
+            }));
+        await using var provider = services.BuildServiceProvider();
+        var transport = provider.GetRequiredService<IntegrationHttpTransport>();
+        var admission = provider.GetRequiredService<IntegrationScopeAdmission>();
+
+        var req = new IntegrationTransportRequest("POST", new Uri("https://provider.test/items?api_key=leak-me"),
+            new Dictionary<string, string>
+            {
+                ["Authorization"] = "Bearer super-secret-token",
+                ["X-Delegat-Api-Key"] = "bridge-secret-key",
+                ["X-Safe-Header"] = "visible-value"
+            },
+            Payload,
+            new IntegrationRequestPolicy("hint", IsEffectful: true));
+
+        var result = await transport.Bind(attempt, r =>
+            r.Url.AbsolutePath == "/items" ? new(true, [SharedScope], 1024) : null).SendAsync(req);
+
+        Assert.Equal(200, result.StatusCode);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal("op-corr-42", entry.OperationId);
+        Assert.Equal(3, entry.StoreId);
+        Assert.Equal(19, entry.ConnectionId);
+        Assert.Equal("ozon", entry.AdapterKey);
+        Assert.Equal("https://provider.test/items", entry.Url);
+        Assert.DoesNotContain("leak-me", entry.Url);
+        Assert.DoesNotContain("super-secret-token", entry.RequestHeadersJson);
+        Assert.DoesNotContain("bridge-secret-key", entry.RequestHeadersJson);
+        Assert.Contains("visible-value", entry.RequestHeadersJson);
+        Assert.DoesNotContain("super-secret-cookie", entry.ResponseHeadersJson);
+        Assert.Contains("req-trace-1", entry.ResponseHeadersJson);
+        Assert.Null(entry.RequestBody);
+        Assert.Null(entry.ResponseBody);
+
+        // Durable scope snapshot is observable without leaking raw credentials.
+        var snapshots = await admission.GetSnapshotsAsync([SharedScope.Key], CancellationToken.None);
+        var snap = Assert.Single(snapshots);
+        Assert.Equal(SharedScope.Key, snap.RawKey);
+        Assert.Equal(0, snap.ActiveLeases);
+    }
+
+    [Fact]
+    public async Task V1Transport_ThrowingLoggerNeverDropsResponseOrCooldown()
+    {
+        var clock = new ManualClock();
+        var (db, keeper) = TestDbFactory.CreateSqliteDb();
+        await using var _ = keeper;
+        await using var __ = db;
+        var dsn = TestDbFactory.SqliteDsn(db);
+        var attempt = (await SeedAsync(db, clock.GetUtcNow())) with { AllowEffects = false };
+
+        var services = new ServiceCollection()
+            .AddScoped(_ => TestDbFactory.CreateSqliteContext(dsn))
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton<IAdapterHttpLogger>(new RecordingHttpLogger(throwOnLog: true))
+            .AddSingleton<IntegrationScopeAdmission>()
+            .AddSingleton<IntegrationHttpTransport>();
+        services.AddHttpClient(IntegrationHttpTransport.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler((_, _) =>
+            {
+                var resp = new HttpResponseMessage((HttpStatusCode)429) { Content = new StringContent("slow") };
+                resp.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromMinutes(2));
+                return Task.FromResult(resp);
+            }));
+        await using var provider = services.BuildServiceProvider();
+        var transport = provider.GetRequiredService<IntegrationHttpTransport>();
+        var admission = provider.GetRequiredService<IntegrationScopeAdmission>();
+
+        var result = await transport.Bind(attempt, Resolve).SendAsync(Request(effectful: false));
+        Assert.Equal(429, result.StatusCode);
+
+        var snapshots = await admission.GetSnapshotsAsync([SharedScope.Key], CancellationToken.None);
+        Assert.Equal(clock.GetUtcNow().AddMinutes(2), Assert.Single(snapshots).CooldownUntil);
+    }
 }

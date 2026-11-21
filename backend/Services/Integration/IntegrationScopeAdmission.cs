@@ -51,6 +51,17 @@ internal sealed record IntegrationScopeSettlement(
 
 internal sealed record IntegrationScopeAdmissionResult(IntegrationScopeLease? Lease, DateTimeOffset? RetryAt);
 
+internal sealed record IntegrationScopeSnapshot(
+    string RawKey,
+    string HashedKey,
+    int ActiveLeases,
+    DateTimeOffset? CooldownUntil,
+    DateTimeOffset? NextStartAt,
+    long UsedUnits,
+    DateTimeOffset? WindowEndAt,
+    long? ObservedLimit,
+    long? ObservedRemaining);
+
 /// <summary>Atomically reserves related outbound scopes and persists waits, budgets, and cooldowns without holding a database transaction across I/O.</summary>
 internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactory, TimeProvider clock)
 {
@@ -598,4 +609,43 @@ internal sealed class IntegrationScopeAdmission(IServiceScopeFactory scopeFactor
         leases.Count == 0
             ? null
             : "|" + string.Join("|", leases.Select(l => $"{l.Owner}:{l.ExpiresTicks}")) + "|";
+
+    /// <summary>Reads current durable admission state for diagnostics and /limits observation.</summary>
+    internal async Task<IReadOnlyList<IntegrationScopeSnapshot>> GetSnapshotsAsync(
+        IReadOnlyList<string> rawScopeKeys, CancellationToken ct)
+    {
+        if (rawScopeKeys.Count == 0)
+            return [];
+        var map = rawScopeKeys
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(HashScopeKey, k => k, StringComparer.Ordinal);
+        if (map.Count == 0)
+            return [];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        var nowTicks = clock.GetUtcNow().UtcTicks;
+        var hashedKeys = map.Keys.ToArray();
+        var rows = await db.integrationScopeStates.AsNoTracking()
+            .Where(s => hashedKeys.Contains(s.scopeKey))
+            .ToListAsync(ct);
+
+        return rows.Select(r =>
+        {
+            var activeCount = r.activeLeases is not null
+                ? ParseActiveLeases(r.activeLeases, nowTicks).Count
+                : (r.leaseOwner is not null && r.leaseUntilTicks > nowTicks ? 1 : 0);
+            return new IntegrationScopeSnapshot(
+                RawKey: map[r.scopeKey],
+                HashedKey: r.scopeKey,
+                ActiveLeases: activeCount,
+                CooldownUntil: r.cooldownUntilTicks > nowTicks ? new DateTimeOffset(r.cooldownUntilTicks, TimeSpan.Zero) : null,
+                NextStartAt: r.nextStartTicks > nowTicks ? new DateTimeOffset(r.nextStartTicks, TimeSpan.Zero) : null,
+                UsedUnits: r.usedUnits,
+                WindowEndAt: r.windowEndTicks > nowTicks ? new DateTimeOffset(r.windowEndTicks, TimeSpan.Zero) : null,
+                ObservedLimit: r.observedLimit,
+                ObservedRemaining: r.observedRemaining);
+        }).ToList();
+    }
 }
