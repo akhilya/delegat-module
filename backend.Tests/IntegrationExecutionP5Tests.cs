@@ -513,4 +513,95 @@ public sealed class IntegrationExecutionP5Tests
         Assert.Equal(expectedProvider, binding!.Provider.ToString());
         Assert.Equal(expectedHost, binding.AllowedOrigin.Host);
     }
+
+    [Fact]
+    public void HostBindingResolver_DetectsWildberriesSandboxModeAndAutoSandboxToken_AndRejectsHttpBridge()
+    {
+        // WB environment="sandbox"
+        var wbExplicit = CreateConnection("wildberries", """{"apiKey":"k","environment":"sandbox"}""");
+        var explicitCreds = ConnectionCredentialsHelper.ParseCredentialsObject(wbExplicit.credentialsJson);
+        Assert.True(HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(wbExplicit, explicitCreds, out var b1));
+        Assert.Equal(IntegrationProviderEnvironment.Sandbox, b1!.Environment);
+        Assert.Equal("marketplace-api-sandbox.wildberries.ru", b1.AllowedOrigin.Host);
+
+        // WB environment="auto" with sandbox JWT payload {"t":true,"sid":"seller-A"}
+        var payloadB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("""{"t":true,"sid":"seller-A"}"""))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var fakeJwt = $"eyJhbGciOiJIUzI1NiJ9.{payloadB64}.sig";
+        var wbAuto = CreateConnection("wildberries", $"{{\"apiKey\":\"{fakeJwt}\",\"environment\":\"auto\"}}");
+        var autoCreds = ConnectionCredentialsHelper.ParseCredentialsObject(wbAuto.credentialsJson);
+        Assert.True(HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(wbAuto, autoCreds, out var b2));
+        Assert.Equal(IntegrationProviderEnvironment.Sandbox, b2!.Environment);
+        Assert.Equal("seller-A", b2.VerifiedSellerId);
+
+        // HTTP Medusa bridge is rejected before admission
+        var medusaHttp = CreateConnection("medusa", """{"apiBaseUrl":"http://localhost:9000/admin/delegat","apiKey":"k"}""");
+        var httpCreds = ConnectionCredentialsHelper.ParseCredentialsObject(medusaHttp.credentialsJson);
+        Assert.False(HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(medusaHttp, httpCreds, out _));
+
+        // Seller replacement changes binding fingerprint
+        var ozA = CreateConnection("ozon", """{"clientId":"111","apiKey":"k1"}""");
+        var ozB = CreateConnection("ozon", """{"clientId":"222","apiKey":"k2"}""");
+        var credsA = ConnectionCredentialsHelper.ParseCredentialsObject(ozA.credentialsJson);
+        var credsB = ConnectionCredentialsHelper.ParseCredentialsObject(ozB.credentialsJson);
+        Assert.True(HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(ozA, credsA, out var bindA));
+        Assert.True(HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(ozB, credsB, out var bindB));
+        Assert.NotEqual(
+            HostIntegrationExecutionBindingResolver.ComputeBindingFingerprint(ozA, credsA, bindA!),
+            HostIntegrationExecutionBindingResolver.ComputeBindingFingerprint(ozB, credsB, bindB!));
+    }
+
+    [Fact]
+    public async Task MedusaOrderAction_RoutesNormalActionToStatusAndCancelWithRefundToCancel()
+    {
+        var medusa = new Delegat.Marketplace.Medusa.MedusaPlugin();
+        var seen = new List<(string Path, string? Body)>();
+        var conn = new ConnectionContext
+        {
+            ConnectionId = 15,
+            AdapterKey = "medusa",
+            Credentials = new Dictionary<string, string>
+            {
+                ["apiBaseUrl"] = "https://medusa.example.com/admin/delegat",
+                ["apiKey"] = "sk_1"
+            },
+            Transport = new StubMedusaTransport((req, _) =>
+            {
+                seen.Add((req.Url.AbsolutePath, req.Body));
+                return Task.FromResult(new IntegrationTransportResponse(200, new Dictionary<string, string>(), """{"success":true,"id":"order_1"}"""));
+            })
+        };
+
+        var prepStatus = await medusa.PrepareAsync(new IntegrationPreparationInput(
+            IntegrationOperationKind.OrderAction, conn,
+            [new IntegrationItemIntent("order_1", new Dictionary<string, object?> { ["action"] = "complete" }, ExpectedRemoteId: "order_1")],
+            null, "cmd-m-1"));
+        var statusStage = Assert.Single(prepStatus.Items.SelectMany(i => i.Stages));
+        var r1 = await medusa.ExecuteStageAsync(new IntegrationStageRequest(
+            conn, new IntegrationAttemptContext("op-1", "cmd-m-1", "order_1", statusStage.StageKey, 1, "rk-1"), statusStage));
+        Assert.Equal(IntegrationStageOutcomeKind.Applied, r1.Kind);
+
+        var prepCancel = await medusa.PrepareAsync(new IntegrationPreparationInput(
+            IntegrationOperationKind.OrderAction, conn,
+            [new IntegrationItemIntent("order_1", new Dictionary<string, object?> { ["action"] = "cancel", ["refund"] = "true", ["reason"] = "damaged", ["note"] = "box torn" }, ExpectedRemoteId: "order_1")],
+            null, "cmd-m-2"));
+        var cancelStage = Assert.Single(prepCancel.Items.SelectMany(i => i.Stages));
+        var r2 = await medusa.ExecuteStageAsync(new IntegrationStageRequest(
+            conn, new IntegrationAttemptContext("op-2", "cmd-m-2", "order_1", cancelStage.StageKey, 1, "rk-2"), cancelStage));
+        Assert.Equal(IntegrationStageOutcomeKind.Applied, r2.Kind);
+
+        Assert.Equal("/admin/delegat/orders/order_1/status", seen[0].Path);
+        Assert.Contains("\"action\":\"complete\"", seen[0].Body);
+        Assert.Equal("/admin/delegat/orders/order_1/cancel", seen[1].Path);
+        Assert.Contains("\"refund\":true", seen[1].Body);
+        Assert.Contains("\"reason\":\"damaged\"", seen[1].Body);
+        Assert.Contains("\"note\":\"box torn\"", seen[1].Body);
+    }
+
+    private sealed class StubMedusaTransport(
+        Func<IntegrationTransportRequest, CancellationToken, Task<IntegrationTransportResponse>> handler) : IMarketplaceTransport
+    {
+        public Task<IntegrationTransportResponse> SendAsync(IntegrationTransportRequest request, CancellationToken ct = default)
+            => handler(request, ct);
+    }
 }

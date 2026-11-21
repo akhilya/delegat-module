@@ -273,6 +273,17 @@ public sealed class MarketplaceCommerceExecutionService
             ? Guid.NewGuid().ToString("N")
             : requestKey.Trim();
         var connCtx = BuildConnectionContext(connection);
+        if (!HostIntegrationExecutionBindingResolver.TryBuildRouteBinding(connection, connCtx.Credentials, out var routeBinding)
+            || routeBinding is null)
+        {
+            throw ApiException.BadRequest(
+                $"Connection '{connection.name}' does not have a valid HTTPS V1 execution route binding",
+                code: "invalid_connection_binding");
+        }
+
+        var bindingFingerprint = HostIntegrationExecutionBindingResolver.ComputeBindingFingerprint(
+            connection, connCtx.Credentials, routeBinding);
+
         var prepInput = new IntegrationPreparationInput(
             operationKind,
             connCtx,
@@ -298,6 +309,7 @@ public sealed class MarketplaceCommerceExecutionService
         {
             connectionId = connection.Id,
             adapterKey = connection.adapterKey,
+            bindingFingerprint,
             kind = commandKind,
             itemKey,
             data
