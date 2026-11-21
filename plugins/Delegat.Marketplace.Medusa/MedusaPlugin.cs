@@ -8,7 +8,7 @@ using Delegat.Marketplace.SDK.DTOs;
 
 namespace Delegat.Marketplace.Medusa;
 
-public class MedusaPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker
+public partial class MedusaPlugin : MarketplacePluginBase, IMarketplaceSandboxReadBroker, IMarketplaceExecutionProvider
 {
     private const int DefaultBulkChunkSize = 50;
     private const int MaxBulkChunkSize = 200;
