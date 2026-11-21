@@ -3,6 +3,7 @@ using Delegat.Infrastructure.Auth;
 using Delegat.Infrastructure.Middleware;
 using Delegat.Marketplace.SDK.DTOs;
 using Delegat.Services;
+using Delegat.Services.Integration;
 using Delegat.Services.Marketplace;
 
 namespace Delegat.Controllers;
@@ -19,15 +20,18 @@ public class MarketplaceCommerceController : ControllerBase
     private readonly ICurrentUserService _currentUser;
     private readonly MarketplaceCommerceService _commerce;
     private readonly MarketplaceOrderSyncService _orderSync;
+    private readonly MarketplaceCommerceExecutionService? _commerceExecution;
 
     public MarketplaceCommerceController(
         ICurrentUserService currentUser,
         MarketplaceCommerceService commerce,
-        MarketplaceOrderSyncService orderSync)
+        MarketplaceOrderSyncService orderSync,
+        MarketplaceCommerceExecutionService? commerceExecution = null)
     {
         _currentUser = currentUser;
         _commerce = commerce;
         _orderSync = orderSync;
+        _commerceExecution = commerceExecution;
     }
 
     [HttpGet("/marketplace/connections/{connectionId:int}/prices")]
@@ -208,6 +212,14 @@ public class MarketplaceCommerceController : ControllerBase
 
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.UpdateOrderStatus, ct);
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var authorUserId = _currentUser.GetUserId() ?? 0;
+            var admitted = await _commerceExecution.AdmitOrderActionAsync(
+                connection, orderId, body, authorUserId, authorApiKeyId: null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.UpdateOrderStatusAsync(connection, orderId, body, ct));
         if (!result.Success)
@@ -286,8 +298,23 @@ public class MarketplaceCommerceController : ControllerBase
         var storeId = await RequireStoreAsync();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
+        var req = body ?? new CreateShipmentRequest();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(req.Name))
+                data["name"] = req.Name.Trim();
+            if (!string.IsNullOrWhiteSpace(req.DestinationLocationId))
+                data["destinationLocationId"] = req.DestinationLocationId.Trim();
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "create_supply", req.Name?.Trim() ?? "shipment", data,
+                $"Create shipment ({connection.name})",
+                _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
-            () => adapter.CreateShipmentAsync(connection, body ?? new CreateShipmentRequest(), ct),
+            () => adapter.CreateShipmentAsync(connection, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -320,8 +347,23 @@ public class MarketplaceCommerceController : ControllerBase
         var storeId = await RequireStoreAsync();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
+        var req = body ?? new ShipmentOrdersUpdate();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["orderIds"] = req.OrderIds ?? []
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "add_orders", shipmentId.Trim(), data,
+                $"Add orders to shipment {shipmentId.Trim()}",
+                _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
-            () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, body ?? new ShipmentOrdersUpdate(), ct),
+            () => adapter.AddOrdersToShipmentAsync(connection, shipmentId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -352,9 +394,24 @@ public class MarketplaceCommerceController : ControllerBase
         var storeId = await RequireStoreAsync();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
+        var req = body ?? new CreateShipmentBoxesRequest();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["amount"] = req.Amount
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "create_boxes", shipmentId.Trim(), data,
+                $"Create boxes on shipment {shipmentId.Trim()}",
+                _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.CreateShipmentBoxesAsync(
-                connection, shipmentId, body ?? new CreateShipmentBoxesRequest(), ct),
+                connection, shipmentId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -373,9 +430,25 @@ public class MarketplaceCommerceController : ControllerBase
         var storeId = await RequireStoreAsync();
         var (connection, adapter) = await _commerce.RequireAsync(
             storeId, connectionId, MarketplaceCapabilities.ManageShipments, ct);
+        var req = body ?? new ShipmentOrdersUpdate();
+        if (_commerceExecution is { IsV1Enabled: true })
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["supplyId"] = shipmentId.Trim(),
+                ["trbxId"] = boxId.Trim(),
+                ["orderIds"] = req.OrderIds ?? []
+            };
+            var admitted = await _commerceExecution.AdmitShipmentActionAsync(
+                connection, "trbx_assign", $"{shipmentId.Trim()}:{boxId.Trim()}", data,
+                $"Assign orders to box {boxId.Trim()}",
+                _currentUser.GetUserId() ?? 0, null, ReadIdempotencyKey(), ct);
+            return AcceptedIntegration(admitted);
+        }
+
         var result = await MarketplaceCommerceService.InvokeAsync(
             () => adapter.AssignOrdersToShipmentBoxAsync(
-                connection, shipmentId, boxId, body ?? new ShipmentOrdersUpdate(), ct),
+                connection, shipmentId, boxId, req, ct),
             "shipment_failed");
         if (!result.Success)
             throw ApiException.BadRequest(code: "shipment_failed");
@@ -489,4 +562,20 @@ public class MarketplaceCommerceController : ControllerBase
             throw ApiException.BadRequest(code: "store_not_selected");
         return selectedStoreId.Value;
     }
+
+    private string? ReadIdempotencyKey()
+    {
+        var raw = HttpContext?.Request.Headers["Idempotency-Key"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+    }
+
+    private IActionResult AcceptedIntegration(IntegrationAdmitResult admitted) =>
+        Accepted(new
+        {
+            operationId = admitted.OperationId,
+            commandId = admitted.CommandId,
+            integrationState = "pending",
+            statusUrl = $"/api/operations/{admitted.OperationId}",
+            duplicate = admitted.IsDuplicate
+        });
 }

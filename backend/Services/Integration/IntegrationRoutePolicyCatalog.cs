@@ -322,11 +322,25 @@ internal static partial class IntegrationRoutePolicyCatalog
                 HeaderProfile: IntegrationVendorHeaderProfile.Ozon);
         }
 
+        // Documented order, async label (D2), and promotion mutation routes under general 50/s account budget.
+        if (path is "/v3/posting/fbs/package-label/create"
+            or "/v4/posting/fbs/ship"
+            or "/v2/posting/fbs/cancel"
+            or "/v1/actions/products/activate"
+            or "/v1/actions/products/deactivate")
+        {
+            return new IntegrationOutboundPolicy(true, [generalScope], binding.ResponseLimitBytes,
+                HeaderProfile: IntegrationVendorHeaderProfile.Ozon);
+        }
+
         // Documented auxiliary/polling/read routes under general 50/s account budget.
         if (path is "/v4/product/info/limit" or "/v1/product/import/info" or "/v3/product/list"
+            or "/v3/product/info/list" or "/v4/product/info/attributes"
             or "/v1/description-category/tree" or "/v1/description-category/attribute"
             or "/v1/description-category/attribute/values" or "/v1/warehouse/list"
-            or "/v3/posting/fbs/get" or "/v3/posting/fbs/list")
+            or "/v3/posting/fbs/get" or "/v3/posting/fbs/list"
+            or "/v2/posting/fbs/package-label/get"
+            or "/v1/actions" or "/v1/actions/products")
         {
             return new IntegrationOutboundPolicy(false, [generalScope], binding.ResponseLimitBytes,
                 HeaderProfile: IntegrationVendorHeaderProfile.Ozon);
