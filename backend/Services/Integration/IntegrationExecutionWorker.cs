@@ -286,6 +286,11 @@ public class IntegrationExecutionWorker : BackgroundService
         {
             TransportAttempt = new(command.Id, stage.Id, attempt.Id, claimedVersion,
                 isDispatch && stage.isEffectful, claimExpiresAt)
+            {
+                OperationId = command.operationId,
+                StoreId = command.storeId,
+                ConnectionId = command.connectionId ?? 0
+            }
         };
 
         IntegrationDispatchResult result;
